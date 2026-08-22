@@ -1,0 +1,6 @@
+# Clean-room denylist — case-insensitive substrings that must not appear
+# anywhere under plugin/ or template/. Lines starting with # are comments.
+# Add client slugs here as engagements begin. "delaware" (the vendor) is allowed.
+michael
+bulthe
+busdev
