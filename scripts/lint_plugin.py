@@ -8,10 +8,12 @@ Two jobs:
    substrings) appears in any text file under plugin/ or template/ — the
    clean-room rule from CLAUDE.md. These trees ship to clients.
 
-Exemption: a line matching `upstreamed-from:\\s*busdev@` (case-insensitive) is
-exempt from the "busdev" term only — the provenance convention documented in
-plugin/skills/README.md. Other terms on that line, and bare "busdev" anywhere
-else (including filenames), still flag.
+Exemption: for the "busdev" term only, the matched `upstreamed-from:\\s*busdev@`
+span (case-insensitive) is stripped from the line before checking — the
+provenance convention documented in plugin/skills/README.md. This is a
+per-occurrence exemption, not a whole-line one: any other "busdev" mention
+riding along on the same line still flags, as do other terms on that line and
+bare "busdev" anywhere else (including filenames).
 
 Exit 0 with no output on success; print problems and exit 1 otherwise.
 """
@@ -92,11 +94,14 @@ def scan_cleanroom(root: Path, terms: list[str]) -> list[str]:
                 continue  # binary — filename already checked above
             for i, line in enumerate(text.splitlines(), 1):
                 lower_line = line.lower()
-                exempt_busdev = bool(PROVENANCE_RE.search(line))
+                # Strip only the matched provenance span before checking the
+                # "busdev" term, so an unrelated "busdev" elsewhere on the
+                # same line still flags — a per-occurrence exemption, not a
+                # whole-line one.
+                busdev_haystack = PROVENANCE_RE.sub("", line).lower()
                 for term in terms:
-                    if term == "busdev" and exempt_busdev:
-                        continue
-                    if term in lower_line:
+                    haystack = busdev_haystack if term == "busdev" else lower_line
+                    if term in haystack:
                         problems.append(
                             f"{path.relative_to(root)}:{i}: clean-room violation: {term!r}"
                         )

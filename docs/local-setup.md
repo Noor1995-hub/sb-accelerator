@@ -13,6 +13,8 @@ python scripts/validate_template.py
 python -m pytest scripts/tests -q
 ```
 
+(If `python` is not on your PATH — stock macOS — use `python3`.)
+
 ## Test the plugin against a scratch vault
 
 Instantiate the template into a throwaway directory and point Claude Code at it:
