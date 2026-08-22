@@ -8,7 +8,7 @@ from the `gh` CLI, so it works from the terminal and from Claude Code.
 | Surface | Link |
 |---|---|
 | Issues | <https://github.com/DLW-INT-BTA-BELUX/sb-accelerator/issues> |
-| Board ("SB Accelerator Backlog") | *(org project — URL in `.github/workflows/issue-backlog-defaults.yml`)* |
+| Board ("SB Accelerator Backlog") | <https://github.com/orgs/DLW-INT-BTA-BELUX/projects/2> |
 
 ## The model — four axes
 
