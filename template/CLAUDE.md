@@ -1,0 +1,90 @@
+# Vault Instructions
+
+## What This Vault Is
+
+An Obsidian-based second brain for one executive, operated jointly with their
+assistant. The assistant runs capture and processing (transcripts, voice
+memos, dossiers, briefs); the executive consumes briefs, asks questions, and
+browses. Claude is the working interface to everything in here.
+
+## Golden Rules
+
+1. **Understand before acting** — when context is missing, ask; don't fill
+   gaps with guesses. Exception: trivial fixes.
+2. **Human in the loop** — nothing generated here goes to external parties
+   without the executive's or assistant's explicit review.
+3. **Be epistemically honest** — state what you know, what you infer, and
+   what you guess. Never present a guess as a fact.
+4. **Build on what exists** — check for existing notes, dossiers, and prior
+   work before creating anything new.
+5. **One file, one purpose** — never create files "just in case."
+
+## Vault Structure
+
+| Folder | Holds |
+|---|---|
+| `10-inbox/` | Unprocessed capture — transcripts, voice memos, forwarded emails. See its README |
+| `20-meetings/` | Meeting notes (one file per meeting) |
+| `30-projects/{slug}/` | Projects and initiatives — `index.md` hub + `decisions/` log |
+| `40-entities/{slug}/` | Dossiers on organizations you work with — `dossier.md` per entity |
+| `50-people/` | People you work with — one note per person |
+| `60-daily-notes/` | Daily canvas; morning and evening briefs land here |
+| `70-resources/` | Guides, source material, attachments |
+| `80-thoughts-ideas/` | Idea seeds and drafts |
+| `90-archive/` | Completed and historical items |
+| `95-private/` | Executive-private notes — excluded from sync, invisible to the assistant |
+| `99-workflow-config/` | Context portfolio, object model reference, lessons log |
+| `_heavy-assets/` | Generated binaries (.pptx/.xlsx/.pdf/…) — excluded from sync |
+
+## Object Model
+
+Five object types: **Meeting · Project · Person · Decision · Entity**.
+Relationships live in YAML frontmatter (wikilinks and slug joins), not folder
+hierarchy; curation happens in the `.base` views, not by browsing folders.
+The authoritative schemas, enums, and join keys are in
+`99-workflow-config/reference/ontology.md` — consult it before writing any
+object frontmatter.
+
+## Key Patterns
+
+### Slugs
+
+Lowercase, hyphenated: `acme-industries`, `jordan-reyes`. An entity's slug
+MUST equal its folder name AND the `entity:` value on its projects — it is
+the join key.
+
+### Decision Notes
+
+Each material decision on a project is an atomic note at
+`30-projects/{slug}/decisions/YYYY-MM-DD-{kebab-summary}.md`. Body:
+`**Decision** — / **Why** — / **Implications**`. Supersession is a wikilink
+edge (`supersedes: [[YYYY-MM-DD-prior]]`). **Never delete a decision** —
+status flips only (`active` → `superseded` / `withdrawn`). The trace is
+permanent.
+
+### Heavy Assets
+
+Generated binaries (`.pptx`, `.xlsx`, `.pdf`, `.docx`, `.zip`) go to
+`_heavy-assets/` with a descriptive, project-prefixed filename — never into
+content folders. Add a stub link under `## Deliverables` in the source
+project's `index.md`.
+
+### Inbox Discipline
+
+Unprocessed capture lands in `10-inbox/` and only there. Processing skills
+consume from the inbox and write results to the proper object folders. Skill
+outputs never land in the inbox.
+
+## Self-Improvement Loop
+
+After any correction or pushback from the executive or assistant:
+
+1. **Log it** — append the pattern to
+   `99-workflow-config/reference/lessons.md` with date, what went wrong, and
+   the rule that prevents it.
+2. **Apply immediately** — follow the new rule for the rest of the session.
+3. **Promote when recurring** — a pattern appearing 2–3 times graduates into
+   this file or the relevant context-portfolio file; mark it `[graduated]`.
+
+At session start, scan `lessons.md` for ungraduated patterns relevant to the
+task at hand.
