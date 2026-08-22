@@ -1,0 +1,27 @@
+Microsoft Teams — Meeting Transcript
+Meeting: Nordbridge Components / Cascadia Intermodal — Quarterly Check-in
+Date: 2026-08-19 10:00–10:35 (America/Chicago)
+Participants: Jordan Vance, Dana Whitfield
+
+[10:00:12] Jordan Vance: Thanks for jumping on, Dana. Wanted to check in
+ahead of the proposal submission — anything changed on your end since we
+last talked?
+
+[10:00:41] Dana Whitfield: Not much has changed. The ERP freeze at Ohio
+Valley is still in effect through end of Q3, so keep that site out of Phase
+1 like we discussed.
+
+[10:01:20] Jordan Vance: Understood, we've already scoped Phase 1 around
+the Kentucky plant instead. Timeline still looking like a September
+submission on our end.
+
+[10:02:05] Dana Whitfield: That works. One thing — procurement wants to see
+a total-cost-of-ownership comparison against our current manual process,
+not just the automation vendor pricing. Can you build that in?
+
+[10:02:40] Jordan Vance: Yes, we'll add a TCO section. I'll get you a draft
+before the formal submission so there's no surprises.
+
+[10:03:15] Dana Whitfield: Appreciated. That's all from my side.
+
+[10:03:22] Jordan Vance: Great, thanks Dana — talk soon.

@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-"""Skill frontmatter lint + clean-room scan for plugin/ and template/.
+"""Skill frontmatter lint + clean-room scan for plugin/, template/, and fixtures/.
 
 Two jobs:
 1. Every plugin/skills/*/SKILL.md has YAML frontmatter with name (matching its
    directory), description, and user_invocable: true.
 2. No denylisted term (scripts/cleanroom-denylist.txt, case-insensitive
-   substrings) appears in any text file under plugin/ or template/ — the
-   clean-room rule from CLAUDE.md. These trees ship to clients.
+   substrings) appears in any text file under plugin/, template/, or
+   fixtures/ — the clean-room rule from CLAUDE.md. plugin/ and template/
+   ship to clients; fixtures/ never ships but must stay just as clean.
 
 Exemption: for the "busdev" term only, the matched `upstreamed-from:\\s*busdev@`
 span (case-insensitive) is stripped from the line before checking — the
@@ -75,7 +76,7 @@ def lint_skills(root: Path) -> list[str]:
 
 def scan_cleanroom(root: Path, terms: list[str]) -> list[str]:
     problems = []
-    for tree in ("plugin", "template"):
+    for tree in ("plugin", "template", "fixtures"):
         base = root / tree
         if not base.is_dir():
             continue

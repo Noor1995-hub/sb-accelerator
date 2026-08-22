@@ -1,0 +1,16 @@
+Voice memo — dictated by Morgan Ellery
+Recorded: 2026-08-20, 16:42 (America/Chicago)
+Device: personal recorder, auto-transcribed
+
+Okay, quick notes from the site visit today with Sam at the regional
+distribution center. Two things worth flagging. One — the pipeline data
+Omar's team is cleaning up as part of the CRM modernization project, I saw
+firsthand today how bad the current stage definitions are, floor
+supervisors are literally using three different terms for the same
+handoff step. That's going to slow down the modernization timeline if we
+don't get operations input, not just sales input, into the new schema.
+Second thing — Sam mentioned informally that the pipeline governance
+review cadence, monthly isn't enough right now given how much is moving on
+the Meridian side, might want to bump that to biweekly for the rest of the
+quarter. Nothing urgent, just wanted to get this down before I forget it.
+That's it.

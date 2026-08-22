@@ -1,0 +1,13 @@
+---
+person-name: "Taylor Brooks"
+slug: taylor-brooks
+email: taylor.brooks@cascadia-intermodal.example
+relationship: colleague
+company: "Cascadia Intermodal Group"
+role: "Chief of Staff"
+projects: [commercial-ops-pipeline-governance]
+created: 2025-06-01
+last-updated: 2026-06-05
+meetings-7d: 0
+meetings-30d: 1
+---

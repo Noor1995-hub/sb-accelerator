@@ -69,6 +69,16 @@ def test_cleanroom_violation_in_template_fails(tmp_path):
     assert any("busdev" in p.lower() for p in problems)
 
 
+def test_cleanroom_violation_in_fixtures_fails(tmp_path):
+    root = make_repo(tmp_path)
+    (root / "fixtures" / "demo-vault" / "50-people").mkdir(parents=True)
+    (root / "fixtures" / "demo-vault" / "50-people" / "note.md").write_text(
+        "Contact Michael about this.\n", encoding="utf-8"
+    )
+    problems = main(root)
+    assert any("michael" in p.lower() for p in problems)
+
+
 def test_cleanroom_scan_skips_binary_and_comments(tmp_path):
     root = make_repo(tmp_path)
     (root / "plugin" / "logo.png").write_bytes(b"\x89PNG\x00michael\x00")

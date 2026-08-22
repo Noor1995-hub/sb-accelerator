@@ -15,14 +15,89 @@ python -m pytest scripts/tests -q
 
 (If `python` is not on your PATH — stock macOS — use `python3`.)
 
-## Test the plugin against a scratch vault
+## Test the plugin against a demo vault
 
-Instantiate the template into a throwaway directory and point Claude Code at it:
+This is the full path from a fresh clone to a hand-testable vault. It's the
+acceptance test for the test-vault harness itself — if any step here doesn't
+work, that's a bug in the harness, not in your setup.
+
+### 1. Create the test vault
 
 ```bash
-cp -R template /tmp/scratch-vault
-cd /tmp/scratch-vault && claude
+python scripts/make_test_vault.py /tmp/sb-test-vault
 ```
 
-(While `template/` is unpopulated this is a no-op; the template-extraction
-issue makes it real.)
+This copies `template/` into `/tmp/sb-test-vault` and overlays
+`fixtures/demo-vault/` on top — a populated demo vault for one fictional
+persona (Morgan Ellery, CCO at Cascadia Intermodal Group). The script
+refuses to touch a target directory that already exists and has files in
+it — it fails fast (exit 1) instead of overwriting. Delete the directory
+first when you want a clean rebuild.
+
+To test the *unpopulated* onboarding path instead (no demo content, just
+the placeholder template):
+
+```bash
+python scripts/make_test_vault.py /tmp/sb-onboarding-vault --fresh
+```
+
+### 2. Open it in Obsidian
+
+Open `/tmp/sb-test-vault` as an Obsidian vault (`Open folder as vault`).
+Obsidian community plugins can't ship pre-installed, so install them by
+hand once per test vault, per `template/README.md`:
+
+1. Settings → Community plugins → Turn on community plugins.
+2. Install and enable: **Dataview**, **Minimal Theme Settings**, **Style
+   Settings**, **Notebook Navigator** (the plugin IDs are already listed in
+   `.obsidian/community-plugins.json`, so Obsidian should offer to enable
+   them directly).
+3. Settings → Appearance → set the theme to **Minimal**.
+
+### 3. Verify the five Bases render
+
+Open each `.base` file and confirm it shows fixture rows, not an empty
+table:
+
+- `40-entities/Entities.base` — "All" shows 3 entities; "Prospects" shows
+  Nordbridge Components; "Active" shows the other two.
+- `30-projects/Projects.base` — "Active" shows 4 projects; "All" shows all 5
+  (including the completed Phase 0 pilot).
+- `30-projects/Decisions.base` — "All" shows 4 decisions with the
+  `supersedes` column populated on one row.
+- `20-meetings/Meetings.base` — "Triage" shows exactly 3 meetings (the two
+  `needs-review` and one `needs-attention` that are neither reviewed nor
+  archived); "All Meetings" shows all 8.
+- `50-people/People.base` — "All" shows 9 people; "Uncurated" shows exactly
+  one row (Jamie Ellwood, `relationship` empty).
+
+### 4. Load the plugin locally and verify skills are invocable
+
+```bash
+cd /tmp/sb-test-vault
+claude --plugin-dir /path/to/sb-accelerator/plugin
+```
+
+Run `/help` (or your Claude Code client's plugin/skill listing) and confirm
+the vault-scoped skills from `plugin/skills/` are visible. As of this
+writing `plugin/skills/` has no skills yet (they land via issues #14–#20) —
+if that's still true when you run this, this step just confirms the plugin
+loads without error; re-run it against a real skill once one exists.
+
+### 5. Run one skill against the fixtures
+
+Once at least one skill exists, invoke it against a fixture input — for
+example, a meeting-capture skill against
+`10-inbox/2026-08-19-teams-transcript-nordbridge-checkin.txt` — and confirm
+it produces output consistent with the ontology (a `20-meetings/` note with
+the required frontmatter fields from
+`template/99-workflow-config/reference/ontology.md`).
+
+### 6. Tear down and recreate
+
+```bash
+rm -rf /tmp/sb-test-vault
+python scripts/make_test_vault.py /tmp/sb-test-vault
+```
+
+Confirms the harness is fully disposable — no state leaks between runs.
