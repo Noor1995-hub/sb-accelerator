@@ -1,0 +1,11 @@
+# Client deployment registry — one entry per deployed engagement.
+# v1 is this file; moves to Airtable when client count justifies it (design doc, Phase 2).
+# Entry shape:
+#   - client: <client-slug>
+#     exec: <name or initials>
+#     plugin_version: <semver deployed>
+#     structure_version: <template structure-version deployed>
+#     archetype: commercial-leader
+#     care_package: active | lapsed | none
+#     notes: ""
+clients: []
