@@ -1,0 +1,53 @@
+filters:
+  and:
+    - file.inFolder("50-people")
+    - file.ext == "md"
+    - person-name != null
+formulas:
+  open: link(file.path, "→")
+properties:
+  formula.open:
+    displayName: " "
+  person-name:
+    displayName: Name
+  relationship:
+    displayName: Relationship
+  company:
+    displayName: Company
+  role:
+    displayName: Role
+  projects:
+    displayName: Projects
+  meetings-30d:
+    displayName: Meetings (30d)
+  last-updated:
+    displayName: Updated
+views:
+  - type: table
+    name: All
+    order:
+      - formula.open
+      - person-name
+      - relationship
+      - company
+      - role
+      - projects
+      - meetings-30d
+      - last-updated
+    sort:
+      - property: last-updated
+        direction: DESC
+  - type: table
+    name: Uncurated
+    filters:
+      and:
+        - relationship == null
+    order:
+      - formula.open
+      - person-name
+      - company
+      - role
+      - meetings-30d
+    sort:
+      - property: meetings-30d
+        direction: DESC

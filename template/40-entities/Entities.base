@@ -1,0 +1,63 @@
+filters:
+  and:
+    - file.name == "dossier"
+    - type == "entity"
+formulas:
+  open: link(file.path, "→")
+properties:
+  formula.open:
+    displayName: " "
+  entity-name:
+    displayName: Entity
+  entity-type:
+    displayName: Type
+  status:
+    displayName: Status
+  industry:
+    displayName: Industry
+  owner:
+    displayName: Owner
+  last-updated:
+    displayName: Updated
+views:
+  - type: table
+    name: All
+    order:
+      - formula.open
+      - entity-name
+      - entity-type
+      - status
+      - industry
+      - owner
+      - last-updated
+    sort:
+      - property: last-updated
+        direction: DESC
+  - type: table
+    name: Active
+    filters:
+      and:
+        - status == "active"
+    order:
+      - formula.open
+      - entity-name
+      - entity-type
+      - industry
+      - owner
+      - last-updated
+    sort:
+      - property: last-updated
+        direction: DESC
+  - type: table
+    name: Prospects
+    filters:
+      and:
+        - status == "prospect"
+    order:
+      - formula.open
+      - entity-name
+      - industry
+      - last-updated
+    sort:
+      - property: last-updated
+        direction: DESC
