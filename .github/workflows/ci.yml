@@ -1,0 +1,69 @@
+# CI - the three required status checks (the `main-ci` ruleset requires the
+# three job names below as contexts, so renaming a job here without updating
+# the ruleset blocks every merge).
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Superseded PR pushes cancel their in-flight run; main runs never cancel.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  plugin:
+    name: plugin (skill lint + tests)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: install deps
+        run: pip install pytest pyyaml
+      - name: skill lint + clean-room scan
+        run: python scripts/lint_plugin.py
+      - name: validator unit tests
+        run: python -m pytest scripts/tests -q
+
+  template:
+    name: template (structure validation)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: template structure validation
+        run: python scripts/validate_template.py
+
+  plugin_version_guard:
+    name: plugin version (not already released)
+    # PR builds only, same rationale as bta's guard: on main the steady state
+    # right after a release is "current version already tagged", which would
+    # red-X every later push.
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Merge-commit checkout: HEAD~1 is the target-branch tip, so
+          # HEAD~1..HEAD is the PR's net change.
+          fetch-depth: 2
+          # persist-credentials stays ON (the checkout default) - unlike bta,
+          # the tag check runs against THIS repo, so GITHUB_TOKEN is exactly
+          # the credential git ls-remote needs.
+      - name: fail if plugin.json version is unbumped or already released
+        run: |
+          set -euo pipefail
+          baseline=$(git show HEAD~1:plugin/.claude-plugin/plugin.json 2>/dev/null \
+            | python3 -c "import json,sys; print(json.load(sys.stdin)['version'])" 2>/dev/null) || baseline=""
+          scripts/check-plugin-version.sh ${baseline:+--baseline "$baseline"}

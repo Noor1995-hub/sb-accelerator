@@ -1,0 +1,41 @@
+name: Issue backlog defaults
+
+# Keeps every issue on the org "SB Accelerator Backlog" project board and gives it
+# a milestone, without asking the reporter to know the roadmap. See
+# docs/architecture.md / the project board for the "Unscheduled" convention:
+# triage moves issues out of it into a real v1.x milestone.
+
+on:
+  issues:
+    types: [opened, reopened, transferred]
+
+permissions:
+  issues: write
+
+jobs:
+  add-to-project:
+    name: Add to SB Accelerator Backlog project
+    runs-on: ubuntu-latest
+    steps:
+      # v2.0.0, pinned to commit for supply-chain safety.
+      - uses: actions/add-to-project@5afcf98fcd03f1c2f92c3c83f58ae24323cc57fd # v2.0.0
+        with:
+          project-url: https://github.com/orgs/DLW-INT-BTA-BELUX/projects/2
+          github-token: ${{ secrets.PROJECTS_TOKEN }}
+
+  default-milestone:
+    name: Assign "Unscheduled" milestone if none set
+    runs-on: ubuntu-latest
+    if: github.event.issue.milestone == null
+    steps:
+      - name: Assign default milestone
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          NUMBER=$(gh api "repos/${{ github.repository }}/milestones" --jq '.[] | select(.title == "Unscheduled") | .number')
+          if [ -z "$NUMBER" ]; then
+            echo "::error::No 'Unscheduled' milestone found in this repo"
+            exit 1
+          fi
+          gh api -X PATCH "repos/${{ github.repository }}/issues/${{ github.event.issue.number }}" -f milestone="$NUMBER"
