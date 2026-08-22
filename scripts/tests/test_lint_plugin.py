@@ -1,7 +1,9 @@
 """Tests build a fake repo tree in tmp_path and run the linter's main() against it."""
 from pathlib import Path
 
-from lint_plugin import main
+from lint_plugin import load_denylist, main, scan_cleanroom
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 def make_repo(tmp_path: Path) -> Path:
@@ -108,3 +110,38 @@ def test_bare_busdev_elsewhere_still_fails(tmp_path):
     )
     problems = main(root)
     assert any("busdev" in p.lower() for p in problems)
+
+
+def test_provenance_line_with_extra_busdev_mention_still_flags(tmp_path):
+    """The per-line provenance exemption must only cover the matched
+    `upstreamed-from: busdev@...` span, not the whole line — an unrelated
+    "busdev" mention riding along on the same line must still flag."""
+    root = make_repo(tmp_path)
+    write_skill(
+        root,
+        "health-check",
+        "name: health-check\ndescription: X.\nuser_invocable: true\n"
+        "upstreamed-from: busdev@abc123  # copied from busdev/clients/acme.md\n",
+    )
+    problems = main(root)
+    assert any("busdev" in p.lower() for p in problems)
+
+
+# --- Finding 1 (final review): the shipped denylist must catch the accented surname. ---
+
+
+def test_shipped_denylist_catches_accented_surname(tmp_path):
+    """Locks scripts/cleanroom-denylist.txt itself: "bulthe" (plain e) does not
+    match "Bulthé" (accented é) as a substring, so the real denylist needs its
+    own accented entry. Runs scan_cleanroom with terms loaded from the actual
+    shipped denylist file, not the slimmed-down fixture in make_repo()."""
+    root = make_repo(tmp_path)
+    write_skill(
+        root,
+        "health-check",
+        "name: health-check\ndescription: X.\nuser_invocable: true\n",
+        body="Ping Bulthé when done.",
+    )
+    real_terms = load_denylist(REPO_ROOT)
+    problems = scan_cleanroom(root, real_terms)
+    assert any("bulth" in p.lower() for p in problems)

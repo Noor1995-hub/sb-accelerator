@@ -3,4 +3,5 @@
 # Add client slugs here as engagements begin. "delaware" (the vendor) is allowed.
 michael
 bulthe
+bulthé
 busdev
