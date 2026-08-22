@@ -69,7 +69,7 @@ Generated binaries (`.pptx`, `.xlsx`, `.pdf`, `.docx`, `.zip`) go to
 content folders. Add a stub link under `## Deliverables` in the source
 project's `index.md`.
 
-### Inbox Discipline
+## Inbox Discipline
 
 Unprocessed capture lands in `10-inbox/` and only there. Processing skills
 consume from the inbox and write results to the proper object folders. Skill

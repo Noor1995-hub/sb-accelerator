@@ -134,8 +134,9 @@ delaware-internal references, any personal or client content.
 Files shipped: `community-plugins.json` (dataview, obsidian-minimal-settings,
 obsidian-style-settings, notebook-navigator), `appearance.json` (Minimal theme named),
 `core-plugins.json` (Bases + daily notes enabled), `daily-notes.json` (folder →
-`60-daily-notes/`), `app.json` (exactly one setting: `attachmentFolderPath` →
-`70-resources/attachments` so pasted images never litter the vault root). **No
+`60-daily-notes/`), `app.json` (two settings: `attachmentFolderPath` →
+`70-resources/attachments` so pasted images never litter the vault root, and
+`alwaysUpdateLinks: true` so file renames keep links intact). **No
 plugin/theme binaries, no `workspace.json`, no sync credentials.**
 
 Obsidian Sync exclusions (`95-private/`, `_heavy-assets/`) cannot be preconfigured in

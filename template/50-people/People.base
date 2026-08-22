@@ -2,7 +2,7 @@ filters:
   and:
     - file.inFolder("50-people")
     - file.ext == "md"
-    - person-name != null
+    - '!note["person-name"].isEmpty()'
 formulas:
   open: link(file.path, "→")
 properties:
@@ -41,7 +41,7 @@ views:
     name: Uncurated
     filters:
       and:
-        - relationship == null
+        - relationship.isEmpty()
     order:
       - formula.open
       - person-name
