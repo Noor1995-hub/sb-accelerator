@@ -1,11 +1,30 @@
 # Vault template
 
-The L0 vault skeleton instantiated once per client: folder structure,
-`.obsidian/` config (incl. sync exclusions for the exec-private folder),
-`.base` views, a de-personalized `CLAUDE.md`, context-portfolio files with
-guided placeholder slots, and a `structure-version` marker consumed by
-`/upgrade-vault`.
+The L0 vault skeleton, instantiated once per client deployment: folder
+structure, `.obsidian/` configuration, `.base` views, vault instructions
+(`CLAUDE.md`), a context portfolio with guided placeholder slots, and a
+`structure-version` marker consumed by `/upgrade-vault`.
 
-Not yet populated — extraction from the upstream lab vault is tracked in the
-backlog (area:template). Once populated, `scripts/validate_template.py` requires
-`template/CLAUDE.md` and `template/structure-version` to exist.
+## Instantiating
+
+Copy the contents of this directory (including `.obsidian/`) into the new
+vault location on the client machine. Do not initialize git in the vault —
+the vault has no git by design; snapshots and sync history cover recovery.
+
+## Provisioning steps that cannot ship as files
+
+Obsidian Sync requires a signed-in account, so the consultant configures
+these by hand at provisioning (see the pre-flight checklist playbook):
+
+1. **Install community plugins** listed in `.obsidian/community-plugins.json`
+   (Dataview, Minimal Theme Settings, Style Settings, Notebook Navigator) and
+   the **Minimal** theme.
+2. **Exclude from Obsidian Sync:** `95-private/` (exec-private folder) and
+   `_heavy-assets/` (generated binaries).
+3. Connect Obsidian Sync on both machines (exec + assistant) and verify the
+   exclusions on each.
+
+## Markers
+
+- `structure-version` — plain integer, bumped only by structure migrations
+  under `migrations/`; read by `/upgrade-vault`.

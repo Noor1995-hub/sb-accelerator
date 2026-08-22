@@ -1,0 +1,67 @@
+filters:
+  and:
+    - file.inFolder("20-meetings")
+    - file.ext == "md"
+formulas:
+  open: link(file.path, "→")
+properties:
+  formula.open:
+    displayName: " "
+  date:
+    displayName: Date
+  calendar-subject:
+    displayName: Subject
+  calendar_match:
+    displayName: Cal
+  attendees:
+    displayName: Attendees
+  projects:
+    displayName: Projects
+  review_status:
+    displayName: Review Status
+  reviewed:
+    displayName: ✓ Reviewed
+  archived:
+    displayName: 🗑 Archive
+  recording-duration:
+    displayName: Duration
+views:
+  - type: table
+    name: Triage
+    filters:
+      and:
+        - or:
+            - review_status == "needs-review"
+            - review_status == "needs-attention"
+        - reviewed != true
+        - archived != true
+    order:
+      - formula.open
+      - date
+      - calendar-subject
+      - calendar_match
+      - attendees
+      - projects
+      - reviewed
+      - archived
+      - recording-duration
+      - source
+      - type
+    sort:
+      - property: date
+        direction: DESC
+    rowHeight: medium
+  - type: table
+    name: All Meetings
+    order:
+      - formula.open
+      - date
+      - calendar-subject
+      - type
+      - attendees
+      - projects
+      - review_status
+      - recording-duration
+    sort:
+      - property: date
+        direction: DESC

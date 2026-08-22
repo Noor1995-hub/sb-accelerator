@@ -1,0 +1,48 @@
+filters:
+  and:
+    - type == "decision"
+formulas:
+  open: link(file.path, "→")
+properties:
+  formula.open:
+    displayName: " "
+  summary:
+    displayName: Decision
+  project:
+    displayName: Project
+  date:
+    displayName: Date
+  status:
+    displayName: Status
+  tags:
+    displayName: Tags
+  supersedes:
+    displayName: Supersedes
+views:
+  - type: table
+    name: Active
+    filters:
+      and:
+        - status == "active"
+    order:
+      - formula.open
+      - summary
+      - project
+      - date
+      - tags
+    sort:
+      - property: date
+        direction: DESC
+  - type: table
+    name: All
+    order:
+      - formula.open
+      - summary
+      - project
+      - date
+      - status
+      - tags
+      - supersedes
+    sort:
+      - property: date
+        direction: DESC

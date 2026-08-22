@@ -1,0 +1,55 @@
+filters:
+  and:
+    - file.inFolder("30-projects")
+    - file.name == "index"
+formulas:
+  open: link(file.path, "→")
+properties:
+  formula.open:
+    displayName: " "
+  project-name:
+    displayName: Project
+  status:
+    displayName: Status
+  project-type:
+    displayName: Type
+  entity:
+    displayName: Entity
+  owner:
+    displayName: Owner
+  next-milestone:
+    displayName: Next Milestone
+  next-milestone-date:
+    displayName: Due
+  last-updated:
+    displayName: Updated
+views:
+  - type: table
+    name: Active
+    filters:
+      and:
+        - status == "active"
+    order:
+      - formula.open
+      - project-name
+      - project-type
+      - entity
+      - next-milestone
+      - next-milestone-date
+      - last-updated
+    sort:
+      - property: last-updated
+        direction: DESC
+  - type: table
+    name: All
+    order:
+      - formula.open
+      - project-name
+      - status
+      - project-type
+      - entity
+      - owner
+      - last-updated
+    sort:
+      - property: last-updated
+        direction: DESC
