@@ -111,6 +111,20 @@ where the vault is mounted. In chat, these skills decline with a one-line
 pointer to Cowork rather than hand-writing frontmatter that a machine
 contract governs.
 
+Two related facts, both confirmed 2026-08-23:
+
+- **Plugins do not load in Chat at all**, so the surface boundary above is a
+  platform constraint rather than a design choice.
+- **Cowork does read the vault's `CLAUDE.md`** as folder instructions by
+  default (it appears in Cowork's context panel as "Instructions ·
+  CLAUDE.md"), so the template's behavioural layer applies there without
+  mirroring. This was an open question at design time; it is settled and adds
+  no deliverable.
+
+Delivery mechanics, the five paths, and the pre-flight consequences live in
+`playbooks/plugin-distribution.md` and `playbooks/pre-flight-checklist.md`
+(PR #37).
+
 **New pre-flight checklist items** (playbook, delaware-side): Windows Cowork
 requires the `VirtualMachinePlatform` optional feature and administrator
 privileges at install — without admin, Cowork is unavailable. Anthropic also
@@ -368,11 +382,22 @@ each skill against the fixture vault — create a project with context pasted
 from a fixture inbox capture, update a dossier from free-form notes — and
 review the actual files produced. Quality is judged on real output.
 
+**Marketplace manifest.** This PR adds `.claude-plugin/marketplace.json` at
+the repo root, because without one the repo is not installable as a
+marketplace at all — and `--plugin-dir` is a **Claude Code** flag, so it is
+not a way to hand-test in Cowork. The client-facing marketplace remains
+`sb-dist`, written by the release pipeline (issue #10, not yet built); this
+manifest is for internal development and Cowork hand-testing, and its `name`
+should say so. Whether a *private* repo can be added as a user-level
+marketplace in Cowork is not documented either way — the hand-test
+establishes it. It works in Claude Code regardless, via
+`/plugin marketplace add`.
+
 ## Scope: three PRs
 
 | PR | Contents | Closes | Version |
 |---|---|---|---|
-| **P1a** | `/new-project`, `/update-entity`, `plugin/lib/vaultlib`, schema compilation, ontology changes, fixture enrichment, `Decisions.base` folder filter, two CI jobs | #17, #18, #19 | 0.1.0 |
+| **P1a** | `/new-project`, `/update-entity`, `plugin/lib/vaultlib`, schema compilation, ontology changes, fixture enrichment, `Decisions.base` folder filter, marketplace manifest, two CI jobs | #17, #18, #19 | 0.1.0 |
 | **P1b** | `/log-decision`, decision note template, supersession procedure, tags removal, decision fixture pass | #20, #36 | 0.2.0 |
 | **P2** | daily loop — its own brainstorm | #14, #15, #16 | |
 
