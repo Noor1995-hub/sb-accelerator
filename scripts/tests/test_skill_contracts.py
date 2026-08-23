@@ -40,7 +40,7 @@ def test_expected_skills_exist():
     # Each skill task appends its own name here as it lands, so this test is
     # always satisfiable by the task that touches it.
     names = {path.parent.name for path in SKILL_FILES}
-    assert "new-project" in names
+    assert {"new-project", "update-entity"} <= names
 
 
 @pytest.mark.parametrize("path", SKILL_FILES, ids=lambda p: p.parent.name)
