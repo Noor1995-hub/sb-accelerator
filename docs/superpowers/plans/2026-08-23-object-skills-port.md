@@ -3512,9 +3512,11 @@ def known_subcommands() -> set:
     return pairs
 
 
-def test_at_least_the_two_expected_skills_exist():
+def test_expected_skills_exist():
+    # Each skill task appends its own name here as it lands, so this test is
+    # always satisfiable by the task that touches it.
     names = {path.parent.name for path in SKILL_FILES}
-    assert {"new-project", "update-entity"} <= names
+    assert "new-project" in names
 
 
 @pytest.mark.parametrize("path", SKILL_FILES, ids=lambda p: p.parent.name)
@@ -4054,12 +4056,25 @@ two things the list cannot tell you:
    relationship-level judgments.
 ````
 
-- [ ] **Step 2: Run the contract tests**
+- [ ] **Step 2: Extend the skill-existence test to cover this skill**
+
+In `scripts/tests/test_skill_contracts.py`, change `test_expected_skills_exist`
+to require both skills now that both exist:
+
+```python
+def test_expected_skills_exist():
+    # Each skill task appends its own name here as it lands, so this test is
+    # always satisfiable by the task that touches it.
+    names = {path.parent.name for path in SKILL_FILES}
+    assert {"new-project", "update-entity"} <= names
+```
+
+- [ ] **Step 3: Run the contract tests**
 
 Run: `python3 -m pytest scripts/tests/test_skill_contracts.py -q`
 Expected: PASS — the parametrized tests now cover two skills.
 
-- [ ] **Step 3: Verify both skills against a real vault**
+- [ ] **Step 4: Verify both skills against a real vault**
 
 ```bash
 rm -rf /tmp/skill-check
@@ -4073,7 +4088,7 @@ fixture dossiers do **not** yet carry the six-section body — that lands in
 Task 11 — so `sections` will show empty strings for most titles. That is
 expected here and is exactly what Task 11 fixes.
 
-- [ ] **Step 4: Run the full suite and the other two checks**
+- [ ] **Step 5: Run the full suite and the other two checks**
 
 ```bash
 python3 -m pytest scripts/tests -q
@@ -4083,7 +4098,7 @@ python3 scripts/validate_template.py
 
 Expected: all pass.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
 git add plugin/skills/update-entity/SKILL.md
