@@ -135,6 +135,16 @@ def scaffold(root: Path, *, name: str, project_type: str, entity: str,
     """Create 30-projects/{slug}/index.md and its decisions/ folder."""
     slug = naming.slugify(name)
     naming.validate_slug(slug)
+    # owner is a join key to 50-people/{slug}.md, so it gets the same
+    # validation as slug. Unvalidated, a display name like "Jordan Reyes,
+    # VP: Ops" emits frontmatter that no YAML parser accepts.
+    try:
+        naming.validate_slug(str(owner or "").strip())
+    except ValueError as exc:
+        raise ProjectError(
+            f"owner {owner!r} is not a person slug: {exc}. "
+            "owner joins to 50-people/<slug>.md"
+        ) from exc
     _validate_inputs(root, slug, project_type, entity, parent)
 
     frontmatter = {

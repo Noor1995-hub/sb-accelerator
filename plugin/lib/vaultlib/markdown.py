@@ -108,10 +108,35 @@ def split_frontmatter(text: str) -> Tuple[dict, str]:
     return parse_frontmatter_block(match.group(1)), _normalize(text)[match.end():]
 
 
+_NEWLINE_RE = re.compile(r"[\r\n]")
+_MAPPING_LOOKALIKE_RE = re.compile(r":(?:\s|\Z)")
+
+
 def _emit_scalar(value, quoted: bool) -> str:
+    """Render one scalar, refusing anything that would not parse back.
+
+    Emitting frontmatter nothing can read is worse than failing: the file is
+    written, the caller is told it succeeded, and every later read of that
+    object fails permanently. A newline ends the scalar even inside quotes
+    (this module's parser is line-based and PyYAML rejects the result too), and
+    an unquoted `: ` turns the value into a nested mapping.
+    """
+    text = str(value)
+    if _NEWLINE_RE.search(text):
+        raise ValueError(
+            f"frontmatter value {text!r} contains a newline; YAML ends the "
+            "scalar there, so the file would not parse back. Pass a single-line "
+            "value."
+        )
+    if not quoted and _MAPPING_LOOKALIKE_RE.search(text):
+        raise ValueError(
+            f"frontmatter value {text!r} contains ':' followed by whitespace or "
+            "end of value, which YAML reads as a nested mapping. Pass a value "
+            "without it."
+        )
     if quoted:
-        return '"{}"'.format(str(value).replace('"', '\\"'))
-    return str(value)
+        return '"{}"'.format(text.replace('"', '\\"'))
+    return text
 
 
 def emit_frontmatter(data: Mapping, quote_keys: Collection[str] = ()) -> str:

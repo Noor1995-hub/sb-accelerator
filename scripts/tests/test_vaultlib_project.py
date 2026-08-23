@@ -109,6 +109,16 @@ def test_collision_is_refused_case_insensitively(tmp_path):
         project.scaffold(root, **BASE)
 
 
+def test_an_owner_that_is_not_a_person_slug_is_refused(tmp_path):
+    # owner is a slug join to 50-people/{slug}.md but was never validated, so
+    # a display name carrying ": " emitted YAML that PyYAML rejects with a
+    # ScannerError — which is also Obsidian's and CI's conformance parser.
+    root = vault_with_entity(tmp_path)
+    with pytest.raises(project.ProjectError, match="person slug"):
+        project.scaffold(root, **dict(BASE, owner="Jordan Reyes, VP: Ops"))
+    assert not (root / "30-projects" / "yard-automation-program").exists()
+
+
 def test_unknown_project_type_is_refused(tmp_path):
     root = vault_with_entity(tmp_path)
     args = dict(BASE, project_type="presales")

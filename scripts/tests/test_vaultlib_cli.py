@@ -146,3 +146,75 @@ def test_malformed_edits_payload_is_a_structured_error(capsys, tmp_path, monkeyp
     ])
     assert code == 1
     assert "not valid JSON" in out["error"]
+
+
+# Each of these used to raise KeyError or TypeError past every handler in
+# cli.main: empty stdout, exit 1, a traceback on stderr. Both SKILL.md files
+# tell the model to read `ok` on every call, so there has to be an `ok`.
+MALFORMED_EDIT_PAYLOADS = {
+    "context entry missing why": '{"context": [{"label": "L", "fact": "f"}]}',
+    "context entry is a string": '{"context": ["a plain string"]}',
+    "engagement missing project": '{"engagements": [{"status": "Active"}]}',
+    "meeting_log missing date": '{"meeting_log": [{"topic": "only a topic"}]}',
+    "context is a dict not a list":
+        '{"context": {"label": "L", "fact": "f", "why": "w"}}',
+}
+
+
+def _seeded_vault(tmp_path):
+    from vaultlib import entity
+    root = make_vault(tmp_path)
+    entity.ensure(root, slug="acme-industries", name="Acme Industries",
+                  today="2026-08-23")
+    return root
+
+
+@pytest.mark.parametrize("payload", list(MALFORMED_EDIT_PAYLOADS.values()),
+                         ids=list(MALFORMED_EDIT_PAYLOADS))
+def test_a_malformed_edits_entry_is_a_structured_error_not_a_traceback(
+        capsys, tmp_path, monkeypatch, payload):
+    import io
+    root = _seeded_vault(tmp_path)
+    monkeypatch.setattr("sys.stdin", io.StringIO(payload))
+    code, out = run(capsys, [
+        "entity", "write", "--vault", str(root), "--slug", "acme-industries",
+        "--edits", "-",
+    ])
+    assert code == 1
+    assert out["ok"] is False
+    assert out["error"].strip(), "the envelope must name the constraint"
+    assert out["hint"].strip()
+
+
+def test_every_malformed_payload_still_prints_exactly_one_json_object(
+        capsys, tmp_path, monkeypatch):
+    import io
+    root = _seeded_vault(tmp_path)
+    for label, payload in MALFORMED_EDIT_PAYLOADS.items():
+        monkeypatch.setattr("sys.stdin", io.StringIO(payload))
+        cli.main(["entity", "write", "--vault", str(root),
+                  "--slug", "acme-industries", "--edits", "-"])
+        out = capsys.readouterr().out
+        assert json.loads(out)["ok"] is False, label  # raises if not valid JSON
+
+
+def test_a_future_direct_index_cannot_escape_the_envelope(
+        capsys, tmp_path, monkeypatch):
+    # The KeyError/TypeError backstop in cli.main. entity._validate_items
+    # catches every payload shape known today, so simulate the case it is
+    # there for: a merge that indexes a key nothing validated.
+    import io
+    from vaultlib import entity
+
+    def boom(*args, **kwargs):
+        raise KeyError("why")
+
+    root = _seeded_vault(tmp_path)
+    monkeypatch.setattr(entity, "write", boom)
+    monkeypatch.setattr("sys.stdin", io.StringIO('{"context": [{}]}'))
+    code, out = run(capsys, [
+        "entity", "write", "--vault", str(root), "--slug", "acme-industries",
+        "--edits", "-",
+    ])
+    assert code == 1
+    assert "malformed edits payload" in out["error"]

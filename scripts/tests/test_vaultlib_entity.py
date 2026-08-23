@@ -88,6 +88,25 @@ def test_ensure_rejects_a_malformed_slug(tmp_path):
         entity.ensure(root, slug="Bad Slug", name="X", today=TODAY)
 
 
+def test_ensure_refuses_a_newline_in_the_display_name(tmp_path):
+    # This used to return created: true and then fail every later read with
+    # "unparseable frontmatter line" — the CLI bricking an object it created.
+    root = make_vault(tmp_path)
+    with pytest.raises(ValueError, match="newline"):
+        entity.ensure(root, slug="acme", name="Acme\nInc", today=TODAY)
+    assert not (root / "40-entities" / "acme" / "dossier.md").exists()
+
+
+def test_ensure_refuses_an_owner_that_is_not_a_person_slug(tmp_path):
+    # owner is a slug join to 50-people/{slug}.md and was never validated, so
+    # a display name emitted YAML that PyYAML rejects with a ScannerError.
+    root = make_vault(tmp_path)
+    with pytest.raises(entity.EntityError, match="person slug"):
+        entity.ensure(root, slug="acme", name="Acme", today=TODAY,
+                      owner="jordan: reyes")
+    assert not (root / "40-entities" / "acme" / "dossier.md").exists()
+
+
 # --- read -----------------------------------------------------------------
 
 def test_read_raises_on_a_missing_dossier(tmp_path):
@@ -313,6 +332,83 @@ def test_off_vocabulary_stance_is_refused(tmp_path):
             {"name": "X", "stance": "hostile"}]}, TODAY)
 
 
+def test_a_notes_update_does_not_clear_the_needs_review_marker(tmp_path):
+    # /update-entity Rule 4: leave the marker for a human. Replacing the Notes
+    # cell used to carry the marker away with the text it replaced.
+    root = seeded(tmp_path)
+    entity.write(root, "meridian-freight-holdings", {"stakeholders": [
+        {"name": "Leo Marchetti", "notes": "wants a payback inside 18 months"}]},
+        TODAY)
+    entity.write(root, "meridian-freight-holdings", {"stakeholders": [
+        {"name": "Leo Marchetti", "notes": "signed off on the discovery budget"}]},
+        TODAY)
+    text = entity.read(root, "meridian-freight-holdings")["sections"]["Stakeholders"]
+    row = [line for line in text.splitlines() if "Marchetti" in line][0]
+    assert "signed off on the discovery budget" in row
+    assert row.count("<!-- needs-review -->") == 1, (
+        f"the marker was cleared on the user's behalf: {row}")
+
+
+def test_a_marker_a_human_cleared_is_not_reinstated(tmp_path):
+    # The other half of Rule 4: re-appending must only preserve a marker that
+    # is still there, never resurrect one a human removed in Obsidian.
+    root = seeded(tmp_path)
+    entity.write(root, "meridian-freight-holdings", {"stakeholders": [
+        {"name": "Leo Marchetti", "notes": "wants numbers"}]}, TODAY)
+    path = root / "40-entities" / "meridian-freight-holdings" / "dossier.md"
+    path.write_text(
+        path.read_text(encoding="utf-8").replace(" <!-- needs-review -->", ""),
+        encoding="utf-8")
+    entity.write(root, "meridian-freight-holdings", {"stakeholders": [
+        {"name": "Leo Marchetti", "notes": "wants numbers and a payback"}]}, TODAY)
+    text = entity.read(root, "meridian-freight-holdings")["sections"]["Stakeholders"]
+    row = [line for line in text.splitlines() if "Marchetti" in line][0]
+    assert "<!-- needs-review -->" not in row
+
+
+def test_a_note_under_the_stakeholder_table_survives_a_write(tmp_path):
+    # _parse_table used to collect only the lines BEFORE the table; anything
+    # after it matched neither branch and was silently dropped.
+    root = seeded(tmp_path)
+    entity.write(root, "meridian-freight-holdings", {"stakeholders": [
+        {"name": "Dana Whitfield", "title": "CFO"}]}, TODAY)
+    path = root / "40-entities" / "meridian-freight-holdings" / "dossier.md"
+    note = "Note: Dana's assistant is Sam Okafor — route scheduling through him."
+    path.write_text(
+        path.read_text(encoding="utf-8").replace(
+            "## Relationship History", f"{note}\n\n## Relationship History", 1),
+        encoding="utf-8")
+
+    entity.write(root, "meridian-freight-holdings", {"stakeholders": [
+        {"name": "Leo Marchetti", "title": "COO"}]}, TODAY)
+
+    section = entity.read(root, "meridian-freight-holdings")["sections"]["Stakeholders"]
+    assert note in section, "a human's note under the table was deleted"
+
+
+def test_notes_above_and_below_the_table_both_survive_in_position(tmp_path):
+    root = seeded(tmp_path)
+    entity.write(root, "meridian-freight-holdings", {"stakeholders": [
+        {"name": "Dana Whitfield", "title": "CFO"}]}, TODAY)
+    path = root / "40-entities" / "meridian-freight-holdings" / "dossier.md"
+    above = "Owners: the commercial team maintains this table."
+    below = "Note: route scheduling for Dana through Sam Okafor."
+    text = path.read_text(encoding="utf-8")
+    text = text.replace(entity.STAKEHOLDER_HEADER,
+                        f"{above}\n\n{entity.STAKEHOLDER_HEADER}", 1)
+    text = text.replace("## Relationship History",
+                        f"{below}\n\n## Relationship History", 1)
+    path.write_text(text, encoding="utf-8")
+
+    entity.write(root, "meridian-freight-holdings", {"stakeholders": [
+        {"name": "Leo Marchetti", "title": "COO"}]}, TODAY)
+
+    section = entity.read(root, "meridian-freight-holdings")["sections"]["Stakeholders"]
+    assert above in section and below in section
+    assert section.index(above) < section.index("| Name |") < section.index(below)
+    assert "Leo Marchetti" in section
+
+
 def test_a_pipe_in_a_field_cannot_break_the_table(tmp_path):
     root = seeded(tmp_path)
     entity.write(root, "meridian-freight-holdings", {"stakeholders": [
@@ -334,6 +430,36 @@ def test_relationship_history_is_date_ordered(tmp_path):
     text = entity.read(root, "meridian-freight-holdings")["sections"]["Relationship History"]
     assert text.index("first") < text.index("second")
     assert "*No entries yet.*" not in text
+
+
+def test_relationship_history_keeps_prose_sub_bullets_and_comments(tmp_path):
+    # The merge used to filter the section down to its `- **` bullets, which
+    # deleted every other line a human had written in it.
+    root = seeded(tmp_path)
+    entity.write(root, "meridian-freight-holdings", {"relationship_history": [
+        {"date": "2026-01-05", "what": "intro call",
+         "significance": "opened the door"}]}, TODAY)
+    path = root / "40-entities" / "meridian-freight-holdings" / "dossier.md"
+    lead = "Relationship owned by Morgan since the referral."
+    sub = "  - Referrer was Jamie Ellwood at Nordbridge."
+    trailing = "<!-- sourced from the 2026 referral thread -->"
+    text = path.read_text(encoding="utf-8")
+    text = text.replace("- **2026-01-05:**", f"{lead}\n\n- **2026-01-05:**", 1)
+    text = text.replace("opened the door", f"opened the door\n{sub}\n{trailing}", 1)
+    path.write_text(text, encoding="utf-8")
+
+    entity.write(root, "meridian-freight-holdings", {"relationship_history": [
+        {"date": "2026-03-01", "what": "steerco", "significance": "scope agreed"}]},
+        TODAY)
+
+    section = entity.read(
+        root, "meridian-freight-holdings")["sections"]["Relationship History"]
+    for kept in (lead, sub, trailing):
+        assert kept in section, f"lost existing content: {kept!r}"
+    # Lead-in above the entries, sub-bullet still under the entry it annotates,
+    # the new entry sorted after it.
+    assert section.index(lead) < section.index("intro call")
+    assert section.index("intro call") < section.index(sub) < section.index("steerco")
 
 
 def test_meeting_log_prepends_newest_first(tmp_path):
@@ -399,6 +525,32 @@ def test_engagement_row_is_updated_not_duplicated(tmp_path):
             if line.startswith("|") and "meridian-yard-automation-program" in line]
     assert len(rows) == 1
     assert "Completed" in rows[0]
+
+
+def test_an_engagement_project_with_a_pipe_is_refused(tmp_path):
+    # The Project cell is built as a raw markdown link and is the one cell
+    # _cell() never sees, so an unescaped pipe used to destroy the Status and
+    # One-liner cells on the next write.
+    root = seeded(tmp_path)
+    with pytest.raises(entity.EntityError, match=re.escape("atlas | depot")):
+        entity.write(root, "meridian-freight-holdings", {"engagements": [
+            {"project": "atlas | depot", "status": "Active",
+             "one_liner": "consolidation"}]}, TODAY)
+
+
+def test_an_engagement_project_given_as_a_display_name_is_refused(tmp_path):
+    # A display name links at 30-projects/Atlas Depot Consolidation/index.md,
+    # which cannot exist, and appends a duplicate row beside the real one.
+    root = seeded(tmp_path)
+    entity.write(root, "meridian-freight-holdings", {"engagements": [
+        {"project": "atlas-depot-consolidation", "one_liner": "consolidation"}]},
+        TODAY)
+    with pytest.raises(entity.EntityError, match="project slug"):
+        entity.write(root, "meridian-freight-holdings", {"engagements": [
+            {"project": "Atlas Depot Consolidation"}]}, TODAY)
+    section = entity.read(root, "meridian-freight-holdings")["sections"]["Engagements"]
+    rows = [line for line in section.splitlines() if line.startswith("|")]
+    assert len(rows) == 3, f"expected header, separator and one row: {rows}"
 
 
 def test_engagement_slugs_with_a_shared_prefix_get_separate_rows(tmp_path):
@@ -485,6 +637,36 @@ def test_an_unknown_edit_key_is_refused(tmp_path):
                      {"invented": [{"a": 1}]}, TODAY)
 
 
+@pytest.mark.parametrize("edits, expected", [
+    ({"context": [{"label": "L", "fact": "f"}]}, "why"),
+    ({"context": ["a plain string"]}, "got str"),
+    ({"engagements": [{"status": "Active"}]}, "project"),
+    ({"meeting_log": [{"topic": "only a topic"}]}, "date"),
+    ({"sensitivities": [{"topic": "T", "detail": "d"}]}, "implications"),
+    ({"relationship_history": [{"date": "2026-01-01", "what": "w"}]},
+     "significance"),
+    ({"stakeholders": [{"title": "COO"}]}, "name"),
+    ({"context": {"label": "L", "fact": "f", "why": "w"}}, "must be a list"),
+])
+def test_a_malformed_edit_entry_raises_entity_error_not_key_or_type_error(
+        tmp_path, edits, expected):
+    # The mergers index required keys directly, so these used to surface as a
+    # KeyError or TypeError traceback with no JSON envelope at all.
+    root = seeded(tmp_path)
+    with pytest.raises(entity.EntityError, match=expected):
+        entity.write(root, "meridian-freight-holdings", edits, TODAY)
+
+
+@pytest.mark.parametrize("blank", ["", "   ", None])
+def test_a_blank_required_field_is_refused_not_rendered_as_garbage(tmp_path, blank):
+    # A whitespace-only label rendered "- **:**  — ". The strip in the shape
+    # check catches it for every section with a required label-like field.
+    root = seeded(tmp_path)
+    with pytest.raises(entity.EntityError, match="label"):
+        entity.write(root, "meridian-freight-holdings", {"context": [
+            {"label": blank, "fact": "f", "why": "w"}]}, TODAY)
+
+
 def test_an_escaped_pipe_survives_a_later_write(tmp_path):
     # _cell() escapes pipes on write; _parse_table must honour that escape on
     # the next write, or an unrelated edit silently truncates the cell.
@@ -502,14 +684,22 @@ def test_an_escaped_pipe_survives_a_later_write(tmp_path):
 
 
 def test_repeated_writes_do_not_accumulate_escapes(tmp_path):
+    # The pipe-bearing note is supplied ONCE and then never again, so it is
+    # read back out of the file and re-rendered on each of the writes that
+    # follow. Re-supplying the same value every round — as this test used to —
+    # would overwrite the previous round's corruption with the correct value,
+    # which made it structurally incapable of observing accumulation.
     root = seeded(tmp_path)
-    for _ in range(3):
+    entity.write(root, "meridian-freight-holdings", {"stakeholders": [
+        {"name": "Leo Marchetti", "notes": "a | b"}]}, TODAY)
+    for title in ("COO", "Chief Operating Officer", "Group COO"):
         entity.write(root, "meridian-freight-holdings", {"stakeholders": [
-            {"name": "Leo Marchetti", "notes": "a | b"}]}, TODAY)
+            {"name": "Leo Marchetti", "title": title}]}, TODAY)
     text = entity.read(root, "meridian-freight-holdings")["sections"]["Stakeholders"]
     row = [line for line in text.splitlines() if "Marchetti" in line][0]
     assert row.count("\\\\") == 0, f"backslashes accumulated: {row}"
     assert r"a \| b" in row
+    assert "Group COO" in row
 
 
 def test_write_uses_lf_endings(tmp_path):

@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Dict, List, Mapping, Optional, Tuple
+from typing import Dict, List, Mapping, Optional, Sequence, Tuple
 
 from . import markdown, naming, schema, vault
 
@@ -40,6 +40,14 @@ ENGAGEMENT_HEADER = (
 
 _EDIT_KEYS = ("context", "stakeholders", "relationship_history",
               "meeting_log", "sensitivities", "engagements")
+_REQUIRED_EDIT_FIELDS = {
+    "context": ("label", "fact", "why"),
+    "stakeholders": ("name",),
+    "relationship_history": ("date", "what", "significance"),
+    "meeting_log": ("date", "topic"),
+    "sensitivities": ("topic", "detail", "implications"),
+    "engagements": ("project",),
+}
 _SECTION_FOR_EDIT = {
     "context": "Context",
     "stakeholders": "Stakeholders",
@@ -99,6 +107,17 @@ def ensure(root: Path, *, slug: str, name: str, today: str,
            owner: Optional[str] = None) -> dict:
     """Create 40-entities/{slug}/dossier.md if it does not exist."""
     naming.validate_slug(slug)
+    if owner:
+        # owner is a join key to 50-people/{slug}.md, so it gets the same
+        # validation as slug. Unvalidated, a display name like "jordan: reyes"
+        # emits frontmatter that no YAML parser accepts.
+        try:
+            naming.validate_slug(str(owner).strip())
+        except ValueError as exc:
+            raise EntityError(
+                f"owner {owner!r} is not a person slug: {exc}. "
+                "owner joins to 50-people/<slug>.md"
+            ) from exc
     path = _dossier_path(root, slug)
     if path.is_file():
         return {"slug": slug, "path": path.relative_to(root).as_posix(),
@@ -215,9 +234,19 @@ def _split_row(line: str) -> list:
     return [part.strip() for part in parts]
 
 
-def _parse_table(content: str, columns: int) -> Tuple[List[str], List[List[str]]]:
-    """Return (non-table lines before the table, data rows as cell lists)."""
-    preamble, rows, seen_header = [], [], 0
+def _parse_table(content: str,
+                 columns: int) -> Tuple[List[str], List[List[str]], List[str]]:
+    """Return (lines before the table, data rows as cell lists, lines after).
+
+    Both the preamble and the postamble are a human's own annotation — a note
+    under the Stakeholders table naming someone's assistant, say — and the hard
+    rule is that a merge never removes existing content. Trailing lines used to
+    match neither branch here and were silently dropped on the next write.
+    """
+    preamble: List[str] = []
+    rows: List[List[str]] = []
+    postamble: List[str] = []
+    seen_header = 0
     for line in _lines(content):
         stripped = line.strip()
         if stripped.startswith("|"):
@@ -229,15 +258,21 @@ def _parse_table(content: str, columns: int) -> Tuple[List[str], List[List[str]]
             rows.append(cells[:columns])
         elif seen_header == 0:
             preamble.append(line)
-    return preamble, rows
+        else:
+            postamble.append(line)
+    return preamble, rows, postamble
 
 
-def _render_table(preamble: List[str], header: str,
-                  rows: List[List[str]]) -> str:
+def _render_table(preamble: List[str], header: str, rows: List[List[str]],
+                  postamble: Sequence[str] = ()) -> str:
     body = "\n".join("| " + " | ".join(row) + " |" for row in rows)
     lead = "\n".join(_strip_placeholder(preamble)).rstrip("\n")
     chunk = header + ("\n" + body if body else "")
-    return (lead + "\n\n" if lead.strip() else "\n") + chunk + "\n"
+    rendered = (lead + "\n\n" if lead.strip() else "\n") + chunk + "\n"
+    tail = "\n".join(_strip_placeholder(list(postamble))).strip("\n")
+    if tail:
+        rendered += "\n" + tail + "\n"
+    return rendered
 
 
 # --- per-section merges ---------------------------------------------------
@@ -296,7 +331,7 @@ def _name_key(cell: str) -> str:
 
 
 def _merge_stakeholders(content: str, items) -> Tuple[str, int]:
-    preamble, rows = _parse_table(content, 5)
+    preamble, rows, postamble = _parse_table(content, 5)
     touched = 0
     for item in items:
         role = (item.get("role") or "").strip()
@@ -317,35 +352,56 @@ def _merge_stakeholders(content: str, items) -> Tuple[str, int]:
         name_key = _name_key(incoming[0])
         for row in rows:
             if _name_key(row[0]) == name_key:
+                was_flagged = NEEDS_REVIEW in row[4]
                 # Only fill; never replace a filled cell with an empty one.
                 # row[0] is deliberately left alone: the dossier's own Name
                 # format (plain, linked, or aliased) is the human's choice.
                 for index in range(1, 5):
                     if incoming[index]:
                         row[index] = incoming[index]
+                if was_flagged and NEEDS_REVIEW not in row[4]:
+                    # /update-entity Rule 4: only a human clears the marker.
+                    # A later Notes update must not carry it away with the text
+                    # it replaced.
+                    row[4] = f"{row[4]} {NEEDS_REVIEW}".strip()
                 break
         else:
             if NEEDS_REVIEW not in incoming[4]:
                 incoming[4] = f"{incoming[4]} {NEEDS_REVIEW}".strip()
             rows.append(incoming)
         touched += 1
-    return _render_table(preamble, STAKEHOLDER_HEADER, rows), touched
+    return _render_table(preamble, STAKEHOLDER_HEADER, rows, postamble), touched
 
 
 _LINK_TEXT_RE = re.compile(r"\A\[([^\]]+)\]")
 
 
 def _row_project_slug(cell: str) -> str:
-    """The engagement row's project slug, taken from the link text."""
+    """The engagement row's project slug, taken from the link text.
+
+    Safe to match without unescaping: _merge_engagements validates the project
+    value as a slug, so no `\\|` escape can ever reach this cell.
+    """
     match = _LINK_TEXT_RE.match(cell.strip())
     return match.group(1).strip() if match else cell.strip()
 
 
 def _merge_engagements(content: str, items) -> Tuple[str, int]:
-    preamble, rows = _parse_table(content, 3)
+    preamble, rows, postamble = _parse_table(content, 3)
     touched = 0
     for item in items:
         slug = str(item["project"]).strip()
+        # The Project cell is a markdown link built from this value and is the
+        # one cell _cell() never sees, so an unescaped pipe would break the row
+        # and a display name would link at a folder that cannot exist.
+        try:
+            naming.validate_slug(slug)
+        except ValueError as exc:
+            raise EntityError(
+                f"engagement project {slug!r} is not a project slug: {exc}. "
+                "Pass the project's slug — the row links to "
+                "30-projects/<slug>/index.md"
+            ) from exc
         link = f"[{slug}](../../30-projects/{slug}/index.md)"
         incoming = [link, _cell(item.get("status") or "Active"),
                     _cell(item.get("one_liner"))]
@@ -358,18 +414,47 @@ def _merge_engagements(content: str, items) -> Tuple[str, int]:
         else:
             rows.append(incoming)
         touched += 1
-    return _render_table(preamble, ENGAGEMENT_HEADER, rows), touched
+    return _render_table(preamble, ENGAGEMENT_HEADER, rows, postamble), touched
 
 
 def _merge_relationship_history(content: str, items) -> Tuple[str, int]:
-    lines = _strip_placeholder(_lines(content))
-    entries = [line for line in lines if line.strip().startswith("- **")]
+    """Add dated entries, keeping every line that is not one.
+
+    Only the top-level `- **date:**` bullets are sorted. Anything else a human
+    put here survives: a lead-in paragraph stays above the entries, an indented
+    continuation line stays attached to the entry it sits under, and any other
+    trailing content (a stray comment, a note) stays below them. Filtering the
+    section down to its bold bullets used to delete all of it.
+    """
+    lead: List[str] = []
+    blocks: List[List[str]] = []
+    tail: List[str] = []
+    for line in _strip_placeholder(_lines(content)):
+        if line.strip().startswith("- **"):
+            blocks.append([line])
+        elif not blocks:
+            lead.append(line)
+        elif line[:1] in (" ", "\t") and line.strip():
+            blocks[-1].append(line)
+        else:
+            tail.append(line)
     for item in items:
-        entries.append(
+        blocks.append([
             f"- **{_text(item['date'])}:** {_text(item['what'])} "
-            f"— {_text(item['significance'])}")
-    entries.sort(key=lambda line: line[4:14])
-    return "\n" + "\n".join(entries) + "\n", len(items)
+            f"— {_text(item['significance'])}"])
+    blocks.sort(key=lambda block: block[0][4:14])
+
+    body: List[str] = []
+    if any(line.strip() for line in lead):
+        body.extend(lead)
+        if body[-1].strip():
+            body.append("")
+    for block in blocks:
+        body.extend(block)
+    if any(line.strip() for line in tail):
+        body.append("")
+        body.extend(tail)
+    return "\n" + "\n".join(body).strip("\n") + "\n", len(items)
 
 
 def _merge_meeting_log(content: str, items) -> Tuple[str, int]:
@@ -401,6 +486,31 @@ _MERGERS = {
 }
 
 
+# --- payload validation ---------------------------------------------------
+
+def _validate_items(edit_key: str, items: list) -> None:
+    """Reject malformed entries before any merge runs.
+
+    The merge functions index required keys directly, so a missing key would
+    otherwise surface as a KeyError traceback with no JSON envelope — and the
+    caller reading stdout is a model that has been told to read `ok`.
+    """
+    required = _REQUIRED_EDIT_FIELDS[edit_key]
+    for index, item in enumerate(items):
+        if not isinstance(item, dict):
+            raise EntityError(
+                f"{edit_key}[{index}] must be an object with "
+                f"{list(required)}, got {type(item).__name__}"
+            )
+        missing = [key for key in required
+                   if not str(item.get(key) or "").strip()]
+        if missing:
+            raise EntityError(
+                f"{edit_key}[{index}] is missing required field(s) {missing}; "
+                f"every {edit_key} entry needs {list(required)}"
+            )
+
+
 # --- writing --------------------------------------------------------------
 
 def write(root: Path, slug: str, edits: Mapping, today: str) -> dict:
@@ -409,11 +519,24 @@ def write(root: Path, slug: str, edits: Mapping, today: str) -> dict:
     if unknown:
         raise EntityError(
             f"unknown edit key(s) {unknown}; expected any of {list(_EDIT_KEYS)}")
-    active = {key: list(edits[key]) for key in _EDIT_KEYS
-              if edits.get(key)}
+    active = {}
+    for key in _EDIT_KEYS:
+        value = edits.get(key)
+        if not value:
+            continue
+        if not isinstance(value, (list, tuple)):
+            # A dict here would otherwise be list()-ed into its own keys and
+            # then indexed as if each key were an entry.
+            raise EntityError(
+                f"{key} must be a list of entries, got "
+                f"{type(value).__name__}; wrap a single entry in a list"
+            )
+        active[key] = list(value)
     if not active:
         raise EntityError(
             f"no edits supplied; expected at least one of {list(_EDIT_KEYS)}")
+    for key, items in active.items():
+        _validate_items(key, items)
 
     path = _dossier_path(root, slug)
     parsed = read(root, slug)

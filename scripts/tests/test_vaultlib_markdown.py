@@ -144,6 +144,30 @@ def test_emit_escapes_embedded_quotes():
     assert md.parse_frontmatter_block(text[4:-4])["n"] == 'a "quoted" word'
 
 
+def test_emit_refuses_a_newline_even_inside_a_quoted_value():
+    # Writing frontmatter nothing can parse and reporting success bricks the
+    # object: every later read of that file fails permanently. Quoting does not
+    # save it — YAML ends the scalar at the newline either way.
+    with pytest.raises(ValueError, match="newline"):
+        md.emit_frontmatter({"entity-name": "Acme\nInc"},
+                            quote_keys={"entity-name"})
+
+
+def test_emit_refuses_an_unquoted_value_that_would_parse_as_a_mapping():
+    # `owner: jordan: reyes` is a ScannerError in PyYAML, which is Obsidian's,
+    # Dataview's, Bases' and CI's conformance parser.
+    with pytest.raises(ValueError, match="nested mapping"):
+        md.emit_frontmatter({"owner": "jordan: reyes"})
+
+
+def test_emit_still_accepts_a_colon_inside_a_quoted_value():
+    text = md.emit_frontmatter({"entity-name": "Acme: The Sequel"},
+                               quote_keys={"entity-name"})
+    assert 'entity-name: "Acme: The Sequel"' in text
+    data, _ = md.split_frontmatter(text)
+    assert data["entity-name"] == "Acme: The Sequel"
+
+
 def test_replace_scalar_field_preserves_everything_else():
     updated = md.replace_scalar_field(DOSSIER, "last-updated", "2026-08-23")
     assert "last-updated: 2026-08-23" in updated
