@@ -280,7 +280,10 @@ def _name_key(cell: str) -> str:
     same person, so a caller passing a display name updates the existing row
     instead of appending a duplicate.
     """
-    text = cell.strip()
+    # _cell() escapes pipes, so an aliased wikilink arrives as
+    # `[[slug\|Alias]]`. Unescape first, or the alias separator is invisible to
+    # the pattern below and the slug captures a stray backslash.
+    text = cell.strip().replace(r"\|", "|")
     match = _WIKILINK_RE.match(text)
     if match:
         text = match.group(1).strip()

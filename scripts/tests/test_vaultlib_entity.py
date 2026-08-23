@@ -234,6 +234,39 @@ def test_a_wikilinked_stakeholder_matches_a_plain_display_name(tmp_path):
     assert "<!-- needs-review -->" not in rows[0]
 
 
+@pytest.mark.parametrize("cell", [
+    "[[leo-marchetti]]",
+    "[[leo-marchetti|Leo Marchetti]]",
+    r"[[leo-marchetti\|Leo Marchetti]]",   # as _cell() stores an aliased link
+    "Leo Marchetti",
+    "  Leo Marchetti  ",
+])
+def test_name_key_normalises_every_stored_form(cell):
+    # A dossier may store a stakeholder as a plain name, a wikilink, or an
+    # aliased wikilink whose pipe _cell() has escaped. All are one person.
+    assert entity._name_key(cell) == "leo-marchetti"
+
+
+def test_name_key_does_not_lean_on_slugify_to_strip_the_escape(monkeypatch):
+    # Pins the mechanism, not just the outcome. _name_key must unescape the
+    # pipe so the pattern captures a clean slug; if it does not, the stray
+    # backslash only disappears because slugify discards non-alphanumerics.
+    # Neutralise slugify and the difference becomes visible: without the
+    # unescape this returns "leo-marchetti\\".
+    monkeypatch.setattr(entity.naming, "slugify", lambda text, **kw: text)
+    assert entity._name_key(r"[[leo-marchetti\|Leo Marchetti]]") == "leo-marchetti"
+
+
+def test_the_wikilink_pattern_captures_a_bare_and_an_aliased_target():
+    assert entity._WIKILINK_RE.match("[[leo-marchetti]]").group(1) == "leo-marchetti"
+    assert entity._WIKILINK_RE.match(
+        "[[leo-marchetti|Leo Marchetti]]").group(1) == "leo-marchetti"
+    # The raw stored form is why the unescape above exists: the pattern cannot
+    # see an escaped separator, so the capture picks up the backslash.
+    assert entity._WIKILINK_RE.match(
+        r"[[leo-marchetti\|Leo Marchetti]]").group(1) == "leo-marchetti\\"
+
+
 def test_an_aliased_wikilink_also_matches(tmp_path):
     root = seeded(tmp_path)
     entity.write(root, "meridian-freight-holdings", {"stakeholders": [
