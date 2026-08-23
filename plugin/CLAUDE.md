@@ -24,6 +24,21 @@ Read `ok` before anything else. On failure, the `error` names the constraint
 and `hint` says what to do — surface both to the user rather than retrying
 blind or working around the CLI by writing files directly.
 
+### Table cells are stored with the pipe escaped
+
+A markdown table row is delimited by `|`, so `entity write` escapes any pipe
+inside a cell as `\|` before storing it. That escape is part of the stored
+form, and `entity read` returns cells exactly as stored — a note the user
+dictated as `wants numbers | not narrative` comes back as
+`wants numbers \| not narrative`.
+
+There is no inverse. A caller that read a cell and wants to send text back
+must send the **unescaped** form, because the write path re-escapes every
+cell it is given. Passing the stored form straight back through
+`entity write` accumulates backslashes on each round trip. This applies only
+to the two table sections, Stakeholders and Engagements; bullet and heading
+sections store free text as given.
+
 ## Interpreter resolution
 
 Never hardcode one interpreter name. Try in order, using the first that

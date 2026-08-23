@@ -61,6 +61,11 @@ unvalidated, and whether the banner is present. **Read this before routing** —
 knowing what is already recorded is what lets you update rather than duplicate,
 and lets you notice a contradiction.
 
+One reading note: cells in the Stakeholders and Engagements tables come back
+with any pipe escaped as `\|`, because that is how they are stored. If you
+carry text from a cell into your payload, strip the backslash first — the write
+path escapes pipes again, so passing the stored form back doubles the escape.
+
 ### 3. Get the input
 
 If the user has not already provided it:
@@ -141,8 +146,14 @@ python3 "$VAULTLIB" entity write --vault "$VAULT" \
   --slug meridian-freight-holdings --edits /tmp/entity-edits.json
 ```
 
-Every key is optional; send only the sections you have something for. Dates
-are ISO `YYYY-MM-DD`.
+Every *section* key is optional; send only the sections you have something for.
+Within an entry the fields are not: `context` needs all of `label`, `fact` and
+`why`, `stakeholders` needs `name`, `meeting_log` needs `date` and `topic`,
+`sensitivities` needs `topic`, `detail` and `implications`,
+`relationship_history` needs `date`, `what` and `significance`, and
+`engagements` needs `project` — as the project's **slug**, not its display
+name. The CLI refuses an incomplete entry rather than rendering a half-empty
+bullet. Dates are ISO `YYYY-MM-DD`.
 
 ### 6. Summarise
 
