@@ -20,7 +20,9 @@ plainly rather than hand-editing the dossier.
 VAULTLIB="${CLAUDE_PLUGIN_ROOT}/lib/vaultlib/cli.py"
 ```
 
-The JSON envelope and interpreter resolution are in the plugin's `CLAUDE.md`.
+The JSON envelope and interpreter resolution are documented in the plugin's
+`CLAUDE.md`. Read `ok` on every call; on failure, show the `error` and `hint`
+to the user rather than retrying blind or editing the dossier by hand.
 
 ## Usage
 
@@ -92,6 +94,13 @@ Judgment calls worth getting right:
 - **Vocabularies are closed.** Role in decision: sponsor · champion ·
   evaluator · influencer · blocker. Stance: champion · neutral · blocker. The
   CLI refuses anything else, so pick the nearest rather than inventing.
+
+**If nothing qualifies, write nothing.** Some input is genuinely not worth a
+permanent entry — a scheduling exchange, a pleasantry, a detail already
+recorded verbatim. `entity write` refuses an empty payload, so do not call it
+with nothing: say what you read, say why none of it earned a place in the
+dossier, and stop. An empty dossier update is a valid outcome, and a
+fabricated entry to justify the call is not.
 
 ### 5. Write it
 
