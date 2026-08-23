@@ -4101,7 +4101,7 @@ Expected: all pass.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add plugin/skills/update-entity/SKILL.md
+git add plugin/skills/update-entity/SKILL.md scripts/tests/test_skill_contracts.py
 git commit -m "$(cat <<'EOF'
 feat: add the /update-entity skill
 
