@@ -3,7 +3,7 @@ type: project
 project-name: "Meridian Freight — Yard Automation Program"
 slug: meridian-yard-automation-program
 status: active
-project-type: delivery
+project-type: initiative
 entity: meridian-freight-holdings
 owner: priya-nathan
 parent: meridian-warehouse-pilot-phase-0

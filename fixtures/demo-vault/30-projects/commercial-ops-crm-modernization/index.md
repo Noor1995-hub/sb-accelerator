@@ -3,7 +3,7 @@ type: project
 project-name: "Commercial Operations — CRM Data Modernization"
 slug: commercial-ops-crm-modernization
 status: active
-project-type: internal
+project-type: initiative
 entity: commercial-operations
 owner: sam-okafor
 stakeholders: [sam-okafor, omar-siddiqui]

@@ -3,7 +3,7 @@ type: project
 project-name: "Nordbridge Components — Regional Rollout Proposal"
 slug: nordbridge-regional-rollout-proposal
 status: active
-project-type: presales
+project-type: initiative
 entity: nordbridge-components
 owner: jordan-vance
 stakeholders: [jordan-vance, dana-whitfield]

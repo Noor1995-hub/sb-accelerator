@@ -3,7 +3,7 @@ type: project
 project-name: "Meridian Freight — Warehouse Pilot (Phase 0)"
 slug: meridian-warehouse-pilot-phase-0
 status: completed
-project-type: delivery
+project-type: initiative
 entity: meridian-freight-holdings
 owner: priya-nathan
 stakeholders: [priya-nathan, leo-marchetti]
