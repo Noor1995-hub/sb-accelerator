@@ -24,6 +24,27 @@ instead of finishing quietly. A silent version of this loses work to the next
 that commit" — and reach for the tool that changes global state. Nothing in the
 worktree warns them another writer exists.
 
+**It happened twice.** The second time, a *different* review subagent detached
+HEAD to `e344f97` and left it there. No commit was orphaned — the branch ref
+was intact and the working tree clean — but the next implementer found its own
+target file absent from disk, because the worktree was sitting at a commit
+predating the file. It correctly refused to mutate anything, diagnosed the
+state read-only, and reported BLOCKED.
+
+**So the prohibition below is necessary but not sufficient.** Two different
+subagents violated it despite explicit, prominent instructions. Reviewers
+reason locally — "I need the suite as it was at that commit" — and reach for
+the tool that changes global state. **Verify controller-side instead of
+trusting compliance:** after every subagent returns, run
+`git symbolic-ref -q HEAD` and reattach if it comes back empty. That check is
+cheap, it is yours, and it does not depend on anyone else behaving. Checking
+`git log` is not enough — it looks identical detached.
+
+Also seen in the same session: a `git stash` commit
+(`WIP on feat/object-skills-port`, two parents) left dangling by some agent.
+Its content was already committed, so nothing was lost, but `stash` belongs on
+the prohibited list for the same reason.
+
 **The rule.** Every subagent dispatch, reviewer and implementer alike, carries
 an explicit prohibition:
 
