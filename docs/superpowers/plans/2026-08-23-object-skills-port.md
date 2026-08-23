@@ -1063,13 +1063,32 @@ Expected: PASS — 27 tests.
 - [ ] **Step 5: Verify the two parsers agree on every fixture**
 
 This is the divergence risk the compiled schema was meant to remove, so prove
-it once against real files. Run:
+it once against real files.
+
+**One intentional difference, so do not "fix" it:** PyYAML coerces an
+unquoted ISO date into a `datetime.date`; our parser keeps it as the verbatim
+string. That is deliberate — `test_dates_stay_verbatim_strings` pins it,
+and it is what lets a round-trip rewrite the same bytes instead of
+reformatting someone's dates. The comparison therefore normalizes date
+typing and checks everything else. Run:
 
 ```bash
 python3 - <<'PY'
-import sys, pathlib, yaml
+import sys, pathlib, datetime, yaml
 sys.path.insert(0, "plugin/lib")
 from vaultlib import markdown as md
+
+def norm(value):
+    """PyYAML returns date objects for unquoted ISO dates; we keep strings on
+    purpose. Compare modulo that one difference."""
+    if isinstance(value, (datetime.date, datetime.datetime)):
+        return value.isoformat()
+    if isinstance(value, list):
+        return [norm(v) for v in value]
+    if isinstance(value, dict):
+        return {k: norm(v) for k, v in value.items()}
+    return value
+
 root = pathlib.Path("fixtures/demo-vault")
 checked = 0
 for path in sorted(root.rglob("*.md")):
@@ -1077,16 +1096,17 @@ for path in sorted(root.rglob("*.md")):
     if not text.startswith("---"):
         continue
     ours, _ = md.split_frontmatter(text)
-    theirs = yaml.safe_load(text.split("---", 2)[1])
+    theirs = norm(yaml.safe_load(text.split("---", 2)[1]))
     assert ours == theirs, f"{path}\n ours={ours}\n pyyaml={theirs}"
     checked += 1
 print(f"{checked} fixture files: our parser and PyYAML agree")
 PY
 ```
 
-Expected: `N fixture files: our parser and PyYAML agree` with N ≥ 20. Any
-mismatch is a real bug in `markdown.py` — fix it before continuing rather
-than adjusting the assertion.
+Expected: `29 fixture files: our parser and PyYAML agree`. I ran this against
+the plan's own `markdown.py` before dispatching and it passes on all 29 —
+so a mismatch here means the transcription drifted, not that the design is
+wrong. Compare your file against the brief before changing any logic.
 
 - [ ] **Step 6: Commit**
 
