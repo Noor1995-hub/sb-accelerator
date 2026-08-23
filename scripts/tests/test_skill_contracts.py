@@ -85,10 +85,16 @@ def test_skill_does_not_instruct_hand_written_frontmatter(path):
 
 
 def test_plugin_claude_md_documents_interpreter_resolution():
+    # Assert the fallback SEQUENCE, not three presence checks: "python" is a
+    # substring of "python3", so a presence check on it can never fail
+    # independently and the test claims coverage it does not have.
     text = (REPO_ROOT / "plugin" / "CLAUDE.md").read_text(encoding="utf-8")
-    for token in ("python3", "python", "py -3"):
-        assert token in text, (
-            "plugin/CLAUDE.md must document the interpreter fallback chain: "
-            "a clean Mac has no real python3 and Windows python3 is often a "
-            "Store alias stub"
-        )
+    parts = text.split("## Interpreter resolution", 1)
+    assert len(parts) == 2, "plugin/CLAUDE.md has no Interpreter resolution section"
+    section = parts[1].split("\n## ", 1)[0]
+    chain = re.findall(r"`(python3|python|py -3)`", section)
+    assert chain[:3] == ["python3", "python", "py -3"], (
+        "plugin/CLAUDE.md must document the interpreter fallback chain in "
+        "order: a clean Mac has no real python3 and Windows python3 is often a "
+        f"Store alias stub. Found {chain[:3]}"
+    )

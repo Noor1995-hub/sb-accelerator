@@ -3,6 +3,7 @@ same pattern as test_lint_plugin.py's use of the shipped denylist — a
 synthetic fixture tree would defeat the point of testing the actual
 instantiation."""
 import os
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -10,6 +11,25 @@ import pytest
 from make_test_vault import TargetNotEmptyError, build_vault, main
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
+def _symlinks_supported() -> bool:
+    """Whether this platform lets us create a symlink at all.
+
+    Windows refuses os.symlink without Developer Mode or elevation, which is
+    the default on a CI runner. build_vault degrades to a warning there — the
+    behaviour test_symlink_failure_degrades_to_warning already covers — so the
+    link's own assertions have nothing to say and must skip rather than fail.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        try:
+            os.symlink("target", Path(tmp) / "probe")
+        except (OSError, NotImplementedError, AttributeError):
+            return False
+    return True
+
+
+SYMLINKS_SUPPORTED = _symlinks_supported()
 
 
 def test_fresh_copies_template_only(tmp_path):
@@ -100,6 +120,11 @@ def test_without_flag_provisioner_not_called(tmp_path, monkeypatch):
     assert main([str(target)]) == 0
 
 
+@pytest.mark.skipif(
+    not SYMLINKS_SUPPORTED,
+    reason="platform does not permit symlink creation (Windows without "
+           "Developer Mode); build_vault degrades to a warning there",
+)
 def test_claude_symlink_created(tmp_path):
     target = tmp_path / "vault"
     build_vault(target, REPO_ROOT, fresh=True)
