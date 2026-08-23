@@ -8,9 +8,13 @@ creates, never merges into or overwrites existing work. With --with-plugins,
 also downloads the pinned Obsidian community plugins and theme into the new
 vault (network required).
 
+Also creates the .claude -> claude symlink so vault-local Claude Code files
+stay visible in Obsidian (warning, not failure, if the OS refuses).
+
 Exit 0 on success; exit 1 with a message on stderr if TARGET is non-empty.
 """
 import argparse
+import os
 import shutil
 import sys
 from pathlib import Path
@@ -28,13 +32,25 @@ class TargetNotEmptyError(Exception):
     pass
 
 
-def build_vault(target: Path, repo_root: Path, fresh: bool) -> None:
+def build_vault(target: Path, repo_root: Path, fresh: bool) -> list[str]:
     if target.exists() and (not target.is_dir() or any(target.iterdir())):
         raise TargetNotEmptyError(f"{target} already exists and is not empty")
     target.mkdir(parents=True, exist_ok=True)
     shutil.copytree(repo_root / "template", target, dirs_exist_ok=True)
     if not fresh:
         shutil.copytree(repo_root / "fixtures" / "demo-vault", target, dirs_exist_ok=True)
+    warnings: list[str] = []
+    link = target / ".claude"
+    if (target / "claude").is_dir() and not link.exists():
+        # Relative symlink so the vault stays relocatable. Obsidian hides
+        # .claude; the visible claude/ dir is the same files.
+        try:
+            os.symlink("claude", link)
+        except OSError as e:
+            warnings.append(
+                f"could not create .claude symlink ({e}); create it by hand: ln -s claude {link}"
+            )
+    return warnings
 
 
 def parse_args(argv):
@@ -57,12 +73,14 @@ def main(argv=None) -> int:
     args = parse_args(argv)
     repo_root = Path(__file__).resolve().parents[1]
     try:
-        build_vault(args.target.resolve(), repo_root, args.fresh)
+        warnings = build_vault(args.target.resolve(), repo_root, args.fresh)
     except TargetNotEmptyError as e:
         print(f"error: {e}", file=sys.stderr)
         return 1
     mode = "template-only" if args.fresh else "template + demo fixtures"
     print(f"Test vault created at {args.target} ({mode}).")
+    for warning in warnings:
+        print(f"warning: {warning}", file=sys.stderr)
     if args.with_plugins:
         actions, problems = provision_into(args.target.resolve())
         for line in actions:

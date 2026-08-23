@@ -34,6 +34,7 @@ browses. Claude is the working interface to everything in here.
 | `90-archive/` | Completed and historical items |
 | `95-private/` | Executive-private notes — excluded from sync, invisible to the assistant |
 | `99-workflow-config/` | Context portfolio, object model reference, lessons log |
+| `claude/` | Vault-local Claude Code home — `.claude` symlinks here so skills stay visible in Obsidian |
 | `_heavy-assets/` | Generated binaries (.pptx/.xlsx/.pdf/…) — excluded from sync |
 
 ## Object Model

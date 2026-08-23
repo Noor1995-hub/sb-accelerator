@@ -25,9 +25,20 @@ these by hand at provisioning (see the pre-flight checklist playbook):
    machine): install by hand the plugins listed in
    `.obsidian/community-plugins.json` (Dataview, Minimal Theme Settings,
    Style Settings, Notebook Navigator) and the **Minimal** theme.
-2. **Exclude from Obsidian Sync:** `95-private/` (exec-private folder) and
+2. **Create the `.claude → claude` symlink** in the vault root:
+   `ln -s claude .claude` (macOS/Linux) — Obsidian hides dot-folders, so
+   the vault keeps Claude Code's home visible as `claude/` with `.claude`
+   pointing at it. On Windows: `mklink /D .claude claude`, run from an
+   elevated shell or with Developer Mode enabled (Windows restricts symlink
+   creation otherwise). `make_test_vault.py` does this automatically for
+   test vaults; on client machines it is a manual step
+   (`template/claude/README.md` explains the arrangement). If symlink
+   creation isn't possible on a given machine, point Claude Code at the
+   `claude/` directory directly — the vault still works; only the
+   `.claude` dot-path convenience is lost.
+3. **Exclude from Obsidian Sync:** `95-private/` (exec-private folder) and
    `_heavy-assets/` (generated binaries).
-3. Connect Obsidian Sync on both machines (exec + assistant) and verify the
+4. Connect Obsidian Sync on both machines (exec + assistant) and verify the
    exclusions on each.
 
 ## Markers

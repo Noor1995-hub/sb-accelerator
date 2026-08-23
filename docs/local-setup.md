@@ -80,6 +80,11 @@ table:
 - `50-people/People.base` — "All" shows 9 people; "Uncurated" shows exactly
   one row (Jamie Ellwood, `relationship` empty).
 
+Also verify the navigator defaults: Notebook Navigator's Shortcuts section
+lists Meetings, Projects, Entities, People, Decisions and the daily-notes
+folder (rainbow-tinted), and `claude/skills` is browsable in the file tree
+(`ls -la` in the vault shows `.claude -> claude`).
+
 ### 4. Load the plugin locally and verify skills are invocable
 
 ```bash

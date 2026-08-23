@@ -2,6 +2,7 @@
 same pattern as test_lint_plugin.py's use of the shipped denylist — a
 synthetic fixture tree would defeat the point of testing the actual
 instantiation."""
+import os
 from pathlib import Path
 
 import pytest
@@ -97,3 +98,23 @@ def test_without_flag_provisioner_not_called(tmp_path, monkeypatch):
     )
     target = tmp_path / "vault"
     assert main([str(target)]) == 0
+
+
+def test_claude_symlink_created(tmp_path):
+    target = tmp_path / "vault"
+    build_vault(target, REPO_ROOT, fresh=True)
+    link = target / ".claude"
+    assert link.is_symlink(), ".claude symlink missing"
+    assert os.readlink(link) == "claude", "symlink must be relative, pointing at claude/"
+    assert (link / "skills").is_dir(), "symlink must resolve to the visible claude/ dir"
+
+
+def test_symlink_failure_degrades_to_warning(tmp_path, monkeypatch):
+    def refuse(*args, **kwargs):
+        raise OSError("symlinks not permitted")
+
+    monkeypatch.setattr("make_test_vault.os.symlink", refuse)
+    target = tmp_path / "vault"
+    warnings = build_vault(target, REPO_ROOT, fresh=True)
+    assert (target / "CLAUDE.md").is_file()  # vault still built
+    assert any(".claude" in w for w in warnings)
