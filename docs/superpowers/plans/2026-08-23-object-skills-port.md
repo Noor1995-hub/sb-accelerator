@@ -2255,7 +2255,7 @@ Expected: FAIL — `ImportError: cannot import name 'project'`.
 
 Create `plugin/lib/vaultlib/project.py`:
 
-```python
+````python
 """Project scaffolding: index.md plus an empty decisions/ folder.
 
 Validation lives here rather than in the skill because these are exactly the
@@ -2438,7 +2438,7 @@ def scaffold(root: Path, *, name: str, project_type: str, entity: str,
             decisions.relative_to(root).as_posix() + "/",
         ],
     }
-```
+````
 
 - [ ] **Step 4: Run to verify it passes**
 

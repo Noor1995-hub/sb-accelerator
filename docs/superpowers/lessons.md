@@ -43,6 +43,62 @@ valid across this class of accident — but regenerate them anyway after
 reconciling, since they may have been produced from a plan file that was
 briefly at the wrong revision.
 
+## 2026-08-23 — three backticks cannot fence code that contains vault content
+
+**What went wrong.** An implementation plan carried the full source of a Python
+module inside a ` ```python ` block. The module builds a project `index.md`,
+so its template string contains Dataview query blocks — themselves fenced with
+three backticks. The inner block's closing fence terminated the outer one, so
+the code block ended two-thirds of the way through the function. Every
+renderer, every extraction script, and any agent reading the file sees a
+truncated module and the remainder as loose prose.
+
+It surfaced only because the module was extracted and compiled before dispatch:
+`SyntaxError: unterminated triple-quoted f-string literal`. Read as prose it
+looks complete — the cut lands between two functions.
+
+**Why this repo hits it more than most.** Almost everything here embeds vault
+content. Project index bodies carry Dataview blocks; `SKILL.md` files carry
+bash and JSON blocks; the ontology carries fenced YAML that is itself the
+normative schema. Any doc quoting that content nests fences by default.
+
+**The rule.** A fenced block that contains another fenced block needs **more
+backticks than its deepest child** — four outside, three inside. This holds for
+plan files, `SKILL.md` bodies, briefs, and PR descriptions alike. To check a
+file before trusting it:
+
+```bash
+python3 - <<'PY'
+import pathlib, re, sys
+OPEN = re.compile(r'^(`{3,})([a-zA-Z][a-zA-Z0-9]*)\s*$')
+CLOSE = re.compile(r'^(`{3,})\s*$')
+for path in sys.argv[1:]:
+    lines = pathlib.Path(path).read_text().split("\n")
+    i = 0
+    while i < len(lines):
+        m = OPEN.match(lines[i])
+        if not m:
+            i += 1
+            continue
+        ticks, j = m.group(1), i + 1
+        while j < len(lines):
+            c = CLOSE.match(lines[j])
+            if c and len(c.group(1)) >= len(ticks):
+                break
+            im = OPEN.match(lines[j])
+            if im and len(im.group(1)) <= len(ticks) and len(ticks) == 3:
+                print(f"{path}:{i+1}: ```{m.group(2)} truncated by ```{im.group(2)} at line {j+1}")
+            j += 1
+        i = j + 1
+PY
+```
+
+**A related trap in tooling, not content.** A non-greedy extraction regex
+(`` ```python\n(.*?)\n``` ``) silently stops at the first inner fence even when
+the outer block is correctly four backticks. Match the fence length with a
+backreference instead: `` (`{3,})python\n(.*?)\n\1 ``. Otherwise a correct
+document still yields truncated code.
+
 ## 2026-08-23 — `checks: read` does not fix the review job's check-runs 403
 
 **What went wrong.** `abca557` (#30) added `checks: read` to
