@@ -2609,6 +2609,8 @@ else is section-specific placement.
 """
 import pytest
 
+import re
+
 from vaultlib import entity, markdown as md, schema
 
 from test_vaultlib_vault import make_vault
@@ -2799,8 +2801,9 @@ def test_a_pipe_in_a_field_cannot_break_the_table(tmp_path):
         {"name": "Leo Marchetti", "notes": "says a | b"}]}, TODAY)
     text = entity.read(root, "meridian-freight-holdings")["sections"]["Stakeholders"]
     row = [line for line in text.splitlines() if "Marchetti" in line][0]
-    assert row.count("|") == 6  # 5 columns => 6 delimiters
-    assert r"\|" in row
+    # An escaped pipe is still a "|" character, so count only UNescaped ones.
+    assert len(re.findall(r"(?<!\\)\|", row)) == 6  # 5 columns => 6 delimiters
+    assert r"says a \| b" in row
 
 
 # --- write: relationship history & meeting log ---------------------------
@@ -2873,8 +2876,11 @@ def test_engagement_row_is_updated_not_duplicated(tmp_path):
             {"project": "meridian-yard-automation-program", "status": status,
              "one_liner": "Three-yard rollout"}]}, TODAY)
     text = entity.read(root, "meridian-freight-holdings")["sections"]["Engagements"]
-    assert text.count("meridian-yard-automation-program") == 1
-    assert "Completed" in text
+    # The slug appears twice per row (link text and href), so count ROWS.
+    rows = [line for line in text.splitlines()
+            if line.startswith("|") and "meridian-yard-automation-program" in line]
+    assert len(rows) == 1
+    assert "Completed" in rows[0]
 
 
 # --- write: cross-cutting ------------------------------------------------
@@ -3303,15 +3309,17 @@ def write(root: Path, slug: str, edits: Mapping, today: str) -> dict:
 - [ ] **Step 4: Run to verify it passes**
 
 Run: `python3 -m pytest scripts/tests/test_vaultlib_entity.py -q`
-Expected: PASS — 30 tests.
+Expected: PASS — 32 tests.
 
-Two failures are likely on first run and both are real bugs, not test
-problems: `test_context_is_capped_at_eight_bullets` if `_merge_labelled_bullets`
-dedupes by identity where two bullets render identically (switch the cap to
-slice by index instead of `id()`), and
-`test_last_updated_is_bumped_without_reordering_frontmatter` if the `head`
-slice in `write()` mis-locates the closing fence (assert on
-`head.count("---") == 2` while debugging).
+The test module needs `import re` at the top for the pipe-escaping assertion.
+
+I ran this whole module against the code above before dispatching, and it
+passes 32/32 as written — so a failure here means the transcription drifted,
+not that the design is wrong. Diff your file against the brief before changing
+any logic. (Two assertions in an earlier draft were wrong and are already
+fixed here: counting raw `|` characters when one of them is legitimately
+escaped, and counting slug occurrences in the Engagements section when the
+slug appears twice per row — once as link text, once in the href.)
 
 - [ ] **Step 5: Wire the subcommands into cli.py**
 
