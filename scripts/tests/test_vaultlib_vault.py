@@ -46,7 +46,10 @@ def test_resolve_rejects_a_directory_that_is_not_a_vault(tmp_path):
 
 def test_resolve_expands_a_user_path(tmp_path, monkeypatch):
     root = make_vault(tmp_path)
+    # expanduser reads HOME on POSIX and USERPROFILE on Windows; set both so
+    # the tilde lands in tmp_path on either platform.
     monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
     assert vault.resolve("~/vault") == root.resolve()
 
 
