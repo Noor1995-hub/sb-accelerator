@@ -1,0 +1,83 @@
+{
+  "_readme": "Pinned Obsidian plugin/theme releases. To bump: edit the tag, rerun the checksum snippet in docs/superpowers/plans/2026-08-23-plugin-provisioning.md Task 2 (or blank the sha256s and read the mismatch digests provision_plugins.py reports), and update sha256. dataview is deliberately pinned to 0.5.68 — 0.5.70 is a mislabeled beta with a broken manifest asset. obsidian-style-settings' canonical repo is community-archive/... (renamed from obsidian-community/..., which still redirects).",
+  "plugins": [
+    {
+      "id": "dataview",
+      "repo": "blacksmithgu/obsidian-dataview",
+      "tag": "0.5.68",
+      "assets": [
+        "main.js",
+        "manifest.json",
+        "styles.css"
+      ],
+      "license": "MIT",
+      "sha256": {
+        "main.js": "794e9eaede73920bb8d54b0eda4f5de2182d698cc638774500f24f14bcd4da0b",
+        "manifest.json": "9235db47112da81b85591c79ecb9ae2574e5e72207056e976472f90616286185",
+        "styles.css": "3306dd9032e00f989ba7233a37fd255bc4d3f4340cee661762e952f3f6aa1de9"
+      }
+    },
+    {
+      "id": "obsidian-minimal-settings",
+      "repo": "kepano/obsidian-minimal-settings",
+      "tag": "9.0.0",
+      "assets": [
+        "main.js",
+        "manifest.json",
+        "styles.css"
+      ],
+      "license": "MIT",
+      "sha256": {
+        "main.js": "f754e0ce6523e433bff8e7995a848f7d7fac205399f9ab3b1258430261fd90c4",
+        "manifest.json": "2038f9c1f5ca026ebc1f3e156bad97c671d2c401a20718384508ef72071e8c5f",
+        "styles.css": "50084760da927a5bf5ac1b9d3b960dc52e1d0a3bf690e54df8f4d76f8212628c"
+      }
+    },
+    {
+      "id": "obsidian-style-settings",
+      "repo": "community-archive/obsidian-style-settings",
+      "tag": "1.0.9",
+      "assets": [
+        "main.js",
+        "manifest.json",
+        "styles.css"
+      ],
+      "license": "GPL-3.0",
+      "sha256": {
+        "main.js": "1828abaacdab4c5578b705a625c585b30512f8efad4c7cfc5a18e70cc3557468",
+        "manifest.json": "9cffdc20cf2aa1354820e0050b694b0f9b576446e3d5d44a36ae8b0187e5bfb8",
+        "styles.css": "ee7937d2be50653a89ccb30ae5f0572b23507d5b7f1328d005271a363075bfd8"
+      }
+    },
+    {
+      "id": "notebook-navigator",
+      "repo": "johansan/notebook-navigator",
+      "tag": "3.3.4",
+      "assets": [
+        "main.js",
+        "manifest.json",
+        "styles.css"
+      ],
+      "license": "GPL-3.0",
+      "sha256": {
+        "main.js": "9ddacbcf2878344122dbbab9c716c077fed459dea0b4853f1c5336683ba13802",
+        "manifest.json": "59e701c41497a24b1b1f4d89fe0b11f559ae43cb99f0050cc9ae25cbfd46946b",
+        "styles.css": "8c55a861eb2beece9fe9a85c539514da11ec81e6e3a467ebbd60c776c1c9ec49"
+      }
+    }
+  ],
+  "theme": {
+    "name": "Minimal",
+    "repo": "kepano/obsidian-minimal",
+    "tag": "9.0.2",
+    "assets": [
+      "theme.css",
+      "manifest.json"
+    ],
+    "license": "MIT",
+    "sha256": {
+      "theme.css": "8974d84fa5c6e6c82879eab5b0411bd57c7c868ea8beeab69d28b994657f7a5f",
+      "manifest.json": "22ca939102aa2eae4ad57b4d77933572bc055d4fee096b9bc00fd8e890680536"
+    }
+  }
+}

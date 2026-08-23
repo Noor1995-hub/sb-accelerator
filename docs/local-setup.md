@@ -34,6 +34,12 @@ refuses to touch a target directory that already exists and has files in
 it — it fails fast (exit 1) instead of overwriting. Delete the directory
 first when you want a clean rebuild.
 
+Add `--with-plugins` to also download the pinned Obsidian community plugins and the Minimal theme into the vault (network required — pins and checksums live in `scripts/plugin-pins.json`):
+
+```bash
+python scripts/make_test_vault.py /tmp/sb-test-vault --with-plugins
+```
+
 To test the *unpopulated* onboarding path instead (no demo content, just
 the placeholder template):
 
@@ -44,15 +50,18 @@ python scripts/make_test_vault.py /tmp/sb-onboarding-vault --fresh
 ### 2. Open it in Obsidian
 
 Open `/tmp/sb-test-vault` as an Obsidian vault (`Open folder as vault`).
-Obsidian community plugins can't ship pre-installed, so install them by
-hand once per test vault, per `template/README.md`:
 
-1. Settings → Community plugins → Turn on community plugins.
-2. Install and enable: **Dataview**, **Minimal Theme Settings**, **Style
-   Settings**, **Notebook Navigator** (the plugin IDs are already listed in
-   `.obsidian/community-plugins.json`, so Obsidian should offer to enable
-   them directly).
-3. Settings → Appearance → set the theme to **Minimal**.
+If you created the vault with `--with-plugins`, the community plugins and
+the Minimal theme are already on disk and marked enabled — Obsidian shows
+one **"trust author and enable plugins"** dialog on first open; accept it
+and you're done (turning off Restricted Mode is the one step that can never
+ship as files, by design).
+
+If you created the vault without the flag, either re-create it with
+`--with-plugins`, run `python scripts/provision_plugins.py /tmp/sb-test-vault`
+and reopen the vault, or install by hand per `template/README.md` (Dataview,
+Minimal Theme Settings, Style Settings, Notebook Navigator + the Minimal
+theme via Settings → Appearance).
 
 ### 3. Verify the five Bases render
 

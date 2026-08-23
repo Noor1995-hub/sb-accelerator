@@ -75,3 +75,25 @@ def test_cli_fresh_mode_reports_template_only(tmp_path, capsys):
     # 40-entities/ itself ships with the template (Entities.base) — only the
     # fixture overlay content must be absent in --fresh mode.
     assert not (target / "40-entities" / "nordbridge-components").exists()
+
+
+def test_with_plugins_flag_invokes_provisioner(tmp_path, capsys, monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        "make_test_vault.provision_into",
+        lambda vault: calls.append(vault) or (["installed fake/main.js"], []),
+    )
+    target = tmp_path / "vault"
+    exit_code = main([str(target), "--with-plugins"])
+    assert exit_code == 0
+    assert calls == [target.resolve()]
+    assert "installed" in capsys.readouterr().out
+
+
+def test_without_flag_provisioner_not_called(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        "make_test_vault.provision_into",
+        lambda vault: pytest.fail("provisioner must not run without --with-plugins"),
+    )
+    target = tmp_path / "vault"
+    assert main([str(target)]) == 0
