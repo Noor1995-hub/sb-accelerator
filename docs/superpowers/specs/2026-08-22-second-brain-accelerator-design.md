@@ -171,6 +171,12 @@ Execs and EAs report breakage and improvement ideas from inside their normal wor
 - Anthropic co-sell worth pursuing given the Claude seat prerequisite?
 - License wording (legal, not us)
 - EA permission variants beyond the private-folder split
+- **Obsidian as the exec surface vs. a custom local-first app** on the
+  markdown layer: revisit after the v1.0 pilot with exec-usage data (do
+  execs open Obsidian at all, or live in Claude + email?). Until then the
+  markdown + YAML data layer stays surface-agnostic; the only
+  Obsidian-proprietary surfaces are `.obsidian/` config and the `.base`
+  views, both thin YAML. (Parked 2026-08-23.)
 
 ## Next Steps
 

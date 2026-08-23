@@ -1,14 +1,15 @@
 """Ontology conformance guard for fixtures/demo-vault/.
 
 Walks the demo-vault fixture tree and checks each object note's frontmatter
-against the schemas and enums documented in
-template/99-workflow-config/reference/ontology.md — the authority. That doc
-is prose plus one YAML example, not a machine-readable schema, so this
-module hand-encodes it as a checkable one. Also checks the fixture set's
-overall shape against issue #24's deliverable (minimum counts, enum
-coverage), so the fixtures stay a real conformance test as they grow rather
-than a pile of unchecked sample content.
+against the ontology's normative schema. The schema is NOT hand-encoded
+here: template/99-workflow-config/reference/ontology.md carries one fenced
+yaml block per object type (keyed by `object:`), and this module loads them
+at import time — editing a block IS editing what this guard enforces.
+Harness-only concerns (which files to walk, slug-join rules, fixture
+minimums, coverage targets) stay here: they describe the demo fixtures and
+this test harness, not the ontology.
 """
+import re
 from pathlib import Path
 
 import pytest
@@ -16,56 +17,66 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 FIXTURE_ROOT = REPO_ROOT / "fixtures" / "demo-vault"
+ONTOLOGY_DOC = REPO_ROOT / "template" / "99-workflow-config" / "reference" / "ontology.md"
 
-SCHEMAS = {
-    "entity": {
-        "glob": "40-entities/*/dossier.md",
-        "required": ["type", "entity-name", "slug", "status"],
-        "enums": {
-            "status": {"prospect", "active", "dormant"},
-            "entity-type": {"client", "business-unit", "partner", "supplier", "other"},
-        },
-        "slug_must_match_parent_dir": True,
-    },
-    "project": {
-        "glob": "30-projects/*/index.md",
-        "required": [
-            "project-name", "slug", "status", "project-type", "entity",
-            "owner", "created", "last-updated",
-        ],
-        "enums": {
-            "status": {"active", "paused", "completed", "cancelled"},
-            "project-type": {"presales", "delivery", "internal", "area-of-responsibility"},
-        },
-        "slug_must_match_parent_dir": True,
-    },
-    "person": {
-        "glob": "50-people/*.md",
-        "required": ["person-name", "slug"],
-        "keys_present": ["relationship"],
-        "enums": {"relationship": {"colleague", "direct-report", "external", None}},
-        "slug_must_match_stem": True,
-    },
-    "decision": {
-        "glob": "30-projects/*/decisions/*.md",
-        "required": ["type", "project", "date", "status", "summary"],
-        "enums": {
-            "status": {"active", "superseded", "withdrawn"},
-            "type": {"decision"},
-        },
-    },
-    "meeting": {
-        "glob": "20-meetings/*.md",
-        "required": [
-            "date", "type", "calendar-subject", "calendar_match", "attendees",
-            "projects", "review_status", "recording-duration", "source", "processed",
-        ],
-        "enums": {
-            "type": {"meeting", "1:1", "steerco", "workshop", "brainstorm", "status-update"},
-            "review_status": {"needs-review", "confirmed", "needs-attention"},
-        },
-    },
+YAML_FENCE_RE = re.compile(r"^```yaml\s*\n(.*?)^```\s*$", re.MULTILINE | re.DOTALL)
+
+# Test-harness concerns per object type: where fixtures live and which
+# slug-join rules the demo vault must satisfy. Schema truth lives in
+# ONTOLOGY_DOC, not here.
+HARNESS = {
+    "entity": {"glob": "40-entities/*/dossier.md", "slug_must_match_parent_dir": True},
+    "project": {"glob": "30-projects/*/index.md", "slug_must_match_parent_dir": True},
+    "person": {"glob": "50-people/*.md", "slug_must_match_stem": True},
+    "decision": {"glob": "30-projects/*/decisions/*.md"},
+    "meeting": {"glob": "20-meetings/*.md"},
 }
+
+
+def load_ontology_schemas() -> dict:
+    """Parse ONTOLOGY_DOC's fenced yaml blocks; return {object-name: block}
+    for every block carrying an `object:` key. Narrative example blocks
+    (no `object:` key) are skipped. Malformed or duplicate blocks raise —
+    a broken ontology doc must fail loudly, not validate vacuously."""
+    text = ONTOLOGY_DOC.read_text(encoding="utf-8")
+    blocks: dict = {}
+    for match in YAML_FENCE_RE.finditer(text):
+        try:
+            data = yaml.safe_load(match.group(1))
+        except yaml.YAMLError as e:
+            raise RuntimeError(f"{ONTOLOGY_DOC}: unparseable yaml block: {e}") from e
+        if not isinstance(data, dict) or "object" not in data:
+            continue
+        name = data["object"]
+        if name in blocks:
+            raise RuntimeError(f"{ONTOLOGY_DOC}: duplicate schema block for {name!r}")
+        blocks[name] = data
+    return blocks
+
+
+def build_schemas() -> dict:
+    """Merge the ontology's normative blocks with the harness config."""
+    ontology = load_ontology_schemas()
+    missing = set(HARNESS) - set(ontology)
+    if missing:
+        raise RuntimeError(f"{ONTOLOGY_DOC}: missing schema block(s) for {sorted(missing)}")
+    schemas = {}
+    for name, harness in HARNESS.items():
+        block = ontology[name]
+        schema = dict(harness)
+        schema["required"] = list(block.get("required") or [])
+        schema["enums"] = {field: set(values) for field, values in (block.get("enums") or {}).items()}
+        if block.get("keys_present"):
+            schema["keys_present"] = list(block["keys_present"])
+        schemas[name] = schema
+    return schemas
+
+
+SCHEMAS = build_schemas()
+
+_DECISION_TAGS = load_ontology_schemas()["decision"]["tags"]
+DECISION_TAGS_VOCABULARY = set(_DECISION_TAGS["vocabulary"])
+DECISION_TAGS_MAX = int(_DECISION_TAGS["max"])
 
 MINIMUMS = {"entity": 3, "project": 4, "person": 8, "meeting": 6, "decision": 2}
 
@@ -160,15 +171,10 @@ def test_decision_status_enum_fully_covered():
     assert seen == expected, f"missing decision status coverage: {expected - seen}"
 
 
-DECISION_TAGS_VOCABULARY = {
-    "scope", "platform", "staffing", "methodology", "commercial", "timing", "stakeholder",
-}
-
-
 def test_decision_tags_within_controlled_vocabulary():
     for path in iter_fixture_files(SCHEMAS["decision"]["glob"]):
         tags = parse_frontmatter(path).get("tags") or []
-        assert len(tags) <= 2, f"{path}: more than 2 tags"
+        assert len(tags) <= DECISION_TAGS_MAX, f"{path}: more than {DECISION_TAGS_MAX} tags"
         for tag in tags:
             assert tag in DECISION_TAGS_VOCABULARY, f"{path}: tag {tag!r} not in vocabulary"
 
@@ -232,3 +238,19 @@ def test_context_portfolio_is_filled_not_placeholder():
         assert begin != -1 and end != -1 and end > begin + len("<!-- setup-my-brain:begin -->") + 1, (
             f"{path}: setup-my-brain content block is empty"
         )
+
+
+def test_ontology_schema_blocks_present_and_wellformed():
+    """The guard's schemas come FROM ontology.md — this test locks the
+    contract: five object blocks, each with non-empty required fields, and
+    enums shaped as field -> list."""
+    blocks = load_ontology_schemas()
+    assert set(blocks) == set(HARNESS), (
+        f"ontology.md schema blocks {sorted(blocks)} != expected object types {sorted(HARNESS)}"
+    )
+    for name, block in blocks.items():
+        assert block.get("required"), f"ontology.md block {name!r}: empty or missing 'required'"
+        for field, values in (block.get("enums") or {}).items():
+            assert isinstance(values, list) and values, (
+                f"ontology.md block {name!r}: enum {field!r} must be a non-empty list"
+            )
