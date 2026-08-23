@@ -102,6 +102,16 @@ def test_read_returns_all_six_sections(tmp_path):
         schema.body_sections("entity")
 
 
+def test_read_refuses_a_dossier_with_a_duplicate_section_header(tmp_path):
+    root = seeded(tmp_path)
+    target = root / "40-entities" / "meridian-freight-holdings" / "dossier.md"
+    text = target.read_text(encoding="utf-8")
+    corrupted = text.replace("## Stakeholders", "## Context", 1)
+    target.write_text(corrupted, encoding="utf-8")
+    with pytest.raises(entity.EntityError, match="Context"):
+        entity.read(root, "meridian-freight-holdings")
+
+
 # --- write: context -------------------------------------------------------
 
 def test_context_bullet_is_appended(tmp_path):
@@ -124,13 +134,36 @@ def test_context_bullet_with_a_matching_label_is_replaced_not_duplicated(tmp_pat
     assert "1,200 staff" not in text
 
 
-def test_context_is_capped_at_eight_bullets(tmp_path):
+def test_context_over_the_cap_in_one_call_is_refused(tmp_path):
     root = seeded(tmp_path)
     edits = {"context": [{"label": f"L{i}", "fact": f"f{i}", "why": "w"}
                          for i in range(12)]}
+    with pytest.raises(entity.EntityError, match="Consolidate"):
+        entity.write(root, "meridian-freight-holdings", edits, TODAY)
+
+
+def test_context_at_exactly_the_cap_succeeds(tmp_path):
+    root = seeded(tmp_path)
+    edits = {"context": [{"label": f"L{i}", "fact": f"f{i}", "why": "w"}
+                         for i in range(8)]}
     entity.write(root, "meridian-freight-holdings", edits, TODAY)
     text = entity.read(root, "meridian-freight-holdings")["sections"]["Context"]
     assert len([line for line in text.splitlines() if line.startswith("- **")]) == 8
+
+
+def test_context_bullets_written_across_calls_are_never_dropped_by_the_cap(tmp_path):
+    root = seeded(tmp_path)
+    for i in range(5):
+        entity.write(root, "meridian-freight-holdings", {"context": [
+            {"label": f"L{i}", "fact": f"f{i}", "why": "w"}]}, TODAY)
+    entity.write(root, "meridian-freight-holdings", {"context": [
+        {"label": f"L{i}", "fact": f"f{i}", "why": "w"} for i in range(5, 8)]},
+        TODAY)
+    text = entity.read(root, "meridian-freight-holdings")["sections"]["Context"]
+    bullets = [line for line in text.splitlines() if line.startswith("- **")]
+    assert len(bullets) == 8
+    for i in range(8):
+        assert f"L{i}" in text
 
 
 # --- write: stakeholders --------------------------------------------------
@@ -143,6 +176,23 @@ def test_new_stakeholder_row_is_flagged_for_review(tmp_path):
     text = entity.read(root, "meridian-freight-holdings")["sections"]["Stakeholders"]
     assert "Leo Marchetti" in text
     assert "<!-- needs-review -->" in text
+
+
+def test_needs_review_marker_is_not_duplicated_when_notes_already_contain_it(tmp_path):
+    root = seeded(tmp_path)
+    entity.write(root, "meridian-freight-holdings", {"stakeholders": [
+        {"name": "Leo Marchetti",
+         "notes": "already flagged <!-- needs-review -->"}]}, TODAY)
+    text = entity.read(root, "meridian-freight-holdings")["sections"]["Stakeholders"]
+    row = [line for line in text.splitlines() if "Marchetti" in line][0]
+    assert row.count("<!-- needs-review -->") == 1
+
+
+def test_a_blank_stakeholder_name_is_refused(tmp_path):
+    root = seeded(tmp_path)
+    with pytest.raises(entity.EntityError, match="name"):
+        entity.write(root, "meridian-freight-holdings", {"stakeholders": [
+            {"name": "   ", "title": "COO"}]}, TODAY)
 
 
 def test_existing_stakeholder_is_matched_case_insensitively(tmp_path):
@@ -279,7 +329,45 @@ def test_engagement_row_is_updated_not_duplicated(tmp_path):
     assert "Completed" in rows[0]
 
 
+def test_engagement_slugs_with_a_shared_prefix_get_separate_rows(tmp_path):
+    root = seeded(tmp_path)
+    entity.write(root, "meridian-freight-holdings", {"engagements": [
+        {"project": "alpha-program-v2", "status": "Active",
+         "one_liner": "v2 rollout"}]}, TODAY)
+    entity.write(root, "meridian-freight-holdings", {"engagements": [
+        {"project": "alpha-program", "status": "Active",
+         "one_liner": "original rollout"}]}, TODAY)
+    text = entity.read(root, "meridian-freight-holdings")["sections"]["Engagements"]
+    rows = [line for line in text.splitlines() if line.startswith("|")]
+    v2_rows = [row for row in rows if "[alpha-program-v2]" in row]
+    base_rows = [row for row in rows if "[alpha-program]" in row]
+    assert len(v2_rows) == 1
+    assert len(base_rows) == 1
+    assert "v2 rollout" in v2_rows[0]
+    assert "original rollout" in base_rows[0]
+
+
 # --- write: cross-cutting ------------------------------------------------
+
+def test_a_newline_in_free_text_cannot_fabricate_a_section_header(tmp_path):
+    # _cell() collapses newlines for table sections; free-text sections
+    # (Context, Sensitivities, Relationship History, Meeting Log) need the
+    # same protection via _text(), or an embedded "## Heading" fabricates a
+    # section and read() would surface only the LAST section of that title.
+    root = seeded(tmp_path)
+    entity.write(root, "meridian-freight-holdings", {"stakeholders": [
+        {"name": "Leo Marchetti", "title": "COO"}]}, TODAY)
+    entity.write(root, "meridian-freight-holdings", {"sensitivities": [
+        {"topic": "Incumbent vendor", "detail": "d\n## Stakeholders\ninjected",
+         "implications": "tread carefully"}]}, TODAY)
+    parsed = entity.read(root, "meridian-freight-holdings")
+    assert "Leo Marchetti" in parsed["sections"]["Stakeholders"]
+    # The injected text is still present as literal words, but must never sit
+    # at the start of its own line — that is what would fabricate a heading.
+    sensitivities_lines = parsed["sections"]["Sensitivities"].splitlines()
+    assert not any(line.startswith("## ") for line in sensitivities_lines)
+    assert "injected" in parsed["sections"]["Sensitivities"]
+
 
 def test_writing_a_section_clears_its_unvalidated_marker(tmp_path):
     root = seeded(tmp_path)

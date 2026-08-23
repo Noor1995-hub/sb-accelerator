@@ -60,6 +60,20 @@ def _cell(value: Optional[str]) -> str:
     return text.replace("|", r"\|").replace("\n", " ")
 
 
+_WS_RUN_RE = re.compile(r"\s+")
+
+
+def _text(value) -> str:
+    """Collapse a caller-supplied value to a single line.
+
+    Bullet and heading sections render free text directly into markdown, so an
+    embedded newline could fabricate a section header — and read() keeps only
+    the last section of a given title, which would make a real section's
+    content invisible. _cell() does the same job for table sections.
+    """
+    return _WS_RUN_RE.sub(" ", "" if value is None else str(value)).strip()
+
+
 def _dossier_path(root: Path, slug: str) -> Path:
     return root / ENTITIES_DIR / slug / "dossier.md"
 
@@ -124,15 +138,27 @@ def read(root: Path, slug: str) -> dict:
         )
     text = path.read_text(encoding="utf-8")
     frontmatter, body = markdown.split_frontmatter(text)
-    sections = dict(markdown.split_sections(body))
-    preamble = sections.pop("", "")
+    raw_sections = markdown.split_sections(body)
+    preamble = ""
+    seen: Dict[str, str] = {}
+    for title, content in raw_sections:
+        if title == "":
+            preamble = content
+            continue
+        if title in seen:
+            raise EntityError(
+                f"dossier {slug!r} has more than one '## {title}' section — "
+                "content under the earlier one is unreachable. Repair the file "
+                "by hand (merge the duplicate headers) before editing it here."
+            )
+        seen[title] = content
     return {
         "slug": slug,
         "path": path.relative_to(root).as_posix(),
         "frontmatter": frontmatter,
-        "sections": {title: sections.get(title, "")
+        "sections": {title: seen.get(title, "")
                      for title in schema.body_sections("entity")},
-        "unvalidated": [title for title, content in sections.items()
+        "unvalidated": [title for title, content in seen.items()
                         if UNVALIDATED in content],
         "banner": BANNER in preamble,
     }
@@ -149,13 +175,13 @@ def _strip_placeholder(lines: List[str]) -> List[str]:
 
 
 def _merge_labelled_bullets(content: str, items, label_key: str,
-                            render, cap: Optional[int] = None) -> Tuple[str, int]:
+                            render) -> Tuple[str, int]:
     """Update a bullet whose bold label matches, else append. Returns
     (content, touched-count)."""
     lines = _strip_placeholder(_lines(content))
     touched = 0
     for item in items:
-        label = str(item[label_key]).strip()
+        label = _text(item[label_key])
         rendered = render(item)
         marker = f"- **{label}:**"
         for index, line in enumerate(lines):
@@ -168,11 +194,6 @@ def _merge_labelled_bullets(content: str, items, label_key: str,
                 insert_at -= 1
             lines.insert(insert_at, rendered)
         touched += 1
-    bullets = [line for line in lines if line.strip().startswith("- **")]
-    if cap is not None and len(bullets) > cap:
-        # Drop oldest bullets first: the newest carry the freshest facts.
-        doomed = set(id(line) for line in bullets[: len(bullets) - cap])
-        lines = [line for line in lines if id(line) not in doomed]
     return "\n".join(lines), touched
 
 
@@ -222,17 +243,28 @@ def _render_table(preamble: List[str], header: str,
 # --- per-section merges ---------------------------------------------------
 
 def _merge_context(content: str, items) -> Tuple[str, int]:
-    return _merge_labelled_bullets(
+    merged, touched = _merge_labelled_bullets(
         content, items, "label",
-        lambda item: f"- **{item['label']}:** {item['fact']} — {item['why']}",
-        cap=MAX_CONTEXT_BULLETS,
+        lambda item: (f"- **{_text(item['label'])}:** {_text(item['fact'])} "
+                      f"— {_text(item['why'])}"),
     )
+    count = len([line for line in merged.split("\n")
+                if line.strip().startswith("- **")])
+    if count > MAX_CONTEXT_BULLETS:
+        raise EntityError(
+            f"Context would hold {count} bullets, exceeding the maximum of "
+            f"{MAX_CONTEXT_BULLETS}. Consolidate instead: update an existing "
+            "bullet's label rather than adding a new one, or merge two related "
+            "bullets before writing."
+        )
+    return merged, touched
 
 
 def _merge_sensitivities(content: str, items) -> Tuple[str, int]:
     return _merge_labelled_bullets(
         content, items, "topic",
-        lambda item: f"- **{item['topic']}:** {item['detail']} — {item['implications']}",
+        lambda item: (f"- **{_text(item['topic'])}:** {_text(item['detail'])} "
+                      f"— {_text(item['implications'])}"),
     )
 
 
@@ -250,6 +282,11 @@ def _merge_stakeholders(content: str, items) -> Tuple[str, int]:
                 f"stance {stance!r} is not one of {list(STANCE_VOCABULARY)}")
         incoming = [_cell(item.get("name")), _cell(item.get("title")),
                     _cell(role), _cell(stance), _cell(item.get("notes"))]
+        if not incoming[0]:
+            raise EntityError(
+                "stakeholder name is missing or blank; every stakeholder "
+                "needs a name"
+            )
         name_key = incoming[0].lower()
         for row in rows:
             if row[0].lower() == name_key:
@@ -259,13 +296,20 @@ def _merge_stakeholders(content: str, items) -> Tuple[str, int]:
                         row[index] = incoming[index]
                 break
         else:
-            if not incoming[4]:
-                incoming[4] = NEEDS_REVIEW
-            else:
-                incoming[4] = f"{incoming[4]} {NEEDS_REVIEW}"
+            if NEEDS_REVIEW not in incoming[4]:
+                incoming[4] = f"{incoming[4]} {NEEDS_REVIEW}".strip()
             rows.append(incoming)
         touched += 1
     return _render_table(preamble, STAKEHOLDER_HEADER, rows), touched
+
+
+_LINK_TEXT_RE = re.compile(r"\A\[([^\]]+)\]")
+
+
+def _row_project_slug(cell: str) -> str:
+    """The engagement row's project slug, taken from the link text."""
+    match = _LINK_TEXT_RE.match(cell.strip())
+    return match.group(1).strip() if match else cell.strip()
 
 
 def _merge_engagements(content: str, items) -> Tuple[str, int]:
@@ -277,7 +321,7 @@ def _merge_engagements(content: str, items) -> Tuple[str, int]:
         incoming = [link, _cell(item.get("status") or "Active"),
                     _cell(item.get("one_liner"))]
         for row in rows:
-            if slug in row[0]:
+            if _row_project_slug(row[0]) == slug:
                 for index in (1, 2):
                     if incoming[index]:
                         row[index] = incoming[index]
@@ -293,7 +337,8 @@ def _merge_relationship_history(content: str, items) -> Tuple[str, int]:
     entries = [line for line in lines if line.strip().startswith("- **")]
     for item in items:
         entries.append(
-            f"- **{item['date']}:** {item['what']} — {item['significance']}")
+            f"- **{_text(item['date'])}:** {_text(item['what'])} "
+            f"— {_text(item['significance'])}")
     entries.sort(key=lambda line: line[4:14])
     return "\n" + "\n".join(entries) + "\n", len(items)
 
@@ -308,9 +353,10 @@ def _merge_meeting_log(content: str, items) -> Tuple[str, int]:
             ("Follow-ups", item.get("followups")),
             ("Dynamics", item.get("dynamics")),
         ]
-        detail = "\n".join(f"- **{label}:** {value}"
+        detail = "\n".join(f"- **{label}:** {_text(value)}"
                            for label, value in rows if value)
-        blocks.append(f"### {item['date']} — {item['topic']}\n\n{detail}")
+        blocks.append(
+            f"### {_text(item['date'])} — {_text(item['topic'])}\n\n{detail}")
     fresh = "\n\n".join(blocks)
     combined = "\n\n".join(part for part in (fresh, existing) if part)
     return "\n" + combined + "\n", len(items)
