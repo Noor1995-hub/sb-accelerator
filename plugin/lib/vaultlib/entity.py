@@ -334,8 +334,11 @@ def _merge_stakeholders(content: str, items) -> Tuple[str, int]:
     preamble, rows, postamble = _parse_table(content, 5)
     touched = 0
     for item in items:
-        role = (item.get("role") or "").strip()
-        stance = (item.get("stance") or "").strip()
+        # str()-wrapped like every other caller value in this module:
+        # `"role": ["sponsor"]` is a routine LLM JSON slip, and .strip()
+        # on a list raises AttributeError — straight past the envelope.
+        role = str(item.get("role") or "").strip()
+        stance = str(item.get("stance") or "").strip()
         if role and role not in ROLE_VOCABULARY:
             raise EntityError(
                 f"role {role!r} is not one of {list(ROLE_VOCABULARY)}")
@@ -452,7 +455,12 @@ def _merge_relationship_history(content: str, items) -> Tuple[str, int]:
     for block in blocks:
         body.extend(block)
     if any(line.strip() for line in tail):
-        body.append("")
+        # tail comes back from the file with the blank line that already
+        # separates it, so adding one unconditionally grew the gap by one
+        # line on every write. Same guard as the lead branch above: only
+        # add the separator when the adjacent line is not already blank.
+        if tail[0].strip():
+            body.append("")
         body.extend(tail)
     return "\n" + "\n".join(body).strip("\n") + "\n", len(items)
 

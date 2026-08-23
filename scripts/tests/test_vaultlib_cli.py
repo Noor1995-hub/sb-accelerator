@@ -158,6 +158,12 @@ MALFORMED_EDIT_PAYLOADS = {
     "meeting_log missing date": '{"meeting_log": [{"topic": "only a topic"}]}',
     "context is a dict not a list":
         '{"context": {"label": "L", "fact": "f", "why": "w"}}',
+    # role/stance were the only values reaching .strip() unwrapped, so a list
+    # raised AttributeError, which the backstop did not catch either.
+    "role is a list not a string":
+        '{"stakeholders": [{"name": "Dana Whitfield", "role": ["sponsor"]}]}',
+    "stance is a list not a string":
+        '{"stakeholders": [{"name": "Dana Whitfield", "stance": ["champion"]}]}',
 }
 
 
@@ -208,6 +214,27 @@ def test_a_future_direct_index_cannot_escape_the_envelope(
 
     def boom(*args, **kwargs):
         raise KeyError("why")
+
+    root = _seeded_vault(tmp_path)
+    monkeypatch.setattr(entity, "write", boom)
+    monkeypatch.setattr("sys.stdin", io.StringIO('{"context": [{}]}'))
+    code, out = run(capsys, [
+        "entity", "write", "--vault", str(root), "--slug", "acme-industries",
+        "--edits", "-",
+    ])
+    assert code == 1
+    assert "malformed edits payload" in out["error"]
+
+
+def test_a_future_attribute_error_cannot_escape_the_envelope(
+        capsys, tmp_path, monkeypatch):
+    # AttributeError joined the backstop tuple because .strip() on a non-string
+    # is how this class of bug actually shows up in this module.
+    import io
+    from vaultlib import entity
+
+    def boom(*args, **kwargs):
+        raise AttributeError("'list' object has no attribute 'strip'")
 
     root = _seeded_vault(tmp_path)
     monkeypatch.setattr(entity, "write", boom)

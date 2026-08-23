@@ -409,6 +409,19 @@ def test_notes_above_and_below_the_table_both_survive_in_position(tmp_path):
     assert "Leo Marchetti" in section
 
 
+@pytest.mark.parametrize("field", ["role", "stance"])
+@pytest.mark.parametrize("value", [["sponsor"], 7, {"x": 1}])
+def test_a_non_string_role_or_stance_is_a_structured_error(tmp_path, field, value):
+    # These were the only two caller values in the module not str()-wrapped
+    # before .strip(), so a non-string raised AttributeError — which the
+    # backstop did not catch either. `"role": ["sponsor"]` instead of
+    # `"sponsor"` is a routine LLM JSON slip, not an exotic input.
+    root = seeded(tmp_path)
+    with pytest.raises(entity.EntityError, match="is not one of"):
+        entity.write(root, "meridian-freight-holdings", {"stakeholders": [
+            dict({"name": "Dana Whitfield"}, **{field: value})]}, TODAY)
+
+
 def test_a_pipe_in_a_field_cannot_break_the_table(tmp_path):
     root = seeded(tmp_path)
     entity.write(root, "meridian-freight-holdings", {"stakeholders": [
@@ -460,6 +473,45 @@ def test_relationship_history_keeps_prose_sub_bullets_and_comments(tmp_path):
     # the new entry sorted after it.
     assert section.index(lead) < section.index("intro call")
     assert section.index("intro call") < section.index(sub) < section.index("steerco")
+
+
+def test_relationship_history_merge_is_a_fixed_point(tmp_path):
+    # Merging nothing into already-rendered content must return it byte for
+    # byte. The tail branch used to add a separator blank line the tail
+    # already carried, so the gap grew by one line on every single write —
+    # monotonic and unbounded, and only when trailing content was present,
+    # which is exactly the case the preservation fix was added to protect.
+    rendered = "\n- **2026-01-05:** intro call — opened the door\n\n<!-- note -->\n"
+    once, _ = entity._merge_relationship_history(rendered, [])
+    assert once == rendered, "merging zero entries changed the section"
+    twice, _ = entity._merge_relationship_history(once, [])
+    assert twice == once, "the merge is not a fixed point"
+
+
+def test_repeated_writes_never_grow_the_gap_before_trailing_content(tmp_path):
+    root = seeded(tmp_path)
+    entity.write(root, "meridian-freight-holdings", {"relationship_history": [
+        {"date": "2026-01-05", "what": "intro call",
+         "significance": "opened the door"}]}, TODAY)
+    path = root / "40-entities" / "meridian-freight-holdings" / "dossier.md"
+    note = "<!-- sourced from the 2026 referral thread -->"
+    path.write_text(
+        path.read_text(encoding="utf-8").replace(
+            "opened the door", f"opened the door\n{note}", 1),
+        encoding="utf-8")
+
+    seen = set()
+    for index in range(6):
+        entity.write(root, "meridian-freight-holdings", {"relationship_history": [
+            {"date": "2026-03-01", "what": f"steerco {index}",
+             "significance": "scope agreed"}]}, TODAY)
+        section = entity.read(
+            root, "meridian-freight-holdings")["sections"]["Relationship History"]
+        assert note in section, "the trailing note was lost"
+        assert "\n\n\n" not in section, (
+            f"blank lines accumulated on write {index + 1}: {section!r}")
+        seen.add(section.count("\n\n"))
+    assert seen == {1}, f"the blank-run count drifted across writes: {sorted(seen)}"
 
 
 def test_meeting_log_prepends_newest_first(tmp_path):

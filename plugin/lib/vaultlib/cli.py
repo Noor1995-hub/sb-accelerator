@@ -169,11 +169,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     except OSError as exc:
         return _fail(f"filesystem error: {exc}",
                      "Check the vault is mounted and writable from this session.")
-    except (KeyError, TypeError) as exc:
+    except (KeyError, TypeError, AttributeError) as exc:
         # Backstop, not the primary guard: entity._validate_items rejects a
         # malformed payload with a useful message. This is here so no future
-        # direct-index can escape the envelope — a traceback on stdout gives
-        # the calling model no `ok` to read.
+        # direct-index or attribute access can escape the envelope — a
+        # traceback on stdout gives the calling model no `ok` to read.
         return _fail(f"malformed edits payload: {exc}",
                      "Check every entry has the fields its section requires.")
 
