@@ -406,7 +406,7 @@ def _merge_engagements(content: str, items) -> Tuple[str, int]:
                 "30-projects/<slug>/index.md"
             ) from exc
         link = f"[{slug}](../../30-projects/{slug}/index.md)"
-        incoming = [link, _cell(item.get("status") or "Active"),
+        incoming = [link, _cell(item.get("status")),
                     _cell(item.get("one_liner"))]
         for row in rows:
             if _row_project_slug(row[0]) == slug:
@@ -415,6 +415,13 @@ def _merge_engagements(content: str, items) -> Tuple[str, int]:
                         row[index] = incoming[index]
                 break
         else:
+            # The default belongs on a NEW row only. On the merge input it
+            # made the Status cell unconditionally truthy, so the fill-only
+            # guard above could never protect a stored value: a follow-up
+            # note carrying no status reset Completed to Active. `status` is
+            # not a required field, so that payload is entirely valid.
+            if not incoming[1]:
+                incoming[1] = "Active"
             rows.append(incoming)
         touched += 1
     return _render_table(preamble, ENGAGEMENT_HEADER, rows, postamble), touched
@@ -551,6 +558,21 @@ def write(root: Path, slug: str, edits: Mapping, today: str) -> dict:
     text = path.read_text(encoding="utf-8")
     _, body = markdown.split_frontmatter(text)
     sections = markdown.split_sections(body)
+
+    # The merge loop below walks the sections the FILE has, so an edit whose
+    # heading is absent — deleted or renamed by hand in Obsidian — would never
+    # be visited: no merge, no changes entry, and an ok envelope over a write
+    # that did not happen. Refuse the whole payload rather than apply part of
+    # it; a half-applied write reads like an ordinary success.
+    present = {title for title, _ in sections}
+    missing = [key for key in active if _SECTION_FOR_EDIT[key] not in present]
+    if missing:
+        headings = ", ".join(f"## {_SECTION_FOR_EDIT[key]}" for key in missing)
+        raise EntityError(
+            f"the dossier for {slug} has no {headings} heading, so nothing "
+            f"was written for {sorted(missing)}. Restore the heading (a "
+            "deleted or renamed section is the usual cause) and retry."
+        )
 
     changes: List[str] = []
     updated: List[Tuple[str, str]] = []

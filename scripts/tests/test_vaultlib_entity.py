@@ -579,6 +579,38 @@ def test_engagement_row_is_updated_not_duplicated(tmp_path):
     assert "Completed" in rows[0]
 
 
+def test_omitting_status_does_not_reset_a_stored_one(tmp_path):
+    # `or "Active"` was applied to the MERGE input, which made the Status cell
+    # unconditionally truthy — so the fill-only guard could never protect a
+    # stored value, and a follow-up note carrying no status turned a Completed
+    # engagement back into Active while reporting ok.
+    root = seeded(tmp_path)
+    entity.write(root, "meridian-freight-holdings", {"engagements": [
+        {"project": "meridian-yard-automation-program", "status": "Completed",
+         "one_liner": "Three-yard rollout"}]}, TODAY)
+    entity.write(root, "meridian-freight-holdings", {"engagements": [
+        {"project": "meridian-yard-automation-program",
+         "one_liner": "Closed out in Q3"}]}, TODAY)
+    text = entity.read(root, "meridian-freight-holdings")["sections"]["Engagements"]
+    row = next(line for line in text.splitlines()
+               if line.startswith("|") and "meridian-yard-automation-program" in line)
+    assert "Completed" in row
+    assert "Closed out in Q3" in row
+
+
+def test_a_first_engagement_still_defaults_to_active(tmp_path):
+    # The other half of the fix: the default belongs on the append branch, so a
+    # brand-new row with no status must still say Active.
+    root = seeded(tmp_path)
+    entity.write(root, "meridian-freight-holdings", {"engagements": [
+        {"project": "meridian-yard-automation-program",
+         "one_liner": "Three-yard rollout"}]}, TODAY)
+    text = entity.read(root, "meridian-freight-holdings")["sections"]["Engagements"]
+    row = next(line for line in text.splitlines()
+               if line.startswith("|") and "meridian-yard-automation-program" in line)
+    assert "Active" in row
+
+
 def test_an_engagement_project_with_a_pipe_is_refused(tmp_path):
     # The Project cell is built as a raw markdown link and is the one cell
     # _cell() never sees, so an unescaped pipe used to destroy the Status and
@@ -687,6 +719,40 @@ def test_an_unknown_edit_key_is_refused(tmp_path):
     with pytest.raises(entity.EntityError, match="invented"):
         entity.write(root, "meridian-freight-holdings",
                      {"invented": [{"a": 1}]}, TODAY)
+
+
+def _drop_section(root, title):
+    path = root / "40-entities" / "meridian-freight-holdings" / "dossier.md"
+    text = path.read_text(encoding="utf-8")
+    path.write_text(re.sub(rf"## {title}\n.*?(?=\n## |\Z)", "", text, flags=re.S),
+                    encoding="utf-8")
+    return path
+
+
+def test_an_edit_for_a_missing_heading_is_refused(tmp_path):
+    # The merge loop walks the sections the FILE has, so an edit key whose
+    # heading a human deleted in Obsidian was never visited: no merge, no
+    # changes entry, and an ok envelope over a write that did not happen.
+    root = seeded(tmp_path)
+    _drop_section(root, "Sensitivities")
+    with pytest.raises(entity.EntityError, match=re.escape("## Sensitivities")):
+        entity.write(root, "meridian-freight-holdings", {"sensitivities": [
+            {"topic": "board pressure", "detail": "capex freeze through Q4",
+             "implications": "do not open with the expansion case"}]}, TODAY)
+
+
+def test_a_missing_heading_does_not_half_apply_the_rest(tmp_path):
+    # The partial payload is the dangerous shape: one section lands, one goes
+    # nowhere, and the envelope reads like an ordinary success. All or nothing.
+    root = seeded(tmp_path)
+    path = _drop_section(root, "Sensitivities")
+    with pytest.raises(entity.EntityError):
+        entity.write(root, "meridian-freight-holdings", {
+            "sensitivities": [{"topic": "board pressure", "detail": "d",
+                               "implications": "i"}],
+            "context": [{"label": "Headquarters", "fact": "Rotterdam",
+                         "why": "every site visit starts there"}]}, TODAY)
+    assert "Rotterdam" not in path.read_text(encoding="utf-8")
 
 
 @pytest.mark.parametrize("edits, expected", [
