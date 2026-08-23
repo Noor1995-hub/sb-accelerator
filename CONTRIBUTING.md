@@ -67,6 +67,12 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 - `python scripts/lint_plugin.py` passes (skill frontmatter + clean-room lint).
 - `python scripts/validate_template.py` passes.
 - `python -m pytest scripts/tests -q` passes.
+- **Changelog — only if a client would notice.** If this PR changes the plugin's behavior, a
+  skill, the vault template, or a migration, add a line under `Unreleased` in `CHANGELOG.md`,
+  ending with your PR number. Write it for the consultant explaining the update at a client
+  tune-up. If the change is internal — CI, validators, fixtures, delaware-side docs, tooling —
+  leave the changelog alone: git history is that record, and a changelog that repeats it is
+  just a worse copy.
 - If you touched `plugin/` (other than `plugin/CLAUDE.md`): bump the version in
   `plugin/.claude-plugin/plugin.json` — the version guard fails PRs that touch the plugin
   without a bump, or bump to an already-released version.

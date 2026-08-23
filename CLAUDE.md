@@ -67,4 +67,8 @@ Same three things CI runs. To exercise the plugin against a vault, instantiate
   `Co-Authored-By: Claude <noreply@anthropic.com>`
 - Any PR touching `plugin/` (except `plugin/CLAUDE.md`) must bump the version
   in `plugin/.claude-plugin/plugin.json` — CI's version guard enforces it.
+- `CHANGELOG.md` is client-facing release notes, not a work log: a PR gets a
+  line under `Unreleased` (ending with its PR number) only if a client would
+  notice — plugin behavior, a skill, the template, a migration. Internal
+  changes stay out; git history is that record. Not CI-enforced.
 - Backlog model (labels, milestones, board): `docs/backlog.md`.
