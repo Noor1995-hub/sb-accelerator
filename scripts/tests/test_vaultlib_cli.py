@@ -113,3 +113,36 @@ def test_project_error_is_a_structured_failure(capsys, tmp_path):
     ])
     assert code == 1
     assert "entity ensure" in payload["error"]
+
+
+def test_entity_write_reads_edits_from_stdin(capsys, tmp_path, monkeypatch):
+    import io
+    import json as _json
+    from vaultlib import entity
+    root = make_vault(tmp_path)
+    entity.ensure(root, slug="acme-industries", name="Acme Industries",
+                  today="2026-08-23")
+    payload = {"sensitivities": [
+        {"topic": "Incumbent", "detail": "d", "implications": "i"}]}
+    monkeypatch.setattr("sys.stdin", io.StringIO(_json.dumps(payload)))
+    code, out = run(capsys, [
+        "entity", "write", "--vault", str(root), "--slug", "acme-industries",
+        "--edits", "-", "--today", "2026-08-24",
+    ])
+    assert code == 0
+    assert any("Sensitivities" in change for change in out["result"]["changes"])
+
+
+def test_malformed_edits_payload_is_a_structured_error(capsys, tmp_path, monkeypatch):
+    import io
+    from vaultlib import entity
+    root = make_vault(tmp_path)
+    entity.ensure(root, slug="acme-industries", name="Acme Industries",
+                  today="2026-08-23")
+    monkeypatch.setattr("sys.stdin", io.StringIO("{not json"))
+    code, out = run(capsys, [
+        "entity", "write", "--vault", str(root), "--slug", "acme-industries",
+        "--edits", "-",
+    ])
+    assert code == 1
+    assert "not valid JSON" in out["error"]

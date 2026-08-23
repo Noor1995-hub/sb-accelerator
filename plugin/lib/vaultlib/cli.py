@@ -30,7 +30,7 @@ if __package__ in (None, ""):
     # the skills invoke it.
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from vaultlib import person, project, schema, vault  # noqa: E402
+from vaultlib import entity, person, project, schema, vault  # noqa: E402
 
 
 def _emit(payload: dict) -> None:
@@ -88,6 +88,34 @@ def build_parser() -> argparse.ArgumentParser:
     scaffold.add_argument("--contacts", help="one line for the Context callout")
     scaffold.add_argument("--source", help="one line for the Context callout")
 
+    entities = top.add_parser("entity", help="entity dossiers")
+    entities_sub = entities.add_subparsers(dest="action", required=True)
+
+    ent_ensure = entities_sub.add_parser(
+        "ensure", help="create a dossier if none exists")
+    _add_vault_argument(ent_ensure)
+    ent_ensure.add_argument("--slug", required=True)
+    ent_ensure.add_argument("--name", required=True, help="display name")
+    ent_ensure.add_argument("--type", dest="entity_type",
+                            choices=schema.enum_values("entity", "entity-type"))
+    ent_ensure.add_argument("--status", default="prospect",
+                            choices=schema.enum_values("entity", "status"))
+    ent_ensure.add_argument("--owner", help="owner person slug")
+    ent_ensure.add_argument("--today", help="ISO date; defaults to today")
+
+    ent_read = entities_sub.add_parser(
+        "read", help="print the dossier's frontmatter and sections as JSON")
+    _add_vault_argument(ent_read)
+    ent_read.add_argument("--slug", required=True)
+
+    ent_write = entities_sub.add_parser(
+        "write", help="apply section edits from a JSON payload")
+    _add_vault_argument(ent_write)
+    ent_write.add_argument("--slug", required=True)
+    ent_write.add_argument("--edits", required=True,
+                           help="path to a JSON file, or - to read stdin")
+    ent_write.add_argument("--today", help="ISO date; defaults to today")
+
     return parser
 
 
@@ -106,6 +134,20 @@ def _dispatch(args: argparse.Namespace) -> int:
             parent=args.parent, stage=args.stage,
             contacts=args.contacts, source=args.source,
         ))
+    if args.group == "entity":
+        if args.action == "ensure":
+            return _ok(entity.ensure(
+                root, slug=args.slug, name=args.name,
+                today=vault.today_iso(args.today),
+                entity_type=args.entity_type, status=args.status,
+                owner=args.owner,
+            ))
+        if args.action == "read":
+            return _ok(entity.read(root, args.slug))
+        payload = (json.load(sys.stdin) if args.edits == "-"
+                   else json.loads(Path(args.edits).read_text(encoding="utf-8")))
+        return _ok(entity.write(root, args.slug, payload,
+                                vault.today_iso(args.today)))
     raise AssertionError(f"unhandled group {args.group!r}")
 
 
@@ -117,6 +159,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         return _fail(str(exc), "Check the --vault path points at the vault root.")
     except project.ProjectError as exc:
         return _fail(str(exc), "Fix the named constraint and retry.")
+    except entity.EntityError as exc:
+        return _fail(str(exc), "Fix the named constraint and retry.")
+    except json.JSONDecodeError as exc:
+        return _fail(f"edits payload is not valid JSON: {exc}",
+                     "Pass a JSON object keyed by section, or - for stdin.")
     except ValueError as exc:
         return _fail(str(exc), "Fix the argument named in the error and retry.")
     except OSError as exc:
