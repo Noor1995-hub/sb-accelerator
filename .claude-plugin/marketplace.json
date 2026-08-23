@@ -1,0 +1,13 @@
+{
+  "name": "sb-accelerator-dev",
+  "owner": {
+    "name": "delaware"
+  },
+  "plugins": [
+    {
+      "name": "second-brain",
+      "source": "./plugin",
+      "description": "Second Brain Accelerator — a personal AI operating system for client executives. Internal development marketplace; client deployments install from the released distribution repo."
+    }
+  ]
+}
