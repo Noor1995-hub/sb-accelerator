@@ -79,3 +79,37 @@ def test_unknown_subcommand_exits_nonzero(tmp_path):
     with pytest.raises(SystemExit) as excinfo:
         cli.main(["nonsense"])
     assert excinfo.value.code != 0
+
+
+def test_project_scaffold_through_the_cli(capsys, tmp_path):
+    from test_vaultlib_project import vault_with_entity
+    root = vault_with_entity(tmp_path)
+    code, payload = run(capsys, [
+        "project", "scaffold", "--vault", str(root),
+        "--name", "Yard Automation Program", "--type", "initiative",
+        "--entity", "meridian-freight-holdings", "--owner", "morgan-ellery",
+        "--today", "2026-08-23",
+    ])
+    assert code == 0
+    assert payload["result"]["slug"] == "yard-automation-program"
+
+
+def test_project_scaffold_rejects_a_retired_type_at_the_parser(tmp_path):
+    from test_vaultlib_project import vault_with_entity
+    root = vault_with_entity(tmp_path)
+    with pytest.raises(SystemExit):
+        cli.main([
+            "project", "scaffold", "--vault", str(root), "--name", "X",
+            "--type", "presales", "--entity", "meridian-freight-holdings",
+            "--owner", "o",
+        ])
+
+
+def test_project_error_is_a_structured_failure(capsys, tmp_path):
+    root = make_vault(tmp_path)
+    code, payload = run(capsys, [
+        "project", "scaffold", "--vault", str(root), "--name", "X",
+        "--type", "initiative", "--entity", "missing-entity", "--owner", "o",
+    ])
+    assert code == 1
+    assert "entity ensure" in payload["error"]
