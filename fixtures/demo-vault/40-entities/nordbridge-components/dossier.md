@@ -13,9 +13,9 @@ last-updated: 2026-06-12
 ## Context
 
 - **Industry:** tier-2 automotive and industrial components — the automation case rests on labour cost, not throughput.
-- **Scale:** roughly 2,200 employees across three plants — larger than Meridian, and buying through procurement rather than through operations.
+- **Scale:** roughly 2,200 employees across three plants — larger than Meridian, and the buying centre sits in procurement, a step removed from the floor.
 - **Systems:** ERP migration mid-flight at the Ohio Valley plant with a change freeze in effect — the constraint that killed the first site proposal.
-- **Buying process:** procurement-led with Dana Whitfield as gatekeeper — expect a written business case, not a relationship decision.
+- **Buying process:** procurement-led with Dana Whitfield as gatekeeper — expect to win or lose this on a written business case.
 - **Relationship age:** conference introduction in February, one call since, nothing delivered — still earning the right to propose.
 
 ## Stakeholders
@@ -35,7 +35,7 @@ last-updated: 2026-06-12
 - **Attendees:** Jordan Vance, Dana Whitfield
 - **Key outcomes:** Open to a regional rollout across all three plants, starting wherever their ERP work is least disrupted
 - **Follow-ups:** Phased proposal excluding Ohio Valley from Phase 1
-- **Dynamics:** Exploratory rather than committed. Dana flagged the Ohio Valley ERP freeze unprompted, which was the most useful thing said in the call.
+- **Dynamics:** Exploratory throughout; no commitment asked for or offered. Dana flagged the Ohio Valley ERP freeze unprompted, which was the most useful thing said in the call.
 
 ## Sensitivities
 

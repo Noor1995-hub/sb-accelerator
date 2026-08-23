@@ -19,11 +19,11 @@ next-milestone-date: 2026-08-30
 # Commercial Operations — CRM Data Modernization
 
 > [!summary]+ **Now** — as of 01-06-26
-> - **Stage** — Three-vendor shortlist approved; RFP out, scored on integration effort rather than list price.
+> - **Stage** — Three-vendor shortlist approved; RFP out, with scoring that weights integration effort above sticker price.
 > - **Defining decision** — [[2026-06-01-vendor-shortlist-approved]]
 > - **Next event** — Vendor selection finalized, target 2026-08-30
 > - **Owe** — RFP scoring criteria sign-off to Sam Okafor
-> - **Watch** — Regional pipeline-stage definitions still differ; that is a governance call, not a data fix, and it will land in whatever schema the vendor builds
+> - **Watch** — Regional pipeline-stage definitions still differ. That is a governance question, and it will land in whatever schema the vendor builds
 
 > [!info]- **Context**
 > - **Contacts** — Sam Okafor (VP Commercial Operations, delivery owner), Omar Siddiqui (Analytics Lead, target schema and RFP scoring)

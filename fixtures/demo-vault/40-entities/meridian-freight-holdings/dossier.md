@@ -12,7 +12,7 @@ last-updated: 2026-06-01
 
 ## Context
 
-- **Industry:** regional freight and intermodal logistics — yard automation lands in their core operation, not a side system.
+- **Industry:** regional freight and intermodal logistics — yard automation lands in the operation they are measured on.
 - **Scale:** three yards, roughly 240 trailers — large enough to justify automation, small enough to decide in one room.
 - **Systems:** mixed PLC estate, historically one vendor per site — the integration overhead that drove the May consolidation.
 - **Decision style:** Leo decides fast once a case is quantified — bring the numbers, not the narrative.
@@ -22,8 +22,8 @@ last-updated: 2026-06-01
 
 | Name | Title | Role in Decision | Stance | Notes |
 |------|-------|------------------|--------|-------|
-| [[leo-marchetti]] | Chief Operating Officer | sponsor | champion | Decides fast once the case is quantified, and reverses himself just as fast. Wants totals, not options. |
-| [[renee-castillo]] | IT Director | evaluator | neutral | Carries the integration work the consolidation created. Has raised the risk twice without escalating it. |
+| [[leo-marchetti]] | Chief Operating Officer | sponsor | champion | Decides fast once the case is quantified, and reverses himself just as fast. Wants a total, and will pick before the options are finished. |
+| [[renee-castillo]] | IT Director | evaluator | neutral | Owns the integration work the consolidation created. Was absent when it was agreed, so her stance on it is untested. |
 | [[jamie-ellwood]] | Operations lead, floor (unconfirmed) | influencer | neutral | First seen in the 2026-05-20 brainstorm; his floor detail is what moved Leo. Title and remit not yet confirmed. <!-- needs-review --> |
 
 ## Relationship History
@@ -41,7 +41,7 @@ last-updated: 2026-06-01
 - **Attendees:** Priya Nathan, Leo Marchetti, Jamie Ellwood
 - **Key outcomes:** Consolidate on one automation vendor across all three yards, reversing the phased multi-vendor plan
 - **Follow-ups:** Re-scope yards 2–3 onto the yard-1 platform; revised commissioning schedule to Leo
-- **Dynamics:** Leo drove it and closed it inside the hour. Jamie's floor-operations detail was what moved him. Renee was not in the room and inherited the integration work.
+- **Dynamics:** Leo drove it and closed it inside the hour. Jamie's floor-operations detail was what moved him. Renee was not in the room.
 
 ### 2026-03-10 — Yard Automation Steering Committee #1
 
@@ -52,9 +52,9 @@ last-updated: 2026-06-01
 
 ## Sensitivities
 
-- **Incumbent yard-1 integrator:** their relationship predates ours and survived the consolidation — frame the single platform as extending that footprint, not replacing their partner.
+- **Incumbent yard-1 integrator:** their relationship predates ours and survived the consolidation — frame the single platform as extending that footprint. Any wording that reads as displacing them comes back through Leo.
 - **The May reversal:** the phased plan was Leo's own and he reversed it himself — do not retell it as a correction, and keep the six-week slip out of anything he has to present.
-- **Renee's integration risk:** raised twice, escalated never — a smaller room gets a straighter answer than steerco does.
+- **Renee's position:** the consolidation handed her the integration work and she was not at the table when it was agreed — get her read directly before the next steerco, because her silence in that room has never been tested.
 
 ## Engagements
 

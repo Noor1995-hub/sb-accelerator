@@ -24,7 +24,7 @@ next-milestone-date: 2026-09-01
 > - **Defining decision** — [[2026-05-20-single-vendor-strategy-adopted]]
 > - **Next event** — Vendor contract signature, target 2026-09-01
 > - **Owe** — Revised commissioning schedule for yards 2–3 to Leo Marchetti
-> - **Watch** — Roughly six weeks of slip against the original phased plan; Renee Castillo carries the integration risk and has raised it twice without escalating
+> - **Watch** — Roughly six weeks of slip against the original phased plan. Renee Castillo owns the integration work the consolidation created, and she was not in the room when it was agreed.
 
 > [!info]- **Context**
 > - **Contacts** — Leo Marchetti (COO, executive sponsor), Renee Castillo (IT Director), Jamie Ellwood (floor operations)

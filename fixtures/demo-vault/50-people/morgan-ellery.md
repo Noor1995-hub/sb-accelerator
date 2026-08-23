@@ -9,5 +9,5 @@ projects: [commercial-ops-crm-modernization, commercial-ops-pipeline-governance]
 created: 2025-09-15
 last-updated: 2026-06-12
 meetings-7d: 0
-meetings-30d: 4
+meetings-30d: 0
 ---

@@ -207,6 +207,45 @@ def test_existing_stakeholder_is_matched_case_insensitively(tmp_path):
     assert "COO" in text  # the earlier field survived
 
 
+def test_a_wikilinked_stakeholder_matches_a_plain_display_name(tmp_path):
+    # Dossiers carry `[[slug]]` in the Name column; the skill's documented
+    # payload passes a display name. They must be the same person.
+    root = seeded(tmp_path)
+    path = root / "40-entities" / "meridian-freight-holdings" / "dossier.md"
+    text = path.read_text(encoding="utf-8").replace(
+        "| Name | Title | Role in Decision | Stance | Notes |\n"
+        "|------|-------|------------------|--------|-------|",
+        "| Name | Title | Role in Decision | Stance | Notes |\n"
+        "|------|-------|------------------|--------|-------|\n"
+        "| [[leo-marchetti]] | COO | sponsor | champion | established |",
+    )
+    path.write_text(text, encoding="utf-8")
+
+    entity.write(root, "meridian-freight-holdings", {"stakeholders": [
+        {"name": "Leo Marchetti", "stance": "neutral"}]}, TODAY)
+
+    section = entity.read(root, "meridian-freight-holdings")["sections"]["Stakeholders"]
+    rows = [line for line in section.splitlines()
+            if line.startswith("|") and "archetti" in line]
+    assert len(rows) == 1, f"duplicate stakeholder row: {rows}"
+    assert "[[leo-marchetti]]" in rows[0], "the existing cell format was rewritten"
+    assert "neutral" in rows[0]
+    assert "established" in rows[0], "an existing note was lost"
+    assert "<!-- needs-review -->" not in rows[0]
+
+
+def test_an_aliased_wikilink_also_matches(tmp_path):
+    root = seeded(tmp_path)
+    entity.write(root, "meridian-freight-holdings", {"stakeholders": [
+        {"name": "[[leo-marchetti|Leo Marchetti]]", "title": "COO"}]}, TODAY)
+    entity.write(root, "meridian-freight-holdings", {"stakeholders": [
+        {"name": "Leo Marchetti", "stance": "champion"}]}, TODAY)
+    section = entity.read(root, "meridian-freight-holdings")["sections"]["Stakeholders"]
+    rows = [line for line in section.splitlines()
+            if line.startswith("|") and "archetti" in line]
+    assert len(rows) == 1, f"duplicate row: {rows}"
+
+
 def test_blank_stakeholder_field_never_overwrites_a_filled_one(tmp_path):
     root = seeded(tmp_path)
     entity.write(root, "meridian-freight-holdings", {"stakeholders": [

@@ -94,6 +94,12 @@ Judgment calls worth getting right:
 - **Vocabularies are closed.** Role in decision: sponsor · champion ·
   evaluator · influencer · blocker. Stance: champion · neutral · blocker. The
   CLI refuses anything else, so pick the nearest rather than inventing.
+- **Always pass a stakeholder's plain display name.** The CLI matches on a
+  slug derived from the name, so "Leo Marchetti" updates an existing row
+  whether that row stores `Leo Marchetti`, `[[leo-marchetti]]` or
+  `[[leo-marchetti|Leo Marchetti]]`. Do not copy a dossier's link syntax back
+  into the payload to make it match, and do not introduce a wikilink for a
+  person note that may not exist.
 
 **If nothing qualifies, write nothing.** Some input is genuinely not worth a
 permanent entry — a scheduling exchange, a pleasantry, a detail already

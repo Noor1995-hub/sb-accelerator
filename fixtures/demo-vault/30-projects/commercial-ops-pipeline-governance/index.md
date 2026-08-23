@@ -20,14 +20,14 @@ next-milestone-date: 2026-09-30
 
 > [!summary]+ **Now** — as of 05-06-26
 > - **Stage** — Standing area. Forecast-call cadence reviewed this cycle with no change agreed; hygiene standards hold.
-> - **Defining decision** — _none recorded; governance calls have been made in the monthly review rather than written down_
+> - **Defining decision** — _none recorded; the governance calls live in the monthly review and nowhere else_
 > - **Next event** — Q3 pipeline governance review, 2026-09-30 (quarterly)
 > - **Owe** — Nothing dated; the monthly review pack is the standing obligation
 > - **Watch** — Regional stage definitions still diverge, and [[commercial-ops-crm-modernization]] forces the question before its 2026-08-30 vendor selection
 
 > [!info]- **Context**
 > - **Contacts** — Sam Okafor (VP Commercial Operations), Taylor Brooks (Chief of Staff, runs the forecast call)
-> - **Source** — Standing responsibility, not a dated engagement
+> - **Source** — Standing responsibility; no start event to point at
 
 ## Decisions
 

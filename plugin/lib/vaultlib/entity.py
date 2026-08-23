@@ -268,6 +268,30 @@ def _merge_sensitivities(content: str, items) -> Tuple[str, int]:
     )
 
 
+_WIKILINK_RE = re.compile(r"\A\[\[([^\]|]+)(?:\|[^\]]*)?\]\]\Z")
+
+
+def _name_key(cell: str) -> str:
+    """Comparison key for a stakeholder Name cell.
+
+    A dossier may carry a plain display name, an Obsidian wikilink to the
+    person note, or an aliased link — and a hand-edited file may mix them.
+    Normalising to a slug means `[[leo-marchetti]]` and "Leo Marchetti" are the
+    same person, so a caller passing a display name updates the existing row
+    instead of appending a duplicate.
+    """
+    text = cell.strip()
+    match = _WIKILINK_RE.match(text)
+    if match:
+        text = match.group(1).strip()
+    if not text:
+        return ""
+    try:
+        return naming.slugify(text)
+    except ValueError:
+        return text.lower()
+
+
 def _merge_stakeholders(content: str, items) -> Tuple[str, int]:
     preamble, rows = _parse_table(content, 5)
     touched = 0
@@ -287,10 +311,12 @@ def _merge_stakeholders(content: str, items) -> Tuple[str, int]:
                 "stakeholder name is missing or blank; every stakeholder "
                 "needs a name"
             )
-        name_key = incoming[0].lower()
+        name_key = _name_key(incoming[0])
         for row in rows:
-            if row[0].lower() == name_key:
+            if _name_key(row[0]) == name_key:
                 # Only fill; never replace a filled cell with an empty one.
+                # row[0] is deliberately left alone: the dossier's own Name
+                # format (plain, linked, or aliased) is the human's choice.
                 for index in range(1, 5):
                     if incoming[index]:
                         row[index] = incoming[index]
