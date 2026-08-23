@@ -1,6 +1,6 @@
 ---
 type: project
-project-name: "Commercial Operations — CRM Data Modernization"
+project-name: "CRM Data Modernization"
 slug: commercial-ops-crm-modernization
 status: active
 project-type: initiative
@@ -16,7 +16,7 @@ next-milestone: "Vendor selection finalized"
 next-milestone-date: 2026-08-30
 ---
 
-# Commercial Operations — CRM Data Modernization
+# CRM Data Modernization
 
 > [!summary]+ **Now** — as of 01-06-26
 > - **Stage** — Three-vendor shortlist approved; RFP out, with scoring that weights integration effort above sticker price.

@@ -1,6 +1,6 @@
 ---
 type: project
-project-name: "Meridian Freight — Warehouse Pilot (Phase 0)"
+project-name: "Warehouse Pilot (Phase 0)"
 slug: meridian-warehouse-pilot-phase-0
 status: completed
 project-type: initiative
@@ -16,7 +16,7 @@ next-milestone:
 next-milestone-date:
 ---
 
-# Meridian Freight — Warehouse Pilot (Phase 0)
+# Warehouse Pilot (Phase 0)
 
 > [!summary]+ **Now** — as of 01-02-26
 > - **Stage** — Closed. Delivered on schedule at the single pilot warehouse; the three-yard follow-on is being scoped.

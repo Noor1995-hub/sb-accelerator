@@ -1,6 +1,6 @@
 ---
 type: project
-project-name: "Commercial Operations — Pipeline Governance"
+project-name: "Pipeline Governance"
 slug: commercial-ops-pipeline-governance
 status: active
 project-type: area-of-responsibility
@@ -16,7 +16,7 @@ next-milestone: "Q3 pipeline governance review"
 next-milestone-date: 2026-09-30
 ---
 
-# Commercial Operations — Pipeline Governance
+# Pipeline Governance
 
 > [!summary]+ **Now** — as of 05-06-26
 > - **Stage** — Standing area. Forecast-call cadence reviewed this cycle with no change agreed; hygiene standards hold.

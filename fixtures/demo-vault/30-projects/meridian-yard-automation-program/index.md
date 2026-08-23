@@ -1,6 +1,6 @@
 ---
 type: project
-project-name: "Meridian Freight — Yard Automation Program"
+project-name: "Yard Automation Program"
 slug: meridian-yard-automation-program
 status: active
 project-type: initiative
@@ -17,7 +17,7 @@ next-milestone: "Vendor contract signature — single-vendor consolidation"
 next-milestone-date: 2026-09-01
 ---
 
-# Meridian Freight — Yard Automation Program
+# Yard Automation Program
 
 > [!summary]+ **Now** — as of 01-06-26
 > - **Stage** — Yard 1 commissioned on the Phase 0 vendor's platform; yards 2–3 being re-scoped onto it after the May consolidation.

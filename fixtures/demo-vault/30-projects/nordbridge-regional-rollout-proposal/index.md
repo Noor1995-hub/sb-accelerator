@@ -1,6 +1,6 @@
 ---
 type: project
-project-name: "Nordbridge Components — Regional Rollout Proposal"
+project-name: "Regional Rollout Proposal"
 slug: nordbridge-regional-rollout-proposal
 status: active
 project-type: initiative
@@ -16,7 +16,7 @@ next-milestone: "Submit regional rollout proposal"
 next-milestone-date: 2026-09-15
 ---
 
-# Nordbridge Components — Regional Rollout Proposal
+# Regional Rollout Proposal
 
 > [!summary]+ **Now** — as of 12-06-26
 > - **Stage** — Proposal in drafting for a September submission; Phase 1 site still unresolved after Ohio Valley came off the table.
