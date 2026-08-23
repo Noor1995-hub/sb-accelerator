@@ -15,6 +15,18 @@ delivers them.
 
 ## Unreleased
 
+- **Two skills that build and maintain the vault's objects.** `/new-project` creates a
+  project — its index note, its decision log, and the link into the entity it belongs to —
+  from a description, a pasted brief, or a file you point it at. `/update-entity` files
+  free-form notes about a client, partner or business unit into the right sections of that
+  entity's dossier: people, meetings, company facts, sensitivities, engagements. Both write
+  through a script rather than typing markdown, so naming, frontmatter and cross-links are
+  consistent every time, and a note you edited by hand is never overwritten — an update fills
+  gaps and adds rows, it does not replace what is already there. Runs in Claude Code or
+  Cowork; plugins do not load in Chat. (#39)
+- **A project is now an initiative or an area of responsibility** — timeboxed with an end, or
+  ongoing. The four previous types mixed the lifecycle question with who the project was for,
+  and who it is for already lives on the project's entity. One axis, asked once. (#39)
 - **Vault UX defaults.** Notebook Navigator ships preconfigured: shortcuts to the five object
   Bases (Meetings, Projects, Entities, People, Decisions) plus `60-daily-notes`, rainbow folder
   colors, all file types visible. Claude's home is also browsable in Obsidian — the vault carries
