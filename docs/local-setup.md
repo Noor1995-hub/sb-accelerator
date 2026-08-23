@@ -77,7 +77,7 @@ table:
 - `20-meetings/Meetings.base` — "Triage" shows exactly 3 meetings (the two
   `needs-review` and one `needs-attention` that are neither reviewed nor
   archived); "All Meetings" shows all 8.
-- `50-people/People.base` — "All" shows 9 people; "Uncurated" shows exactly
+- `50-people/People.base` — "All" shows 10 people; "Uncurated" shows exactly
   one row (Jamie Ellwood, `relationship` empty).
 
 Also verify the navigator defaults: Notebook Navigator's Shortcuts section
@@ -87,25 +87,42 @@ folder (rainbow-tinted), and `claude/skills` is browsable in the file tree
 
 ### 4. Load the plugin locally and verify skills are invocable
 
+**Claude Code** can load the plugin from a path:
+
 ```bash
 cd /tmp/sb-test-vault
 claude --plugin-dir /path/to/sb-accelerator/plugin
 ```
 
-Run `/help` (or your Claude Code client's plugin/skill listing) and confirm
-the vault-scoped skills from `plugin/skills/` are visible. As of this
-writing `plugin/skills/` has no skills yet (they land via issues #14–#20) —
-if that's still true when you run this, this step just confirms the plugin
-loads without error; re-run it against a real skill once one exists.
+Run `/help` and confirm `/new-project` and `/update-entity` appear.
 
-### 5. Run one skill against the fixtures
+**Cowork cannot** — `--plugin-dir` is a Claude Code flag, and Cowork loads
+skills only from installed plugins and your own skill store, never from a
+connected folder. To exercise the skills where they are designed to run, add
+this repo as a marketplace (Customize → Plugins → Add marketplace) using the
+root `.claude-plugin/marketplace.json` (`sb-accelerator-dev`), then install
+`second-brain`.
 
-Once at least one skill exists, invoke it against a fixture input — for
-example, a meeting-capture skill against
-`10-inbox/2026-08-19-teams-transcript-nordbridge-checkin.txt` — and confirm
-it produces output consistent with the ontology (a `20-meetings/` note with
-the required frontmatter fields from
-`template/99-workflow-config/reference/ontology.md`).
+### 5. Run a skill against the fixtures
+
+Open the test vault and try both:
+
+```
+/new-project "Northgate Terminal Refresh"
+/update-entity nordbridge-components
+```
+
+Then check the CLI directly, which is what the skills call:
+
+```bash
+python3 plugin/lib/vaultlib/cli.py entity read \
+  --vault /tmp/sb-test-vault --slug meridian-freight-holdings
+```
+
+Every call prints one JSON object with an `ok` field. Confirm the created
+project's frontmatter matches
+`template/99-workflow-config/reference/ontology.md`, and that its body carries
+the three H2 sections the ontology's `body_sections` declares.
 
 ### 6. Tear down and recreate
 

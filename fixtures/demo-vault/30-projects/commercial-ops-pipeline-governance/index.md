@@ -5,7 +5,7 @@ slug: commercial-ops-pipeline-governance
 status: active
 project-type: area-of-responsibility
 entity: commercial-operations
-owner: taylor-brooks
+owner: morgan-ellery
 stakeholders: [sam-okafor, taylor-brooks]
 created: 2026-01-20
 last-updated: 2026-06-05
@@ -16,7 +16,48 @@ next-milestone: "Q3 pipeline governance review"
 next-milestone-date: 2026-09-30
 ---
 
-## Overview
+# Commercial Operations — Pipeline Governance
 
-Ongoing area of responsibility: pipeline hygiene standards, forecast-call
-cadence, and quarterly governance review across the commercial org.
+> [!summary]+ **Now** — as of 05-06-26
+> - **Stage** — Standing area. Forecast-call cadence reviewed this cycle with no change agreed; hygiene standards hold.
+> - **Defining decision** — _none recorded; governance calls have been made in the monthly review rather than written down_
+> - **Next event** — Q3 pipeline governance review, 2026-09-30 (quarterly)
+> - **Owe** — Nothing dated; the monthly review pack is the standing obligation
+> - **Watch** — Regional stage definitions still diverge, and [[commercial-ops-crm-modernization]] forces the question before its 2026-08-30 vendor selection
+
+> [!info]- **Context**
+> - **Contacts** — Sam Okafor (VP Commercial Operations), Taylor Brooks (Chief of Staff, runs the forecast call)
+> - **Source** — Standing responsibility, not a dated engagement
+
+## Decisions
+
+```dataview
+TABLE WITHOUT ID
+  link(file.path, dateformat(date, "dd-MM-yy")) AS "Date",
+  status AS "Status",
+  summary AS "Decision"
+FROM "30-projects/commercial-ops-pipeline-governance/decisions"
+SORT status ASC, date DESC
+LIMIT 20
+```
+
+## Open Items
+
+- **Owe** — Monthly pipeline review pack to the commercial leadership team (recurring)
+- **Awaiting** — May forecast-versus-actual figures from Sam Okafor's team
+- **Question** — Cadence was reviewed on 2026-06-05 with no change agreed; revisit if deal velocity picks up
+- **Pending** — Q3 governance review, 2026-09-30
+
+## Related Meetings
+
+```dataview
+TABLE WITHOUT ID
+  link(file.path, dateformat(date, "dd-MM HH:mm")) AS "Date",
+  slice(attendees, 0, 3) AS "Attendees",
+  recording-duration AS "Min",
+  calendar-subject AS "Subject"
+FROM "20-meetings"
+WHERE econtains(projects, this.slug)
+SORT date DESC
+LIMIT 15
+```

@@ -67,3 +67,34 @@ jobs:
           baseline=$(git show HEAD~1:plugin/.claude-plugin/plugin.json 2>/dev/null \
             | python3 -c "import json,sys; print(json.load(sys.stdin)['version'])" 2>/dev/null) || baseline=""
           scripts/check-plugin-version.sh ${baseline:+--baseline "$baseline"}
+
+  runtime_floor:
+    name: runtime floor (python 3.10)
+    # Cowork's VM ships Python 3.10 while the job above runs 3.13, so a 3.11+
+    # construct would otherwise fail only on a client machine. Not a required
+    # check yet — promote it in the ruleset once it has proven stable.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: install deps
+        run: pip install pytest pyyaml
+      - name: tests on the runtime floor
+        run: python -m pytest scripts/tests -q
+
+  cross_platform:
+    name: cross-platform (windows)
+    # The plugin runs inside Cowork's Linux VM, but the Claude Code CLI runs on
+    # the host, and the consultant-side scripts run on consultant laptops.
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: install deps
+        run: pip install pytest pyyaml
+      - name: tests on windows
+        run: python -m pytest scripts/tests -q

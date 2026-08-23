@@ -10,19 +10,40 @@ created: 2026-02-01
 last-updated: 2026-06-12
 ---
 
-## Overview
+## Context
 
-Tier-2 automotive and industrial components manufacturer, ~2,200 employees
-across three plants. Introduced by [[jordan-vance]] via an industry
-conference; no prior commercial relationship with Cascadia Intermodal.
+- **Industry:** tier-2 automotive and industrial components — the automation case rests on labour cost, not throughput.
+- **Scale:** roughly 2,200 employees across three plants — larger than Meridian, and buying through procurement rather than through operations.
+- **Systems:** ERP migration mid-flight at the Ohio Valley plant with a change freeze in effect — the constraint that killed the first site proposal.
+- **Buying process:** procurement-led with Dana Whitfield as gatekeeper — expect a written business case, not a relationship decision.
+- **Relationship age:** conference introduction in February, one call since, nothing delivered — still earning the right to propose.
 
-## Key contacts
+## Stakeholders
 
-- [[dana-whitfield]] — VP Procurement, primary buyer-side contact.
+| Name | Title | Role in Decision | Stance | Notes |
+|------|-------|------------------|--------|-------|
+| [[dana-whitfield]] | VP Procurement | evaluator | neutral | Straight about constraints — flagged the Ohio Valley freeze before we could propose into it. No read yet on who signs above her. |
 
-## Relationship history
+## Relationship History
 
-Intro call held 2026-03-02 ([[02-03-26-nordbridge-intro-call]]). Initial pilot
-site proposal withdrawn after an unrelated ERP migration freeze
-([[2026-03-02-pilot-site-selection-withdrawn]]); regional rollout proposal
-now in progress under [[nordbridge-regional-rollout-proposal]].
+- **2026-03-02:** Intro call — open to a three-plant rollout sequenced around their ERP work; the only substantive contact so far.
+
+## Meeting Log
+
+### 2026-03-02 — Intro Call
+
+- **Attendees:** Jordan Vance, Dana Whitfield
+- **Key outcomes:** Open to a regional rollout across all three plants, starting wherever their ERP work is least disrupted
+- **Follow-ups:** Phased proposal excluding Ohio Valley from Phase 1
+- **Dynamics:** Exploratory rather than committed. Dana flagged the Ohio Valley ERP freeze unprompted, which was the most useful thing said in the call.
+
+## Sensitivities
+
+- **Ohio Valley ERP freeze:** an unrelated migration has that plant locked — never propose it as a Phase 1 site, and do not re-ask before their freeze lifts.
+- **No delivery history with us:** every claim needs a reference other than our own work for them — the Meridian pilot carries that weight, and its commercial terms stay out of the room.
+
+## Engagements
+
+| Project | Status | One-liner |
+|---------|--------|-----------|
+| [nordbridge-regional-rollout-proposal](../../30-projects/nordbridge-regional-rollout-proposal/index.md) | Active | Three-plant rollout proposal, Phase 1 site still open |

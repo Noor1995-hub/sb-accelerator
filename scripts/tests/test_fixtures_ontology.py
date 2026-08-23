@@ -68,6 +68,8 @@ def build_schemas() -> dict:
         schema["enums"] = {field: set(values) for field, values in (block.get("enums") or {}).items()}
         if block.get("keys_present"):
             schema["keys_present"] = list(block["keys_present"])
+        if block.get("body_sections"):
+            schema["body_sections"] = list(block["body_sections"])
         schemas[name] = schema
     return schemas
 
@@ -253,4 +255,74 @@ def test_ontology_schema_blocks_present_and_wellformed():
         for field, values in (block.get("enums") or {}).items():
             assert isinstance(values, list) and values, (
                 f"ontology.md block {name!r}: enum {field!r} must be a non-empty list"
+            )
+
+
+def h2_titles(text: str) -> list:
+    """H2 headings outside fenced code blocks."""
+    titles, fence = [], None
+    for line in text.split("\n"):
+        token = line.strip()[:3]
+        if token in ("```", "~~~"):
+            fence = None if fence == token else (fence or token)
+            continue
+        if fence is None and line.startswith("## "):
+            titles.append(line[3:].strip())
+    return titles
+
+
+@pytest.mark.parametrize("object_type", ["project", "entity"])
+def test_body_sections_present_in_every_fixture(object_type):
+    expected = SCHEMAS[object_type]["body_sections"]
+    files = iter_fixture_files(SCHEMAS[object_type]["glob"])
+    assert files, f"no {object_type} fixtures found"
+    for path in files:
+        assert h2_titles(path.read_text(encoding="utf-8")) == expected, (
+            f"{path}: H2 sections do not match ontology body_sections for "
+            f"{object_type}"
+        )
+
+
+def test_ontology_declares_body_sections_where_the_guard_expects_them():
+    blocks = load_ontology_schemas()
+    for name in ("project", "entity"):
+        assert blocks[name].get("body_sections"), (
+            f"ontology.md block {name!r}: body_sections is missing or empty"
+        )
+
+
+def test_project_indexes_scope_their_decisions_query_to_themselves():
+    for path in iter_fixture_files(SCHEMAS["project"]["glob"]):
+        slug = parse_frontmatter(path)["slug"]
+        text = path.read_text(encoding="utf-8")
+        assert f'FROM "30-projects/{slug}/decisions"' in text, (
+            f"{path}: Decisions query must name this project's own slug — "
+            "Dataview does not reliably accept this.file.folder as a source"
+        )
+
+
+def test_no_fixture_hardcodes_a_person_name_in_a_query():
+    # The upstream Related Meetings query filtered the executive out by
+    # display name. Nothing generated here may reintroduce that.
+    for path in iter_fixture_files(SCHEMAS["project"]["glob"]):
+        text = path.read_text(encoding="utf-8")
+        assert "a !=" not in text, f"{path}: attendee self-filter reintroduced"
+
+
+def test_exec_person_note_exists_and_is_referenced_as_an_owner():
+    people = {parse_frontmatter(p)["slug"]
+              for p in iter_fixture_files(SCHEMAS["person"]["glob"])}
+    owners = {parse_frontmatter(p)["owner"]
+              for p in iter_fixture_files(SCHEMAS["project"]["glob"])}
+    assert owners <= people, f"project owners with no person note: {owners - people}"
+
+
+def test_dossier_engagements_resolve_to_real_projects():
+    project_slugs = slugs_of(SCHEMAS["project"]["glob"])
+    for path in iter_fixture_files(SCHEMAS["entity"]["glob"]):
+        text = path.read_text(encoding="utf-8")
+        for match in re.finditer(r"\.\./\.\./30-projects/([a-z0-9-]+)/index\.md", text):
+            assert match.group(1) in project_slugs, (
+                f"{path}: Engagements row links to unknown project "
+                f"{match.group(1)!r}"
             )
