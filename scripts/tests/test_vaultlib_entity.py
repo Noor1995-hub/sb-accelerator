@@ -325,6 +325,33 @@ def test_an_unknown_edit_key_is_refused(tmp_path):
                      {"invented": [{"a": 1}]}, TODAY)
 
 
+def test_an_escaped_pipe_survives_a_later_write(tmp_path):
+    # _cell() escapes pipes on write; _parse_table must honour that escape on
+    # the next write, or an unrelated edit silently truncates the cell.
+    root = seeded(tmp_path)
+    entity.write(root, "meridian-freight-holdings", {"stakeholders": [
+        {"name": "Leo Marchetti", "title": "COO",
+         "notes": "wants numbers | not narrative"}]}, TODAY)
+    entity.write(root, "meridian-freight-holdings", {"stakeholders": [
+        {"name": "Renee Castillo", "title": "IT Director"}]}, TODAY)
+    text = entity.read(root, "meridian-freight-holdings")["sections"]["Stakeholders"]
+    row = [line for line in text.splitlines() if "Marchetti" in line][0]
+    assert "not narrative" in row, "the escaped-pipe cell was truncated"
+    assert "<!-- needs-review -->" in row, "the review marker was lost"
+    assert len(re.findall(r"(?<!\\)\|", row)) == 6
+
+
+def test_repeated_writes_do_not_accumulate_escapes(tmp_path):
+    root = seeded(tmp_path)
+    for _ in range(3):
+        entity.write(root, "meridian-freight-holdings", {"stakeholders": [
+            {"name": "Leo Marchetti", "notes": "a | b"}]}, TODAY)
+    text = entity.read(root, "meridian-freight-holdings")["sections"]["Stakeholders"]
+    row = [line for line in text.splitlines() if "Marchetti" in line][0]
+    assert row.count("\\\\") == 0, f"backslashes accumulated: {row}"
+    assert r"a \| b" in row
+
+
 def test_write_uses_lf_endings(tmp_path):
     root = seeded(tmp_path)
     entity.write(root, "meridian-freight-holdings", {"sensitivities": [

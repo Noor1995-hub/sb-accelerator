@@ -176,6 +176,24 @@ def _merge_labelled_bullets(content: str, items, label_key: str,
     return "\n".join(lines), touched
 
 
+_ROW_SPLIT_RE = re.compile(r'(?<!\\)\|')
+
+
+def _split_row(line: str) -> list:
+    """Split a table row on unescaped delimiters only.
+
+    _cell() escapes pipes inside free text, so a naive split on "|" would
+    corrupt any cell carrying one — and re-parsing happens on every later
+    write to the same dossier.
+    """
+    parts = _ROW_SPLIT_RE.split(line.strip())
+    if parts and parts[0].strip() == "":
+        parts = parts[1:]
+    if parts and parts[-1].strip() == "":
+        parts = parts[:-1]
+    return [part.strip() for part in parts]
+
+
 def _parse_table(content: str, columns: int) -> Tuple[List[str], List[List[str]]]:
     """Return (non-table lines before the table, data rows as cell lists)."""
     preamble, rows, seen_header = [], [], 0
@@ -185,7 +203,7 @@ def _parse_table(content: str, columns: int) -> Tuple[List[str], List[List[str]]
             seen_header += 1
             if seen_header <= 2:
                 continue  # header row and separator
-            cells = [cell.strip() for cell in stripped.strip("|").split("|")]
+            cells = _split_row(stripped)
             cells += [""] * (columns - len(cells))
             rows.append(cells[:columns])
         elif seen_header == 0:
