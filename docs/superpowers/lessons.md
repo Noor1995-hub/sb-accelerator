@@ -4,6 +4,45 @@ Pitfalls agent sessions in this repo have hit. Append entries as they happen
 (date, what went wrong, the rule that prevents it). Patterns that recur get
 promoted into `CLAUDE.md`.
 
+## 2026-08-23 — a subagent's `git checkout` orphaned the controller's commit
+
+**What went wrong.** During subagent-driven execution of the object-skills
+port, a review subagent wanted to run the test suite at the exact commit it
+was reviewing, so it ran `git checkout <sha>` in the worktree — the same
+worktree the controller session was still committing to. The controller's next
+commit was parented on that detached HEAD instead of the branch tip. When HEAD
+returned to the branch, the commit became unreachable: present in the object
+database and reflog, absent from `git log` on the branch.
+
+It was recovered with `git cherry-pick <sha>` and nothing was lost, but only
+because the reviewer noticed the anomaly in its own output and reported it
+instead of finishing quietly. A silent version of this loses work to the next
+`git gc`.
+
+**Why it bites here specifically.** Parallel agents in one worktree share one
+`.git` and one index. Subagents reason locally — "I need the code as it was at
+that commit" — and reach for the tool that changes global state. Nothing in the
+worktree warns them another writer exists.
+
+**The rule.** Every subagent dispatch, reviewer and implementer alike, carries
+an explicit prohibition:
+
+> Do not run `git checkout`, `git switch`, `git reset`, `git stash`, or
+> `git rebase` in this worktree. Another session commits here concurrently and
+> those commands will orphan its work. To read a file at a specific commit use
+> `git show <sha>:<path>`, which needs no working-tree change. To inspect a
+> range use `git diff A..B` or `git log`.
+
+`git show` covers essentially every legitimate reviewer need. A reviewer that
+genuinely must *execute* code at another commit should copy it out to a
+scratch directory rather than move HEAD.
+
+**Also worth knowing:** artifacts under `.superpowers/` (and `.sdd/`) are
+gitignored, so a stray checkout does not revert them. Generated briefs stay
+valid across this class of accident — but regenerate them anyway after
+reconciling, since they may have been produced from a plan file that was
+briefly at the wrong revision.
+
 ## 2026-08-23 — `checks: read` does not fix the review job's check-runs 403
 
 **What went wrong.** `abca557` (#30) added `checks: read` to
