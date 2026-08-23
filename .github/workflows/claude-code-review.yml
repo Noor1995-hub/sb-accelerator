@@ -76,6 +76,26 @@ jobs:
       pull-requests: write
       issues: read
       id-token: write
+      # LOAD-BEARING. Declaring a `permissions:` block sets every unlisted
+      # scope to `none`, and two things the review depends on need this one:
+      #
+      # 1. Prompt constraint 3 tells the reviewer to read CI outcomes with
+      #    `gh api repos/{owner}/{repo}/commits/<sha>/check-runs`. Without
+      #    `checks: read` that is a hard 403 ("Resource not accessible by
+      #    integration") -- the prompt instructs a call the token cannot
+      #    make, so a PR with red CI gets reviewed as if it were green.
+      # 2. `gh pr view <n>` and `gh pr view <n> --comments` request
+      #    `statusCheckRollup`, so they fail outright too -- which cost the
+      #    step-1 eligibility guard its "has Claude already commented?"
+      #    query on both PR #25 and #28 (it fell back to
+      #    `--json comments`, which sees issue comments only).
+      #
+      # Note `claude.yml` grants `actions: read` with the comment "Required
+      # for Claude to read CI results on PRs". That is the workflow-run
+      # scope (`/actions/runs`), NOT the check-runs scope -- it would not
+      # have fixed either 403 above. Add it here only if a reviewer also
+      # needs to read workflow runs or job logs.
+      checks: read
 
     env:
       # `pull_request` events carry the number on `pull_request`; `issue_comment`
@@ -203,7 +223,29 @@ jobs:
           # real issues has no way to report them -- the silent-failure shape
           # this job is already prone to. `Bash(gh pr comment:*)` stays because
           # the no-issues summary still goes through it.
+          #
+          # These entries are PREFIX matches, so a command variant that reads
+          # as obviously-equivalent to a human is a hard denial. Three such
+          # variants were denied across the #25 and #28 runs, each one the
+          # form an agent reaches for first:
+          #
+          # - `python3 ...` does not match `Bash(python ...)`. This one bit
+          #   hardest: on #28 the deep logic-review agent was denied pytest
+          #   three times and finished its review without ever running the
+          #   suite. Our own CLAUDE.md and docs/local-setup.md tell readers to
+          #   use `python3` on stock macOS, so agents follow the repo's stated
+          #   convention straight into the wall. Both spellings are listed.
+          # - `git --no-pager show` does not match `Bash(git show:*)`. Agents
+          #   add `--no-pager` on reflex in a non-TTY environment.
+          # - `git fetch` was absent entirely, so `git log origin/main..HEAD`
+          #   (the natural way to check the commit trailer on every commit in
+          #   the PR) could not be set up.
+          #
+          # Denials are not just wasted turns: an agent that cannot run the
+          # tests silently downgrades to reading the code instead, which is a
+          # quieter review, not a failed one. When adding a command here,
+          # allow the variants too.
           claude_args: |
-            --allowedTools "Task,Read,Glob,Grep,mcp__github_inline_comment__create_inline_comment,Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr list:*),Bash(gh pr comment:*),Bash(gh issue view:*),Bash(gh issue list:*),Bash(gh search:*),Bash(gh api:*),Bash(git log:*),Bash(git blame:*),Bash(git show:*),Bash(git diff:*),Bash(python -m pytest:*),Bash(python scripts/lint_plugin.py:*),Bash(python scripts/validate_template.py:*)"
+            --allowedTools "Task,Read,Glob,Grep,mcp__github_inline_comment__create_inline_comment,Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr list:*),Bash(gh pr comment:*),Bash(gh issue view:*),Bash(gh issue list:*),Bash(gh search:*),Bash(gh api:*),Bash(git log:*),Bash(git blame:*),Bash(git show:*),Bash(git --no-pager show:*),Bash(git diff:*),Bash(git fetch:*),Bash(python -m pytest:*),Bash(python3 -m pytest:*),Bash(python scripts/lint_plugin.py:*),Bash(python3 scripts/lint_plugin.py:*),Bash(python scripts/validate_template.py:*),Bash(python3 scripts/validate_template.py:*)"
           # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
           # or https://code.claude.com/docs/en/cli-reference for available options
