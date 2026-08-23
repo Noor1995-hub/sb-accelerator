@@ -60,7 +60,8 @@ optional: [type, parent, stakeholders, meetings-7d, meetings-30d, key-people,
            next-milestone, next-milestone-date]
 enums:
   status: [active, paused, completed, cancelled]
-  project-type: [presales, delivery, internal, area-of-responsibility]
+  project-type: [initiative, area-of-responsibility]
+body_sections: [Decisions, Open Items, Related Meetings]
 ```
 
 - **Edges:** `parent` (project slug) · `stakeholders[]` (person slugs).
@@ -68,6 +69,13 @@ enums:
   **Index extras:** `next-milestone`, `next-milestone-date`.
 - `entity` is a slug string joining to an Entity's `slug` (and folder name).
 - Example: `30-projects/acme-industries-operating-model/index.md`
+- **`project-type` is one axis: timeboxed vs ongoing.** `initiative` is
+  bounded work with an end; `area-of-responsibility` is a standing
+  responsibility with no end date. Counterparty is deliberately *not*
+  encoded here — a project's `entity` joins to an Entity whose `entity-type`
+  already says whether the work faces a client, a partner, a supplier, or
+  your own business unit. Areas of responsibility are always top-level: they
+  never carry a `parent`.
 
 ### Person — `50-people/{slug}.md` · Base: `People.base`
 
@@ -118,6 +126,8 @@ optional: [entity-type, industry, owner, created, last-updated]
 enums:
   status: [prospect, active, dormant]
   entity-type: [client, business-unit, partner, supplier, other]
+body_sections: [Context, Stakeholders, Relationship History, Meeting Log,
+                Sensitivities, Engagements]
 ```
 
 A filled dossier's frontmatter looks like this (an example, not the schema):
@@ -133,6 +143,40 @@ owner: jordan-reyes
 created: 2026-02-07
 last-updated: 2026-04-01
 ```
+
+### Entity body structure
+
+The dossier body carries exactly the six H2 sections in `body_sections`
+above, in that order. Two skills write it — `/new-project` creates a
+baseline, `/update-entity` maintains it — so this is the shared contract, not
+a per-skill template.
+
+| Section | Shape | Merge rule |
+|---|---|---|
+| `## Context` | `- **{Label}:** {fact} — {why it matters}` | Update the bullet with a matching label; otherwise append. Maximum 8 bullets; consolidate the least important rather than exceeding it. |
+| `## Stakeholders` | Table: Name · Title · Role in Decision · Stance · Notes | Match on name, case-insensitive. Update only fields carrying new information; never overwrite specific data with vaguer data. Never remove a row. New rows get `<!-- needs-review -->` in Notes. |
+| `## Relationship History` | `- **{YYYY-MM-DD}:** {what happened} — {significance}` | Insert in date order. Never modify or remove an existing entry. |
+| `## Meeting Log` | `### {YYYY-MM-DD} — {Topic}` then Attendees / Key outcomes / Follow-ups / Dynamics bullets | Append-only, newest first (prepend). Never modify an existing entry. |
+| `## Sensitivities` | `- **{topic}:** {detail} — {implications}` | Update a matching topic; otherwise append. Never remove. |
+| `## Engagements` | Table: Project · Status · One-liner | Match on project slug. Update status and one-liner. Never remove. Link `[{slug}](../../30-projects/{slug}/index.md)`. |
+
+Empty sections carry `*No entries yet.*` — replaced on first real entry.
+
+**Role in Decision** vocabulary: sponsor · champion · evaluator · influencer
+· blocker. **Stance** vocabulary: champion · neutral · blocker.
+
+**Unvalidated marking.** Content that was generated rather than confirmed by
+a human carries `<!-- unvalidated -->` directly under its section header, and
+the file carries a top banner:
+
+```
+> [!unvalidated] Generated context — verify before relying on details.
+```
+
+When a human supplies content for a section, drop that section's marker. When
+the last marker goes, drop the banner. This is the vault's "be epistemically
+honest" rule made mechanical; keep it even where no skill currently generates
+context, because `/setup-my-brain` will.
 
 - `slug` MUST equal the folder name AND the `entity:` value on its projects —
   it is the join key.

@@ -1,9 +1,9 @@
 ---
 type: project
-project-name: "Meridian Freight — Warehouse Pilot (Phase 0)"
+project-name: "Warehouse Pilot (Phase 0)"
 slug: meridian-warehouse-pilot-phase-0
 status: completed
-project-type: delivery
+project-type: initiative
 entity: meridian-freight-holdings
 owner: priya-nathan
 stakeholders: [priya-nathan, leo-marchetti]
@@ -16,7 +16,46 @@ next-milestone:
 next-milestone-date:
 ---
 
-## Overview
+# Warehouse Pilot (Phase 0)
 
-Single-warehouse automation pilot that preceded the full yard-automation
-program. Completed 2026-02; superseded by [[meridian-yard-automation-program]].
+> [!summary]+ **Now** — as of 01-02-26
+> - **Stage** — Closed. Delivered on schedule at the single pilot warehouse; the three-yard follow-on is being scoped.
+> - **Defining decision** — _none recorded; the pilot ran to its original scope_
+> - **Next event** — _none; project closed 2026-02-01_
+> - **Owe** — _nothing outstanding_
+> - **Watch** — The pilot vendor is embedded at the pilot site, so whatever follows inherits that platform choice
+
+> [!info]- **Context**
+> - **Contacts** — Leo Marchetti (COO, executive sponsor)
+> - **Source** — First paid engagement with Meridian Freight, scoped deliberately small
+
+## Decisions
+
+```dataview
+TABLE WITHOUT ID
+  link(file.path, dateformat(date, "dd-MM-yy")) AS "Date",
+  status AS "Status",
+  summary AS "Decision"
+FROM "30-projects/meridian-warehouse-pilot-phase-0/decisions"
+SORT status ASC, date DESC
+LIMIT 20
+```
+
+## Open Items
+
+_None — closed with nothing outstanding. The three-yard follow-on is tracked
+separately under [[meridian-yard-automation-program]]._
+
+## Related Meetings
+
+```dataview
+TABLE WITHOUT ID
+  link(file.path, dateformat(date, "dd-MM HH:mm")) AS "Date",
+  slice(attendees, 0, 3) AS "Attendees",
+  recording-duration AS "Min",
+  calendar-subject AS "Subject"
+FROM "20-meetings"
+WHERE econtains(projects, this.slug)
+SORT date DESC
+LIMIT 15
+```

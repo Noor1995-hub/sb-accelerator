@@ -1,5 +1,6 @@
 filters:
   and:
+    - file.inFolder("30-projects")
     - type == "decision"
 formulas:
   open: link(file.path, "→")

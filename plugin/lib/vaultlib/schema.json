@@ -1,0 +1,184 @@
+{
+  "generated_from": "template/99-workflow-config/reference/ontology.md",
+  "objects": {
+    "decision": {
+      "enums": {
+        "status": [
+          "active",
+          "superseded",
+          "withdrawn"
+        ],
+        "type": [
+          "decision"
+        ]
+      },
+      "optional": [
+        "supersedes",
+        "source",
+        "tags"
+      ],
+      "required": [
+        "type",
+        "project",
+        "date",
+        "status",
+        "summary"
+      ],
+      "tags": {
+        "max": 2,
+        "vocabulary": [
+          "scope",
+          "platform",
+          "staffing",
+          "methodology",
+          "commercial",
+          "timing",
+          "stakeholder"
+        ]
+      }
+    },
+    "entity": {
+      "body_sections": [
+        "Context",
+        "Stakeholders",
+        "Relationship History",
+        "Meeting Log",
+        "Sensitivities",
+        "Engagements"
+      ],
+      "enums": {
+        "entity-type": [
+          "client",
+          "business-unit",
+          "partner",
+          "supplier",
+          "other"
+        ],
+        "status": [
+          "prospect",
+          "active",
+          "dormant"
+        ]
+      },
+      "optional": [
+        "entity-type",
+        "industry",
+        "owner",
+        "created",
+        "last-updated"
+      ],
+      "required": [
+        "type",
+        "entity-name",
+        "slug",
+        "status"
+      ]
+    },
+    "meeting": {
+      "enums": {
+        "review_status": [
+          "needs-review",
+          "confirmed",
+          "needs-attention"
+        ],
+        "type": [
+          "meeting",
+          "1:1",
+          "steerco",
+          "workshop",
+          "brainstorm",
+          "status-update"
+        ]
+      },
+      "optional": [
+        "attendee-emails",
+        "organizer",
+        "location",
+        "recurring",
+        "start-time",
+        "source-drive-id",
+        "source-filename",
+        "reviewed",
+        "archived"
+      ],
+      "required": [
+        "date",
+        "type",
+        "calendar-subject",
+        "calendar_match",
+        "attendees",
+        "projects",
+        "review_status",
+        "recording-duration",
+        "source",
+        "processed"
+      ]
+    },
+    "person": {
+      "enums": {
+        "relationship": [
+          "colleague",
+          "direct-report",
+          "external",
+          null
+        ]
+      },
+      "keys_present": [
+        "relationship"
+      ],
+      "optional": [
+        "email",
+        "company",
+        "role",
+        "projects",
+        "created",
+        "last-updated",
+        "meetings-7d",
+        "meetings-30d"
+      ],
+      "required": [
+        "person-name",
+        "slug"
+      ]
+    },
+    "project": {
+      "body_sections": [
+        "Decisions",
+        "Open Items",
+        "Related Meetings"
+      ],
+      "enums": {
+        "project-type": [
+          "initiative",
+          "area-of-responsibility"
+        ],
+        "status": [
+          "active",
+          "paused",
+          "completed",
+          "cancelled"
+        ]
+      },
+      "optional": [
+        "type",
+        "parent",
+        "stakeholders",
+        "meetings-7d",
+        "meetings-30d",
+        "key-people",
+        "next-milestone",
+        "next-milestone-date"
+      ],
+      "required": [
+        "project-name",
+        "slug",
+        "status",
+        "project-type",
+        "entity",
+        "owner",
+        "created",
+        "last-updated"
+      ]
+    }
+  }
+}
