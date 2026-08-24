@@ -92,3 +92,51 @@ def test_skip_is_idempotent(tmp_path):
     assert result["already_present"] is True
     skip_file = root / "99-workflow-config" / "sync-state" / "skipped-recordings.txt"
     assert skip_file.read_text(encoding="utf-8").count("plaud:x1") == 1
+
+
+def write_triaged_meeting(root, stem, review_status, reviewed):
+    text = "\n".join([
+        "---", "date: 2026-08-20T10:00", "type: meeting",
+        'calendar-subject: "X"', f"review_status: {review_status}",
+        f"reviewed: {'true' if reviewed else 'false'}", "archived: false",
+        "---", "", "## Key Takeaways", "- x", "",
+    ])
+    (root / "20-meetings" / f"{stem}.md").write_text(text, encoding="utf-8")
+
+
+def test_reconcile_flips_only_reviewed_needs_review(tmp_path):
+    root = make_vault(tmp_path)
+    write_triaged_meeting(root, "a-ticked", "needs-review", True)
+    write_triaged_meeting(root, "b-unticked", "needs-review", False)
+    write_triaged_meeting(root, "c-confirmed", "confirmed", True)
+    write_triaged_meeting(root, "d-attention", "needs-attention", True)
+
+    result = syncjob.reconcile_reviews(root)
+    assert result["flipped"] == ["20-meetings/a-ticked.md"]
+    assert result["needs_attention_ticks"] == ["20-meetings/d-attention.md"]
+
+    text = (root / "20-meetings" / "a-ticked.md").read_text(encoding="utf-8")
+    assert "review_status: confirmed" in text
+    assert "reviewed: true" in text          # the tick itself is never touched
+    untouched = (root / "20-meetings" / "b-unticked.md").read_text(encoding="utf-8")
+    assert "review_status: needs-review" in untouched
+
+
+def test_reconcile_preserves_every_other_byte(tmp_path):
+    root = make_vault(tmp_path)
+    write_triaged_meeting(root, "a-ticked", "needs-review", True)
+    before = (root / "20-meetings" / "a-ticked.md").read_text(encoding="utf-8")
+    syncjob.reconcile_reviews(root)
+    after = (root / "20-meetings" / "a-ticked.md").read_text(encoding="utf-8")
+    assert after == before.replace("review_status: needs-review",
+                                   "review_status: confirmed")
+
+
+def test_reconcile_is_idempotent_and_tolerates_broken_files(tmp_path):
+    root = make_vault(tmp_path)
+    write_triaged_meeting(root, "a-ticked", "needs-review", True)
+    (root / "20-meetings" / "broken.md").write_text("not a note", encoding="utf-8")
+    syncjob.reconcile_reviews(root)
+    second = syncjob.reconcile_reviews(root)
+    assert second["flipped"] == []
+    assert any("broken.md" in w for w in second["warnings"])

@@ -170,6 +170,11 @@ def build_parser() -> argparse.ArgumentParser:
     _add_vault_argument(sync_skip)
     sync_skip.add_argument("--id", dest="recording_id", required=True)
 
+    sync_rec = sync_sub.add_parser(
+        "reconcile-reviews",
+        help="flip review_status needs-review -> confirmed where reviewed is ticked")
+    _add_vault_argument(sync_rec)
+
     return parser
 
 
@@ -226,6 +231,8 @@ def _dispatch(args: argparse.Namespace) -> int:
             return _ok(syncjob.dedup(root, payload))
         if args.action == "skip":
             return _ok(syncjob.skip(root, args.recording_id))
+        if args.action == "reconcile-reviews":
+            return _ok(syncjob.reconcile_reviews(root))
     raise AssertionError(f"unhandled group {args.group!r}")
 
 

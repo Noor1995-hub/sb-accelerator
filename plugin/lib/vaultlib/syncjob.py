@@ -13,7 +13,7 @@ import hashlib
 from pathlib import Path
 from typing import Dict, List, Set, Tuple
 
-from . import markdown
+from . import markdown, vault
 
 INBOX_DIR = "10-inbox"
 MEETINGS_DIR = "20-meetings"
@@ -127,3 +127,41 @@ def dedup(root: Path, ids: List[str]) -> dict:
         "skipped": [rid for rid in validated if rid in skipped_ids],
         "warnings": warnings,
     }
+
+
+def reconcile_reviews(root: Path) -> dict:
+    """Fold triage ticks back into review_status: reviewed true flips
+    needs-review -> confirmed. One-way and narrow: a tick on a
+    needs-attention note is surfaced for a human, never auto-confirmed, and
+    `archived` is never read by any pipeline.
+    """
+    flipped: List[str] = []
+    attention: List[str] = []
+    warnings: List[str] = []
+    meetings = root / MEETINGS_DIR
+    for path in sorted(meetings.glob("*.md")) if meetings.is_dir() else []:
+        rel = path.relative_to(root).as_posix()
+        try:
+            text = path.read_text(encoding="utf-8")
+            data, _ = markdown.split_frontmatter(text)
+        except (ValueError, OSError) as exc:
+            warnings.append(f"{rel}: {exc}")
+            continue
+        if data.get("reviewed") is not True:
+            continue
+        status = data.get("review_status")
+        if status == "needs-attention":
+            attention.append(rel)
+            continue
+        if status != "needs-review":
+            continue
+        try:
+            updated = markdown.replace_scalar_field(
+                text, "review_status", "confirmed")
+        except ValueError as exc:
+            warnings.append(f"{rel}: {exc}")
+            continue
+        vault.atomic_write(path, updated)
+        flipped.append(rel)
+    return {"flipped": flipped, "needs_attention_ticks": attention,
+            "warnings": warnings}
