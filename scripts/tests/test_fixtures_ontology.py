@@ -30,6 +30,7 @@ HARNESS = {
     "person": {"glob": "50-people/*.md", "slug_must_match_stem": True},
     "decision": {"glob": "30-projects/*/decisions/*.md"},
     "meeting": {"glob": "20-meetings/*.md"},
+    "daily-note": {"glob": "60-daily-notes/*.md"},
 }
 
 
@@ -76,7 +77,8 @@ def build_schemas() -> dict:
 
 SCHEMAS = build_schemas()
 
-MINIMUMS = {"entity": 3, "project": 4, "person": 8, "meeting": 6, "decision": 2}
+MINIMUMS = {"entity": 3, "project": 4, "person": 8, "meeting": 6, "decision": 2,
+            "daily-note": 3}
 
 
 def parse_frontmatter(path: Path) -> dict:
@@ -232,7 +234,7 @@ def test_context_portfolio_is_filled_not_placeholder():
 
 def test_ontology_schema_blocks_present_and_wellformed():
     """The guard's schemas come FROM ontology.md — this test locks the
-    contract: five object blocks, each with non-empty required fields, and
+    contract: six object blocks, each with non-empty required fields, and
     enums shaped as field -> list."""
     blocks = load_ontology_schemas()
     assert set(blocks) == set(HARNESS), (
@@ -259,7 +261,7 @@ def h2_titles(text: str) -> list:
     return titles
 
 
-@pytest.mark.parametrize("object_type", ["project", "entity"])
+@pytest.mark.parametrize("object_type", ["project", "entity", "daily-note"])
 def test_body_sections_present_in_every_fixture(object_type):
     expected = SCHEMAS[object_type]["body_sections"]
     files = iter_fixture_files(SCHEMAS[object_type]["glob"])
@@ -273,7 +275,7 @@ def test_body_sections_present_in_every_fixture(object_type):
 
 def test_ontology_declares_body_sections_where_the_guard_expects_them():
     blocks = load_ontology_schemas()
-    for name in ("project", "entity"):
+    for name in ("project", "entity", "daily-note"):
         assert blocks[name].get("body_sections"), (
             f"ontology.md block {name!r}: body_sections is missing or empty"
         )
@@ -530,3 +532,95 @@ def test_executive_attends_every_meeting():
 
 # test_meeting_attendee_joins_resolve is already covered by
 # test_meeting_edges_resolve above — no duplicate added here.
+
+
+# --- Daily-note fixtures model the evening-sync contract ---
+
+DAILY_MARKER_RE = re.compile(r"<!-- evening-sync:(recap|prep):(begin|end) -->")
+
+
+def test_daily_note_filename_is_its_date():
+    for path in iter_fixture_files(SCHEMAS["daily-note"]["glob"]):
+        fm = parse_frontmatter(path)
+        assert str(fm["date"]) == path.stem, (
+            f"{path}: frontmatter date must equal the filename stem"
+        )
+
+
+def test_daily_note_machine_regions_are_balanced():
+    files = iter_fixture_files(SCHEMAS["daily-note"]["glob"])
+    assert files, "no daily-note fixtures found"
+    for path in files:
+        text = path.read_text(encoding="utf-8")
+        stack = []
+        for name, kind in DAILY_MARKER_RE.findall(text):
+            if kind == "begin":
+                stack.append(name)
+            else:
+                assert stack and stack.pop() == name, (
+                    f"{path}: unbalanced {name!r} markers"
+                )
+        assert not stack, f"{path}: region {stack!r} never closed"
+        assert text.count("evening-sync:recap:begin") == 1, (
+            f"{path}: exactly one recap region"
+        )
+
+
+def _jotting_lines_outside_markers(path):
+    """Non-empty '- ' bullets in the Meetings section, outside machine regions."""
+    found, inside, in_meetings = [], False, False
+    for line in path.read_text(encoding="utf-8").split("\n"):
+        marker = DAILY_MARKER_RE.search(line)
+        if marker:
+            inside = marker.group(2) == "begin"
+            continue
+        if line.startswith("## "):
+            in_meetings = line[3:].strip() == "Meetings"
+            continue
+        if in_meetings and not inside and line.strip().startswith("- ") \
+                and line.strip()[2:].strip():
+            found.append(line.strip())
+    return found
+
+
+def test_daily_note_fixtures_carry_hand_jottings_outside_markers():
+    # The merge rule is only real if fixtures exercise it (spec: fixture
+    # enrichment — "hand-written jottings outside markers").
+    jotted = [p for p in iter_fixture_files(SCHEMAS["daily-note"]["glob"])
+              if _jotting_lines_outside_markers(p)]
+    assert len(jotted) >= 2, (
+        "at least two daily-note fixtures must carry hand jottings outside "
+        f"markers; found {len(jotted)}"
+    )
+
+
+def test_conflict_sibling_fixture_exercises_conflicts_with():
+    """P2a parked item: the collision-guard output shape, on disk."""
+    carriers = []
+    stems = {p.stem for p in iter_fixture_files(SCHEMAS["meeting"]["glob"])}
+    for path in iter_fixture_files(SCHEMAS["meeting"]["glob"]):
+        fm = parse_frontmatter(path)
+        raw = fm.get("conflicts-with")
+        if raw in (None, ""):
+            continue
+        carriers.append(path)
+        match = WIKILINK_RE.match(str(raw).strip())
+        assert match, f"{path}: conflicts-with must be a quoted wikilink"
+        assert match.group(1) in stems, (
+            f"{path}: conflicts-with target {match.group(1)!r} is not a fixture"
+        )
+        assert fm["review_status"] == "needs-attention", (
+            f"{path}: conflicts-with appears only on needs-attention siblings"
+        )
+    assert carriers, "expected at least one conflicts-with fixture"
+
+
+def test_recording_id_namespaces_are_covered():
+    seen = set()
+    for path in iter_fixture_files(SCHEMAS["meeting"]["glob"]):
+        rid = parse_frontmatter(path).get("source-recording-id")
+        if rid:
+            seen.add(str(rid).split(":", 1)[0])
+    assert {"inbox", "plaud"} <= seen, (
+        f"fixtures should cover the shipping id namespaces; found {seen}"
+    )

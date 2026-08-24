@@ -6,6 +6,7 @@ level, an area given a parent.
 """
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Optional
 
@@ -189,4 +190,66 @@ def scaffold(root: Path, *, name: str, project_type: str, entity: str,
             index.relative_to(root).as_posix(),
             decisions.relative_to(root).as_posix() + "/",
         ],
+    }
+
+
+_ISO_DATE_ONLY_RE = re.compile(r"\A\d{4}-\d{2}-\d{2}\Z")
+
+
+def _require_iso_date(value, label: str) -> str:
+    text = str(value or "").strip()
+    if not _ISO_DATE_ONLY_RE.match(text):
+        raise ProjectError(f"{label} {value!r} must be ISO YYYY-MM-DD")
+    return text
+
+
+def touch(root, *, slug: str, date_iso: str,
+          next_milestone=None, next_milestone_date=None) -> dict:
+    """Bump the auto-maintained frontmatter of a project-state update.
+
+    Stage-5 subagents own the Now callout and Open Items as body prose; the
+    frontmatter half comes through here so no model ever authors it. Only
+    last-updated (and, together, the milestone pair) can change; every other
+    byte of index.md stays put.
+    """
+    try:
+        naming.validate_slug(str(slug or "").strip())
+    except ValueError as exc:
+        raise ProjectError(f"slug {slug!r}: {exc}") from exc
+    index_path = root / "30-projects" / slug / "index.md"
+    if not index_path.is_file():
+        raise ProjectError(
+            f"no project {slug!r} at 30-projects/{slug}/index.md — "
+            "create it first with /new-project"
+        )
+    stamped = _require_iso_date(date_iso, "date")
+    if (next_milestone is None) != (next_milestone_date is None):
+        raise ProjectError(
+            "next-milestone and next-milestone-date travel together — "
+            "pass both or neither"
+        )
+    text = index_path.read_text(encoding="utf-8")
+    updated = markdown.upsert_scalar_field(text, "last-updated", stamped)
+    milestone = None
+    milestone_date = None
+    if next_milestone is not None:
+        milestone = str(next_milestone).strip()
+        if not milestone or "\n" in milestone:
+            raise ProjectError("next-milestone must be a single line of text")
+        milestone_date = _require_iso_date(next_milestone_date,
+                                           "next-milestone-date")
+        quoted = '"{}"'.format(milestone.replace('"', '\\"'))
+        updated = markdown.upsert_scalar_field(updated, "next-milestone", quoted)
+        updated = markdown.upsert_scalar_field(updated, "next-milestone-date",
+                                               milestone_date)
+    changed = updated != text
+    if changed:
+        vault.atomic_write(index_path, updated)
+    return {
+        "slug": slug,
+        "path": f"30-projects/{slug}/index.md",
+        "last-updated": stamped,
+        "next-milestone": milestone,
+        "next-milestone-date": milestone_date,
+        "changed": changed,
     }

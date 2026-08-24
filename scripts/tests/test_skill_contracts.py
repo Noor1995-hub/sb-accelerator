@@ -41,7 +41,7 @@ def test_expected_skills_exist():
     # always satisfiable by the task that touches it.
     names = {path.parent.name for path in SKILL_FILES}
     assert {"new-project", "update-entity", "log-decision",
-            "sync-recordings"} <= names
+            "sync-recordings", "evening-sync"} <= names
 
 
 @pytest.mark.parametrize("path", SKILL_FILES, ids=lambda p: p.parent.name)

@@ -31,7 +31,7 @@ if __package__ in (None, ""):
     # the skills invoke it.
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from vaultlib import dates, decision, entity, meeting, person, plaud, project, schema, syncjob, vault  # noqa: E402
+from vaultlib import dailynote, dates, decision, entity, meeting, person, plaud, project, schema, syncjob, updatequeue, vault  # noqa: E402
 
 
 def _emit(payload: dict) -> None:
@@ -77,6 +77,14 @@ def build_parser() -> argparse.ArgumentParser:
     dates_window.add_argument("--hours", type=float, default=2.0,
                               help="half-width of the window (default 2)")
 
+    dates_plan = dates_sub.add_parser(
+        "plan", help="authoritative date block: today, next business day, recap window")
+    _add_vault_argument(dates_plan)
+    dates_plan.add_argument("--today", help="ISO date override (tests, backfills)")
+    dates_plan.add_argument("--timezone", help="IANA timezone name")
+    dates_plan.add_argument("--utc-offset", dest="utc_offset",
+                            help="explicit offset like +02:00")
+
     people = top.add_parser("person", help="person notes")
     people_sub = people.add_subparsers(dest="action", required=True)
     person_ensure = people_sub.add_parser(
@@ -100,6 +108,16 @@ def build_parser() -> argparse.ArgumentParser:
     scaffold.add_argument("--stage", help="one line for the Now callout")
     scaffold.add_argument("--contacts", help="one line for the Context callout")
     scaffold.add_argument("--source", help="one line for the Context callout")
+
+    proj_touch = projects_sub.add_parser(
+        "touch", help="bump last-updated (and optionally the milestone pair)")
+    _add_vault_argument(proj_touch)
+    proj_touch.add_argument("--slug", required=True)
+    proj_touch.add_argument("--date", help="ISO date; defaults to today")
+    proj_touch.add_argument("--next-milestone", dest="next_milestone",
+                            help="one line; requires --next-milestone-date")
+    proj_touch.add_argument("--next-milestone-date", dest="next_milestone_date",
+                            help="ISO date; requires --next-milestone")
 
     entities = top.add_parser("entity", help="entity dossiers")
     entities_sub = entities.add_subparsers(dest="action", required=True)
@@ -176,6 +194,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="flip review_status needs-review -> confirmed where reviewed is ticked")
     _add_vault_argument(sync_rec)
 
+    sync_queue = sync_sub.add_parser(
+        "update-queue",
+        help="write meeting metrics and list projects needing state synthesis")
+    _add_vault_argument(sync_queue)
+    sync_queue.add_argument("--executive", required=True,
+                            help="the executive's person slug (excluded from key-people)")
+    sync_queue.add_argument("--today", help="ISO date; defaults to today")
+
     meetings = top.add_parser("meeting", help="meeting notes")
     meetings_sub = meetings.add_subparsers(dest="action", required=True)
     meeting_write = meetings_sub.add_parser(
@@ -196,6 +222,19 @@ def build_parser() -> argparse.ArgumentParser:
     plaud_re.add_argument("--timezone", help="IANA timezone name")
     plaud_re.add_argument("--utc-offset", dest="utc_offset")
 
+    daily = top.add_parser("daily-note",
+                           help="daily notes: region write and harvest read")
+    daily_sub = daily.add_subparsers(dest="action", required=True)
+    daily_write = daily_sub.add_parser(
+        "write", help="render or region-merge one daily note from a JSON payload")
+    _add_vault_argument(daily_write)
+    daily_write.add_argument("--note", required=True,
+                             help="path to a JSON file, or - to read stdin")
+    daily_read = daily_sub.add_parser(
+        "read", help="parse a daily note into regions and human jottings")
+    _add_vault_argument(daily_read)
+    daily_read.add_argument("--date", required=True, help="ISO date of the note")
+
     return parser
 
 
@@ -203,14 +242,23 @@ def _dispatch(args: argparse.Namespace) -> int:
     # dates (and later stateless subcommands) take no --vault.
     root = vault.resolve(args.vault) if hasattr(args, "vault") else None
     if args.group == "dates":
-        return _ok(dates.window(args.start, timezone=args.timezone,
-                                utc_offset=args.utc_offset, hours=args.hours))
+        if args.action == "window":
+            return _ok(dates.window(args.start, timezone=args.timezone,
+                                    utc_offset=args.utc_offset, hours=args.hours))
+        return _ok(dates.plan(root, args.today, timezone=args.timezone,
+                              utc_offset=args.utc_offset))
     if args.group == "identity":
         return _ok({"identity": vault.read_identity_block(root)})
     if args.group == "person":
         today = vault.today_iso(getattr(args, "today", None))
         return _ok(person.ensure(root, args.name, today))
     if args.group == "project":
+        if args.action == "touch":
+            return _ok(project.touch(
+                root, slug=args.slug, date_iso=vault.today_iso(args.date),
+                next_milestone=args.next_milestone,
+                next_milestone_date=args.next_milestone_date,
+            ))
         today = vault.today_iso(getattr(args, "today", None))
         return _ok(project.scaffold(
             root, name=args.name, project_type=args.project_type,
@@ -254,6 +302,9 @@ def _dispatch(args: argparse.Namespace) -> int:
             return _ok(syncjob.skip(root, args.recording_id))
         if args.action == "reconcile-reviews":
             return _ok(syncjob.reconcile_reviews(root))
+        if args.action == "update-queue":
+            return _ok(updatequeue.run(root, vault.today_iso(args.today),
+                                       args.executive))
     if args.group == "meeting":
         payload = (json.load(sys.stdin) if args.note == "-"
                    else json.loads(Path(args.note).read_text(encoding="utf-8")))
@@ -262,6 +313,12 @@ def _dispatch(args: argparse.Namespace) -> int:
         return _ok(plaud.reassemble(
             args.meta, args.transcript, args.note, args.out,
             timezone=args.timezone, utc_offset=args.utc_offset))
+    if args.group == "daily-note":
+        if args.action == "write":
+            payload = (json.load(sys.stdin) if args.note == "-"
+                       else json.loads(Path(args.note).read_text(encoding="utf-8")))
+            return _ok(dailynote.write(root, payload))
+        return _ok(dailynote.read(root, args.date))
     raise AssertionError(f"unhandled group {args.group!r}")
 
 
@@ -310,6 +367,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         return _fail(str(exc), "Fix the named id or argument and retry.")
     except plaud.PlaudError as exc:
         return _fail(str(exc), "Check the raw MCP JSON files named in the error.")
+    except updatequeue.UpdateQueueError as exc:
+        return _fail(str(exc), "Fix the named argument and retry.")
+    except dailynote.DailyNoteError as exc:
+        return _fail(str(exc), "Fix the named payload field or note state and retry.")
     except json.JSONDecodeError as exc:
         return _fail(f"payload is not valid JSON: {exc}",
                      "Pass a JSON object in a file, or - to read stdin.")

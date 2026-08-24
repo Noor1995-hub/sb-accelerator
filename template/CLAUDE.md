@@ -39,7 +39,7 @@ browses. Claude is the working interface to everything in here.
 
 ## Object Model
 
-Five object types: **Meeting · Project · Person · Decision · Entity**.
+Six object types: **Meeting · Project · Person · Decision · Entity · Daily note**.
 Relationships live in YAML frontmatter (wikilinks and slug joins), not folder
 hierarchy; curation happens in the `.base` views, not by browsing folders.
 The authoritative schemas, enums, and join keys are in

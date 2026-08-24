@@ -99,6 +99,20 @@ Plugins are not used in Chat, so a skill cannot run there at all. Every
 object-writing skill states this in its own body so the user gets an
 explanation rather than a silent absence.
 
+## Daily-note regions
+
+`daily-note write` owns the machine half of a daily note. The payload carries
+region *content* only — never the `<!-- evening-sync:{region}:begin/end -->`
+markers, which the CLI writes and refuses to accept inside content. On an
+existing note, region interiors are replaced in place and every byte outside
+the markers is preserved exactly; jottings are the user's, permanently. The
+region structure must match the payload (one recap; one prep per meeting, or
+a single no-meetings prep) — if the meeting set changed since the note was
+written, the write fails with a structural-change error instead of guessing,
+because by then the note may hold human text that outranks the calendar.
+Surface that error; do not delete the note to force a rewrite unless the user
+says so.
+
 ## After changing the ontology
 
 ```bash

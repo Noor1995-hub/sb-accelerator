@@ -1,6 +1,23 @@
 {
   "generated_from": "template/99-workflow-config/reference/ontology.md",
   "objects": {
+    "daily-note": {
+      "body_sections": [
+        "Recap",
+        "Meetings",
+        "End of day"
+      ],
+      "enums": {
+        "type": [
+          "daily-note"
+        ]
+      },
+      "optional": [],
+      "required": [
+        "date",
+        "type"
+      ]
+    },
     "decision": {
       "enums": {
         "status": [

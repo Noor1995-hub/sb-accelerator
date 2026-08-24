@@ -204,3 +204,20 @@ def test_split_sections_ignores_h2_inside_fenced_code():
 def test_render_sections_round_trips():
     body = "\n## One\n\nalpha\n\n## Two\n\nbeta\n"
     assert md.render_sections(md.split_sections(body)) == body
+
+
+def test_upsert_scalar_field_replaces_in_place():
+    text = "---\nslug: x\nmeetings-7d: 3\n---\nBody stays.\n"
+    result = md.upsert_scalar_field(text, "meetings-7d", "0")
+    assert result == "---\nslug: x\nmeetings-7d: 0\n---\nBody stays.\n"
+
+
+def test_upsert_scalar_field_inserts_before_the_closing_fence():
+    text = "---\nslug: x\n---\nBody stays.\n"
+    result = md.upsert_scalar_field(text, "meetings-7d", "2")
+    assert result == "---\nslug: x\nmeetings-7d: 2\n---\nBody stays.\n"
+
+
+def test_upsert_scalar_field_requires_frontmatter():
+    with pytest.raises(ValueError):
+        md.upsert_scalar_field("no fences here", "a", "b")

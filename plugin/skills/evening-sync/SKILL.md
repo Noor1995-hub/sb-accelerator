@@ -1,0 +1,237 @@
+---
+name: evening-sync
+description: Run the evening pipeline — sync recordings, fold review ticks, refresh project metrics, update project state, capture decisions, and write tomorrow's daily note. Triggers when the user invokes /evening-sync or asks to run the evening sync or prepare tomorrow's note.
+user_invocable: true
+upstreamed-from: busdev@ccc27b8
+---
+
+# Evening Sync
+
+The engine of the daily loop. One run harvests today's jottings, syncs new
+recordings, refreshes project metrics, updates the state of projects with new
+confirmed meetings, captures decisions for review, and writes **tomorrow's**
+daily note — a recap of today plus a prepared section per upcoming meeting.
+Deterministic stages are CLI subcommands; judgment (recap prose, themes,
+project-state synthesis, decision candidates) is yours.
+
+## Requirements
+
+Writing to the vault needs a shell, so this skill runs in **Cowork** or
+**Claude Code**. It cannot run in Chat — plugins are not loaded there; say so
+plainly rather than assembling a note by hand.
+
+Set `VAULT` to the vault root, and:
+
+```bash
+VAULTLIB="${CLAUDE_PLUGIN_ROOT}/lib/vaultlib/cli.py"
+```
+
+The JSON envelope and interpreter resolution are documented in the plugin's
+`CLAUDE.md`. Read `ok` on every call; on failure surface `error` and `hint`.
+
+## Usage
+
+```
+/evening-sync                    # interactive: one confirmation at the sync stage
+/evening-sync --unattended       # scheduled shape — never prompts, ever
+```
+
+Stages are **failure-isolated**: a failed stage logs its error into the final
+summary and the chain continues. A crashed calendar still gets a daily note;
+a failed sync still gets metrics and project updates.
+
+## Stage 1 — Dates (authoritative, never re-derived)
+
+Read the executive's timezone from
+`99-workflow-config/context/identity.md` (IANA name in prose), then:
+
+```bash
+python3 "$VAULTLIB" dates plan --vault "$VAULT" --timezone <executive-timezone>
+```
+
+Consume the result **verbatim** — `today`, `next_business_day`, the day
+names, `recap_from`/`recap_to`, `last_daily_note`, `note_to_write`. Never
+derive day-of-week or date arithmetic yourself; that is the bug class this
+subcommand exists to kill. The recap window is *everything since the last
+daily note*: after a missed run or a gap, it widens automatically — no
+weekend special case.
+
+Also resolve the executive's **person slug**: their name is in the identity
+block; the matching note is in `50-people/` (its `person-name`). Stage 3
+needs the slug.
+
+## Stage 2 — Harvest (read-only)
+
+```bash
+python3 "$VAULTLIB" daily-note read --vault "$VAULT" --date <recap_from>
+```
+
+`exists: false` is a normal first-run state — note it and move on. Otherwise
+collect per-meeting `jottings` and `end_of_day` bullets: they are context for
+the recap (stage 6) and decision candidates (stage 4). The note itself is the
+archive of the day — **never modify it**, and never route jottings into other
+notes; in v1 they inform, nothing more.
+
+## Stage 3 — Sync, refresh
+
+**Sync:** run the `/sync-recordings` workflow (follow
+`${CLAUDE_PLUGIN_ROOT}/skills/sync-recordings/SKILL.md`) — unattended when this run is
+unattended, interactive otherwise. Its step 1 already runs
+`sync reconcile-reviews`, which IS this pipeline's reconcile stage — do not
+run it a second time. Record what it reports: synced stems, folded ticks,
+conflicts, per-adapter lines.
+
+**Refresh:**
+
+```bash
+python3 "$VAULTLIB" sync update-queue --vault "$VAULT" --today <today> --executive <exec-slug>
+```
+
+This writes `meetings-7d` / `meetings-30d` / `key-people` on active projects
+and `meetings-7d` / `meetings-30d` on people (confirmed meetings only — the
+review queue is the quality gate), and returns `projectsNeedingUpdate`: each
+entry carries `indexPath`, `decisionsDir`, `lastUpdated`, `newFiles`, and the
+`existingDecisions` projection. Carry `warnings` — especially `SELF-CHECK`
+lines — into the final summary verbatim.
+
+## Stage 4 — Project-state updates
+
+If the queue is empty, record "no projects to update" and skip to stage 6.
+Otherwise, per queued project, dispatch a subagent (up to 3 in parallel) with
+the queue entry, the harvest jottings that mention the project, today's date,
+and these instructions:
+
+1. Read the `newFiles` meetings end-to-end — Key Takeaways, Debrief, Action
+   Items.
+2. Rewrite the `> [!summary]+ **Now**` callout in `indexPath` — **exactly 5
+   bullets**: Stage · Defining decision (wikilink) · Next event · Owe ·
+   Watch. Rewrite `## Open Items` (add new, remove resolved — vocabulary:
+   📤 Owe · 👤 Awaiting · ❓ Question · ⏳ Pending). Touch **nothing else in
+   the body** — the Dataview blocks render themselves.
+3. Frontmatter goes through the CLI, never your editor:
+
+```bash
+python3 "$VAULTLIB" project touch --vault "$VAULT" --slug <slug> --date <today> --next-milestone "<one line>" --next-milestone-date <ISO>
+```
+
+   (Omit the milestone pair when no concrete next event was identified.)
+4. Decision capture: extract candidates from the new meetings AND the
+   harvest jottings, then follow
+   `${CLAUDE_PLUGIN_ROOT}/skills/log-decision/SKILL.md` in **background mode**
+   (`/log-decision <slug> --background`) with those candidates as the
+   source. Its rules apply unchanged: the material-decision test (commits
+   the engagement AND changes a stakeholder's behaviour), dedup against
+   `existingDecisions`, supersession only on explicit conflict language,
+   never delete, status flips only. Writing nothing is a valid outcome.
+5. Return a fenced JSON block: `{"slug", "indexUpdated": bool,
+   "decisionsWritten": [stems], "decisionsSkipped": N, "notes"}`. A subagent
+   that fails or returns no block becomes a warning, not a retry.
+
+Projects with only `needs-review` meetings never reach the queue — do not
+"help" one by confirming meetings yourself.
+
+## Stage 5 — Tomorrow's calendar and prep
+
+If the Microsoft 365 calendar tool is available (ToolSearch
+`outlook_calendar_search`), pull `next_business_day`'s events; compute the
+query window deterministically:
+
+```bash
+python3 "$VAULTLIB" dates window --start <next_business_day> --timezone <tz> --hours 0
+```
+
+Filter out all-day and cancelled events; sort by start time; render times in
+the executive's local timezone. For each event, build one prep line —
+**Attendees:** names · **Last meeting:** date + one-liner · **Context:** one
+line from the entity dossier and the project's Now callout. The lookups:
+match attendee email domains and subject keywords against `40-entities/*/`
+and active projects in `30-projects/*/index.md` (same signals, same order,
+as `/sync-recordings` step 3); read the matched dossier and the most recent
+meeting note for that entity or project. No match → no entity suffix and a
+prep line from the event alone.
+
+Calendar tool missing or erroring → `meetings: []` with
+`meetings_note: "*Calendar unavailable — meetings could not be prepped.*"`.
+The note is still written. "Couldn't look" is not "looked and found
+nothing" — say which one happened in the summary.
+
+## Stage 6 — Write tomorrow's note
+
+Compose the recap from: the recap window's meetings (everything in
+`20-meetings/` dated within `recap_from`..`recap_to` — takeaway one-liners,
+entities, themes when there are ≥2 meetings), decisions written in stage 4,
+harvest jottings worth carrying forward, and watch items (conflicts,
+needs-attention flags, self-check warnings). Respect the language and depth
+preferences in `99-workflow-config/context/preferences-and-constraints.md`.
+Open items live on projects — link them, never duplicate a task list.
+$SCRATCH below is your session scratch directory — payloads never land in the vault.
+
+```bash
+cat > "$SCRATCH/daily-note.payload.json" <<'JSON'
+{
+  "date": "<next_business_day>",
+  "recap": "> [!info] At a glance\n> {N meetings · entities · themes}\n- {takeaway bullets, decisions logged, watch items}",
+  "meetings": [
+    {"time": "09:00", "subject": "Weekly Status", "entity": "acme-industries",
+     "prep": "**Attendees:** … · **Last meeting:** … · **Context:** …"}
+  ]
+}
+JSON
+python3 "$VAULTLIB" daily-note write --vault "$VAULT" --note "$SCRATCH/daily-note.payload.json"
+```
+
+The CLI renders the contract on a fresh note and region-merges on an
+existing one — your payload carries content only, never markers. A
+`structure changed` error means the note already exists with a different
+meeting set: report it and leave the note alone (it may hold human
+jottings); do not delete it to force a rewrite.
+
+## Stage 7 — Verify against disk, then summarize
+
+Counts come from what exists, not from what you intended (a lab run once
+reported "Processed: 0" after writing a meeting correctly):
+
+- tomorrow's note exists at `note_to_write` with a fresh mtime;
+- every project reported updated shows today's `last-updated` in its
+  frontmatter;
+- every recording reported synced has its stem in `20-meetings/`.
+
+```
+## Evening Sync Complete
+**Synced:** {N} recordings → `20-meetings/` ({stems})
+**Reviewed ticks folded:** {N} confirmed
+**Metrics refreshed:** {P} projects · {Q} people
+**Projects updated:** {N} ({slugs}) — {M} decisions written (reviewed: false), {K} candidates skipped
+**Tomorrow's note:** `60-daily-notes/{date}.md` ({DayName}) — {N} meetings prepped | calendar unavailable
+**Warnings:** {verbatim, including SELF-CHECK lines} | none
+```
+
+A non-empty warnings block means investigate before tomorrow's run.
+
+## Unattended mode
+
+`--unattended` is what a scheduled run passes. Non-negotiable:
+
+1. **Never ask a question.** A blocked prompt means the run exits having
+   done nothing. Ambiguity → skip that item, report it, let it retry next
+   run.
+2. **Decision capture is always `--background`** (writes `reviewed: false`
+   for the Decisions.base review queue).
+3. **Prefer under-doing to wrong-doing.** No confident project match, no
+   confident prep — leave it out and say so.
+
+## Rules
+
+1. **Consume `dates plan` verbatim.** No day-of-week or window arithmetic
+   outside the CLI.
+2. **Harvest is read-only.** Today's note is never modified.
+3. **Only confirmed meetings drive metrics and project updates.**
+4. **Frontmatter is never model-authored.** `project touch`, `decision
+   write`, `meeting write`, `daily-note write` — those are the writers.
+5. **Bytes outside daily-note markers are the user's.** The CLI enforces
+   it; never work around a structure error.
+6. **Supersession needs explicit conflict language; never delete a
+   decision.** Status flips only.
+7. **Calendar unavailable still writes the note** — with the explicit
+   unavailable line, never a silent empty section.
+8. **Verify against disk before claiming success.**

@@ -5,9 +5,9 @@ import pytest
 from vaultlib import schema
 
 
-def test_all_five_objects_are_present():
+def test_all_six_objects_are_present():
     assert set(schema.load()["objects"]) == {
-        "meeting", "project", "person", "decision", "entity",
+        "meeting", "project", "person", "decision", "entity", "daily-note",
     }
 
 

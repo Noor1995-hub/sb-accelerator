@@ -9,5 +9,5 @@ projects: [meridian-yard-automation-program]
 created: 2026-03-10
 last-updated: 2026-05-20
 meetings-7d: 0
-meetings-30d: 2
+meetings-30d: 0
 ---

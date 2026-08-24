@@ -7,7 +7,7 @@ responses; anything else raises rather than guessing.
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 from typing import Optional, Tuple
 
@@ -98,9 +98,10 @@ def reassemble(meta_path: str, transcript_path: str, note_path: Optional[str],
         start_utc = datetime.fromisoformat(str(meta["start_at"]))
     except ValueError as exc:
         raise PlaudError(f"meta start_at {meta['start_at']!r} is not ISO") from exc
-    offset_minutes, _ = dates.resolve_offset_minutes(
-        start_utc, timezone, utc_offset)
-    local = start_utc + timedelta(minutes=offset_minutes)
+    if start_utc.tzinfo is not None:
+        from datetime import timezone as _timezone
+        start_utc = start_utc.astimezone(_timezone.utc).replace(tzinfo=None)
+    local, _ = dates.utc_to_local(start_utc, timezone, utc_offset)
     recorded_local = local.strftime("%Y-%m-%d %H:%M:%S")
 
     body, max_end_ms = _render_transcript(transcript)

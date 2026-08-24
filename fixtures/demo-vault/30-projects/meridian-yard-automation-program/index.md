@@ -11,8 +11,8 @@ stakeholders: [priya-nathan, leo-marchetti, renee-castillo]
 created: 2026-02-15
 last-updated: 2026-06-01
 meetings-7d: 0
-meetings-30d: 2
-key-people: [priya-nathan, leo-marchetti]
+meetings-30d: 0
+key-people: [priya-nathan]
 next-milestone: "Vendor contract signature — single-vendor consolidation"
 next-milestone-date: 2026-09-01
 ---
