@@ -43,7 +43,7 @@ busdev (lab) ──/propose-upstream──▶ issues on sb-accelerator ──/pr
                                           │  release tag + CI publish
                                           ▼
                                     sb-dist (client-facing marketplace, build artifact)
-                                          │  per-client read token; consultant runs
+                                          │  marketplace sync (auth per path); consultant runs
                                           │  `claude plugin update` at tune-ups
                                           ▼
                                     client machines (exec + EA)
@@ -65,9 +65,9 @@ sb-accelerator/
                    #   archetype, care-package status (v1: file; later: Airtable)
 ```
 
-**3. `sb-dist`** — new, client-facing. Contains only `marketplace.json` + released plugin/template versions. Written exclusively by release pipeline on tag. Clients get per-client read tokens to this repo only.
+**3. `sb-dist`** — new, client-facing. Contains only `marketplace.json` + released plugin/template versions. Written exclusively by release pipeline on tag. Client read access is scoped to this repo only; *how* it is granted is path-specific (a per-client token on some delivery paths, the admin's own GitHub access plus the Claude GitHub App on others) — see `playbooks/plugin-distribution.md`.
 
-**Distribution mechanism (proven in-house):** Anthropic natively supports org plugin marketplaces — the client's Claude org admin connects `sb-dist` as a marketplace and Claude syncs the plugin to selected users across web, Desktop, **Cowork**, and Claude Code (`bta-agents-portal/docs/it-request-plugin-distribution.md` is the proven IT-request template). This is how the plugin reaches the exec's Cowork surface without per-machine installs. The consultant-applied update policy is implemented by *publishing cadence*: `sb-dist` only receives a release when clients should get it (quarterly, around tune-ups); structure migrations remain consultant-run, with a structure-version mismatch check making skills degrade gracefully until migrated.
+**Distribution mechanism (proven in-house):** Anthropic natively supports org plugin marketplaces — the client's Claude org admin connects `sb-dist` as a marketplace and Claude syncs the plugin to selected users across Desktop, **Cowork**, and Claude Code (`bta-agents-portal/docs/it-request-plugin-distribution.md` is the proven IT-request template). This is how the plugin reaches the exec's Cowork surface without per-machine installs. The consultant-applied update policy is implemented by *publishing cadence*: `sb-dist` only receives a release when clients should get it (quarterly, around tune-ups); structure migrations remain consultant-run, with a structure-version mismatch check making skills degrade gracefully until migrated.
 
 **4. `sb-client-<slug>`** — one small delaware-owned repo per client, created at provisioning. Carries that client's feedback issues (from `/report-feedback`, see Feedback loop below) and deployment notes. Exists because feedback must not be visible across clients — `sb-dist` is shared, so issues there would leak between client tokens.
 
@@ -92,13 +92,26 @@ The issue queue generalizes into the product's contribution funnel: post-launch,
 - **No client-side git.** `/upgrade-vault` takes a timestamped vault snapshot (local zip, keep last 3, excluded from sync) before migrating, verifies after, appends to a migration log (structure-version, date, plugin version, outcome) in the vault config folder. Fine-grained restore = Obsidian Sync file history.
 - Vault carries a `structure-version` marker consumed by `/upgrade-vault`.
 
+**Surface capabilities** (verified 2026-08-23; amended after the object-skills port brainstorm — details and sources in `2026-08-23-object-skills-port-design.md`):
+
+| Surface | Plugin skills | Shell | Object writes |
+|---|---|---|---|
+| Chat (web/mobile) + filesystem or Obsidian MCP | **no** — plugins are not used in Chat | none | not supported |
+| Cowork (Claude Desktop, macOS or Windows host) | yes | dedicated Linux VM | yes |
+| Claude Code CLI on the host | yes | host OS | yes |
+
+- **Cowork does not execute on the host OS.** Shell commands and any code Claude writes run inside a dedicated Linux VM (Apple Virtualization.framework on macOS, Hyper-V on Windows), with connected folders exposed through a permission layer. So host-OS portability largely dissolves on the operational surface, and Windows-vs-macOS assistant machines behave the same.
+- **Neither Cowork nor Chat loads skills from a connected folder.** A vault-local `claude/skills/` directory is a Claude Code convenience, never a delivery channel — skills reach a client only through an installed plugin. See `playbooks/plugin-distribution.md`.
+- **Cowork does read the vault's `CLAUDE.md`** as folder instructions by default, so the template's behavioural layer (golden rules, ontology pointer, inbox discipline, the report-it nudge) applies there without mirroring. Confirmed empirically 2026-08-23.
+- Consequence for skill design: object-writing skills require Cowork or Claude Code and delegate writes to a deterministic CLI rather than model-authored frontmatter. Chat over a vault stays a read-and-ask surface, which is what plain markdown plus YAML frontmatter is for.
+
 ### Feedback loop (client → delaware)
 
 Execs and EAs report breakage and improvement ideas from inside their normal workflow; Claude itself proposes reporting when it notices something broken or clumsy.
 
 - **`/report-feedback` skill** (in the plugin): drafts a GitHub issue from the current context. **Hard scrubbing rule:** the draft describes the behavior generically — plugin version, structure-version, skill involved, what happened vs expected — and contains **zero vault content, client names, or people names** (same content-free discipline as `/health-check`). The draft is always shown to the exec/EA for approval before sending; never auto-sent.
 - **Proactive nudge:** a behavioral rule in the template's `CLAUDE.md` — when Claude on a client machine hits a broken skill, a confusing flow, or a repeated friction point, it offers "want me to report this to delaware?" and, on yes, runs `/report-feedback` with a prefilled draft.
-- **Channel: a per-client repo `sb-client-<slug>`** (delaware-owned, created at provisioning), because feedback must not be visible across clients — `sb-dist` is shared, so issues there would leak between client tokens. Each client's token is fine-grained: `issues:write` on their own `sb-client-<slug>` only, `contents:read` on `sb-dist`. The repo doubles as the home for that client's deployment notes.
+- **Channel: a per-client repo `sb-client-<slug>`** (delaware-owned, created at provisioning), because feedback must not be visible across clients — `sb-dist` is shared, so issues there would leak between client tokens. Each client's token is fine-grained: `issues:write` on their own `sb-client-<slug>` only. (Read access to `sb-dist` is a separate, path-specific matter — see step 2 of the per-engagement runbook.) The repo doubles as the home for that client's deployment notes.
 - **Triage into the product:** delaware reviews incoming client issues (notification-driven + a standing check at each tune-up), and promotes the real ones into `sb-accelerator` as `field-proposal` issues — the same contribution funnel that serves consultant field feedback and busdev upstream proposals. The client issue gets a human reply (care-package touchpoint, not a black hole).
 
 ### Exec experience — three tiers
@@ -120,13 +133,16 @@ Execs and EAs report breakage and improvement ideas from inside their normal wor
 ## delaware-Side Operations
 
 **Per-engagement runbook:**
-1. **Pre-flight:** client IT checklist — Claude Team/Enterprise seat, device/MDM allows Obsidian + Claude Desktop, M365 tenant consent for connector, data-flow one-pager signed off, recording-consent legal check (jurisdiction + policy — client's legal decides), Plaud account provisioning, EA scope conversation.
-2. **Provision:** instantiate vault from template at pinned version; create `sb-client-<slug>` feedback repo + fine-grained client token (`issues:write` there, `contents:read` on `sb-dist`); register deployment in `registry.yaml`.
+1. **Pre-flight:** client IT checklist — full version in `playbooks/pre-flight-checklist.md`, which separates *qualifying* items (those that can end the conversation) from setup tasks. Headline requirements: Claude Team/Enterprise with **both Cowork and Skills enabled**, a named Claude administrator, device/MDM allows Obsidian + Claude Desktop, **Cowork's VM prerequisites** (macOS 11+; on Windows the `VirtualMachinePlatform` feature *and* admin privileges at install, without which Cowork is simply unavailable), M365 tenant consent for connector, data-flow one-pager signed off, recording-consent legal check (jurisdiction + policy — client's legal decides), recorder account provisioning, EA scope conversation.
+   - **Hard disqualifier:** Anthropic states that "virtual machines and VDI environments without nested virtualization aren't supported" — a client whose knowledge workers live in VDI without nested virtualisation cannot run Cowork at all. Establish this first.
+2. **Provision:** instantiate vault from template at pinned version; deliver the plugin through a marketplace per `playbooks/plugin-distribution.md` (client-facing IT ask: reuse `bta-agents-portal/docs/it-request-plugin-distribution.md`), set to **Required** so it cannot drift off a machine; create `sb-client-<slug>` feedback repo + fine-grained client token (`issues:write` there, for `/report-feedback`); register deployment in `registry.yaml`.
+   - **Clarified 2026-08-23:** the `contents:read on sb-dist` token is **path-specific, not universal**. It works where marketplace configuration is admin-managed (`credentialKind: credentialHelper`). On the claude.ai Team/Enterprise console path there is no token we mint — the admin's *own* GitHub access is verified and the Claude GitHub App installation token does the sync, which also means the client's admin needs reachability into `sb-dist`. And on managed deployments, `required`/`auto_install` marketplaces demand a **full 40-character commit SHA**; a branch or tag name is refused. Which of the five delivery paths applies is a per-engagement decision, recorded in `registry.yaml`.
+   - `sb-dist` and its release pipeline are **not built yet** (issue #10, milestone v1.0). Until then, delivery is manual ZIP upload and the release train below is intent, not capability.
 3. **Deliver:** sessions per playbook.
 4. **Hypercare:** 4 weeks.
 5. **Steady state (care package):** quarterly tune-up = consultant applies plugin update, runs `/upgrade-vault` if migration pending, re-tunes briefs, reviews the client's open `sb-client-<slug>` feedback issues, harvests everything into the issue queue.
 
-**Release train:** minor releases monthly (internal); client-facing updates bundled quarterly; structure migrations only ever inside a tune-up visit. Backward compatibility required within a structure-version.
+**Release train:** minor releases monthly (internal); client-facing updates bundled quarterly; structure migrations only ever inside a tune-up visit. Backward compatibility required within a structure-version. Mechanically the client-facing update is a pinned-revision change, not a per-machine visit — see the release train in `playbooks/plugin-distribution.md`. Because `required` and `auto_install` marketplaces refuse an unpinned ref, every deployed state is deterministic and auditable, which is what makes the compatibility rule checkable rather than aspirational.
 
 **Effort shape:** ~4–6 consultant-days per exec for setup + hypercare; ~0.5 day/quarter steady state.
 
