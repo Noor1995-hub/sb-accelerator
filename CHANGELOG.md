@@ -15,6 +15,13 @@ delivers them.
 
 ## Unreleased
 
+- **`/sync-recordings` — transcripts become meeting notes.** Drop a
+  transcript in the inbox (or connect a Plaud recorder) and the sync turns
+  it into a structured meeting note: takeaways, debrief, action items,
+  attendees, and a link to the right project. Every note lands in the
+  Meetings review queue with an honest confidence stamp saying how sure the
+  routing is — nothing is auto-confirmed, and nothing is ever synced twice.
+  Ticking "reviewed" in the Meetings base now confirms the note. (#14)
 - **`/log-decision` — the decision log gets a producer.** Point it at a meeting
   note, a transcript, or just describe what was decided, and it proposes the
   decisions it found, one at a time, for you to confirm or correct before
