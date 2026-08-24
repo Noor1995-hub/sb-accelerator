@@ -12,6 +12,8 @@ from datetime import date, datetime, timedelta, timezone as _timezone
 from pathlib import Path
 from typing import Optional, Tuple
 
+from . import vault
+
 _OFFSET_RE = re.compile(r"\A([+-])(\d{2}):(\d{2})\Z")
 _DATETIME_RE = re.compile(r"\A\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2})?)?\Z")
 _UTC_FMT = "%Y-%m-%dT%H:%M:%S"
@@ -107,7 +109,7 @@ def window(start_local: str, *, timezone: Optional[str] = None,
     }
 
 
-DAILY_NOTES_DIR = "60-daily-notes"
+DAILY_NOTES_DIR = vault.DAILY_NOTES_DIR
 
 # Explicit and English on purpose: %A is locale-dependent, and the whole point
 # of this module is that the model never derives day-of-week itself.
@@ -117,12 +119,10 @@ DAY_NAMES = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday",
 # weekday(): Mon=0 … Sun=6. Fri -> Mon (+3), Sat -> Mon (+2), Sun -> Mon (+1).
 _NEXT_BUSINESS_DAYS = {4: 3, 5: 2, 6: 1}
 
-_ISO_DATE_ONLY_RE = re.compile(r"\A\d{4}-\d{2}-\d{2}\Z")
-
 
 def _parse_date(text, label: str) -> date:
     raw = str(text).strip()
-    if not _ISO_DATE_ONLY_RE.match(raw):
+    if not vault.ISO_DATE_RE.match(raw):
         raise DatesError(f"{label} {text!r} must be ISO YYYY-MM-DD")
     try:
         return datetime.strptime(raw, "%Y-%m-%d").date()
@@ -185,7 +185,7 @@ def plan(root: Path, today: Optional[str] = None, *,
     notes_dir = root / DAILY_NOTES_DIR
     existing = []
     for path in sorted(notes_dir.glob("*.md")) if notes_dir.is_dir() else []:
-        if not _ISO_DATE_ONLY_RE.match(path.stem):
+        if not vault.ISO_DATE_RE.match(path.stem):
             continue
         try:
             noted = datetime.strptime(path.stem, "%Y-%m-%d").date()

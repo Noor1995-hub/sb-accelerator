@@ -10,7 +10,7 @@ from pathlib import Path
 
 from . import markdown, naming, vault
 
-PEOPLE_DIR = "50-people"
+PEOPLE_DIR = vault.PEOPLE_DIR
 PERSON_QUOTE_KEYS = frozenset({"person-name", "company", "role"})
 
 

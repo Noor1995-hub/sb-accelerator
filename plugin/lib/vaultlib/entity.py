@@ -16,7 +16,7 @@ from typing import Dict, List, Mapping, Optional, Sequence, Tuple
 
 from . import markdown, naming, schema, vault
 
-ENTITIES_DIR = "40-entities"
+ENTITIES_DIR = vault.ENTITIES_DIR
 ENTITY_QUOTE_KEYS = frozenset({"entity-name", "industry"})
 
 PLACEHOLDER = "*No entries yet.*"

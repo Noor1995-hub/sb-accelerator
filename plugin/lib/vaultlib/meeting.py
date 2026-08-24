@@ -15,7 +15,7 @@ from typing import Optional
 
 from . import markdown, naming, schema, syncjob, vault
 
-MEETINGS_DIR = "20-meetings"
+MEETINGS_DIR = vault.MEETINGS_DIR
 
 REQUIRED_PAYLOAD = ("title", "date", "type", "calendar-subject",
                     "calendar_match", "attendees", "projects",
@@ -72,14 +72,14 @@ def _require_slug_list(payload: dict, key: str, *, allow_empty: bool) -> list:
 def _require_joins(root: Path, attendees: list, projects: list,
                    people: list) -> None:
     for slug in projects:
-        if not (root / "30-projects" / slug / "index.md").is_file():
+        if not (root / vault.PROJECTS_DIR / slug / "index.md").is_file():
             raise MeetingError(
                 f"projects entry {slug!r} matches no project at "
                 f"30-projects/{slug}/index.md — create it with /new-project, "
                 "or leave projects empty for triage to catch"
             )
     for slug in dict.fromkeys(attendees + people):
-        if not (root / "50-people" / f"{slug}.md").is_file():
+        if not (root / vault.PEOPLE_DIR / f"{slug}.md").is_file():
             raise MeetingError(
                 f"attendee {slug!r} has no person note at 50-people/{slug}.md "
                 f"— run `person ensure` for them first"

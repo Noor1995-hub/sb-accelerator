@@ -19,9 +19,9 @@ from typing import Optional
 
 from . import markdown, naming, schema, vault
 
-PROJECTS_DIR = "30-projects"
+PROJECTS_DIR = vault.PROJECTS_DIR
 DECISIONS_DIR = "decisions"
-MEETINGS_DIR = "20-meetings"
+MEETINGS_DIR = vault.MEETINGS_DIR
 
 # Quoting these three is a correctness requirement, not house style: unquoted,
 # `[[x]]` is a nested YAML list. PyYAML reads [['x']] and this repo's stdlib

@@ -15,14 +15,24 @@ from typing import List, Optional
 IDENTITY_RELPATH = Path("99-workflow-config") / "context" / "identity.md"
 _BEGIN = "<!-- setup-my-brain:begin -->"
 _END = "<!-- setup-my-brain:end -->"
-_ISO_DATE_RE = re.compile(r"\A\d{4}-\d{2}-\d{2}\Z")
+
+# The folder taxonomy and the ISO-date shape live here, in the one module
+# every other one already imports, so a rename is a single edit rather than a
+# grep. Modules alias what they use (`MEETINGS_DIR = vault.MEETINGS_DIR`).
+INBOX_DIR = "10-inbox"
+MEETINGS_DIR = "20-meetings"
+PROJECTS_DIR = "30-projects"
+ENTITIES_DIR = "40-entities"
+PEOPLE_DIR = "50-people"
+DAILY_NOTES_DIR = "60-daily-notes"
+ISO_DATE_RE = re.compile(r"\A\d{4}-\d{2}-\d{2}\Z")
 
 # A directory is a vault if it carries the config folder and at least one
 # numbered content folder. Cheap, and it stops a mistyped path from scattering
 # object folders across someone's home directory.
 _MARKER = Path("99-workflow-config")
-_CONTENT_FOLDERS = ("10-inbox", "20-meetings", "30-projects", "40-entities",
-                    "50-people", "60-daily-notes")
+_CONTENT_FOLDERS = (INBOX_DIR, MEETINGS_DIR, PROJECTS_DIR, ENTITIES_DIR,
+                    PEOPLE_DIR, DAILY_NOTES_DIR)
 
 
 class VaultError(Exception):
@@ -88,7 +98,7 @@ def today_iso(explicit: Optional[str] = None) -> str:
     """Today as unquoted ISO. Explicit values keep the CLI deterministic."""
     if explicit is None:
         return _datetime.date.today().isoformat()
-    if not _ISO_DATE_RE.match(explicit):
+    if not ISO_DATE_RE.match(explicit):
         raise VaultError(f"date {explicit!r} must be ISO YYYY-MM-DD")
     return explicit
 
