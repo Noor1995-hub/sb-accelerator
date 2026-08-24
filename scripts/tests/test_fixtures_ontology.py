@@ -68,15 +68,13 @@ def build_schemas() -> dict:
         schema["enums"] = {field: set(values) for field, values in (block.get("enums") or {}).items()}
         if block.get("keys_present"):
             schema["keys_present"] = list(block["keys_present"])
+        if block.get("body_sections"):
+            schema["body_sections"] = list(block["body_sections"])
         schemas[name] = schema
     return schemas
 
 
 SCHEMAS = build_schemas()
-
-_DECISION_TAGS = load_ontology_schemas()["decision"]["tags"]
-DECISION_TAGS_VOCABULARY = set(_DECISION_TAGS["vocabulary"])
-DECISION_TAGS_MAX = int(_DECISION_TAGS["max"])
 
 MINIMUMS = {"entity": 3, "project": 4, "person": 8, "meeting": 6, "decision": 2}
 
@@ -171,14 +169,6 @@ def test_decision_status_enum_fully_covered():
     assert seen == expected, f"missing decision status coverage: {expected - seen}"
 
 
-def test_decision_tags_within_controlled_vocabulary():
-    for path in iter_fixture_files(SCHEMAS["decision"]["glob"]):
-        tags = parse_frontmatter(path).get("tags") or []
-        assert len(tags) <= DECISION_TAGS_MAX, f"{path}: more than {DECISION_TAGS_MAX} tags"
-        for tag in tags:
-            assert tag in DECISION_TAGS_VOCABULARY, f"{path}: tag {tag!r} not in vocabulary"
-
-
 def test_entity_fixtures_cover_multiple_types_and_statuses():
     fms = [parse_frontmatter(p) for p in iter_fixture_files(SCHEMAS["entity"]["glob"])]
     if not fms:
@@ -254,3 +244,204 @@ def test_ontology_schema_blocks_present_and_wellformed():
             assert isinstance(values, list) and values, (
                 f"ontology.md block {name!r}: enum {field!r} must be a non-empty list"
             )
+
+
+def h2_titles(text: str) -> list:
+    """H2 headings outside fenced code blocks."""
+    titles, fence = [], None
+    for line in text.split("\n"):
+        token = line.strip()[:3]
+        if token in ("```", "~~~"):
+            fence = None if fence == token else (fence or token)
+            continue
+        if fence is None and line.startswith("## "):
+            titles.append(line[3:].strip())
+    return titles
+
+
+@pytest.mark.parametrize("object_type", ["project", "entity"])
+def test_body_sections_present_in_every_fixture(object_type):
+    expected = SCHEMAS[object_type]["body_sections"]
+    files = iter_fixture_files(SCHEMAS[object_type]["glob"])
+    assert files, f"no {object_type} fixtures found"
+    for path in files:
+        assert h2_titles(path.read_text(encoding="utf-8")) == expected, (
+            f"{path}: H2 sections do not match ontology body_sections for "
+            f"{object_type}"
+        )
+
+
+def test_ontology_declares_body_sections_where_the_guard_expects_them():
+    blocks = load_ontology_schemas()
+    for name in ("project", "entity"):
+        assert blocks[name].get("body_sections"), (
+            f"ontology.md block {name!r}: body_sections is missing or empty"
+        )
+
+
+def test_project_indexes_scope_their_decisions_query_to_themselves():
+    for path in iter_fixture_files(SCHEMAS["project"]["glob"]):
+        slug = parse_frontmatter(path)["slug"]
+        text = path.read_text(encoding="utf-8")
+        assert f'FROM "30-projects/{slug}/decisions"' in text, (
+            f"{path}: Decisions query must name this project's own slug — "
+            "Dataview does not reliably accept this.file.folder as a source"
+        )
+
+
+def test_no_fixture_hardcodes_a_person_name_in_a_query():
+    # The upstream Related Meetings query filtered the executive out by
+    # display name. Nothing generated here may reintroduce that.
+    for path in iter_fixture_files(SCHEMAS["project"]["glob"]):
+        text = path.read_text(encoding="utf-8")
+        assert "a !=" not in text, f"{path}: attendee self-filter reintroduced"
+
+
+def test_exec_person_note_exists_and_is_referenced_as_an_owner():
+    people = {parse_frontmatter(p)["slug"]
+              for p in iter_fixture_files(SCHEMAS["person"]["glob"])}
+    owners = {parse_frontmatter(p)["owner"]
+              for p in iter_fixture_files(SCHEMAS["project"]["glob"])}
+    assert owners <= people, f"project owners with no person note: {owners - people}"
+
+
+def test_dossier_engagements_resolve_to_real_projects():
+    project_slugs = slugs_of(SCHEMAS["project"]["glob"])
+    for path in iter_fixture_files(SCHEMAS["entity"]["glob"]):
+        text = path.read_text(encoding="utf-8")
+        for match in re.finditer(r"\.\./\.\./30-projects/([a-z0-9-]+)/index\.md", text):
+            assert match.group(1) in project_slugs, (
+                f"{path}: Engagements row links to unknown project "
+                f"{match.group(1)!r}"
+            )
+
+
+def test_no_decision_fixture_carries_tags():
+    for path in iter_fixture_files(SCHEMAS["decision"]["glob"]):
+        assert "tags" not in parse_frontmatter(path), (
+            f"{path}: decision tags were dropped from the ontology"
+        )
+
+
+def test_every_decision_fixture_declares_whether_it_was_reviewed():
+    for path in iter_fixture_files(SCHEMAS["decision"]["glob"]):
+        fm = parse_frontmatter(path)
+        assert isinstance(fm.get("reviewed"), bool), (
+            f"{path}: reviewed must be present and boolean — Decisions.base's "
+            "'Needs review' view filters on it, and a missing key makes that "
+            "view silently incomplete"
+        )
+
+
+def test_decision_fixtures_demonstrate_both_review_states():
+    seen = {parse_frontmatter(p)["reviewed"]
+            for p in iter_fixture_files(SCHEMAS["decision"]["glob"])}
+    assert seen == {True, False}, (
+        "fixtures must show an unattended capture as well as a validated one"
+    )
+
+
+def test_every_decision_body_carries_the_three_bold_markers():
+    # Decisions use bold markers rather than H2s, so body_sections does not
+    # apply and this is the guard that replaces it.
+    for path in iter_fixture_files(SCHEMAS["decision"]["glob"]):
+        text = path.read_text(encoding="utf-8")
+        for marker in ("**Decision**", "**Why**", "**Implications**"):
+            assert marker in text, f"{path}: body is missing {marker}"
+
+
+def test_decision_object_declares_no_body_sections():
+    assert not load_ontology_schemas()["decision"].get("body_sections"), (
+        "decision bodies are bold markers, not H2 sections"
+    )
+
+
+SUPERSEDED_FOOTER_RE = re.compile(
+    r"^\*\*Superseded\*\* — (\d{4}-\d{2}-\d{2}) · replaced by \[\[([^\]]+)\]\]\.$",
+    re.MULTILINE,
+)
+WIKILINK_RE = re.compile(r"\A\[\[([^\]|]+)\]\]\Z")
+
+
+def _decision_stems_by_project() -> dict:
+    index: dict = {}
+    for path in iter_fixture_files(SCHEMAS["decision"]["glob"]):
+        index.setdefault(path.parent.parent.name, {})[path.stem] = path
+    return index
+
+
+def test_every_supersedes_edge_resolves_and_flips_its_target():
+    """Both sides of the edge, on real files. This is the two-sided procedure
+    the ontology now states; before P1b it was only demonstrated, never
+    checked."""
+    index = _decision_stems_by_project()
+    for project, notes in index.items():
+        for stem, path in notes.items():
+            raw = parse_frontmatter(path).get("supersedes")
+            if raw in (None, ""):
+                continue
+            match = WIKILINK_RE.match(str(raw).strip())
+            assert match, (
+                f"{path}: supersedes must be a quoted wikilink — unquoted "
+                "[[x]] parses as a nested YAML list"
+            )
+            target_stem = match.group(1)
+            assert target_stem in notes, (
+                f"{path}: supersedes {target_stem!r} is not a decision in "
+                f"{project}'s decisions folder"
+            )
+            target = notes[target_stem]
+            assert parse_frontmatter(target)["status"] == "superseded", (
+                f"{target}: superseded by {stem} but its status was not flipped"
+            )
+            footer = SUPERSEDED_FOOTER_RE.search(
+                target.read_text(encoding="utf-8"))
+            assert footer, f"{target}: missing the **Superseded** footer"
+            assert footer.group(2) == stem, (
+                f"{target}: footer points at {footer.group(2)!r}, not {stem!r}"
+            )
+
+
+def test_no_superseded_decision_lacks_an_incoming_edge():
+    for project, notes in _decision_stems_by_project().items():
+        superseded = {stem for stem, path in notes.items()
+                      if parse_frontmatter(path)["status"] == "superseded"}
+        claimed = set()
+        for path in notes.values():
+            raw = parse_frontmatter(path).get("supersedes")
+            match = WIKILINK_RE.match(str(raw).strip()) if raw else None
+            if match:
+                claimed.add(match.group(1))
+        assert superseded <= claimed, (
+            f"{project}: superseded with no successor: {superseded - claimed}"
+        )
+
+
+BASE_PROPERTY_EXEMPTIONS = {"file.name", "file.path", "file.mtime"}
+
+
+def test_decisions_base_columns_all_exist_in_the_ontology():
+    """The drift guard the tags removal needs: a Base column for a field the
+    ontology does not define renders an empty column in the client's vault."""
+    base = ONTOLOGY_DOC.parents[2] / "30-projects" / "Decisions.base"
+    config = yaml.safe_load(base.read_text(encoding="utf-8"))
+    block = load_ontology_schemas()["decision"]
+    known = (set(block.get("required") or [])
+             | set(block.get("optional") or [])
+             | set(block.get("keys_present") or []))
+    for name in config.get("properties", {}):
+        if name.startswith("formula.") or name in BASE_PROPERTY_EXEMPTIONS:
+            continue
+        assert name in known, (
+            f"Decisions.base declares property {name!r}, which ontology.md "
+            "§Decision does not define"
+        )
+
+
+def test_decisions_base_has_a_needs_review_view():
+    base = ONTOLOGY_DOC.parents[2] / "30-projects" / "Decisions.base"
+    config = yaml.safe_load(base.read_text(encoding="utf-8"))
+    names = [view.get("name") for view in config.get("views", [])]
+    assert "Needs review" in names, (
+        f"the unattended-capture audit needs its own view; found {names}"
+    )

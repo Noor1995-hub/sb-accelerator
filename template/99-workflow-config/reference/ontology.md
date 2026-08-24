@@ -60,7 +60,8 @@ optional: [type, parent, stakeholders, meetings-7d, meetings-30d, key-people,
            next-milestone, next-milestone-date]
 enums:
   status: [active, paused, completed, cancelled]
-  project-type: [presales, delivery, internal, area-of-responsibility]
+  project-type: [initiative, area-of-responsibility]
+body_sections: [Decisions, Open Items, Related Meetings]
 ```
 
 - **Edges:** `parent` (project slug) · `stakeholders[]` (person slugs).
@@ -68,6 +69,13 @@ enums:
   **Index extras:** `next-milestone`, `next-milestone-date`.
 - `entity` is a slug string joining to an Entity's `slug` (and folder name).
 - Example: `30-projects/acme-industries-operating-model/index.md`
+- **`project-type` is one axis: timeboxed vs ongoing.** `initiative` is
+  bounded work with an end; `area-of-responsibility` is a standing
+  responsibility with no end date. Counterparty is deliberately *not*
+  encoded here — a project's `entity` joins to an Entity whose `entity-type`
+  already says whether the work faces a client, a partner, a supplier, or
+  your own business unit. Areas of responsibility are always top-level: they
+  never carry a `parent`.
 
 ### Person — `50-people/{slug}.md` · Base: `People.base`
 
@@ -87,24 +95,86 @@ enums:
 - Auto-created from meeting attendees; enriched manually via People Base.
 - Example: `50-people/jordan-reyes.md`
 
-### Decision — `30-projects/{slug}/decisions/YYYY-MM-DD-{summary}.md` · Base: `Decisions.base`
+### Decision — `30-projects/{slug}/decisions/YYYY-MM-DD-{title}.md` · Base: `Decisions.base`
 
 ```yaml
 object: decision
 required: [type, project, date, status, summary]
-optional: [supersedes, source, tags]
+optional: [supersedes, source]
+keys_present: [reviewed]
 enums:
   type: [decision]
   status: [active, superseded, withdrawn]
-tags:
-  vocabulary: [scope, platform, staffing, methodology, commercial, timing,
-               stakeholder]
-  max: 2
 ```
 
 - **Edges:** `supersedes` (`[[decision]]` / null) · `source` (`[[meeting]]`).
 - Never deleted — status flips only. Supersession is a wikilink edge.
+- `date` is the date the decision was **made**, not the date it was written
+  down. It is what orders the decision log.
+- `summary` is one full sentence — it is the Decision column in
+  `Decisions.base`. The filename carries a *short* kebab label instead, because
+  a slug of the summary sentence is a truncated paragraph.
+- `reviewed` is the triage marker: `true` when a human validated the note as it
+  was written, `false` when it was captured unattended. It is in
+  `keys_present`, so the key always exists — `Decisions.base`'s **Needs review**
+  view filters on `reviewed == false`, and a missing key would make that view
+  silently incomplete. Same one-click convention as Meeting's `reviewed`.
+- `source` names a note in `20-meetings/`. A decision drawn from an inbox
+  transcript, a pasted paragraph or dictation carries no `source`; its
+  provenance goes in the **Why** text.
 - Example: `30-projects/acme-industries-operating-model/decisions/2026-05-20-single-vendor-strategy-adopted.md`
+
+### Decision note template
+
+Three bold markers, not H2 sections — so this object has no `body_sections`,
+and the conformance guard checks the markers instead. One paragraph per marker.
+
+```markdown
+---
+type: decision
+project: acme-industries-operating-model
+date: 2026-05-20
+status: active
+summary: "One sentence stating what was decided, specific enough to be useful without opening the note."
+supersedes: "[[2026-03-10-prior-decision-stem]]"
+source: "[[20-05-26-vendor-strategy-brainstorm]]"
+reviewed: true
+---
+
+**Decision** — What was decided.
+
+**Why** — The reasoning, including what was traded away.
+
+**Implications** — What changes as a result: scope, dates, who does what.
+```
+
+Quoting `supersedes` and `source` is required, not house style: unquoted,
+`[[x]]` is a nested YAML list, and the note's edges stop resolving silently.
+Leave `supersedes:` empty (no value) when there is nothing superseded.
+
+### Supersession procedure
+
+A decision is superseded when a later decision **replaces** it — stated in
+words, not inferred because two notes look inconsistent. One operation, three
+effects, applied together:
+
+1. The **new** note carries `supersedes: "[[{prior-stem}]]"`.
+2. The **prior** note's `status` flips `active` → `superseded`. Nothing else in
+   its frontmatter changes.
+3. The **prior** note gains a footer, appended — never replacing prose:
+
+   `**Superseded** — {YYYY-MM-DD} · replaced by [[{new-stem}]].`
+
+   The date is the new decision's date. The footer exists so a reader of the old
+   note can see what replaced it without running a query.
+
+Only an `active` decision can be superseded: `superseded` and `withdrawn`
+decisions were not in force, so replacing one is a category error — and in
+practice that is what a stale or mistyped stem looks like. A decision also
+cannot supersede one dated after it — the edge always points backward in
+time. A decision that was reversed rather than replaced is written
+`withdrawn` instead. **Never delete a decision note** — the trace is the
+point.
 
 ### Entity — `40-entities/{slug}/dossier.md` · Base: `Entities.base`
 
@@ -118,6 +188,8 @@ optional: [entity-type, industry, owner, created, last-updated]
 enums:
   status: [prospect, active, dormant]
   entity-type: [client, business-unit, partner, supplier, other]
+body_sections: [Context, Stakeholders, Relationship History, Meeting Log,
+                Sensitivities, Engagements]
 ```
 
 A filled dossier's frontmatter looks like this (an example, not the schema):
@@ -133,6 +205,40 @@ owner: jordan-reyes
 created: 2026-02-07
 last-updated: 2026-04-01
 ```
+
+### Entity body structure
+
+The dossier body carries exactly the six H2 sections in `body_sections`
+above, in that order. Two skills write it — `/new-project` creates a
+baseline, `/update-entity` maintains it — so this is the shared contract, not
+a per-skill template.
+
+| Section | Shape | Merge rule |
+|---|---|---|
+| `## Context` | `- **{Label}:** {fact} — {why it matters}` | Update the bullet with a matching label; otherwise append. Maximum 8 bullets; consolidate the least important rather than exceeding it. |
+| `## Stakeholders` | Table: Name · Title · Role in Decision · Stance · Notes | Match on name, case-insensitive. Update only fields carrying new information; never overwrite specific data with vaguer data. Never remove a row. New rows get `<!-- needs-review -->` in Notes. |
+| `## Relationship History` | `- **{YYYY-MM-DD}:** {what happened} — {significance}` | Insert in date order. Never modify or remove an existing entry. |
+| `## Meeting Log` | `### {YYYY-MM-DD} — {Topic}` then Attendees / Key outcomes / Follow-ups / Dynamics bullets | Append-only, newest first (prepend). Never modify an existing entry. |
+| `## Sensitivities` | `- **{topic}:** {detail} — {implications}` | Update a matching topic; otherwise append. Never remove. |
+| `## Engagements` | Table: Project · Status · One-liner | Match on project slug. Update status and one-liner. Never remove. Link `[{slug}](../../30-projects/{slug}/index.md)`. |
+
+Empty sections carry `*No entries yet.*` — replaced on first real entry.
+
+**Role in Decision** vocabulary: sponsor · champion · evaluator · influencer
+· blocker. **Stance** vocabulary: champion · neutral · blocker.
+
+**Unvalidated marking.** Content that was generated rather than confirmed by
+a human carries `<!-- unvalidated -->` directly under its section header, and
+the file carries a top banner:
+
+```
+> [!unvalidated] Generated context — verify before relying on details.
+```
+
+When a human supplies content for a section, drop that section's marker. When
+the last marker goes, drop the banner. This is the vault's "be epistemically
+honest" rule made mechanical; keep it even where no skill currently generates
+context, because `/setup-my-brain` will.
 
 - `slug` MUST equal the folder name AND the `entity:` value on its projects —
   it is the join key.

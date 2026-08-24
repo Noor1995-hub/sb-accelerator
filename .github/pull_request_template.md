@@ -8,6 +8,7 @@
 - [ ] Template validates locally: `python scripts/validate_template.py`
 - [ ] Validator tests pass locally: `python -m pytest scripts/tests -q`
 - [ ] No secret, client name, or vault content is committed (clean-room rule — root `CLAUDE.md`).
+- [ ] **Changelog:** if a client would notice this change (plugin behavior, a skill, the vault template, a migration), it has a line under `Unreleased` in `CHANGELOG.md`. Internal-only change (CI, tooling, fixtures, delaware-side docs) → N/A, git history covers it.
 - [ ] **Plugin version:** if this PR touches `plugin/` (other than `plugin/CLAUDE.md`), the version in `plugin/.claude-plugin/plugin.json` is bumped.
 - [ ] **Migrations:** any new migration in `migrations/` is idempotent (safe to run twice).
 

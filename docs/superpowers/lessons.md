@@ -4,6 +4,122 @@ Pitfalls agent sessions in this repo have hit. Append entries as they happen
 (date, what went wrong, the rule that prevents it). Patterns that recur get
 promoted into `CLAUDE.md`.
 
+## 2026-08-23 — a subagent's `git checkout` orphaned the controller's commit
+
+**What went wrong.** During subagent-driven execution of the object-skills
+port, a review subagent wanted to run the test suite at the exact commit it
+was reviewing, so it ran `git checkout <sha>` in the worktree — the same
+worktree the controller session was still committing to. The controller's next
+commit was parented on that detached HEAD instead of the branch tip. When HEAD
+returned to the branch, the commit became unreachable: present in the object
+database and reflog, absent from `git log` on the branch.
+
+It was recovered with `git cherry-pick <sha>` and nothing was lost, but only
+because the reviewer noticed the anomaly in its own output and reported it
+instead of finishing quietly. A silent version of this loses work to the next
+`git gc`.
+
+**Why it bites here specifically.** Parallel agents in one worktree share one
+`.git` and one index. Subagents reason locally — "I need the code as it was at
+that commit" — and reach for the tool that changes global state. Nothing in the
+worktree warns them another writer exists.
+
+**It happened twice.** The second time, a *different* review subagent detached
+HEAD to `e344f97` and left it there. No commit was orphaned — the branch ref
+was intact and the working tree clean — but the next implementer found its own
+target file absent from disk, because the worktree was sitting at a commit
+predating the file. It correctly refused to mutate anything, diagnosed the
+state read-only, and reported BLOCKED.
+
+**So the prohibition below is necessary but not sufficient.** Two different
+subagents violated it despite explicit, prominent instructions. Reviewers
+reason locally — "I need the suite as it was at that commit" — and reach for
+the tool that changes global state. **Verify controller-side instead of
+trusting compliance:** after every subagent returns, run
+`git symbolic-ref -q HEAD` and reattach if it comes back empty. That check is
+cheap, it is yours, and it does not depend on anyone else behaving. Checking
+`git log` is not enough — it looks identical detached.
+
+Also seen in the same session: a `git stash` commit
+(`WIP on feat/object-skills-port`, two parents) left dangling by some agent.
+Its content was already committed, so nothing was lost, but `stash` belongs on
+the prohibited list for the same reason.
+
+**The rule.** Every subagent dispatch, reviewer and implementer alike, carries
+an explicit prohibition:
+
+> Do not run `git checkout`, `git switch`, `git reset`, `git stash`, or
+> `git rebase` in this worktree. Another session commits here concurrently and
+> those commands will orphan its work. To read a file at a specific commit use
+> `git show <sha>:<path>`, which needs no working-tree change. To inspect a
+> range use `git diff A..B` or `git log`.
+
+`git show` covers essentially every legitimate reviewer need. A reviewer that
+genuinely must *execute* code at another commit should copy it out to a
+scratch directory rather than move HEAD.
+
+**Also worth knowing:** artifacts under `.superpowers/` (and `.sdd/`) are
+gitignored, so a stray checkout does not revert them. Generated briefs stay
+valid across this class of accident — but regenerate them anyway after
+reconciling, since they may have been produced from a plan file that was
+briefly at the wrong revision.
+
+## 2026-08-23 — three backticks cannot fence code that contains vault content
+
+**What went wrong.** An implementation plan carried the full source of a Python
+module inside a ` ```python ` block. The module builds a project `index.md`,
+so its template string contains Dataview query blocks — themselves fenced with
+three backticks. The inner block's closing fence terminated the outer one, so
+the code block ended two-thirds of the way through the function. Every
+renderer, every extraction script, and any agent reading the file sees a
+truncated module and the remainder as loose prose.
+
+It surfaced only because the module was extracted and compiled before dispatch:
+`SyntaxError: unterminated triple-quoted f-string literal`. Read as prose it
+looks complete — the cut lands between two functions.
+
+**Why this repo hits it more than most.** Almost everything here embeds vault
+content. Project index bodies carry Dataview blocks; `SKILL.md` files carry
+bash and JSON blocks; the ontology carries fenced YAML that is itself the
+normative schema. Any doc quoting that content nests fences by default.
+
+**The rule.** A fenced block that contains another fenced block needs **more
+backticks than its deepest child** — four outside, three inside. This holds for
+plan files, `SKILL.md` bodies, briefs, and PR descriptions alike. To check a
+file before trusting it:
+
+```bash
+python3 - <<'PY'
+import pathlib, re, sys
+OPEN = re.compile(r'^(`{3,})([a-zA-Z][a-zA-Z0-9]*)\s*$')
+CLOSE = re.compile(r'^(`{3,})\s*$')
+for path in sys.argv[1:]:
+    lines = pathlib.Path(path).read_text().split("\n")
+    i = 0
+    while i < len(lines):
+        m = OPEN.match(lines[i])
+        if not m:
+            i += 1
+            continue
+        ticks, j = m.group(1), i + 1
+        while j < len(lines):
+            c = CLOSE.match(lines[j])
+            if c and len(c.group(1)) >= len(ticks):
+                break
+            im = OPEN.match(lines[j])
+            if im and len(im.group(1)) <= len(ticks) and len(ticks) == 3:
+                print(f"{path}:{i+1}: ```{m.group(2)} truncated by ```{im.group(2)} at line {j+1}")
+            j += 1
+        i = j + 1
+PY
+```
+
+**A related trap in tooling, not content.** A non-greedy extraction regex
+(`` ```python\n(.*?)\n``` ``) silently stops at the first inner fence even when
+the outer block is correctly four backticks. Match the fence length with a
+backreference instead: `` (`{3,})python\n(.*?)\n\1 ``. Otherwise a correct
+document still yields truncated code.
+
 ## 2026-08-23 — `checks: read` does not fix the review job's check-runs 403
 
 **What went wrong.** `abca557` (#30) added `checks: read` to

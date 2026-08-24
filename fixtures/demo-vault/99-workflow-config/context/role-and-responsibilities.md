@@ -15,7 +15,7 @@ What the executive owns and is accountable for. Read by briefing and processing 
 ## Content
 
 <!-- setup-my-brain:begin -->
-Owns the commercial P&L: new-logo growth (presales), existing-client delivery
+Owns the commercial P&L: new-logo growth (new pursuits), existing-client delivery
 oversight, and the Commercial Operations business unit. Judged on: new
 bookings, gross margin on delivery engagements, and net revenue retention
 across the existing client base. Direct reports: Sam Okafor (VP Commercial

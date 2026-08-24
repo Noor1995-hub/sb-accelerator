@@ -1,5 +1,6 @@
 filters:
   and:
+    - file.inFolder("30-projects")
     - type == "decision"
 formulas:
   open: link(file.path, "→")
@@ -14,8 +15,8 @@ properties:
     displayName: Date
   status:
     displayName: Status
-  tags:
-    displayName: Tags
+  reviewed:
+    displayName: Reviewed
   supersedes:
     displayName: Supersedes
 views:
@@ -29,7 +30,21 @@ views:
       - summary
       - project
       - date
-      - tags
+    sort:
+      - property: date
+        direction: DESC
+  - type: table
+    name: Needs review
+    filters:
+      and:
+        - reviewed != true
+    order:
+      - formula.open
+      - summary
+      - project
+      - date
+      - status
+      - supersedes
     sort:
       - property: date
         direction: DESC
@@ -41,7 +56,7 @@ views:
       - project
       - date
       - status
-      - tags
+      - reviewed
       - supersedes
     sort:
       - property: date

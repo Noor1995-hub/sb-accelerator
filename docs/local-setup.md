@@ -65,20 +65,32 @@ theme via Settings → Appearance).
 
 ### 3. Verify the five Bases render
 
-Open each `.base` file and confirm it shows fixture rows, not an empty
-table:
+**Which rows each view shows is now asserted in CI**, so you no longer count
+rows by hand. `scripts/tests/test_bases_views.py` evaluates all five `.base`
+files against these fixtures and pins the exact row set of every view;
+`scripts/tests/test_dataview_refs.py` checks that every property a Dataview
+block names still exists in the ontology. Both run inside
+`python -m pytest scripts/tests -q`, so a filter left pointing at a renamed
+property fails in seconds instead of surfacing as an empty table in front of
+a client.
 
-- `40-entities/Entities.base` — "All" shows 3 entities; "Prospects" shows
-  Nordbridge Components; "Active" shows the other two.
-- `30-projects/Projects.base` — "Active" shows 4 projects; "All" shows all 5
-  (including the completed Phase 0 pilot).
-- `30-projects/Decisions.base` — "All" shows 4 decisions with the
-  `supersedes` column populated on one row.
-- `20-meetings/Meetings.base` — "Triage" shows exactly 3 meetings (the two
-  `needs-review` and one `needs-attention` that are neither reviewed nor
-  archived); "All Meetings" shows all 8.
-- `50-people/People.base` — "All" shows 9 people; "Uncurated" shows exactly
-  one row (Jamie Ellwood, `relationship` empty).
+That leaves this manual pass for what only Obsidian can tell you —
+**rendering, not row correctness**:
+
+- Each Base opens as a table rather than an error, with readable column
+  widths and the `displayName` headers, not raw property names.
+- `30-projects/Decisions.base` "All" has the `supersedes` column populated on
+  one row — the tests check which rows appear, not how a cell renders.
+- Project index bodies (e.g.
+  `30-projects/meridian-yard-automation-program/index.md`) render their
+  Dataview tables. Two projects — `commercial-ops-pipeline-governance` and
+  `meridian-warehouse-pilot-phase-0` — have no decisions yet, so an empty
+  decisions table there is correct, not a bug.
+- Dates, durations and list columns (attendees, projects) are legible rather
+  than raw arrays.
+
+If a row set ever disagrees with what Obsidian actually shows, **Obsidian is
+right** — fix `scripts/basesim.py` and the expectations it pinned.
 
 Also verify the navigator defaults: Notebook Navigator's Shortcuts section
 lists Meetings, Projects, Entities, People, Decisions and the daily-notes
@@ -87,25 +99,44 @@ folder (rainbow-tinted), and `claude/skills` is browsable in the file tree
 
 ### 4. Load the plugin locally and verify skills are invocable
 
+**Claude Code** can load the plugin from a path:
+
 ```bash
 cd /tmp/sb-test-vault
 claude --plugin-dir /path/to/sb-accelerator/plugin
 ```
 
-Run `/help` (or your Claude Code client's plugin/skill listing) and confirm
-the vault-scoped skills from `plugin/skills/` are visible. As of this
-writing `plugin/skills/` has no skills yet (they land via issues #14–#20) —
-if that's still true when you run this, this step just confirms the plugin
-loads without error; re-run it against a real skill once one exists.
+Run `/help` and confirm `/new-project`, `/update-entity`, and `/log-decision`
+appear.
 
-### 5. Run one skill against the fixtures
+**Cowork cannot** — `--plugin-dir` is a Claude Code flag, and Cowork loads
+skills only from installed plugins and your own skill store, never from a
+connected folder. To exercise the skills where they are designed to run, add
+this repo as a marketplace (Customize → Plugins → Add marketplace) using the
+root `.claude-plugin/marketplace.json` (`sb-accelerator-dev`), then install
+`second-brain`.
 
-Once at least one skill exists, invoke it against a fixture input — for
-example, a meeting-capture skill against
-`10-inbox/2026-08-19-teams-transcript-nordbridge-checkin.txt` — and confirm
-it produces output consistent with the ontology (a `20-meetings/` note with
-the required frontmatter fields from
-`template/99-workflow-config/reference/ontology.md`).
+### 5. Run a skill against the fixtures
+
+Open the test vault and try them:
+
+```
+/new-project "Northgate Terminal Refresh"
+/update-entity nordbridge-components
+/log-decision meridian-yard-automation-program
+```
+
+Then check the CLI directly, which is what the skills call:
+
+```bash
+python3 plugin/lib/vaultlib/cli.py entity read \
+  --vault /tmp/sb-test-vault --slug meridian-freight-holdings
+```
+
+Every call prints one JSON object with an `ok` field. Confirm the created
+project's frontmatter matches
+`template/99-workflow-config/reference/ontology.md`, and that its body carries
+the three H2 sections the ontology's `body_sections` declares.
 
 ### 6. Tear down and recreate
 
