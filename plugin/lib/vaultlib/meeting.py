@@ -233,6 +233,52 @@ def write(root: Path, payload: dict) -> dict:
     }
 
 
+def _find_stem(folder: Path, stem: str) -> Optional[Path]:
+    """Case-insensitive stem lookup (Linux VM writes, APFS/NTFS host)."""
+    if not folder.is_dir():
+        return None
+    lowered = stem.lower()
+    for candidate in sorted(folder.glob("*.md")):
+        if candidate.stem.lower() == lowered:
+            return candidate
+    return None
+
+
+def _first_free(folder: Path, pattern: str) -> str:
+    for n in range(2, 100):
+        candidate = pattern.format(n=n)
+        if _find_stem(folder, candidate) is None:
+            return candidate
+    raise MeetingError(f"more than 98 collisions for {pattern!r} — clean up first")
+
+
 def _resolve_target(root: Path, stem: str, payload: dict):
-    """Task 6 replaces this stub with the collision guards."""
-    return stem, "needs-review", None, None
+    """Apply the three collision guards, in order. Never overwrites."""
+    rid = payload.get("source-recording-id")
+    if rid is not None:
+        known, _ = syncjob.known_recording_ids(root)
+        if rid in known:
+            raise MeetingError(
+                f"recording {rid!r} is already synced as {known[rid]} — "
+                "this is the dedup ledger working; do not write it again"
+            )
+
+    folder = root / MEETINGS_DIR
+    existing = _find_stem(folder, stem)
+    if existing is None:
+        return stem, "needs-review", None, None
+
+    try:
+        data, _ = markdown.split_frontmatter(existing.read_text(encoding="utf-8"))
+        status = data.get("review_status")
+    except (ValueError, OSError):
+        status = None   # unreadable counts as not-confirmed: suffix, don't touch
+
+    if status == "confirmed":
+        sibling = _first_free(folder, stem + "--v{n}")
+        conflict = {"kind": "confirmed-target", "conflicts_with": existing.stem}
+        return sibling, "needs-attention", existing.stem, conflict
+
+    suffixed = _first_free(folder, stem + "-{n}")
+    conflict = {"kind": "stem-collision", "suffixed_from": existing.stem}
+    return suffixed, "needs-review", None, conflict

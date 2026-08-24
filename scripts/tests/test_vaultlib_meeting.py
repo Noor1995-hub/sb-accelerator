@@ -126,3 +126,57 @@ def test_rejects_zero_takeaways_and_too_many(tmp_path):
         meeting.write(root, payload(takeaways=[]))
     with pytest.raises(meeting.MeetingError, match="takeaways"):
         meeting.write(root, payload(takeaways=["a", "b", "c", "d", "e", "f"]))
+
+
+def test_refuses_when_recording_id_already_in_ledger(tmp_path):
+    root = make_vault(tmp_path)
+    meeting.write(root, payload())
+    with pytest.raises(meeting.MeetingError, match="already synced"):
+        meeting.write(root, payload(title="different title entirely"))
+
+
+def test_confirmed_target_gets_needs_attention_sibling(tmp_path):
+    root = make_vault(tmp_path)
+    first = meeting.write(root, payload())
+    # A human confirms it via triage.
+    p = root / first["path"]
+    p.write_text(p.read_text(encoding="utf-8").replace(
+        "review_status: needs-review", "review_status: confirmed"),
+        encoding="utf-8")
+
+    dup = payload(**{"source-recording-id": "inbox:ffff2a41d8e07b56"})
+    result = meeting.write(root, dup)
+    assert result["stem"] == "20-05-26-vendor-strategy-brainstorm--v2"
+    assert result["review_status"] == "needs-attention"
+    assert result["conflict"] == {
+        "kind": "confirmed-target",
+        "conflicts_with": "20-05-26-vendor-strategy-brainstorm",
+    }
+    text = (root / result["path"]).read_text(encoding="utf-8")
+    assert 'conflicts-with: "[[20-05-26-vendor-strategy-brainstorm]]"' in text
+    # The confirmed note was not touched.
+    assert "review_status: confirmed" in p.read_text(encoding="utf-8")
+
+
+def test_second_conflict_takes_v3(tmp_path):
+    root = make_vault(tmp_path)
+    first = meeting.write(root, payload())
+    p = root / first["path"]
+    p.write_text(p.read_text(encoding="utf-8").replace(
+        "review_status: needs-review", "review_status: confirmed"),
+        encoding="utf-8")
+    meeting.write(root, payload(**{"source-recording-id": "inbox:aaaa2a41d8e07b56"}))
+    third = meeting.write(root, payload(**{"source-recording-id": "inbox:bbbb2a41d8e07b56"}))
+    assert third["stem"] == "20-05-26-vendor-strategy-brainstorm--v3"
+
+
+def test_unconfirmed_stem_collision_suffixes_instead_of_overwriting(tmp_path):
+    root = make_vault(tmp_path)
+    first = meeting.write(root, payload())
+    result = meeting.write(
+        root, payload(**{"source-recording-id": "inbox:cccc2a41d8e07b56"}))
+    assert result["stem"] == "20-05-26-vendor-strategy-brainstorm-2"
+    assert result["review_status"] == "needs-review"
+    assert result["conflict"]["kind"] == "stem-collision"
+    # Both notes exist; nothing was overwritten.
+    assert (root / first["path"]).is_file() and (root / result["path"]).is_file()
