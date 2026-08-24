@@ -292,3 +292,31 @@ def test_cli_read_envelope(tmp_path):
     assert result["ok"] is True
     assert result["result"]["meetings"][0]["jottings"] == [
         "Proposal on track for September submission."]
+
+
+import shutil
+
+
+FRESH_FIXTURE_PAYLOAD = {
+    "date": "2026-06-15",
+    "recap": (
+        "> [!info] At a glance\n"
+        "> 1 meeting Friday · Nordbridge Components · 1 duplicate capture flagged\n"
+        "- [[12-06-26-jordan-1on1]] — proposal drafting on track for September submission.\n"
+        "- Duplicate recorder capture written as [[12-06-26-jordan-1on1-v2]] — needs attention in triage.\n"
+        "- Jotting carried forward: follow up with Dana Whitfield on rollout scope this week."
+    ),
+    "meetings": [],
+}
+
+
+def test_fresh_fixture_is_exactly_what_daily_note_write_renders(tmp_path):
+    """60-daily-notes/2026-06-15.md is the just-written artifact of the
+    2026-06-12 evening run — pinned byte-for-byte to the renderer."""
+    target = tmp_path / "vault"
+    shutil.copytree(FIXTURE_ROOT, target)
+    fixture_path = target / "60-daily-notes" / "2026-06-15.md"
+    expected = fixture_path.read_text(encoding="utf-8")
+    fixture_path.unlink()
+    dailynote.write(target, dict(FRESH_FIXTURE_PAYLOAD))
+    assert fixture_path.read_text(encoding="utf-8") == expected

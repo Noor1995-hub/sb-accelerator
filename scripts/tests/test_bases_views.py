@@ -38,7 +38,7 @@ ALL_DECISIONS = {
 ALL_MEETINGS = {MEETINGS.format(s) for s in (
     "01-06-26-commercial-ops-status-update", "02-03-26-nordbridge-intro-call",
     "05-06-26-pipeline-governance-review", "10-03-26-meridian-steerco-01",
-    "12-06-26-jordan-1on1", "15-04-26-priya-1on1",
+    "12-06-26-jordan-1on1", "12-06-26-jordan-1on1-v2", "15-04-26-priya-1on1",
     "20-04-26-commercial-ops-workshop", "20-05-26-meridian-vendor-strategy-brainstorm")}
 ALL_PEOPLE = {PEOPLE.format(s) for s in (
     "dana-whitfield", "jamie-ellwood", "jordan-vance", "leo-marchetti", "morgan-ellery",
@@ -70,8 +70,11 @@ EXPECTED = [
     ("20-meetings/Meetings.base", "All Meetings", ALL_MEETINGS),
     # Each exclusion path fires exactly once: 01-06 is reviewed, 05-06 is
     # archived, and the three `confirmed` meetings fail the review_status or.
+    # The -v2 collision sibling is needs-attention, unreviewed, unarchived —
+    # it belongs in Triage alongside the needs-review fixtures.
     ("20-meetings/Meetings.base", "Triage", {
         MEETINGS.format("02-03-26-nordbridge-intro-call"),
+        MEETINGS.format("12-06-26-jordan-1on1-v2"),
         MEETINGS.format("20-04-26-commercial-ops-workshop"),
         MEETINGS.format("20-05-26-meridian-vendor-strategy-brainstorm"),
     }),

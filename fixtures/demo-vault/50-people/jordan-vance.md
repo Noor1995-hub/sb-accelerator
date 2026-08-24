@@ -8,6 +8,6 @@ role: "Sales Director, New Logo"
 projects: [nordbridge-regional-rollout-proposal]
 created: 2026-02-01
 last-updated: 2026-06-12
-meetings-7d: 0
-meetings-30d: 2
+meetings-7d: 1
+meetings-30d: 1
 ---

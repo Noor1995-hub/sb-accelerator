@@ -204,3 +204,32 @@ def test_cli_update_queue_envelope(tmp_path):
     payload = json.loads(proc.stdout)
     assert payload["ok"] is True
     assert payload["result"]["projectsNeedingUpdate"] == []
+
+
+import shutil
+
+FIXTURE_ROOT = REPO_ROOT / "fixtures" / "demo-vault"
+
+
+def copy_fixture_vault(tmp_path: Path) -> Path:
+    target = tmp_path / "vault"
+    shutil.copytree(FIXTURE_ROOT, target)
+    return target
+
+
+def test_fixture_vault_is_a_fixed_point_of_update_queue(tmp_path):
+    """The demo vault is a converged evening-run snapshot at 2026-06-12: the
+    checked-in metric stamps ARE update-queue's output, so a run changes
+    nothing. This pins metric arithmetic against real fixture data AND keeps
+    the stamps honest (P2a lesson: fixture stamps must survive scrutiny)."""
+    root = copy_fixture_vault(tmp_path)
+    before = {p.relative_to(root): p.read_bytes() for p in root.rglob("*.md")}
+    result = updatequeue.run(root, today="2026-06-12",
+                             executive="morgan-ellery")
+    after = {p.relative_to(root): p.read_bytes() for p in root.rglob("*.md")}
+    assert after == before
+    assert result["meetingsIndexed"] == 9
+    assert result["confirmedMeetings"] == 3
+    assert result["projectsNeedingUpdate"] == []
+    assert result["warnings"] == []
+    assert result["metricsWritten"] == {"projects": 4, "people": 10}

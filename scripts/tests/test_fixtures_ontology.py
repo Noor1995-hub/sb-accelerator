@@ -592,3 +592,35 @@ def test_daily_note_fixtures_carry_hand_jottings_outside_markers():
         "at least two daily-note fixtures must carry hand jottings outside "
         f"markers; found {len(jotted)}"
     )
+
+
+def test_conflict_sibling_fixture_exercises_conflicts_with():
+    """P2a parked item: the collision-guard output shape, on disk."""
+    carriers = []
+    stems = {p.stem for p in iter_fixture_files(SCHEMAS["meeting"]["glob"])}
+    for path in iter_fixture_files(SCHEMAS["meeting"]["glob"]):
+        fm = parse_frontmatter(path)
+        raw = fm.get("conflicts-with")
+        if raw in (None, ""):
+            continue
+        carriers.append(path)
+        match = WIKILINK_RE.match(str(raw).strip())
+        assert match, f"{path}: conflicts-with must be a quoted wikilink"
+        assert match.group(1) in stems, (
+            f"{path}: conflicts-with target {match.group(1)!r} is not a fixture"
+        )
+        assert fm["review_status"] == "needs-attention", (
+            f"{path}: conflicts-with appears only on needs-attention siblings"
+        )
+    assert carriers, "expected at least one conflicts-with fixture"
+
+
+def test_recording_id_namespaces_are_covered():
+    seen = set()
+    for path in iter_fixture_files(SCHEMAS["meeting"]["glob"]):
+        rid = parse_frontmatter(path).get("source-recording-id")
+        if rid:
+            seen.add(str(rid).split(":", 1)[0])
+    assert {"inbox", "plaud"} <= seen, (
+        f"fixtures should cover the shipping id namespaces; found {seen}"
+    )
