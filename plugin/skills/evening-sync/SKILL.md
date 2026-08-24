@@ -75,7 +75,7 @@ notes; in v1 they inform, nothing more.
 ## Stage 3 — Sync, refresh
 
 **Sync:** run the `/sync-recordings` workflow (follow
-`plugin/skills/sync-recordings/SKILL.md`) — unattended when this run is
+`${CLAUDE_PLUGIN_ROOT}/skills/sync-recordings/SKILL.md`) — unattended when this run is
 unattended, interactive otherwise. Its step 1 already runs
 `sync reconcile-reviews`, which IS this pipeline's reconcile stage — do not
 run it a second time. Record what it reports: synced stems, folded ticks,
@@ -117,7 +117,7 @@ python3 "$VAULTLIB" project touch --vault "$VAULT" --slug <slug> --date <today> 
    (Omit the milestone pair when no concrete next event was identified.)
 4. Decision capture: extract candidates from the new meetings AND the
    harvest jottings, then follow
-   `plugin/skills/log-decision/SKILL.md` in **background mode**
+   `${CLAUDE_PLUGIN_ROOT}/skills/log-decision/SKILL.md` in **background mode**
    (`/log-decision <slug> --background`) with those candidates as the
    source. Its rules apply unchanged: the material-decision test (commits
    the engagement AND changes a stakeholder's behaviour), dedup against
@@ -164,6 +164,7 @@ harvest jottings worth carrying forward, and watch items (conflicts,
 needs-attention flags, self-check warnings). Respect the language and depth
 preferences in `99-workflow-config/context/preferences-and-constraints.md`.
 Open items live on projects — link them, never duplicate a task list.
+$SCRATCH below is your session scratch directory — payloads never land in the vault.
 
 ```bash
 cat > "$SCRATCH/daily-note.payload.json" <<'JSON'
