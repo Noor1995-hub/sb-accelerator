@@ -87,3 +87,28 @@ def test_cli_window_envelope():
     assert payload["ok"] is True
     # local 16:42 at -05:00 → UTC 21:42; default hours=2 → from 19:42
     assert payload["result"]["utc_from"] == "2026-08-20T19:42:00"
+
+
+def test_merge_dash_values_pairs_negative_offsets():
+    """argparse < 3.14 reads `--utc-offset -05:00` as a flag missing its
+    argument; cli._merge_dash_values folds the pair into `=` form. Pinned at
+    unit level because the subprocess test above only trips on runners whose
+    argparse predates the 3.14 behavior change."""
+    from vaultlib import cli
+
+    argv = ["dates", "window", "--start", "2026-08-20T16:42",
+            "--utc-offset", "-05:00", "--hours", "1"]
+    assert cli._merge_dash_values(argv) == [
+        "dates", "window", "--start", "2026-08-20T16:42",
+        "--utc-offset=-05:00", "--hours", "1"]
+    # A trailing flag with no value, and non-dash values, pass through as-is.
+    assert cli._merge_dash_values(["--utc-offset"]) == ["--utc-offset"]
+    assert cli._merge_dash_values(["--utc-offset", "+02:00"]) == [
+        "--utc-offset", "+02:00"]
+
+
+def test_main_accepts_space_separated_negative_offset():
+    from vaultlib import cli
+    rc = cli.main(["dates", "window", "--start", "2026-08-20T16:42",
+                   "--utc-offset", "-05:00"])
+    assert rc == 0

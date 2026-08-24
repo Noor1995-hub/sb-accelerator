@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Optional, Sequence
@@ -264,8 +265,33 @@ def _dispatch(args: argparse.Namespace) -> int:
     raise AssertionError(f"unhandled group {args.group!r}")
 
 
+# Flags whose legitimate values can start with a dash (a negative UTC
+# offset). argparse before Python 3.14 reads `--utc-offset -05:00` as a flag
+# followed by a missing argument; merging the pair into `--utc-offset=-05:00`
+# parses identically on every supported version — the Cowork VM runs 3.10.
+_DASH_VALUE_FLAGS = frozenset({"--utc-offset"})
+_DASH_VALUE_RE = re.compile(r"\A-\d")
+
+
+def _merge_dash_values(argv: Sequence[str]) -> list:
+    merged, skip = [], False
+    for index, token in enumerate(argv):
+        if skip:
+            skip = False
+            continue
+        follower = argv[index + 1] if index + 1 < len(argv) else None
+        if (token in _DASH_VALUE_FLAGS and follower is not None
+                and _DASH_VALUE_RE.match(follower)):
+            merged.append(f"{token}={follower}")
+            skip = True
+        else:
+            merged.append(token)
+    return merged
+
+
 def main(argv: Optional[Sequence[str]] = None) -> int:
-    args = build_parser().parse_args(argv)
+    args = build_parser().parse_args(
+        _merge_dash_values(sys.argv[1:] if argv is None else argv))
     try:
         return _dispatch(args)
     except vault.VaultError as exc:
