@@ -489,3 +489,44 @@ def test_meeting_confidence_reasons_conform():
         assert len(cal) == 1, f"{path}: need exactly one calendar reason, got {cal}"
         assert len(proj) == 1, f"{path}: need exactly one project-link reason, got {proj}"
         assert len(att) == 1, f"{path}: need exactly one attendees reason, got {att}"
+
+
+# --- Meeting fixtures model the sync pipeline's real output shape ---
+
+EXEC_SLUG = "morgan-ellery"   # the demo vault's executive (P1a person fixture)
+
+
+def test_meeting_source_enum_fully_covered():
+    files = iter_fixture_files(SCHEMAS["meeting"]["glob"])
+    seen = {parse_frontmatter(p).get("source") for p in files}
+    expected = SCHEMAS["meeting"]["enums"]["source"]
+    assert seen == expected, f"missing source coverage: {expected - seen}"
+
+
+def test_every_meeting_carries_confidence_stamp():
+    # Fixtures model the sync pipeline's REAL output shape (issue #2 rule);
+    # a real synced meeting always carries its stamp.
+    for path in iter_fixture_files(SCHEMAS["meeting"]["glob"]):
+        fm = parse_frontmatter(path)
+        assert "confidence" in fm and "confidence-reasons" in fm, (
+            f"{path}: fixture meetings carry the confidence stamp"
+        )
+
+
+def test_confidence_ratings_fully_covered():
+    files = iter_fixture_files(SCHEMAS["meeting"]["glob"])
+    seen = {parse_frontmatter(p).get("confidence") for p in files}
+    expected = SCHEMAS["meeting"]["enums"]["confidence"]
+    assert seen == expected, f"missing confidence coverage: {expected - seen}"
+
+
+def test_executive_attends_every_meeting():
+    for path in iter_fixture_files(SCHEMAS["meeting"]["glob"]):
+        attendees = parse_frontmatter(path).get("attendees") or []
+        assert EXEC_SLUG in attendees, (
+            f"{path}: the executive is in the room in their own vault"
+        )
+
+
+# test_meeting_attendee_joins_resolve is already covered by
+# test_meeting_edges_resolve above — no duplicate added here.

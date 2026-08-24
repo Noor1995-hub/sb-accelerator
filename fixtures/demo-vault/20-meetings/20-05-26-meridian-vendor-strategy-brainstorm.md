@@ -3,13 +3,16 @@ date: 2026-05-20T11:00
 type: brainstorm
 calendar-subject: "Meridian Freight — Vendor Strategy Brainstorm"
 calendar_match: false
-attendees: [priya-nathan, leo-marchetti, jamie-ellwood]
+attendees: [priya-nathan, leo-marchetti, jamie-ellwood, morgan-ellery]
 projects: [meridian-yard-automation-program]
 review_status: needs-review
 reviewed: false
 archived: false
+confidence: low
+confidence-reasons: [calendar-tool-unavailable, content-keyword-match, "new-attendees:1"]
 recording-duration: 41
 source: recorder
+source-recording-id: inbox:3f9c2a41d8e07b56
 source-filename: "REC-2026-0520-1103.m4a"
 processed: true
 ---

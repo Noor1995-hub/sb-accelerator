@@ -7,12 +7,14 @@ organizer: sam-okafor
 location: "Microsoft Teams"
 recurring: false
 start-time: 2026-04-20T13:00
-attendee-emails: [sam.okafor@cascadia-intermodal.example, omar.siddiqui@cascadia-intermodal.example, taylor.brooks@cascadia-intermodal.example]
-attendees: [sam-okafor, omar-siddiqui, taylor-brooks]
+attendee-emails: [sam.okafor@cascadia-intermodal.example, omar.siddiqui@cascadia-intermodal.example, taylor.brooks@cascadia-intermodal.example, morgan.ellery@cascadia-intermodal.example]
+attendees: [sam-okafor, omar-siddiqui, taylor-brooks, morgan-ellery]
 projects: [commercial-ops-crm-modernization]
 review_status: needs-attention
 reviewed: false
 archived: false
+confidence: medium
+confidence-reasons: [calendar-match-medium, content-keyword-match, "new-attendees:1"]
 recording-duration: 75
 source: teams
 processed: true
