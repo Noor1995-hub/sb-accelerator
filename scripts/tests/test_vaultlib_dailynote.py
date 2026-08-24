@@ -203,3 +203,92 @@ def test_cli_write_envelope(tmp_path):
     result = json.loads(proc.stdout)
     assert result["ok"] is True
     assert result["result"]["path"] == "60-daily-notes/2026-06-15.md"
+
+
+def jotted_note_text() -> str:
+    return """---
+date: 2026-06-12
+type: daily-note
+---
+
+# 2026-06-12 · Friday
+
+## Recap
+<!-- evening-sync:recap:begin -->
+> [!info] At a glance
+> recap content here
+<!-- evening-sync:recap:end -->
+
+## Meetings
+
+### 10:00 — 1:1 — Jordan Vance · [[acme-industries]]
+<!-- evening-sync:prep:begin -->
+**Attendees:** Jordan Vance · **Context:** rollout proposal.
+<!-- evening-sync:prep:end -->
+- Proposal on track for September submission.
+- 
+
+## End of day
+- Follow up with Dana next week.
+"""
+
+
+def test_read_extracts_regions_meetings_and_jottings(tmp_path):
+    root = make_vault(tmp_path)
+    (root / "60-daily-notes" / "2026-06-12.md").write_text(
+        jotted_note_text(), encoding="utf-8")
+    result = dailynote.read(root, "2026-06-12")
+    assert result["exists"] is True
+    assert result["frontmatter"]["type"] == "daily-note"
+    assert result["recap"].startswith("> [!info] At a glance")
+    assert len(result["meetings"]) == 1
+    meeting = result["meetings"][0]
+    assert meeting["time"] == "10:00"
+    assert meeting["subject"] == "1:1 — Jordan Vance"
+    assert meeting["entity"] == "acme-industries"
+    assert meeting["prep"].startswith("**Attendees:** Jordan Vance")
+    # The empty '- ' affordance is dropped; the real jotting survives.
+    assert meeting["jottings"] == ["Proposal on track for September submission."]
+    assert result["end_of_day"] == ["Follow up with Dana next week."]
+    assert result["warnings"] == []
+
+
+def test_read_on_a_missing_note_is_a_normal_state(tmp_path):
+    root = make_vault(tmp_path)
+    result = dailynote.read(root, "2026-06-12")
+    assert result == {"exists": False, "path": "60-daily-notes/2026-06-12.md"}
+
+
+def test_read_tolerates_a_hand_written_note_without_markers(tmp_path):
+    root = make_vault(tmp_path)
+    (root / "60-daily-notes" / "2026-06-12.md").write_text(
+        "---\ndate: 2026-06-12\ntype: daily-note\n---\n\n"
+        "# 2026-06-12 · Friday\n\n## Recap\n- hand recap line\n\n"
+        "## Meetings\n\n## End of day\n- wrap up\n", encoding="utf-8")
+    result = dailynote.read(root, "2026-06-12")
+    assert result["recap"] is None
+    assert result["meetings"] == []
+    assert result["end_of_day"] == ["wrap up"]
+    assert "hand recap line" in result["other_lines"]
+
+
+def test_read_parses_every_daily_note_fixture():
+    for path in sorted((FIXTURE_ROOT / "60-daily-notes").glob("*.md")):
+        result = dailynote.read(FIXTURE_ROOT, path.stem)
+        assert result["exists"] is True
+        assert result["recap"], f"{path}: fixture recap region is empty"
+
+
+def test_cli_read_envelope(tmp_path):
+    root = make_vault(tmp_path)
+    (root / "60-daily-notes" / "2026-06-12.md").write_text(
+        jotted_note_text(), encoding="utf-8")
+    proc = subprocess.run(
+        [sys.executable, str(CLI), "daily-note", "read",
+         "--vault", str(root), "--date", "2026-06-12"],
+        capture_output=True, text=True)
+    assert proc.returncode == 0, proc.stderr
+    result = json.loads(proc.stdout)
+    assert result["ok"] is True
+    assert result["result"]["meetings"][0]["jottings"] == [
+        "Proposal on track for September submission."]

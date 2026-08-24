@@ -230,6 +230,10 @@ def build_parser() -> argparse.ArgumentParser:
     _add_vault_argument(daily_write)
     daily_write.add_argument("--note", required=True,
                              help="path to a JSON file, or - to read stdin")
+    daily_read = daily_sub.add_parser(
+        "read", help="parse a daily note into regions and human jottings")
+    _add_vault_argument(daily_read)
+    daily_read.add_argument("--date", required=True, help="ISO date of the note")
 
     return parser
 
@@ -314,6 +318,7 @@ def _dispatch(args: argparse.Namespace) -> int:
             payload = (json.load(sys.stdin) if args.note == "-"
                        else json.loads(Path(args.note).read_text(encoding="utf-8")))
             return _ok(dailynote.write(root, payload))
+        return _ok(dailynote.read(root, args.date))
     raise AssertionError(f"unhandled group {args.group!r}")
 
 

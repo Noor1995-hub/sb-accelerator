@@ -236,3 +236,100 @@ def write(root: Path, payload) -> dict:
         "regions_replaced": replaced,
         "changed": changed,
     }
+
+
+def _frontmatter_end_line(lines: List[str]) -> int:
+    """Index of the closing '---' fence line, or -1 if none."""
+    if not lines or lines[0].strip() != "---":
+        return -1
+    for index in range(1, len(lines)):
+        if lines[index].strip() == "---":
+            return index
+    return -1
+
+
+def read(root: Path, date_iso_raw) -> dict:
+    """Parse a daily note into machine regions and human jottings.
+
+    Read-only by design (decision 8): the note is the archive of the day.
+    A missing note is a normal state — the first run of a fresh vault — not
+    an error. A hand-written note without markers is tolerated: everything
+    is human text then, and recap comes back null.
+    """
+    date_iso = _require_date(date_iso_raw)
+    rel = f"{DAILY_NOTES_DIR}/{date_iso}.md"
+    path = root / DAILY_NOTES_DIR / f"{date_iso}.md"
+    if not path.is_file():
+        return {"exists": False, "path": rel}
+    text = path.read_text(encoding="utf-8")
+    warnings: List[str] = []
+    try:
+        frontmatter, _ = markdown.split_frontmatter(text)
+    except ValueError as exc:
+        frontmatter = {}
+        warnings.append(f"{rel}: {exc}")
+
+    lines = text.split("\n")
+    regions = _find_regions(lines)
+    region_lines = set()
+    for region in regions:
+        region_lines.update(range(region["begin"], region["end"] + 1))
+    recap = None
+    recap_regions = [r for r in regions if r["name"] == "recap"]
+    if recap_regions:
+        region = recap_regions[0]
+        recap = "\n".join(lines[region["begin"] + 1:region["end"]])
+    prep_by_begin = {r["begin"]: "\n".join(lines[r["begin"] + 1:r["end"]])
+                     for r in regions if r["name"] == "prep"}
+
+    meetings: List[dict] = []
+    end_of_day: List[str] = []
+    other_lines: List[str] = []
+    current: Optional[dict] = None
+    section = ""
+    fm_end = _frontmatter_end_line(lines)
+    for index, line in enumerate(lines):
+        if index <= fm_end:
+            continue
+        if index in region_lines:
+            if current is not None and index in prep_by_begin:
+                current["prep"] = prep_by_begin[index]
+            continue
+        if line.startswith("## "):
+            section = line[3:].strip()
+            current = None
+            continue
+        if line.startswith("# "):
+            continue
+        if section == "Meetings" and line.startswith("### "):
+            heading = line[4:].strip()
+            match = _HEADING_RE.match(heading)
+            current = {
+                "heading": heading,
+                "time": match.group(1) if match else None,
+                "subject": match.group(2) if match else heading,
+                "entity": match.group(3) if match else None,
+                "prep": None,
+                "jottings": [],
+            }
+            meetings.append(current)
+            continue
+        stripped = line.strip()
+        if not stripped:
+            continue
+        content = stripped[2:].strip() if stripped.startswith("- ") else (
+            "" if stripped == "-" else stripped)
+        if not content:
+            continue   # the empty '- ' jot affordance
+        if section == "End of day":
+            end_of_day.append(content)
+        elif section == "Meetings" and current is not None:
+            current["jottings"].append(content)
+        else:
+            other_lines.append(content)
+    return {
+        "exists": True, "path": rel, "date": date_iso,
+        "frontmatter": frontmatter, "recap": recap, "meetings": meetings,
+        "end_of_day": end_of_day, "other_lines": other_lines,
+        "warnings": warnings,
+    }
