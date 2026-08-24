@@ -168,6 +168,41 @@ def test_broken_files_warn_and_the_run_continues(tmp_path):
     assert result["metricsWritten"]["projects"] == 2
 
 
+def test_scalar_projects_and_attendees_warn_and_count_once(tmp_path):
+    """`projects: alpha` without brackets is a string, and iterating a string
+    yields characters — the meeting would silently join to no project at all."""
+    root = make_vault(tmp_path)
+    write_person(root, "ana-fields")
+    index = write_project(root, "alpha", last_updated="2026-06-01")
+    (root / "20-meetings" / "m1.md").write_text("\n".join([
+        "---", "date: 2026-06-10T10:00", "type: meeting",
+        "review_status: confirmed", "projects: alpha", "attendees: ana-fields",
+        "---", "", "- x", "",
+    ]), encoding="utf-8")
+    result = updatequeue.run(root, today="2026-06-12", executive="exec-morgan")
+    assert any("m1.md" in w and "projects" in w and "list" in w
+               for w in result["warnings"])
+    assert any("m1.md" in w and "attendees" in w and "list" in w
+               for w in result["warnings"])
+    text = index.read_text(encoding="utf-8")
+    assert "meetings-7d: 1" in text
+    assert "key-people: [ana-fields]" in text
+    assert [entry["slug"] for entry in result["projectsNeedingUpdate"]] == ["alpha"]
+
+
+def test_non_string_list_frontmatter_warns_instead_of_crashing(tmp_path):
+    root = make_vault(tmp_path)
+    write_project(root, "alpha", last_updated="2026-06-01")
+    (root / "20-meetings" / "m1.md").write_text("\n".join([
+        "---", "date: 2026-06-10T10:00", "type: meeting",
+        "review_status: confirmed", "projects: 42", "attendees: [ana-fields]",
+        "---", "", "- x", "",
+    ]), encoding="utf-8")
+    result = updatequeue.run(root, today="2026-06-12", executive="exec-morgan")
+    assert any("m1.md" in w and "projects" in w for w in result["warnings"])
+    assert result["projectsNeedingUpdate"] == []
+
+
 def test_executive_slug_is_validated(tmp_path):
     root = make_vault(tmp_path)
     with pytest.raises(updatequeue.UpdateQueueError, match="person note"):

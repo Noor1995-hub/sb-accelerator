@@ -16,20 +16,17 @@ class that once cost the lab nine unqueued projects.
 """
 from __future__ import annotations
 
-import re
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple
 
 from . import decision, markdown, naming, vault
 
-MEETINGS_DIR = "20-meetings"
-PROJECTS_DIR = "30-projects"
-PEOPLE_DIR = "50-people"
+MEETINGS_DIR = vault.MEETINGS_DIR
+PROJECTS_DIR = vault.PROJECTS_DIR
+PEOPLE_DIR = vault.PEOPLE_DIR
 KEY_PEOPLE_WINDOW_DAYS = 90
 TOP_KEY_PEOPLE = 3
-
-_ISO_DATE_ONLY_RE = re.compile(r"\A\d{4}-\d{2}-\d{2}\Z")
 
 
 class UpdateQueueError(Exception):
@@ -48,6 +45,28 @@ def _parse_first_iso_date(value) -> Optional[date]:
         return None
 
 
+def _slug_list(value, field: str, rel: str, warnings: List[str]) -> List[str]:
+    """A frontmatter list field, with the scalar case named rather than split.
+
+    `projects: alpha` parses as a string, and iterating a string yields its
+    characters — the meeting would then join to no project at all, silently.
+    One item is the obvious reading, so take it and say so.
+    """
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return [str(item) for item in value if item]
+    if isinstance(value, str):
+        warnings.append(
+            f"{rel}: frontmatter '{field}' is a scalar ({value!r}), not a "
+            "list — read as a single item; write it as [a, b] or '- a' lines")
+        return [value.strip()] if value.strip() else []
+    warnings.append(
+        f"{rel}: frontmatter '{field}' is {type(value).__name__}, not a list "
+        f"({value!r}) — ignored; write it as [a, b] or '- a' lines")
+    return []
+
+
 def _index_meetings(root: Path) -> Tuple[List[dict], List[str]]:
     meetings: List[dict] = []
     warnings: List[str] = []
@@ -63,8 +82,10 @@ def _index_meetings(root: Path) -> Tuple[List[dict], List[str]]:
             "file": rel,
             "date": _parse_first_iso_date(data.get("date")),
             "review_status": data.get("review_status"),
-            "projects": [str(s) for s in (data.get("projects") or []) if s],
-            "attendees": [str(s) for s in (data.get("attendees") or []) if s],
+            "projects": _slug_list(data.get("projects"), "projects", rel,
+                                   warnings),
+            "attendees": _slug_list(data.get("attendees"), "attendees", rel,
+                                    warnings),
         })
     return meetings, warnings
 
@@ -110,7 +131,7 @@ def run(root: Path, today: str, executive: str) -> dict:
             f"{PEOPLE_DIR}/{exec_slug}.md — the executive is excluded from "
             "key-people by slug, so a mistyped slug silently poisons the metric"
         )
-    if not _ISO_DATE_ONLY_RE.match(str(today or "").strip()):
+    if not vault.ISO_DATE_RE.match(str(today or "").strip()):
         raise UpdateQueueError(f"--today {today!r} must be ISO YYYY-MM-DD")
     today_date = _parse_first_iso_date(today)
     if today_date is None:
