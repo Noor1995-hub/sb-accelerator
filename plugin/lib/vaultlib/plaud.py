@@ -34,13 +34,22 @@ def _render_transcript(payload) -> Tuple[str, int]:
         code = txn.get("data_error_code")
         if code is not None and code != 10:
             raise PlaudError(f"transcript data_error_code={code}")
-        utterances = json.loads(txn["data_content"]) if txn.get("data_content") else []
+        try:
+            utterances = (json.loads(txn["data_content"])
+                          if txn.get("data_content") else [])
+        except json.JSONDecodeError as exc:
+            raise PlaudError(
+                f"transcript data_content is not valid JSON: {exc}"
+            ) from exc
         if not utterances:
             raise PlaudError("empty transcript")
     else:
         raise PlaudError(
             f"unrecognized transcript shape ({type(payload).__name__})"
         )
+    utterances = [u for u in utterances if isinstance(u, dict)]
+    if not utterances:
+        raise PlaudError("empty transcript")
     lines = [f'{u.get("speaker", "Speaker ?")}: {(u.get("content") or "").strip()}'
              for u in utterances]
     max_end = max((u.get("end_time") or 0) for u in utterances)
@@ -79,6 +88,9 @@ def reassemble(meta_path: str, transcript_path: str, note_path: Optional[str],
     meta = _load(meta_path, "meta")
     if not isinstance(meta, dict) or not meta.get("id") or not meta.get("start_at"):
         raise PlaudError("meta must be the list_files entry: id, name, start_at, duration")
+    rec_id = str(meta["id"])
+    if "/" in rec_id or "\\" in rec_id or ".." in rec_id:
+        raise PlaudError(f"meta id {rec_id!r} is not usable as a filename")
     transcript = _load(transcript_path, "transcript")
     note = _load(note_path, "note")
 
@@ -101,12 +113,12 @@ def reassemble(meta_path: str, transcript_path: str, note_path: Optional[str],
 
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
-    blob_path = out / f"{meta['id']}.blob.md"
+    blob_path = out / f"{rec_id}.blob.md"
     blob_path.write_text(blob, encoding="utf-8", newline="\n")
 
     duration_ms = max_end_ms or int(meta.get("duration") or 0)
     return {
-        "recording_id": f"plaud:{meta['id']}",
+        "recording_id": f"plaud:{rec_id}",
         "duration_min": round(duration_ms / 60000),
         "recorded_local": recorded_local,
         "has_enrichment": summary is not None,

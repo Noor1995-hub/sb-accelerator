@@ -27,9 +27,15 @@ class SyncError(Exception):
 
 
 def content_id(path: Path) -> str:
-    """inbox:{16 hex} — content-addressed, so a renamed drop stays deduped."""
-    digest = hashlib.sha256(path.read_bytes()).hexdigest()[:16]
-    return f"inbox:{digest}"
+    """inbox:{16 hex} — content-addressed, so a renamed drop stays deduped.
+
+    Chunked read: the inbox legitimately holds large recorder exports, and
+    scan hashes every file on every run."""
+    digest = hashlib.sha256()
+    with open(path, "rb") as handle:
+        for chunk in iter(lambda: handle.read(65536), b""):
+            digest.update(chunk)
+    return f"inbox:{digest.hexdigest()[:16]}"
 
 
 def _validate_id(recording_id: str) -> str:

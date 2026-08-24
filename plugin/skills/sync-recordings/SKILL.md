@@ -52,6 +52,17 @@ is **skipped with an explicit line in the summary** — never a silent zero.
 
 ### 1. Scan and dedup
 
+First fold pending triage ticks back into `review_status` — this is what
+makes the reviewed checkbox in Meetings.base actually confirm a note, and
+it runs in both modes:
+
+```bash
+python3 "$VAULTLIB" sync reconcile-reviews --vault "$VAULT"
+```
+
+Report `flipped` in the summary; surface any `needs_attention_ticks` for a
+human — those are never auto-confirmed.
+
 **Inbox:**
 
 ```bash
@@ -208,15 +219,18 @@ Payload rules the CLI enforces (so get them right the first time):
 - `title` is a short kebab-able label — the filename becomes
   `{DD-MM-YY}-{title-slug}.md`. `date` is ISO, the recording's local start.
 - `attendees`/`projects` are slugs and must resolve (person notes, project
-  folders). `takeaways` is 1–5 strings. `type` values with a colon
-  (`"1:1"`) are handled by the CLI — pass them as plain strings.
+  folders). `attendees` must be non-empty; `projects` may be empty (triage
+  catches unassigned meetings). Optional `people` (slug list) renders a
+  `## People` wikilink section. `takeaways` is 1–5 strings. `type` values
+  with a colon (`"1:1"`) are handled by the CLI — pass them as plain strings.
 - Do NOT pass `review_status`, `reviewed`, `archived`, or `processed` — the
   CLI sets them.
-- Inbox files: `source-recording-id` is the `recording_id` from `sync scan`.
-  Every write carries one — it IS the dedup ledger.
+- `source-recording-id` is **required** on every write — it IS the dedup
+  ledger. For inbox files it is the `recording_id` from `sync scan`; for
+  Plaud it comes from `plaud reassemble`.
 
 Read the result: a `conflict` of kind `confirmed-target` means the CLI wrote
-a `--v2` sibling marked `needs-attention` instead of touching a confirmed
+a `-v2` sibling marked `needs-attention` instead of touching a confirmed
 note — report it, it surfaces in triage. `stem-collision` means a `-2`
 suffix. An `error` about an already-synced id means dedup was bypassed —
 stop and say so.
@@ -230,6 +244,7 @@ Count what exists, not what you intended (a lab run once reported
 ## Sync Complete
 **Processed:** {N} → `20-meetings/` ({list the stems})
 **New people:** {N} created in `50-people/`
+**Reviewed ticks folded:** {N} confirmed
 **Needs attention:** {N} (would have overwritten confirmed notes)
 **Skipped / errors:** {N} (will retry next run)
 **Adapters:** inbox ok · plaud ok · m365 not configured

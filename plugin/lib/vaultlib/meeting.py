@@ -19,9 +19,10 @@ MEETINGS_DIR = "20-meetings"
 
 REQUIRED_PAYLOAD = ("title", "date", "type", "calendar-subject",
                     "calendar_match", "attendees", "projects",
-                    "recording-duration", "source", "takeaways", "debrief")
+                    "recording-duration", "source", "takeaways", "debrief",
+                    "source-recording-id")
 OPTIONAL_PAYLOAD = ("attendee-emails", "organizer", "location", "recurring",
-                    "source-recording-id", "source-filename",
+                    "source-filename",
                     "confidence", "confidence-reasons",
                     "action-items", "people")
 
@@ -56,7 +57,9 @@ def _require_keys(payload: dict) -> None:
 
 def _require_slug_list(payload: dict, key: str, *, allow_empty: bool) -> list:
     values = payload.get(key) or []
-    if not isinstance(values, list) or (not values and not allow_empty):
+    if not isinstance(values, list):
+        raise MeetingError(f"{key} must be a list of slugs")
+    if not values and not allow_empty:
         raise MeetingError(f"{key} must be a non-empty list of slugs")
     for value in values:
         try:
@@ -275,7 +278,7 @@ def _resolve_target(root: Path, stem: str, payload: dict):
         status = None   # unreadable counts as not-confirmed: suffix, don't touch
 
     if status == "confirmed":
-        sibling = _first_free(folder, stem + "--v{n}")
+        sibling = _first_free(folder, stem + "-v{n}")
         conflict = {"kind": "confirmed-target", "conflicts_with": existing.stem}
         return sibling, "needs-attention", existing.stem, conflict
 

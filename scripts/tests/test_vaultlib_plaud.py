@@ -86,3 +86,22 @@ def test_broken_note_degrades_to_no_enrichment(tmp_path):
         write_json(tmp_path, "n.json", bad_note),
         str(tmp_path / "s"), utc_offset="+00:00")
     assert result["has_enrichment"] is False
+
+
+def test_non_json_data_content_raises_plauderror(tmp_path):
+    bad = [{"data_type": "transaction", "data_error_code": 10,
+            "data_content": "not json at all"}]
+    with pytest.raises(plaud.PlaudError, match="not valid JSON"):
+        plaud.reassemble(
+            write_json(tmp_path, "m.json", META),
+            write_json(tmp_path, "t.json", bad),
+            None, str(tmp_path / "s"), utc_offset="+00:00")
+
+
+def test_path_escaping_meta_id_raises(tmp_path):
+    evil = dict(META, id="../escaped")
+    with pytest.raises(plaud.PlaudError, match="not usable as a filename"):
+        plaud.reassemble(
+            write_json(tmp_path, "m.json", evil),
+            write_json(tmp_path, "t.json", SEGMENTS),
+            None, str(tmp_path / "s"), utc_offset="+00:00")

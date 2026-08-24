@@ -128,6 +128,12 @@ def test_rejects_zero_takeaways_and_too_many(tmp_path):
         meeting.write(root, payload(takeaways=["a", "b", "c", "d", "e", "f"]))
 
 
+def test_rejects_missing_recording_id(tmp_path):
+    root = make_vault(tmp_path)
+    with pytest.raises(meeting.MeetingError, match="source-recording-id"):
+        meeting.write(root, payload(**{"source-recording-id": None}))
+
+
 def test_refuses_when_recording_id_already_in_ledger(tmp_path):
     root = make_vault(tmp_path)
     meeting.write(root, payload())
@@ -146,7 +152,7 @@ def test_confirmed_target_gets_needs_attention_sibling(tmp_path):
 
     dup = payload(**{"source-recording-id": "inbox:ffff2a41d8e07b56"})
     result = meeting.write(root, dup)
-    assert result["stem"] == "20-05-26-vendor-strategy-brainstorm--v2"
+    assert result["stem"] == "20-05-26-vendor-strategy-brainstorm-v2"
     assert result["review_status"] == "needs-attention"
     assert result["conflict"] == {
         "kind": "confirmed-target",
@@ -167,7 +173,7 @@ def test_second_conflict_takes_v3(tmp_path):
         encoding="utf-8")
     meeting.write(root, payload(**{"source-recording-id": "inbox:aaaa2a41d8e07b56"}))
     third = meeting.write(root, payload(**{"source-recording-id": "inbox:bbbb2a41d8e07b56"}))
-    assert third["stem"] == "20-05-26-vendor-strategy-brainstorm--v3"
+    assert third["stem"] == "20-05-26-vendor-strategy-brainstorm-v3"
 
 
 def test_unconfirmed_stem_collision_suffixes_instead_of_overwriting(tmp_path):

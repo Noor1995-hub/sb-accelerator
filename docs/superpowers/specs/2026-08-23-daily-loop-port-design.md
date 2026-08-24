@@ -163,7 +163,7 @@ always a parameter, JSON on stdout — P1a's rules):
 | `sync scan` | Inbox adapter discovery + dedup of any adapter's capture list against the vault, keyed on namespaced `source-recording-id` with content-hash backstop |
 | `sync reconcile-reviews` | `reviewed: true` → `review_status: confirmed` flips (from `needs-review` only, one-way; `archived` is never read) |
 | `sync update-queue` | Port of `build_update_queue.py`: project/person `meetings-7d` / `meetings-30d` / `key-people` writes, the queue of projects needing state synthesis with their `existingDecisions` projection, and the reverse-direction self-check |
-| `meeting write` | Schema-validated meeting note emission; collision guards; never overwrites `confirmed` (writes the `--v2` `needs-attention` sibling with `conflicts-with`) |
+| `meeting write` | Schema-validated meeting note emission; collision guards; never overwrites `confirmed` (writes the `-v2` `needs-attention` sibling with `conflicts-with`) |
 | `daily-note write` | Renders/regenerates the marker-fenced machine regions of a daily note; bytes outside markers are untouchable; idempotent |
 | `daily-note read` | Parses a daily note into regions + human jottings as JSON, for the harvest stage |
 

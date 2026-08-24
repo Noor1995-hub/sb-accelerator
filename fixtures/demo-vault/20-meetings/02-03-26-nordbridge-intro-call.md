@@ -13,7 +13,7 @@ projects: [nordbridge-regional-rollout-proposal]
 review_status: needs-review
 reviewed: false
 archived: false
-confidence: high
+confidence: low
 confidence-reasons: [calendar-match-high, entity-domain-match, "new-attendees:2"]
 recording-duration: 32
 source: teams
