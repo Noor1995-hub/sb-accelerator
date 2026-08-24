@@ -113,6 +113,18 @@ because by then the note may hold human text that outranks the calendar.
 Surface that error; do not delete the note to force a rewrite unless the user
 says so.
 
+Matching counts are not enough. The `### {HH:MM} — {Subject}[ · [[entity]]]`
+headings sit *outside* the markers, so nothing regenerates them: a calendar
+that swapped one meeting for another between runs would file fresh prep under
+a stale heading. Each prep region's heading is therefore compared against the
+payload meeting it would receive, and any difference — time, subject, entity,
+a heading the user retyped, a heading missing or present when the payload says
+otherwise — refuses the write exactly like a count mismatch.
+
+`daily-note read` returns the mirror image: `meetings[]` for prep filed under
+a heading, and `meetings_note` for a prep region with no heading above it (the
+no-meetings line, or whatever `meetings_note` the last write passed).
+
 ## After changing the ontology
 
 ```bash

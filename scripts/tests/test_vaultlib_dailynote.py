@@ -168,6 +168,96 @@ def test_merge_refuses_a_structural_change(tmp_path):
         dailynote.write(root, smaller)
 
 
+def test_merge_refuses_an_equal_count_meeting_swap(tmp_path):
+    """The count matching is not enough: headings live outside the markers and
+    are never regenerated, so a swapped meeting would file fresh prep under a
+    stale heading."""
+    root = make_vault(tmp_path)
+    dailynote.write(root, payload())
+    path = root / "60-daily-notes" / "2026-06-15.md"
+    before = path.read_text(encoding="utf-8")
+    swapped = payload()
+    swapped["meetings"][1] = {
+        "time": "15:30", "subject": "Board prep", "entity": None,
+        "prep": "**Attendees:** Priya · **Context:** replaced the deep dive."}
+    with pytest.raises(dailynote.DailyNoteError, match="structure"):
+        dailynote.write(root, swapped)
+    assert path.read_text(encoding="utf-8") == before
+
+
+def test_merge_refuses_an_entity_only_heading_change(tmp_path):
+    root = make_vault(tmp_path)
+    dailynote.write(root, payload())
+    dropped = payload()
+    dropped["meetings"][0]["entity"] = None
+    with pytest.raises(dailynote.DailyNoteError, match="structure"):
+        dailynote.write(root, dropped)
+
+
+def test_merge_refuses_prep_over_a_no_meetings_note(tmp_path):
+    """One prep region either way — the count check alone would let this
+    overwrite the no-meetings line with prep nothing introduces a heading for."""
+    root = make_vault(tmp_path)
+    dailynote.write(root, payload(meetings=[]))
+    one = payload()
+    one["meetings"] = one["meetings"][:1]
+    with pytest.raises(dailynote.DailyNoteError, match="structure"):
+        dailynote.write(root, one)
+
+
+def test_merge_refuses_a_no_meetings_payload_over_a_prepped_meeting(tmp_path):
+    root = make_vault(tmp_path)
+    single = payload()
+    single["meetings"] = single["meetings"][:1]
+    dailynote.write(root, single)
+    with pytest.raises(dailynote.DailyNoteError, match="structure"):
+        dailynote.write(root, payload(meetings=[]))
+
+
+def test_merge_refuses_a_hand_edited_heading(tmp_path):
+    """A heading the user retyped is human text: refuse and let them decide,
+    rather than assuming the payload's version wins."""
+    root = make_vault(tmp_path)
+    dailynote.write(root, payload())
+    path = root / "60-daily-notes" / "2026-06-15.md"
+    path.write_text(
+        path.read_text(encoding="utf-8").replace(
+            "### 09:00 — Weekly Status · [[acme-industries]]",
+            "### 09:00 — Weekly Status (moved to Teams) · [[acme-industries]]"),
+        encoding="utf-8")
+    with pytest.raises(dailynote.DailyNoteError, match="structure"):
+        dailynote.write(root, payload())
+
+
+def test_merge_ignores_a_heading_inside_recap_content(tmp_path):
+    """A `### ` line inside the recap region is content, not a meeting heading:
+    the search for a prep region's heading stops at the region above it."""
+    root = make_vault(tmp_path)
+    (root / "60-daily-notes" / "2026-06-15.md").write_text(
+        "---\ndate: 2026-06-15\ntype: daily-note\n---\n\n"
+        "# 2026-06-15 · Monday\n\n"
+        "<!-- evening-sync:recap:begin -->\n"
+        "### 08:00 — a line the user pasted into the recap\n"
+        "<!-- evening-sync:recap:end -->\n\n"
+        "<!-- evening-sync:prep:begin -->\n*No meetings scheduled.*\n"
+        "<!-- evening-sync:prep:end -->\n", encoding="utf-8")
+    result = dailynote.write(root, payload(meetings=[]))
+    assert result["changed"] is True
+    text = (root / "60-daily-notes" / "2026-06-15.md").read_text(encoding="utf-8")
+    assert "### 08:00 — a line the user pasted into the recap" not in text
+
+
+def test_merge_accepts_fresh_prep_under_unchanged_headings(tmp_path):
+    root = make_vault(tmp_path)
+    dailynote.write(root, payload())
+    fresh = payload()
+    fresh["meetings"][0]["prep"] = "**Attendees:** Sam, Dana · **Context:** new."
+    result = dailynote.write(root, fresh)
+    assert result["changed"] is True and result["regions_replaced"] == 3
+    text = (root / "60-daily-notes" / "2026-06-15.md").read_text(encoding="utf-8")
+    assert "**Attendees:** Sam, Dana · **Context:** new." in text
+
+
 def test_rejects_markers_inside_payload_content(tmp_path):
     root = make_vault(tmp_path)
     with pytest.raises(dailynote.DailyNoteError, match="markers"):
@@ -203,6 +293,24 @@ def test_cli_write_envelope(tmp_path):
     result = json.loads(proc.stdout)
     assert result["ok"] is True
     assert result["result"]["path"] == "60-daily-notes/2026-06-15.md"
+
+
+def test_cli_refusal_is_still_one_json_object(tmp_path):
+    root = make_vault(tmp_path)
+    dailynote.write(root, payload())
+    swapped = payload()
+    swapped["meetings"][0]["subject"] = "Weekly Status — moved to Teams"
+    note_file = tmp_path / "payload.json"
+    note_file.write_text(json.dumps(swapped), encoding="utf-8")
+    proc = subprocess.run(
+        [sys.executable, str(CLI), "daily-note", "write",
+         "--vault", str(root), "--note", str(note_file)],
+        capture_output=True, text=True)
+    assert proc.returncode == 1
+    result = json.loads(proc.stdout)
+    assert result["ok"] is False
+    assert "structure changed" in result["error"]
+    assert result["hint"]
 
 
 def jotted_note_text() -> str:
@@ -251,6 +359,25 @@ def test_read_extracts_regions_meetings_and_jottings(tmp_path):
     assert meeting["jottings"] == ["Proposal on track for September submission."]
     assert result["end_of_day"] == ["Follow up with Dana next week."]
     assert result["warnings"] == []
+
+
+def test_read_surfaces_the_no_meetings_prep_region(tmp_path):
+    """A prep region with no meeting heading above it is the no-meetings line
+    (or the calendar-unavailable note) — it comes back rather than vanishing."""
+    root = make_vault(tmp_path)
+    dailynote.write(root, payload(
+        meetings=[], meetings_note="*Calendar unavailable — check Outlook.*"))
+    result = dailynote.read(root, "2026-06-15")
+    assert result["meetings"] == []
+    assert result["meetings_note"] == "*Calendar unavailable — check Outlook.*"
+
+
+def test_read_leaves_meetings_note_null_when_meetings_are_prepped(tmp_path):
+    root = make_vault(tmp_path)
+    dailynote.write(root, payload())
+    result = dailynote.read(root, "2026-06-15")
+    assert len(result["meetings"]) == 2
+    assert result["meetings_note"] is None
 
 
 def test_read_on_a_missing_note_is_a_normal_state(tmp_path):

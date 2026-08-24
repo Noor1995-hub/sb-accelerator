@@ -183,8 +183,10 @@ python3 "$VAULTLIB" daily-note write --vault "$VAULT" --note "$SCRATCH/daily-not
 The CLI renders the contract on a fresh note and region-merges on an
 existing one — your payload carries content only, never markers. A
 `structure changed` error means the note already exists with a different
-meeting set: report it and leave the note alone (it may hold human
-jottings); do not delete it to force a rewrite.
+meeting set: either a different number of meetings, or a meeting heading that
+no longer matches the payload (the calendar moved, or the user retyped the
+heading). Report it and leave the note alone (it may hold human jottings); do
+not delete it to force a rewrite.
 
 ## Stage 7 — Verify against disk, then summarize
 

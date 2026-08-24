@@ -17,17 +17,22 @@ from typing import Dict, List, Optional, Tuple
 
 from . import dates, markdown, naming, vault
 
-DAILY_NOTES_DIR = "60-daily-notes"
+DAILY_NOTES_DIR = vault.DAILY_NOTES_DIR
 NO_MEETINGS_LINE = "*No meetings scheduled.*"
 
 _MARKER_RE = re.compile(r"\A<!-- evening-sync:([a-z-]+):(begin|end) -->\s*\Z")
 _KNOWN_REGIONS = ("recap", "prep")
-_ISO_DATE_ONLY_RE = re.compile(r"\A\d{4}-\d{2}-\d{2}\Z")
 _TIME_RE = re.compile(r"\A([01]\d|2[0-3]):[0-5]\d\Z")
 _HEADING_RE = re.compile(
     r"\A(\d{2}:\d{2}) — (.*?)(?: · \[\[([a-z0-9-]+)\]\])?\Z")
 _ALLOWED_KEYS = ("date", "recap", "meetings", "meetings_note")
 _ALLOWED_MEETING_KEYS = ("time", "subject", "entity", "prep")
+
+_STRUCTURE_HINT = (
+    "the meeting structure changed since this note was written. Only region "
+    "interiors are replaced and bytes outside markers are never touched, so a "
+    "structural change needs a human (or a fresh note)."
+)
 
 
 class DailyNoteError(Exception):
@@ -36,7 +41,7 @@ class DailyNoteError(Exception):
 
 def _require_date(raw) -> str:
     text = str(raw or "").strip()
-    if not _ISO_DATE_ONLY_RE.match(text):
+    if not vault.ISO_DATE_RE.match(text):
         raise DailyNoteError(f"date {raw!r} must be ISO YYYY-MM-DD")
     try:
         datetime.strptime(text, "%Y-%m-%d")
@@ -97,11 +102,12 @@ def _validate(root: Path, payload) -> dict:
             except ValueError as exc:
                 raise DailyNoteError(
                     f"meeting {position}: entity {entity!r}: {exc}") from exc
-            if not (root / "40-entities" / entity / "dossier.md").is_file():
+            dossier = root / vault.ENTITIES_DIR / entity / "dossier.md"
+            if not dossier.is_file():
                 raise DailyNoteError(
                     f"meeting {position}: entity {entity!r} has no dossier at "
-                    f"40-entities/{entity}/dossier.md — pass null rather than "
-                    "guessing")
+                    f"{vault.ENTITIES_DIR}/{entity}/dossier.md — pass null "
+                    "rather than guessing")
         prep = _clean_region_text(entry.get("prep"),
                                   f"meeting {position} prep")
         meetings.append({"time": time_text, "subject": subject,
@@ -123,6 +129,15 @@ def _region(name: str, content: str) -> str:
             f"<!-- evening-sync:{name}:end -->")
 
 
+def _meeting_heading(meeting: dict) -> str:
+    """The heading text (no `### `) a meeting renders to — and the form the
+    merge guard compares an existing note's heading against."""
+    heading = f"{meeting['time']} — {meeting['subject']}"
+    if meeting["entity"]:
+        heading += f" · [[{meeting['entity']}]]"
+    return heading
+
+
 def _render(data: dict) -> str:
     date_iso = data["date"]
     parts = ["---", f"date: {date_iso}", "type: daily-note", "---", "",
@@ -132,10 +147,7 @@ def _render(data: dict) -> str:
     if data["meetings"]:
         chunks = []
         for meeting in data["meetings"]:
-            heading = f"### {meeting['time']} — {meeting['subject']}"
-            if meeting["entity"]:
-                heading += f" · [[{meeting['entity']}]]"
-            chunks.append("\n".join([heading,
+            chunks.append("\n".join([f"### {_meeting_heading(meeting)}",
                                      _region("prep", meeting["prep"]), "- "]))
         parts.append("\n\n".join(chunks))
     else:
@@ -174,6 +186,67 @@ def _find_regions(lines: List[str]) -> List[dict]:
     return regions
 
 
+def _heading_above(lines: List[str], begin: int, floor: int) -> Optional[str]:
+    """The `### ` heading a prep region belongs to, or None.
+
+    Searches upward from the region's begin marker, stopping at the previous
+    region (so a missing heading never borrows the one above it, and a `###`
+    line inside recap content is never read as a meeting) and at any `#`/`##`
+    line, which ends the meeting a heading would have introduced.
+    """
+    for index in range(begin - 1, floor - 1, -1):
+        line = lines[index].rstrip()
+        if line.startswith("### "):
+            return line[4:].strip()
+        if line.startswith(("# ", "## ")):
+            return None
+    return None
+
+
+def _heading_key(text: str) -> Tuple[str, str, Optional[str]]:
+    """(time, subject, entity) — an unparseable heading compares as a whole so
+    a hand-retyped one is a mismatch rather than a partial match."""
+    match = _HEADING_RE.match(text)
+    if not match:
+        return ("", text, None)
+    return (match.group(1), match.group(2), match.group(3))
+
+
+def _check_headings(lines: List[str], regions: List[dict],
+                    meetings: List[dict]) -> None:
+    """Refuse a merge whose prep regions sit under the wrong meetings.
+
+    Equal counts are not equal structure: headings live outside the markers,
+    so nothing regenerates them, and a calendar that swapped one meeting for
+    another between runs would file fresh prep under a stale heading.
+    """
+    preps, floors, previous_end = [], [], 0
+    for region in regions:
+        if region["name"] == "prep":
+            preps.append(region)
+            floors.append(previous_end)
+        previous_end = region["end"] + 1
+    for position, (region, floor) in enumerate(zip(preps, floors)):
+        found = _heading_above(lines, region["begin"], floor)
+        if not meetings:
+            if found is not None:
+                raise DailyNoteError(
+                    f"the note's prep region sits under meeting heading "
+                    f"{found!r} but the payload carries no meetings — "
+                    f"{_STRUCTURE_HINT}")
+            continue
+        expected = _meeting_heading(meetings[position])
+        if found is None:
+            raise DailyNoteError(
+                f"meeting {position + 1}: the note has no '### ' heading above "
+                f"the matching prep region, but the payload carries "
+                f"{expected!r} — {_STRUCTURE_HINT}")
+        if _heading_key(found) != _heading_key(expected):
+            raise DailyNoteError(
+                f"meeting {position + 1}: the note's heading is {found!r} but "
+                f"the payload carries {expected!r} — {_STRUCTURE_HINT}")
+
+
 def _merge(text: str, data: dict) -> Tuple[str, int]:
     lines = text.split("\n")
     regions = _find_regions(lines)
@@ -186,11 +259,9 @@ def _merge(text: str, data: dict) -> Tuple[str, int]:
     if len(preps) != expected_preps:
         raise DailyNoteError(
             f"the note has {len(preps)} prep region(s) but the payload "
-            f"carries {expected_preps} — the meeting structure changed since "
-            "this note was written. Only region interiors are replaced and "
-            "bytes outside markers are never touched, so a structural change "
-            "needs a human (or a fresh note)."
+            f"carries {expected_preps} — {_STRUCTURE_HINT}"
         )
+    _check_headings(lines, regions, data["meetings"])
     prep_contents = ([m["prep"] for m in data["meetings"]]
                      if data["meetings"]
                      else [data["meetings_note"] or NO_MEETINGS_LINE])
@@ -283,6 +354,7 @@ def read(root: Path, date_iso_raw) -> dict:
                      for r in regions if r["name"] == "prep"}
 
     meetings: List[dict] = []
+    meetings_note = None
     end_of_day: List[str] = []
     other_lines: List[str] = []
     current: Optional[dict] = None
@@ -292,8 +364,13 @@ def read(root: Path, date_iso_raw) -> dict:
         if index <= fm_end:
             continue
         if index in region_lines:
-            if current is not None and index in prep_by_begin:
-                current["prep"] = prep_by_begin[index]
+            if index in prep_by_begin:
+                # A prep region under no meeting heading is the no-meetings
+                # line the write path renders (or the payload's meetings_note).
+                if current is not None:
+                    current["prep"] = prep_by_begin[index]
+                elif meetings_note is None:
+                    meetings_note = prep_by_begin[index]
             continue
         if line.startswith("## "):
             section = line[3:].strip()
@@ -330,6 +407,7 @@ def read(root: Path, date_iso_raw) -> dict:
     return {
         "exists": True, "path": rel, "date": date_iso,
         "frontmatter": frontmatter, "recap": recap, "meetings": meetings,
+        "meetings_note": meetings_note,
         "end_of_day": end_of_day, "other_lines": other_lines,
         "warnings": warnings,
     }

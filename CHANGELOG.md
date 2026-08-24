@@ -26,8 +26,10 @@ delivers them.
   `60-daily-notes/`, written the evening before: recap on top, one section per
   meeting with prep, room to jot underneath. Jot freely — the machine only ever
   rewrites its own marked regions, and the evening run reads your jottings back
-  into the recap and decision capture. The separate morning brief is gone on
-  purpose: tomorrow's note *is* the morning brief. (#15)
+  into the recap and decision capture. If tomorrow's calendar changes after the
+  note is written, the next run says so and leaves the note alone rather than
+  re-filing prep under the old meeting headings. The separate morning brief is
+  gone on purpose: tomorrow's note *is* the morning brief. (#15)
 - **`/sync-recordings` — transcripts become meeting notes.** Drop a
   transcript in the inbox (or connect a Plaud recorder) and the sync turns
   it into a structured meeting note: takeaways, debrief, action items,
