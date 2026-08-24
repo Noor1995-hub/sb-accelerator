@@ -445,3 +445,47 @@ def test_decisions_base_has_a_needs_review_view():
     assert "Needs review" in names, (
         f"the unattended-capture audit needs its own view; found {names}"
     )
+
+
+# --- Meeting confidence vocabulary (loaded from the ontology, not hand-encoded) ---
+
+_MEETING_BLOCK = load_ontology_schemas()["meeting"]
+CONFIDENCE_REASON_GROUPS = _MEETING_BLOCK["confidence_reasons"]
+NEW_ATTENDEES_RE = re.compile(r"\Anew-attendees:[1-9]\d*\Z")
+
+
+def test_meeting_block_carries_reason_groups():
+    assert set(CONFIDENCE_REASON_GROUPS) == {"calendar", "project-link", "attendees"}
+    assert "calendar-tool-unavailable" in CONFIDENCE_REASON_GROUPS["calendar"]
+    assert "no-calendar-match" in CONFIDENCE_REASON_GROUPS["calendar"]
+    assert "entity-domain-match" in CONFIDENCE_REASON_GROUPS["project-link"]
+    assert CONFIDENCE_REASON_GROUPS["attendees"] == ["all-attendees-known"]
+
+
+def _matches_attendees_group(reason):
+    return reason in CONFIDENCE_REASON_GROUPS["attendees"] or NEW_ATTENDEES_RE.match(reason)
+
+
+def test_meeting_confidence_reasons_conform():
+    """Where a meeting carries a confidence stamp, it is complete and closed-
+    vocabulary: exactly one reason per group, and rating and reasons travel
+    together."""
+    for path in iter_fixture_files(SCHEMAS["meeting"]["glob"]):
+        fm = parse_frontmatter(path)
+        has_rating = "confidence" in fm
+        has_reasons = "confidence-reasons" in fm
+        assert has_rating == has_reasons, (
+            f"{path}: confidence and confidence-reasons must travel together"
+        )
+        if not has_reasons:
+            continue
+        reasons = fm["confidence-reasons"]
+        assert isinstance(reasons, list) and len(reasons) == 3, (
+            f"{path}: expected exactly 3 reasons (one per group), got {reasons!r}"
+        )
+        cal = [r for r in reasons if r in CONFIDENCE_REASON_GROUPS["calendar"]]
+        proj = [r for r in reasons if r in CONFIDENCE_REASON_GROUPS["project-link"]]
+        att = [r for r in reasons if _matches_attendees_group(r)]
+        assert len(cal) == 1, f"{path}: need exactly one calendar reason, got {cal}"
+        assert len(proj) == 1, f"{path}: need exactly one project-link reason, got {proj}"
+        assert len(att) == 1, f"{path}: need exactly one attendees reason, got {att}"

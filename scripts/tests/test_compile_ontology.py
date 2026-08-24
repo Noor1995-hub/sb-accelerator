@@ -65,8 +65,10 @@ def test_decision_carries_reviewed_and_no_tags_vocabulary():
 
 def test_carried_keys_are_exactly_what_the_runtime_validator_reads():
     # schema.validate() reads required / optional / keys_present / enums;
-    # body_sections is read by schema.body_sections(). Anything else compiled
+    # body_sections is read by schema.body_sections(); confidence_reasons is
+    # read by the confidence stamp validation logic. Anything else compiled
     # into schema.json affects nothing and will drift.
     assert set(co.CARRIED_KEYS) == {
         "required", "optional", "enums", "keys_present", "body_sections",
+        "confidence_reasons",
     }

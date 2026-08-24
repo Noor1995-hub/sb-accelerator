@@ -65,11 +65,40 @@
       ]
     },
     "meeting": {
+      "confidence_reasons": {
+        "attendees": [
+          "all-attendees-known"
+        ],
+        "calendar": [
+          "calendar-match-high",
+          "calendar-match-medium",
+          "calendar-match-low",
+          "no-calendar-match",
+          "calendar-tool-unavailable"
+        ],
+        "project-link": [
+          "entity-domain-match",
+          "calendar-subject-match",
+          "content-keyword-match",
+          "no-project-match"
+        ]
+      },
       "enums": {
+        "confidence": [
+          "high",
+          "medium",
+          "low"
+        ],
         "review_status": [
           "needs-review",
           "confirmed",
           "needs-attention"
+        ],
+        "source": [
+          "teams",
+          "recorder",
+          "manual",
+          "email"
         ],
         "type": [
           "meeting",
@@ -86,8 +115,11 @@
         "location",
         "recurring",
         "start-time",
-        "source-drive-id",
+        "source-recording-id",
         "source-filename",
+        "conflicts-with",
+        "confidence",
+        "confidence-reasons",
         "reviewed",
         "archived"
       ],
