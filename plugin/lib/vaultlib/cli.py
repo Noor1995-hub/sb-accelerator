@@ -30,7 +30,7 @@ if __package__ in (None, ""):
     # the skills invoke it.
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from vaultlib import dates, decision, entity, person, project, schema, vault  # noqa: E402
+from vaultlib import dates, decision, entity, person, project, schema, syncjob, vault  # noqa: E402
 
 
 def _emit(payload: dict) -> None:
@@ -152,6 +152,24 @@ def build_parser() -> argparse.ArgumentParser:
     mode.add_argument("--background", action="store_true",
                       help="unattended capture; writes reviewed: false")
 
+    sync = top.add_parser("sync", help="recording-sync ledger operations")
+    sync_sub = sync.add_subparsers(dest="action", required=True)
+
+    sync_scan = sync_sub.add_parser(
+        "scan", help="partition 10-inbox/ files against the sync ledger")
+    _add_vault_argument(sync_scan)
+
+    sync_dedup = sync_sub.add_parser(
+        "dedup", help="filter a JSON list of namespaced ids against the ledger")
+    _add_vault_argument(sync_dedup)
+    sync_dedup.add_argument("--ids", required=True,
+                            help="path to a JSON array of ids, or - for stdin")
+
+    sync_skip = sync_sub.add_parser(
+        "skip", help="never propose this recording id again")
+    _add_vault_argument(sync_skip)
+    sync_skip.add_argument("--id", dest="recording_id", required=True)
+
     return parser
 
 
@@ -197,6 +215,17 @@ def _dispatch(args: argparse.Namespace) -> int:
             root, project=args.project, date=vault.today_iso(args.date),
             payload=payload, reviewed=args.foreground,
         ))
+    if args.group == "sync":
+        if args.action == "scan":
+            return _ok(syncjob.scan(root))
+        if args.action == "dedup":
+            payload = (json.load(sys.stdin) if args.ids == "-"
+                       else json.loads(Path(args.ids).read_text(encoding="utf-8")))
+            if not isinstance(payload, list):
+                raise syncjob.SyncError("--ids must be a JSON array of id strings")
+            return _ok(syncjob.dedup(root, payload))
+        if args.action == "skip":
+            return _ok(syncjob.skip(root, args.recording_id))
     raise AssertionError(f"unhandled group {args.group!r}")
 
 
@@ -214,6 +243,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         return _fail(str(exc), "Fix the named constraint and retry.")
     except decision.DecisionError as exc:
         return _fail(str(exc), "Fix the named constraint and retry.")
+    except syncjob.SyncError as exc:
+        return _fail(str(exc), "Fix the named id or argument and retry.")
     except json.JSONDecodeError as exc:
         return _fail(f"payload is not valid JSON: {exc}",
                      "Pass a JSON object in a file, or - to read stdin.")
