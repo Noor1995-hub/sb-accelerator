@@ -15,6 +15,19 @@ delivers them.
 
 ## Unreleased
 
+- **`/evening-sync` — the vault maintains itself overnight.** One run syncs the
+  day's recordings, folds review ticks into confirmations, refreshes each
+  project's meeting metrics, updates the state of projects with new confirmed
+  meetings, captures decisions for review, and writes tomorrow's daily note: a
+  recap of today plus a prepared section per upcoming calendar meeting. Runs
+  unattended on whatever schedule the engagement chooses, or by hand after a
+  missed evening. (#16)
+- **Daily notes become the one daily artifact.** Each day gets a single note in
+  `60-daily-notes/`, written the evening before: recap on top, one section per
+  meeting with prep, room to jot underneath. Jot freely — the machine only ever
+  rewrites its own marked regions, and the evening run reads your jottings back
+  into the recap and decision capture. The separate morning brief is gone on
+  purpose: tomorrow's note *is* the morning brief. (#15)
 - **`/sync-recordings` — transcripts become meeting notes.** Drop a
   transcript in the inbox (or connect a Plaud recorder) and the sync turns
   it into a structured meeting note: takeaways, debrief, action items,
