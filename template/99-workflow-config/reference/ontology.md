@@ -8,7 +8,7 @@ tags: [meta, reference, ontology]
 > controlled vocabularies.** Edit here; never let the schema live in prose
 > elsewhere.
 
-Five object types: **Meeting · Project · Person · Decision · Entity**.
+Six object types: **Meeting · Project · Person · Decision · Entity · Daily note**.
 Relationships live in YAML frontmatter (wikilinks / slug joins), not folder
 hierarchy. Curation happens in Bases, not by browsing folders.
 
@@ -273,6 +273,46 @@ context, because `/setup-my-brain` will.
 - Dates written **unquoted ISO** (`2026-02-07`) — quoted dates silently break
   Bases/Dataview date handling. This convention applies to every object type.
 - Per-entity project lists come free by grouping `Projects.base` on `entity`.
+
+### Daily note — `60-daily-notes/{YYYY-MM-DD}.md` · no Base
+
+One note per working day, written the evening before by `/evening-sync`,
+jotted in by hand during the day, harvested (read-only) that evening. It is
+the day's canvas and its archive — deliberately the thinnest object type.
+
+```yaml
+object: daily-note
+required: [date, type]
+optional: []
+enums:
+  type: [daily-note]
+body_sections: [Recap, Meetings, End of day]
+```
+
+- `date` is an unquoted ISO date and MUST equal the filename stem.
+- **Machine regions are marker-fenced.** Inside the body, machine-written
+  content sits between `<!-- evening-sync:{region}:begin -->` and
+  `<!-- evening-sync:{region}:end -->` markers — one `recap` region under
+  `## Recap`, one `prep` region per meeting under `## Meetings` (or a single
+  prep region carrying `*No meetings scheduled.*` on an empty calendar).
+  `daily-note write` regenerates marked regions wholesale on any re-run and
+  is forbidden from touching a byte outside them. One writer class per
+  region.
+- **Everything outside the markers is human territory**: jotting bullets
+  under each meeting heading, `## End of day`, anything else. The evening
+  harvest reads jottings as input; nothing ever edits or routes them in v1.
+- A note is never deleted or rewritten by a later day's run. Times are the
+  executive's local timezone.
+
+A day in the life of a daily note:
+
+```markdown
+### 10:00 — 1:1 — Jordan Vance · [[nordbridge-components]]
+<!-- evening-sync:prep:begin -->
+**Attendees:** Jordan Vance · **Last meeting:** 2026-03-02 — intro call · **Context:** …
+<!-- evening-sync:prep:end -->
+- proposal on track for September submission   ← hand jotting, untouchable
+```
 
 ## 2. Relationship graph
 
