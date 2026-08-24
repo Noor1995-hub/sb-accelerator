@@ -30,7 +30,7 @@ if __package__ in (None, ""):
     # the skills invoke it.
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from vaultlib import decision, entity, person, project, schema, vault  # noqa: E402
+from vaultlib import dates, decision, entity, person, project, schema, vault  # noqa: E402
 
 
 def _emit(payload: dict) -> None:
@@ -63,6 +63,18 @@ def build_parser() -> argparse.ArgumentParser:
     identity_show = identity_sub.add_parser(
         "show", help="print identity.md's setup-my-brain content block")
     _add_vault_argument(identity_show)
+
+    dates_group = top.add_parser("dates", help="date and timezone arithmetic")
+    dates_sub = dates_group.add_subparsers(dest="action", required=True)
+    dates_window = dates_sub.add_parser(
+        "window", help="UTC query window around a local timestamp")
+    dates_window.add_argument("--start", required=True,
+                              help="local ISO date or datetime")
+    dates_window.add_argument("--timezone", help="IANA timezone name")
+    dates_window.add_argument("--utc-offset", dest="utc_offset",
+                              help="explicit offset like -05:00")
+    dates_window.add_argument("--hours", type=float, default=2.0,
+                              help="half-width of the window (default 2)")
 
     people = top.add_parser("person", help="person notes")
     people_sub = people.add_subparsers(dest="action", required=True)
@@ -144,7 +156,11 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def _dispatch(args: argparse.Namespace) -> int:
-    root = vault.resolve(args.vault)
+    # dates (and later stateless subcommands) take no --vault.
+    root = vault.resolve(args.vault) if hasattr(args, "vault") else None
+    if args.group == "dates":
+        return _ok(dates.window(args.start, timezone=args.timezone,
+                                utc_offset=args.utc_offset, hours=args.hours))
     if args.group == "identity":
         return _ok({"identity": vault.read_identity_block(root)})
     if args.group == "person":
@@ -190,6 +206,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         return _dispatch(args)
     except vault.VaultError as exc:
         return _fail(str(exc), "Check the --vault path points at the vault root.")
+    except dates.DatesError as exc:
+        return _fail(str(exc), "Fix the date or timezone argument and retry.")
     except project.ProjectError as exc:
         return _fail(str(exc), "Fix the named constraint and retry.")
     except entity.EntityError as exc:
