@@ -31,7 +31,7 @@ if __package__ in (None, ""):
     # the skills invoke it.
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from vaultlib import dates, decision, entity, meeting, person, plaud, project, schema, syncjob, updatequeue, vault  # noqa: E402
+from vaultlib import dailynote, dates, decision, entity, meeting, person, plaud, project, schema, syncjob, updatequeue, vault  # noqa: E402
 
 
 def _emit(payload: dict) -> None:
@@ -222,6 +222,15 @@ def build_parser() -> argparse.ArgumentParser:
     plaud_re.add_argument("--timezone", help="IANA timezone name")
     plaud_re.add_argument("--utc-offset", dest="utc_offset")
 
+    daily = top.add_parser("daily-note",
+                           help="daily notes: region write and harvest read")
+    daily_sub = daily.add_subparsers(dest="action", required=True)
+    daily_write = daily_sub.add_parser(
+        "write", help="render or region-merge one daily note from a JSON payload")
+    _add_vault_argument(daily_write)
+    daily_write.add_argument("--note", required=True,
+                             help="path to a JSON file, or - to read stdin")
+
     return parser
 
 
@@ -300,6 +309,11 @@ def _dispatch(args: argparse.Namespace) -> int:
         return _ok(plaud.reassemble(
             args.meta, args.transcript, args.note, args.out,
             timezone=args.timezone, utc_offset=args.utc_offset))
+    if args.group == "daily-note":
+        if args.action == "write":
+            payload = (json.load(sys.stdin) if args.note == "-"
+                       else json.loads(Path(args.note).read_text(encoding="utf-8")))
+            return _ok(dailynote.write(root, payload))
     raise AssertionError(f"unhandled group {args.group!r}")
 
 
@@ -350,6 +364,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         return _fail(str(exc), "Check the raw MCP JSON files named in the error.")
     except updatequeue.UpdateQueueError as exc:
         return _fail(str(exc), "Fix the named argument and retry.")
+    except dailynote.DailyNoteError as exc:
+        return _fail(str(exc), "Fix the named payload field or note state and retry.")
     except json.JSONDecodeError as exc:
         return _fail(f"payload is not valid JSON: {exc}",
                      "Pass a JSON object in a file, or - to read stdin.")
