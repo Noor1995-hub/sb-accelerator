@@ -30,7 +30,7 @@ if __package__ in (None, ""):
     # the skills invoke it.
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from vaultlib import entity, person, project, schema, vault  # noqa: E402
+from vaultlib import decision, entity, person, project, schema, vault  # noqa: E402
 
 
 def _emit(payload: dict) -> None:
@@ -116,6 +116,30 @@ def build_parser() -> argparse.ArgumentParser:
                            help="path to a JSON file, or - to read stdin")
     ent_write.add_argument("--today", help="ISO date; defaults to today")
 
+    decisions = top.add_parser("decision", help="decision notes")
+    decisions_sub = decisions.add_subparsers(dest="action", required=True)
+
+    dec_list = decisions_sub.add_parser(
+        "list", help="print a project's decisions as JSON")
+    _add_vault_argument(dec_list)
+    dec_list.add_argument("--project", required=True, help="project slug")
+
+    dec_write = decisions_sub.add_parser(
+        "write", help="write a decision note, applying any supersession edge")
+    _add_vault_argument(dec_write)
+    dec_write.add_argument("--project", required=True, help="project slug")
+    dec_write.add_argument(
+        "--date", help="ISO date the decision was MADE; defaults to today")
+    dec_write.add_argument("--note", required=True,
+                           help="path to a JSON file, or - to read stdin")
+    # No default: the mode decides what goes into the `reviewed` audit field,
+    # and a wrong default writes a lie into it.
+    mode = dec_write.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--foreground", action="store_true",
+                      help="a human validated this inline; writes reviewed: true")
+    mode.add_argument("--background", action="store_true",
+                      help="unattended capture; writes reviewed: false")
+
     return parser
 
 
@@ -148,6 +172,15 @@ def _dispatch(args: argparse.Namespace) -> int:
                    else json.loads(Path(args.edits).read_text(encoding="utf-8")))
         return _ok(entity.write(root, args.slug, payload,
                                 vault.today_iso(args.today)))
+    if args.group == "decision":
+        if args.action == "list":
+            return _ok(decision.list_decisions(root, args.project))
+        payload = (json.load(sys.stdin) if args.note == "-"
+                   else json.loads(Path(args.note).read_text(encoding="utf-8")))
+        return _ok(decision.write(
+            root, project=args.project, date=vault.today_iso(args.date),
+            payload=payload, reviewed=args.foreground,
+        ))
     raise AssertionError(f"unhandled group {args.group!r}")
 
 
@@ -161,9 +194,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         return _fail(str(exc), "Fix the named constraint and retry.")
     except entity.EntityError as exc:
         return _fail(str(exc), "Fix the named constraint and retry.")
+    except decision.DecisionError as exc:
+        return _fail(str(exc), "Fix the named constraint and retry.")
     except json.JSONDecodeError as exc:
-        return _fail(f"edits payload is not valid JSON: {exc}",
-                     "Pass a JSON object keyed by section, or - for stdin.")
+        return _fail(f"payload is not valid JSON: {exc}",
+                     "Pass a JSON object in a file, or - to read stdin.")
     except ValueError as exc:
         return _fail(str(exc), "Fix the argument named in the error and retry.")
     except OSError as exc:

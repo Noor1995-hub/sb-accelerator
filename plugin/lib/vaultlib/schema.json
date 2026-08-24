@@ -12,10 +12,12 @@
           "decision"
         ]
       },
+      "keys_present": [
+        "reviewed"
+      ],
       "optional": [
         "supersedes",
-        "source",
-        "tags"
+        "source"
       ],
       "required": [
         "type",
@@ -23,19 +25,7 @@
         "date",
         "status",
         "summary"
-      ],
-      "tags": {
-        "max": 2,
-        "vocabulary": [
-          "scope",
-          "platform",
-          "staffing",
-          "methodology",
-          "commercial",
-          "timing",
-          "stakeholder"
-        ]
-      }
+      ]
     },
     "entity": {
       "body_sections": [

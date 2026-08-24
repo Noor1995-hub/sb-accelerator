@@ -40,7 +40,7 @@ def test_expected_skills_exist():
     # Each skill task appends its own name here as it lands, so this test is
     # always satisfiable by the task that touches it.
     names = {path.parent.name for path in SKILL_FILES}
-    assert {"new-project", "update-entity"} <= names
+    assert {"new-project", "update-entity", "log-decision"} <= names
 
 
 @pytest.mark.parametrize("path", SKILL_FILES, ids=lambda p: p.parent.name)
@@ -97,4 +97,29 @@ def test_plugin_claude_md_documents_interpreter_resolution():
         "plugin/CLAUDE.md must document the interpreter fallback chain in "
         "order: a clean Mac has no real python3 and Windows python3 is often a "
         f"Store alias stub. Found {chain[:3]}"
+    )
+
+
+def test_log_decision_documents_both_modes():
+    text = (SKILLS_DIR / "log-decision" / "SKILL.md").read_text(encoding="utf-8")
+    assert "--foreground" in text and "--background" in text, (
+        "the mode flag is the interface #16's evening run calls; both halves "
+        "have to be written down"
+    )
+
+
+def test_log_decision_forbids_prompting_in_background_mode():
+    # The lab's production failure: an unattended run that asks a question
+    # exits having done nothing.
+    text = (SKILLS_DIR / "log-decision" / "SKILL.md").read_text(encoding="utf-8")
+    assert "never ask" in text.lower() or "never prompt" in text.lower(), (
+        "background mode must state that it never blocks on a prompt"
+    )
+
+
+def test_plugin_claude_md_documents_the_bare_stem_boundary():
+    text = (REPO_ROOT / "plugin" / "CLAUDE.md").read_text(encoding="utf-8")
+    assert "bare" in text.lower() and "supersedes" in text, (
+        "the wikilink-never-crosses-the-boundary rule belongs next to the "
+        "pipe-escaping rule — they are the same lesson twice"
     )

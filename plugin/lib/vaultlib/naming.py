@@ -7,6 +7,11 @@ from typing import Iterable, Optional
 
 MAX_SLUG_LENGTH = 60
 
+# A decision or meeting note stem is a date prefix plus a title slug
+# (`YYYY-MM-DD-{title}`), so it is legitimately longer than an object slug.
+# Validating one against MAX_SLUG_LENGTH would reject legal filenames.
+MAX_STEM_LENGTH = len("YYYY-MM-DD-") + MAX_SLUG_LENGTH
+
 # Windows refuses these stems whatever the extension. The vault syncs to
 # Windows machines even when written from the Cowork Linux VM, so a slug that
 # is legal where it is created can be illegal where it lands.
@@ -46,7 +51,7 @@ def slugify(text: str, max_length: int = MAX_SLUG_LENGTH) -> str:
     return result
 
 
-def validate_slug(slug: str) -> None:
+def validate_slug(slug: str, max_length: int = MAX_SLUG_LENGTH) -> None:
     """Raise ValueError if the slug is unusable as a folder or file stem."""
     if not slug:
         raise ValueError("slug is empty")
@@ -55,8 +60,8 @@ def validate_slug(slug: str) -> None:
             f"slug {slug!r} must be lowercase alphanumeric segments joined by "
             "single hyphens, with no leading or trailing hyphen"
         )
-    if len(slug) > MAX_SLUG_LENGTH:
-        raise ValueError(f"slug {slug!r} exceeds {MAX_SLUG_LENGTH} characters")
+    if len(slug) > max_length:
+        raise ValueError(f"slug {slug!r} exceeds {max_length} characters")
     if slug in RESERVED_STEMS:
         raise ValueError(f"slug {slug!r} is a reserved filename on Windows")
 

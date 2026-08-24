@@ -106,7 +106,8 @@ cd /tmp/sb-test-vault
 claude --plugin-dir /path/to/sb-accelerator/plugin
 ```
 
-Run `/help` and confirm `/new-project` and `/update-entity` appear.
+Run `/help` and confirm `/new-project`, `/update-entity`, and `/log-decision`
+appear.
 
 **Cowork cannot** — `--plugin-dir` is a Claude Code flag, and Cowork loads
 skills only from installed plugins and your own skill store, never from a
@@ -117,11 +118,12 @@ root `.claude-plugin/marketplace.json` (`sb-accelerator-dev`), then install
 
 ### 5. Run a skill against the fixtures
 
-Open the test vault and try both:
+Open the test vault and try them:
 
 ```
 /new-project "Northgate Terminal Refresh"
 /update-entity nordbridge-components
+/log-decision meridian-yard-automation-program
 ```
 
 Then check the CLI directly, which is what the skills call:

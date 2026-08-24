@@ -245,3 +245,101 @@ def test_a_future_attribute_error_cannot_escape_the_envelope(
     ])
     assert code == 1
     assert "malformed edits payload" in out["error"]
+
+
+def test_decision_list_through_the_cli(capsys, tmp_path):
+    from test_vaultlib_decision import vault_with_project, write_note
+    root = vault_with_project(tmp_path)
+    write_note(root, "meridian-yard-automation-program", "2026-03-10-a")
+    code, payload = run(capsys, [
+        "decision", "list", "--vault", str(root),
+        "--project", "meridian-yard-automation-program",
+    ])
+    assert code == 0
+    assert [e["stem"] for e in payload["result"]["decisions"]] == ["2026-03-10-a"]
+
+
+def test_decision_list_on_an_unknown_project_is_a_structured_error(capsys, tmp_path):
+    from test_vaultlib_decision import vault_with_project
+    root = vault_with_project(tmp_path)
+    code, payload = run(capsys, [
+        "decision", "list", "--vault", str(root), "--project", "nope",
+    ])
+    assert code == 1
+    assert payload["ok"] is False
+    assert "/new-project" in payload["error"]
+    assert payload["hint"]
+
+
+def test_decision_write_reads_its_payload_from_stdin(capsys, tmp_path, monkeypatch):
+    import io
+    import json as _json
+    from test_vaultlib_decision import note, vault_with_project, PROJECT
+    root = vault_with_project(tmp_path)
+    monkeypatch.setattr("sys.stdin", io.StringIO(_json.dumps(note())))
+    code, out = run(capsys, [
+        "decision", "write", "--vault", str(root), "--project", PROJECT,
+        "--date", "2026-05-20", "--note", "-", "--background",
+    ])
+    assert code == 0
+    assert out["result"]["reviewed"] is False
+
+
+def test_decision_write_requires_a_mode(tmp_path):
+    from test_vaultlib_decision import vault_with_project, PROJECT
+    root = vault_with_project(tmp_path)
+    with pytest.raises(SystemExit):
+        cli.main(["decision", "write", "--vault", str(root),
+                  "--project", PROJECT, "--note", "-"])
+
+
+def test_decision_write_refuses_both_modes_at_once(tmp_path):
+    from test_vaultlib_decision import vault_with_project, PROJECT
+    root = vault_with_project(tmp_path)
+    with pytest.raises(SystemExit):
+        cli.main(["decision", "write", "--vault", str(root),
+                  "--project", PROJECT, "--note", "-",
+                  "--foreground", "--background"])
+
+
+def test_foreground_mode_marks_the_note_reviewed(capsys, tmp_path, monkeypatch):
+    import io
+    import json as _json
+    from test_vaultlib_decision import note, vault_with_project, PROJECT
+    root = vault_with_project(tmp_path)
+    monkeypatch.setattr("sys.stdin", io.StringIO(_json.dumps(note())))
+    code, out = run(capsys, [
+        "decision", "write", "--vault", str(root), "--project", PROJECT,
+        "--date", "2026-05-20", "--note", "-", "--foreground",
+    ])
+    assert code == 0
+    assert out["result"]["reviewed"] is True
+
+
+def test_a_malformed_decision_payload_is_a_structured_error(capsys, tmp_path, monkeypatch):
+    import io
+    from test_vaultlib_decision import vault_with_project, PROJECT
+    root = vault_with_project(tmp_path)
+    monkeypatch.setattr("sys.stdin", io.StringIO('{"title": "only a title"}'))
+    code, out = run(capsys, [
+        "decision", "write", "--vault", str(root), "--project", PROJECT,
+        "--note", "-", "--background",
+    ])
+    assert code == 1
+    assert out["ok"] is False
+    assert out["error"].strip()
+    assert out["hint"].strip()
+
+
+def test_a_decision_payload_that_is_not_json_is_a_structured_error(
+        capsys, tmp_path, monkeypatch):
+    import io
+    from test_vaultlib_decision import vault_with_project, PROJECT
+    root = vault_with_project(tmp_path)
+    monkeypatch.setattr("sys.stdin", io.StringIO("{not json"))
+    code, out = run(capsys, [
+        "decision", "write", "--vault", str(root), "--project", PROJECT,
+        "--note", "-", "--background",
+    ])
+    assert code == 1
+    assert "not valid JSON" in out["error"]

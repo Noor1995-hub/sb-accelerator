@@ -51,3 +51,22 @@ def test_body_sections_are_carried_for_project_and_entity():
 @pytest.mark.parametrize("object_name", ["meeting", "person", "decision"])
 def test_objects_without_body_schema_omit_the_key(object_name):
     assert "body_sections" not in co.compile_schema()["objects"][object_name]
+
+
+def test_decision_carries_reviewed_and_no_tags_vocabulary():
+    decision = co.compile_schema()["objects"]["decision"]
+    assert decision["optional"] == ["supersedes", "source"]
+    assert decision["keys_present"] == ["reviewed"]
+    assert "tags" not in decision, (
+        "decision tags were dropped in P1a decision 6 — a compiled key nothing "
+        "validates is the silent-divergence shape the compiler exists to prevent"
+    )
+
+
+def test_carried_keys_are_exactly_what_the_runtime_validator_reads():
+    # schema.validate() reads required / optional / keys_present / enums;
+    # body_sections is read by schema.body_sections(). Anything else compiled
+    # into schema.json affects nothing and will drift.
+    assert set(co.CARRIED_KEYS) == {
+        "required", "optional", "enums", "keys_present", "body_sections",
+    }

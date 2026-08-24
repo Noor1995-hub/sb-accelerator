@@ -26,7 +26,7 @@ SOURCE_LABEL = "template/99-workflow-config/reference/ontology.md"
 
 YAML_FENCE_RE = re.compile(r"^```yaml\s*\n(.*?)^```\s*$", re.MULTILINE | re.DOTALL)
 
-CARRIED_KEYS = ("required", "optional", "enums", "keys_present", "body_sections", "tags")
+CARRIED_KEYS = ("required", "optional", "enums", "keys_present", "body_sections")
 
 
 def load_blocks(doc: Path) -> dict:

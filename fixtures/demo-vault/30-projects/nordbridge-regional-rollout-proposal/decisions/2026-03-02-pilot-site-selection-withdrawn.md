@@ -6,7 +6,7 @@ status: withdrawn
 summary: "Proposed piloting the rollout at Nordbridge's Ohio Valley plant first; withdrawn after Nordbridge flagged an unrelated ERP migration freeze at that site."
 supersedes:
 source: "[[02-03-26-nordbridge-intro-call]]"
-tags: [timing]
+reviewed: true
 ---
 
 **Decision** — Pilot the regional rollout proposal at the Ohio Valley plant

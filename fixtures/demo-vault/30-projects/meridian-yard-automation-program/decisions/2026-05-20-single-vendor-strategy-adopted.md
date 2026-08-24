@@ -6,7 +6,7 @@ status: active
 summary: "Consolidate on a single automation vendor across all three yards to simplify integration and reduce total cost of ownership."
 supersedes: "[[2026-03-10-phased-regional-rollout-adopted]]"
 source: "[[20-05-26-meridian-vendor-strategy-brainstorm]]"
-tags: [platform, commercial]
+reviewed: true
 ---
 
 **Decision** — Consolidate on a single automation vendor across all three

@@ -81,3 +81,14 @@ def test_find_collision_returns_none_when_clear():
 
 def test_find_collision_tolerates_an_empty_vault():
     assert naming.find_collision("first-project", []) is None
+
+
+def test_validate_slug_takes_a_caller_supplied_cap():
+    long_stem = "2026-03-10-" + ("a" * naming.MAX_SLUG_LENGTH)
+    with pytest.raises(ValueError, match="exceeds 60"):
+        naming.validate_slug(long_stem)
+    naming.validate_slug(long_stem, max_length=naming.MAX_STEM_LENGTH)
+
+
+def test_max_stem_length_is_a_date_prefix_plus_a_full_slug():
+    assert naming.MAX_STEM_LENGTH == len("YYYY-MM-DD-") + naming.MAX_SLUG_LENGTH

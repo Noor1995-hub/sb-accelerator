@@ -39,6 +39,28 @@ cell it is given. Passing the stored form straight back through
 to the two table sections, Stakeholders and Engagements; bullet and heading
 sections store free text as given.
 
+### Wikilink fields cross the boundary as bare stems
+
+`decision write` takes `supersedes` and `source` as bare note stems
+(`2026-03-10-phased-rollout-adopted`) and `decision list` returns them the same
+way. The `[[...]]` wrapping — and the quoting that keeps YAML from reading it as
+a nested list — exists only inside the file.
+
+So the value that comes out is the value that goes back in. This is deliberately
+*not* the table-cell situation above: there, the stored escape is what a reader
+gets and the caller has to strip it. Here the CLI owns both directions, because
+a caller that re-wraps a stem it just read produces `[[[[...]]]]`, and the write
+succeeds while the edge silently resolves to nothing.
+
+### The mode flag decides an audit field
+
+`decision write` requires exactly one of `--foreground` or `--background`, and
+it has no default. Foreground writes `reviewed: true` — a claim that a human
+validated the note as it was written. Background writes `reviewed: false`, which
+is what `Decisions.base`'s **Needs review** view queues up. A default here would
+write a lie into the audit trail, which is why argparse is made to refuse the
+call instead.
+
 ## Interpreter resolution
 
 Never hardcode one interpreter name. Try in order, using the first that

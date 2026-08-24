@@ -57,11 +57,19 @@ the join key.
 ### Decision Notes
 
 Each material decision on a project is an atomic note at
-`30-projects/{slug}/decisions/YYYY-MM-DD-{kebab-summary}.md`. Body:
-`**Decision** — / **Why** — / **Implications**`. Supersession is a wikilink
-edge (`supersedes: [[YYYY-MM-DD-prior]]`). **Never delete a decision** —
+`30-projects/{slug}/decisions/YYYY-MM-DD-{kebab-title}.md`. Body:
+`**Decision** — / **Why** — / **Implications**`. **Never delete a decision** —
 status flips only (`active` → `superseded` / `withdrawn`). The trace is
 permanent.
+
+Superseding is one operation with two sides: `supersedes: "[[prior]]"` on the
+new note **and** `status: superseded` on the prior one, which also gains a
+`**Superseded** —` footer pointing forward. `/log-decision` does both; doing one
+by hand leaves a half-edge.
+
+`reviewed` says whether a human validated the note (`true`) or it was captured
+unattended overnight (`false`). Decisions.base's **Needs review** view is the
+queue; tick the checkbox there once you have read one.
 
 ### Heavy Assets
 

@@ -60,6 +60,12 @@ EXPECTED = [
         "30-projects/commercial-ops-crm-modernization/decisions/2026-06-01-vendor-shortlist-approved.md",
         "30-projects/meridian-yard-automation-program/decisions/2026-05-20-single-vendor-strategy-adopted.md",
     }),
+    # The one fixture written as an unattended capture (reviewed: false); the
+    # absence-tolerant `reviewed != true` filter would also catch pre-0.2.0
+    # notes that carry no reviewed key at all.
+    ("30-projects/Decisions.base", "Needs review", {
+        "30-projects/commercial-ops-crm-modernization/decisions/2026-06-01-vendor-shortlist-approved.md",
+    }),
 
     ("20-meetings/Meetings.base", "All Meetings", ALL_MEETINGS),
     # Each exclusion path fires exactly once: 01-06 is reviewed, 05-06 is

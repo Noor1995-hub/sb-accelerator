@@ -15,6 +15,19 @@ delivers them.
 
 ## Unreleased
 
+- **`/log-decision` — the decision log gets a producer.** Point it at a meeting
+  note, a transcript, or just describe what was decided, and it proposes the
+  decisions it found, one at a time, for you to confirm or correct before
+  anything is written. Each one becomes its own dated note in the project's
+  `decisions/` folder. When a decision replaces an earlier one it maintains both
+  ends: the new note records what it supersedes, and the old note is marked
+  superseded with a pointer forward — never deleted, so the trail of how the
+  engagement changed its mind stays readable. It can also run unattended;
+  everything written that way is flagged for review in the Decisions base, so
+  nothing stays in the record unreviewed. (#46)
+- **Decisions no longer carry tags.** A seven-word tag vocabulary was thin at
+  the volume a decision log actually reaches, and decisions are found by project,
+  by recency, or by asking. One less field to fill in. (#46)
 - **Two skills that build and maintain the vault's objects.** `/new-project` creates a
   project — its index note, its decision log, and the link into the entity it belongs to —
   from a description, a pasted brief, or a file you point it at. `/update-entity` files

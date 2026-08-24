@@ -95,24 +95,86 @@ enums:
 - Auto-created from meeting attendees; enriched manually via People Base.
 - Example: `50-people/jordan-reyes.md`
 
-### Decision — `30-projects/{slug}/decisions/YYYY-MM-DD-{summary}.md` · Base: `Decisions.base`
+### Decision — `30-projects/{slug}/decisions/YYYY-MM-DD-{title}.md` · Base: `Decisions.base`
 
 ```yaml
 object: decision
 required: [type, project, date, status, summary]
-optional: [supersedes, source, tags]
+optional: [supersedes, source]
+keys_present: [reviewed]
 enums:
   type: [decision]
   status: [active, superseded, withdrawn]
-tags:
-  vocabulary: [scope, platform, staffing, methodology, commercial, timing,
-               stakeholder]
-  max: 2
 ```
 
 - **Edges:** `supersedes` (`[[decision]]` / null) · `source` (`[[meeting]]`).
 - Never deleted — status flips only. Supersession is a wikilink edge.
+- `date` is the date the decision was **made**, not the date it was written
+  down. It is what orders the decision log.
+- `summary` is one full sentence — it is the Decision column in
+  `Decisions.base`. The filename carries a *short* kebab label instead, because
+  a slug of the summary sentence is a truncated paragraph.
+- `reviewed` is the triage marker: `true` when a human validated the note as it
+  was written, `false` when it was captured unattended. It is in
+  `keys_present`, so the key always exists — `Decisions.base`'s **Needs review**
+  view filters on `reviewed == false`, and a missing key would make that view
+  silently incomplete. Same one-click convention as Meeting's `reviewed`.
+- `source` names a note in `20-meetings/`. A decision drawn from an inbox
+  transcript, a pasted paragraph or dictation carries no `source`; its
+  provenance goes in the **Why** text.
 - Example: `30-projects/acme-industries-operating-model/decisions/2026-05-20-single-vendor-strategy-adopted.md`
+
+### Decision note template
+
+Three bold markers, not H2 sections — so this object has no `body_sections`,
+and the conformance guard checks the markers instead. One paragraph per marker.
+
+```markdown
+---
+type: decision
+project: acme-industries-operating-model
+date: 2026-05-20
+status: active
+summary: "One sentence stating what was decided, specific enough to be useful without opening the note."
+supersedes: "[[2026-03-10-prior-decision-stem]]"
+source: "[[20-05-26-vendor-strategy-brainstorm]]"
+reviewed: true
+---
+
+**Decision** — What was decided.
+
+**Why** — The reasoning, including what was traded away.
+
+**Implications** — What changes as a result: scope, dates, who does what.
+```
+
+Quoting `supersedes` and `source` is required, not house style: unquoted,
+`[[x]]` is a nested YAML list, and the note's edges stop resolving silently.
+Leave `supersedes:` empty (no value) when there is nothing superseded.
+
+### Supersession procedure
+
+A decision is superseded when a later decision **replaces** it — stated in
+words, not inferred because two notes look inconsistent. One operation, three
+effects, applied together:
+
+1. The **new** note carries `supersedes: "[[{prior-stem}]]"`.
+2. The **prior** note's `status` flips `active` → `superseded`. Nothing else in
+   its frontmatter changes.
+3. The **prior** note gains a footer, appended — never replacing prose:
+
+   `**Superseded** — {YYYY-MM-DD} · replaced by [[{new-stem}]].`
+
+   The date is the new decision's date. The footer exists so a reader of the old
+   note can see what replaced it without running a query.
+
+Only an `active` decision can be superseded: `superseded` and `withdrawn`
+decisions were not in force, so replacing one is a category error — and in
+practice that is what a stale or mistyped stem looks like. A decision also
+cannot supersede one dated after it — the edge always points backward in
+time. A decision that was reversed rather than replaced is written
+`withdrawn` instead. **Never delete a decision note** — the trace is the
+point.
 
 ### Entity — `40-entities/{slug}/dossier.md` · Base: `Entities.base`
 
