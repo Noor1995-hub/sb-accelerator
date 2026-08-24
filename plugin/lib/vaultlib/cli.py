@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Optional, Sequence
@@ -30,7 +31,7 @@ if __package__ in (None, ""):
     # the skills invoke it.
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from vaultlib import decision, entity, person, project, schema, vault  # noqa: E402
+from vaultlib import dates, decision, entity, meeting, person, plaud, project, schema, syncjob, vault  # noqa: E402
 
 
 def _emit(payload: dict) -> None:
@@ -63,6 +64,18 @@ def build_parser() -> argparse.ArgumentParser:
     identity_show = identity_sub.add_parser(
         "show", help="print identity.md's setup-my-brain content block")
     _add_vault_argument(identity_show)
+
+    dates_group = top.add_parser("dates", help="date and timezone arithmetic")
+    dates_sub = dates_group.add_subparsers(dest="action", required=True)
+    dates_window = dates_sub.add_parser(
+        "window", help="UTC query window around a local timestamp")
+    dates_window.add_argument("--start", required=True,
+                              help="local ISO date or datetime")
+    dates_window.add_argument("--timezone", help="IANA timezone name")
+    dates_window.add_argument("--utc-offset", dest="utc_offset",
+                              help="explicit offset like -05:00")
+    dates_window.add_argument("--hours", type=float, default=2.0,
+                              help="half-width of the window (default 2)")
 
     people = top.add_parser("person", help="person notes")
     people_sub = people.add_subparsers(dest="action", required=True)
@@ -140,11 +153,58 @@ def build_parser() -> argparse.ArgumentParser:
     mode.add_argument("--background", action="store_true",
                       help="unattended capture; writes reviewed: false")
 
+    sync = top.add_parser("sync", help="recording-sync ledger operations")
+    sync_sub = sync.add_subparsers(dest="action", required=True)
+
+    sync_scan = sync_sub.add_parser(
+        "scan", help="partition 10-inbox/ files against the sync ledger")
+    _add_vault_argument(sync_scan)
+
+    sync_dedup = sync_sub.add_parser(
+        "dedup", help="filter a JSON list of namespaced ids against the ledger")
+    _add_vault_argument(sync_dedup)
+    sync_dedup.add_argument("--ids", required=True,
+                            help="path to a JSON array of ids, or - for stdin")
+
+    sync_skip = sync_sub.add_parser(
+        "skip", help="never propose this recording id again")
+    _add_vault_argument(sync_skip)
+    sync_skip.add_argument("--id", dest="recording_id", required=True)
+
+    sync_rec = sync_sub.add_parser(
+        "reconcile-reviews",
+        help="flip review_status needs-review -> confirmed where reviewed is ticked")
+    _add_vault_argument(sync_rec)
+
+    meetings = top.add_parser("meeting", help="meeting notes")
+    meetings_sub = meetings.add_subparsers(dest="action", required=True)
+    meeting_write = meetings_sub.add_parser(
+        "write", help="write one meeting note from a JSON payload")
+    _add_vault_argument(meeting_write)
+    meeting_write.add_argument("--note", required=True,
+                               help="path to a JSON file, or - to read stdin")
+
+    plaud_group = top.add_parser("plaud", help="Plaud MCP adapter helpers")
+    plaud_sub = plaud_group.add_subparsers(dest="action", required=True)
+    plaud_re = plaud_sub.add_parser(
+        "reassemble", help="render raw MCP JSON into one capture-bundle blob")
+    plaud_re.add_argument("--meta", required=True)
+    plaud_re.add_argument("--transcript", required=True)
+    plaud_re.add_argument("--note")
+    plaud_re.add_argument("--out", required=True,
+                          help="scratch directory for the blob (never the vault)")
+    plaud_re.add_argument("--timezone", help="IANA timezone name")
+    plaud_re.add_argument("--utc-offset", dest="utc_offset")
+
     return parser
 
 
 def _dispatch(args: argparse.Namespace) -> int:
-    root = vault.resolve(args.vault)
+    # dates (and later stateless subcommands) take no --vault.
+    root = vault.resolve(args.vault) if hasattr(args, "vault") else None
+    if args.group == "dates":
+        return _ok(dates.window(args.start, timezone=args.timezone,
+                                utc_offset=args.utc_offset, hours=args.hours))
     if args.group == "identity":
         return _ok({"identity": vault.read_identity_block(root)})
     if args.group == "person":
@@ -181,21 +241,75 @@ def _dispatch(args: argparse.Namespace) -> int:
             root, project=args.project, date=vault.today_iso(args.date),
             payload=payload, reviewed=args.foreground,
         ))
+    if args.group == "sync":
+        if args.action == "scan":
+            return _ok(syncjob.scan(root))
+        if args.action == "dedup":
+            payload = (json.load(sys.stdin) if args.ids == "-"
+                       else json.loads(Path(args.ids).read_text(encoding="utf-8")))
+            if not isinstance(payload, list):
+                raise syncjob.SyncError("--ids must be a JSON array of id strings")
+            return _ok(syncjob.dedup(root, payload))
+        if args.action == "skip":
+            return _ok(syncjob.skip(root, args.recording_id))
+        if args.action == "reconcile-reviews":
+            return _ok(syncjob.reconcile_reviews(root))
+    if args.group == "meeting":
+        payload = (json.load(sys.stdin) if args.note == "-"
+                   else json.loads(Path(args.note).read_text(encoding="utf-8")))
+        return _ok(meeting.write(root, payload))
+    if args.group == "plaud":
+        return _ok(plaud.reassemble(
+            args.meta, args.transcript, args.note, args.out,
+            timezone=args.timezone, utc_offset=args.utc_offset))
     raise AssertionError(f"unhandled group {args.group!r}")
 
 
+# Flags whose legitimate values can start with a dash (a negative UTC
+# offset). argparse before Python 3.14 reads `--utc-offset -05:00` as a flag
+# followed by a missing argument; merging the pair into `--utc-offset=-05:00`
+# parses identically on every supported version — the Cowork VM runs 3.10.
+_DASH_VALUE_FLAGS = frozenset({"--utc-offset"})
+_DASH_VALUE_RE = re.compile(r"\A-\d")
+
+
+def _merge_dash_values(argv: Sequence[str]) -> list:
+    merged, skip = [], False
+    for index, token in enumerate(argv):
+        if skip:
+            skip = False
+            continue
+        follower = argv[index + 1] if index + 1 < len(argv) else None
+        if (token in _DASH_VALUE_FLAGS and follower is not None
+                and _DASH_VALUE_RE.match(follower)):
+            merged.append(f"{token}={follower}")
+            skip = True
+        else:
+            merged.append(token)
+    return merged
+
+
 def main(argv: Optional[Sequence[str]] = None) -> int:
-    args = build_parser().parse_args(argv)
+    args = build_parser().parse_args(
+        _merge_dash_values(sys.argv[1:] if argv is None else argv))
     try:
         return _dispatch(args)
     except vault.VaultError as exc:
         return _fail(str(exc), "Check the --vault path points at the vault root.")
+    except dates.DatesError as exc:
+        return _fail(str(exc), "Fix the date or timezone argument and retry.")
     except project.ProjectError as exc:
         return _fail(str(exc), "Fix the named constraint and retry.")
     except entity.EntityError as exc:
         return _fail(str(exc), "Fix the named constraint and retry.")
     except decision.DecisionError as exc:
         return _fail(str(exc), "Fix the named constraint and retry.")
+    except meeting.MeetingError as exc:
+        return _fail(str(exc), "Fix the named payload field and retry.")
+    except syncjob.SyncError as exc:
+        return _fail(str(exc), "Fix the named id or argument and retry.")
+    except plaud.PlaudError as exc:
+        return _fail(str(exc), "Check the raw MCP JSON files named in the error.")
     except json.JSONDecodeError as exc:
         return _fail(f"payload is not valid JSON: {exc}",
                      "Pass a JSON object in a file, or - to read stdin.")

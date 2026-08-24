@@ -7,12 +7,14 @@ organizer: sam-okafor
 location: "Microsoft Teams"
 recurring: false
 start-time: 2026-06-05T15:00
-attendee-emails: [sam.okafor@cascadia-intermodal.example, taylor.brooks@cascadia-intermodal.example]
-attendees: [sam-okafor, taylor-brooks]
+attendee-emails: [sam.okafor@cascadia-intermodal.example, taylor.brooks@cascadia-intermodal.example, morgan.ellery@cascadia-intermodal.example]
+attendees: [sam-okafor, taylor-brooks, morgan-ellery]
 projects: [commercial-ops-pipeline-governance]
 review_status: needs-attention
 reviewed: false
 archived: true
+confidence: low
+confidence-reasons: [calendar-match-low, content-keyword-match, all-attendees-known]
 recording-duration: 30
 source: teams
 processed: true

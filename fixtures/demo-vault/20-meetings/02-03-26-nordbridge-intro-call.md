@@ -7,12 +7,14 @@ organizer: jordan-vance
 location: "Microsoft Teams"
 recurring: false
 start-time: 2026-03-02T10:00
-attendee-emails: [jordan.vance@cascadia-intermodal.example, dana.whitfield@nordbridge.example]
-attendees: [jordan-vance, dana-whitfield]
+attendee-emails: [jordan.vance@cascadia-intermodal.example, dana.whitfield@nordbridge.example, morgan.ellery@cascadia-intermodal.example]
+attendees: [jordan-vance, dana-whitfield, morgan-ellery]
 projects: [nordbridge-regional-rollout-proposal]
 review_status: needs-review
 reviewed: false
 archived: false
+confidence: low
+confidence-reasons: [calendar-match-high, entity-domain-match, "new-attendees:2"]
 recording-duration: 32
 source: teams
 processed: true

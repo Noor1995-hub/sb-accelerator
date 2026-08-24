@@ -31,15 +31,24 @@ object: meeting
 required: [date, type, calendar-subject, calendar_match, attendees, projects,
            review_status, recording-duration, source, processed]
 optional: [attendee-emails, organizer, location, recurring, start-time,
-           source-drive-id, source-filename, reviewed, archived]
+           source-recording-id, source-filename, conflicts-with,
+           confidence, confidence-reasons, reviewed, archived]
 enums:
   type: [meeting, "1:1", steerco, workshop, brainstorm, status-update]
   review_status: [needs-review, confirmed, needs-attention]
+  source: [teams, recorder, manual, email]
+  confidence: [high, medium, low]
+confidence_reasons:
+  calendar: [calendar-match-high, calendar-match-medium, calendar-match-low,
+             no-calendar-match, calendar-tool-unavailable]
+  project-link: [entity-domain-match, calendar-subject-match,
+                 content-keyword-match, no-project-match]
+  attendees: [all-attendees-known]
 ```
 
 - `date` is an ISO datetime (e.g. `2026-05-05T14:37`).
 - `attendee-emails`, `organizer`, `location`, `recurring`, `start-time`
-  appear on calendar-matched meetings only. `source-drive-id`,
+  appear on calendar-matched meetings only. `source-recording-id`,
   `source-filename` are recorder provenance.
 - **Triage checkboxes (booleans, edited in Meetings.base):** `reviewed` —
   one-click confirm; `archived` — hides the row from triage views (noise
@@ -48,6 +57,25 @@ enums:
   `reviewed`, `archived`) are edited later.
 - The `1:1` type value must stay **quoted** in frontmatter and in the block
   above — unquoted YAML parses `1:1` as the integer 61.
+- `source` is the capture channel: `teams` (platform transcript), `recorder`
+  (device capture), `manual` (typed notes), `email` (an emailed summary or
+  transcript). `recording-duration` is `0` when nothing was recorded
+  (`manual`, `email`).
+- `source-recording-id` is the sync ledger: a namespaced id
+  (`plaud:{id}`, `m365:{id}`, `inbox:{content-hash}`) written by
+  `/sync-recordings`. A recording whose id appears in any meeting note is
+  never synced twice. Notes that predate the sync, or were written by hand,
+  simply omit it.
+- **Confidence stamp.** `confidence` and `confidence-reasons` travel
+  together and record how sure the sync pipeline was about its routing:
+  exactly one reason from each `confidence_reasons` group above — the
+  `attendees` group also admits the parameterized form `new-attendees:{N}`
+  (N ≥ 1). `calendar-tool-unavailable` means the calendar was never
+  searched; `no-calendar-match` means it was searched and held nothing.
+  These are different facts — never collapse them.
+- `conflicts-with` (`[[meeting]]`, quoted) appears only on a
+  `needs-attention` sibling written because its target would have
+  overwritten a `confirmed` meeting.
 - Example: `20-meetings/05-05-26-quarterly-portfolio-review.md`
 
 ### Project — `30-projects/{slug}/index.md` · Base: `Projects.base`
