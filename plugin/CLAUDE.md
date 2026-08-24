@@ -113,6 +113,12 @@ because by then the note may hold human text that outranks the calendar.
 Surface that error; do not delete the note to force a rewrite unless the user
 says so.
 
+`daily-note read` returns the mirror image: `meetings[]` for prep filed under
+a `### ` heading, and `meetings_note` for a prep region with no heading above
+it (the no-meetings line, or whatever `meetings_note` the last write passed).
+Unparseable frontmatter is a warning, not a failure — the jottings the harvest
+needs live in the body, so `frontmatter` comes back empty and the run goes on.
+
 ## After changing the ontology
 
 ```bash

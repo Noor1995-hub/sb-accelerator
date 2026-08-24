@@ -17,12 +17,11 @@ from typing import Dict, List, Optional, Tuple
 
 from . import dates, markdown, naming, vault
 
-DAILY_NOTES_DIR = "60-daily-notes"
+DAILY_NOTES_DIR = vault.DAILY_NOTES_DIR
 NO_MEETINGS_LINE = "*No meetings scheduled.*"
 
 _MARKER_RE = re.compile(r"\A<!-- evening-sync:([a-z-]+):(begin|end) -->\s*\Z")
 _KNOWN_REGIONS = ("recap", "prep")
-_ISO_DATE_ONLY_RE = re.compile(r"\A\d{4}-\d{2}-\d{2}\Z")
 _TIME_RE = re.compile(r"\A([01]\d|2[0-3]):[0-5]\d\Z")
 _HEADING_RE = re.compile(
     r"\A(\d{2}:\d{2}) — (.*?)(?: · \[\[([a-z0-9-]+)\]\])?\Z")
@@ -36,7 +35,7 @@ class DailyNoteError(Exception):
 
 def _require_date(raw) -> str:
     text = str(raw or "").strip()
-    if not _ISO_DATE_ONLY_RE.match(text):
+    if not vault.ISO_DATE_RE.match(text):
         raise DailyNoteError(f"date {raw!r} must be ISO YYYY-MM-DD")
     try:
         datetime.strptime(text, "%Y-%m-%d")
@@ -97,11 +96,12 @@ def _validate(root: Path, payload) -> dict:
             except ValueError as exc:
                 raise DailyNoteError(
                     f"meeting {position}: entity {entity!r}: {exc}") from exc
-            if not (root / "40-entities" / entity / "dossier.md").is_file():
+            dossier = root / vault.ENTITIES_DIR / entity / "dossier.md"
+            if not dossier.is_file():
                 raise DailyNoteError(
                     f"meeting {position}: entity {entity!r} has no dossier at "
-                    f"40-entities/{entity}/dossier.md — pass null rather than "
-                    "guessing")
+                    f"{vault.ENTITIES_DIR}/{entity}/dossier.md — pass null "
+                    "rather than guessing")
         prep = _clean_region_text(entry.get("prep"),
                                   f"meeting {position} prep")
         meetings.append({"time": time_text, "subject": subject,
@@ -322,6 +322,7 @@ def read(root: Path, date_iso_raw) -> dict:
                      for r in regions if r["name"] == "prep"}
 
     meetings: List[dict] = []
+    meetings_note = None
     end_of_day: List[str] = []
     other_lines: List[str] = []
     current: Optional[dict] = None
@@ -331,8 +332,13 @@ def read(root: Path, date_iso_raw) -> dict:
         if index <= fm_end:
             continue
         if index in region_lines:
-            if current is not None and index in prep_by_begin:
-                current["prep"] = prep_by_begin[index]
+            if index in prep_by_begin:
+                # A prep region under no meeting heading is the no-meetings
+                # line the write path renders (or the payload's meetings_note).
+                if current is not None:
+                    current["prep"] = prep_by_begin[index]
+                elif meetings_note is None:
+                    meetings_note = prep_by_begin[index]
             continue
         if line.startswith("## "):
             section = line[3:].strip()
@@ -369,6 +375,7 @@ def read(root: Path, date_iso_raw) -> dict:
     return {
         "exists": True, "path": rel, "date": date_iso,
         "frontmatter": frontmatter, "recap": recap, "meetings": meetings,
+        "meetings_note": meetings_note,
         "end_of_day": end_of_day, "other_lines": other_lines,
         "warnings": warnings,
     }

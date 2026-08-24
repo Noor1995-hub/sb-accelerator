@@ -15,8 +15,8 @@ from typing import Dict, List, Set, Tuple
 
 from . import markdown, vault
 
-INBOX_DIR = "10-inbox"
-MEETINGS_DIR = "20-meetings"
+INBOX_DIR = vault.INBOX_DIR
+MEETINGS_DIR = vault.MEETINGS_DIR
 NAMESPACES = ("inbox", "plaud", "m365")
 SKIP_FILE_RELPATH = Path("99-workflow-config") / "sync-state" / "skipped-recordings.txt"
 _IGNORED_NAMES = {"README.md"}

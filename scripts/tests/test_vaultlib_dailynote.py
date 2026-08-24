@@ -282,6 +282,42 @@ def test_read_extracts_regions_meetings_and_jottings(tmp_path):
     assert result["warnings"] == []
 
 
+def test_read_surfaces_the_no_meetings_prep_region(tmp_path):
+    """A prep region with no meeting heading above it is the no-meetings line
+    (or the calendar-unavailable note) — it comes back rather than vanishing."""
+    root = make_vault(tmp_path)
+    dailynote.write(root, payload(
+        meetings=[], meetings_note="*Calendar unavailable — check Outlook.*"))
+    result = dailynote.read(root, "2026-06-15")
+    assert result["meetings"] == []
+    assert result["meetings_note"] == "*Calendar unavailable — check Outlook.*"
+
+
+def test_read_leaves_meetings_note_null_when_meetings_are_prepped(tmp_path):
+    root = make_vault(tmp_path)
+    dailynote.write(root, payload())
+    result = dailynote.read(root, "2026-06-15")
+    assert len(result["meetings"]) == 2
+    assert result["meetings_note"] is None
+
+
+def test_read_warns_on_unparseable_frontmatter_and_keeps_going(tmp_path):
+    """Frontmatter is the one part of a note a human may mangle without the
+    region markers noticing. The harvest still needs the jottings, so the
+    failure is a warning and frontmatter comes back empty."""
+    root = make_vault(tmp_path)
+    (root / "60-daily-notes" / "2026-06-12.md").write_text(
+        "---\ndate: 2026-06-12\nthis line has no colon\n---\n\n"
+        "# 2026-06-12 · Friday\n\n## End of day\n- wrap up\n", encoding="utf-8")
+    result = dailynote.read(root, "2026-06-12")
+    assert result["exists"] is True
+    assert result["frontmatter"] == {}
+    assert result["warnings"] == [
+        "60-daily-notes/2026-06-12.md: unparseable frontmatter line: "
+        "'this line has no colon'"]
+    assert result["end_of_day"] == ["wrap up"]
+
+
 def test_read_on_a_missing_note_is_a_normal_state(tmp_path):
     root = make_vault(tmp_path)
     result = dailynote.read(root, "2026-06-12")

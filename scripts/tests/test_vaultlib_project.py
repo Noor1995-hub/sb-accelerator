@@ -1,11 +1,19 @@
 """Project scaffolding. The guard rails here are the ones a model gets wrong:
 collisions, parent depth, and areas that should never be nested."""
+import json
+import subprocess
+import sys
+from pathlib import Path
+
 import pytest
 
 from vaultlib import markdown as md
 from vaultlib import project, schema
 
 from test_vaultlib_vault import make_vault
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+CLI = REPO_ROOT / "plugin" / "lib" / "vaultlib" / "cli.py"
 
 BASE = dict(
     name="Yard Automation Program",
@@ -244,3 +252,54 @@ def test_touch_rejects_unknown_project_and_bad_dates(tmp_path):
         project.touch(root, slug="alpha", date_iso="2026-06-12",
                       next_milestone="two\nlines",
                       next_milestone_date="2026-09-01")
+
+
+def test_touch_rejects_a_lone_carriage_return_in_the_milestone(tmp_path):
+    """A bare \\r is a line break to every markdown reader and to the vault's
+    own frontmatter normalizer, so it splits the scalar exactly like \\n —
+    but it slips past a \\n-only check and past .strip()."""
+    root = make_touch_vault(tmp_path)
+    before = (root / "30-projects" / "alpha" / "index.md").read_text(encoding="utf-8")
+    with pytest.raises(project.ProjectError, match="single line"):
+        project.touch(root, slug="alpha", date_iso="2026-06-12",
+                      next_milestone="two\rlines",
+                      next_milestone_date="2026-09-01")
+    after = (root / "30-projects" / "alpha" / "index.md").read_text(encoding="utf-8")
+    assert after == before
+
+
+def test_cli_touch_envelope(tmp_path):
+    """`project touch` is the one write /evening-sync makes per queued project,
+    so its envelope is pinned through a real process — argparse's --next-
+    milestone-date dest included."""
+    root = make_touch_vault(tmp_path)
+    proc = subprocess.run(
+        [sys.executable, str(CLI), "project", "touch", "--vault", str(root),
+         "--slug", "alpha", "--date", "2026-06-12",
+         "--next-milestone", "Vendor contract signature",
+         "--next-milestone-date", "2026-09-01"],
+        capture_output=True, text=True)
+    assert proc.returncode == 0, proc.stderr
+    payload = json.loads(proc.stdout)
+    assert payload["ok"] is True
+    assert payload["result"] == {
+        "slug": "alpha",
+        "path": "30-projects/alpha/index.md",
+        "last-updated": "2026-06-12",
+        "next-milestone": "Vendor contract signature",
+        "next-milestone-date": "2026-09-01",
+        "changed": True,
+    }
+
+
+def test_cli_touch_refusal_is_still_one_json_object(tmp_path):
+    root = make_touch_vault(tmp_path)
+    proc = subprocess.run(
+        [sys.executable, str(CLI), "project", "touch", "--vault", str(root),
+         "--slug", "ghost", "--date", "2026-06-12"],
+        capture_output=True, text=True)
+    assert proc.returncode == 1
+    payload = json.loads(proc.stdout)
+    assert payload["ok"] is False
+    assert "/new-project" in payload["error"]
+    assert payload["hint"]

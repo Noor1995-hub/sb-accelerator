@@ -6,14 +6,13 @@ level, an area given a parent.
 """
 from __future__ import annotations
 
-import re
 from pathlib import Path
 from typing import Optional
 
 from . import markdown, naming, schema, vault
 
-PROJECTS_DIR = "30-projects"
-ENTITIES_DIR = "40-entities"
+PROJECTS_DIR = vault.PROJECTS_DIR
+ENTITIES_DIR = vault.ENTITIES_DIR
 PROJECT_QUOTE_KEYS = frozenset({"project-name", "next-milestone"})
 
 _PLACEHOLDER = "_none yet_"
@@ -193,12 +192,9 @@ def scaffold(root: Path, *, name: str, project_type: str, entity: str,
     }
 
 
-_ISO_DATE_ONLY_RE = re.compile(r"\A\d{4}-\d{2}-\d{2}\Z")
-
-
 def _require_iso_date(value, label: str) -> str:
     text = str(value or "").strip()
-    if not _ISO_DATE_ONLY_RE.match(text):
+    if not vault.ISO_DATE_RE.match(text):
         raise ProjectError(f"{label} {value!r} must be ISO YYYY-MM-DD")
     return text
 
@@ -216,10 +212,10 @@ def touch(root, *, slug: str, date_iso: str,
         naming.validate_slug(str(slug or "").strip())
     except ValueError as exc:
         raise ProjectError(f"slug {slug!r}: {exc}") from exc
-    index_path = root / "30-projects" / slug / "index.md"
+    index_path = root / PROJECTS_DIR / slug / "index.md"
     if not index_path.is_file():
         raise ProjectError(
-            f"no project {slug!r} at 30-projects/{slug}/index.md — "
+            f"no project {slug!r} at {PROJECTS_DIR}/{slug}/index.md — "
             "create it first with /new-project"
         )
     stamped = _require_iso_date(date_iso, "date")
@@ -234,7 +230,11 @@ def touch(root, *, slug: str, date_iso: str,
     milestone_date = None
     if next_milestone is not None:
         milestone = str(next_milestone).strip()
-        if not milestone or "\n" in milestone:
+        # A lone \r counts: this module quotes and upserts the value itself
+        # rather than going through markdown._emit_scalar, and the frontmatter
+        # parser normalizes \r to \n on the way back in, so the scalar would
+        # split there.
+        if not milestone or "\n" in milestone or "\r" in milestone:
             raise ProjectError("next-milestone must be a single line of text")
         milestone_date = _require_iso_date(next_milestone_date,
                                            "next-milestone-date")
@@ -247,7 +247,7 @@ def touch(root, *, slug: str, date_iso: str,
         vault.atomic_write(index_path, updated)
     return {
         "slug": slug,
-        "path": f"30-projects/{slug}/index.md",
+        "path": f"{PROJECTS_DIR}/{slug}/index.md",
         "last-updated": stamped,
         "next-milestone": milestone,
         "next-milestone-date": milestone_date,

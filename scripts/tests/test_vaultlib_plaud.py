@@ -107,6 +107,19 @@ def test_path_escaping_meta_id_raises(tmp_path):
             None, str(tmp_path / "s"), utc_offset="+00:00")
 
 
+def test_a_tz_aware_start_at_is_normalized_to_utc_first(tmp_path):
+    """Plaud sends naive UTC, but the field is ISO and an offset is legal in
+    it — the offset has to come off before the local conversion, or it is
+    applied twice."""
+    aware = dict(META, start_at="2026-05-20T09:03:00+05:00")
+    result = plaud.reassemble(
+        write_json(tmp_path, "m.json", aware),
+        write_json(tmp_path, "t.json", SEGMENTS),
+        None, str(tmp_path / "s"), utc_offset="+02:00")
+    # 09:03+05:00 is 04:03 UTC, which is 06:03 at +02:00.
+    assert result["recorded_local"] == "2026-05-20 06:03:00"
+
+
 def test_reassemble_recorded_local_handles_the_dst_edge(tmp_path):
     try:
         from zoneinfo import ZoneInfo
