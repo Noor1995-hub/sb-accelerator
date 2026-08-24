@@ -30,7 +30,7 @@ if __package__ in (None, ""):
     # the skills invoke it.
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from vaultlib import dates, decision, entity, meeting, person, project, schema, syncjob, vault  # noqa: E402
+from vaultlib import dates, decision, entity, meeting, person, plaud, project, schema, syncjob, vault  # noqa: E402
 
 
 def _emit(payload: dict) -> None:
@@ -183,6 +183,18 @@ def build_parser() -> argparse.ArgumentParser:
     meeting_write.add_argument("--note", required=True,
                                help="path to a JSON file, or - to read stdin")
 
+    plaud_group = top.add_parser("plaud", help="Plaud MCP adapter helpers")
+    plaud_sub = plaud_group.add_subparsers(dest="action", required=True)
+    plaud_re = plaud_sub.add_parser(
+        "reassemble", help="render raw MCP JSON into one capture-bundle blob")
+    plaud_re.add_argument("--meta", required=True)
+    plaud_re.add_argument("--transcript", required=True)
+    plaud_re.add_argument("--note")
+    plaud_re.add_argument("--out", required=True,
+                          help="scratch directory for the blob (never the vault)")
+    plaud_re.add_argument("--timezone", help="IANA timezone name")
+    plaud_re.add_argument("--utc-offset", dest="utc_offset")
+
     return parser
 
 
@@ -245,6 +257,10 @@ def _dispatch(args: argparse.Namespace) -> int:
         payload = (json.load(sys.stdin) if args.note == "-"
                    else json.loads(Path(args.note).read_text(encoding="utf-8")))
         return _ok(meeting.write(root, payload))
+    if args.group == "plaud":
+        return _ok(plaud.reassemble(
+            args.meta, args.transcript, args.note, args.out,
+            timezone=args.timezone, utc_offset=args.utc_offset))
     raise AssertionError(f"unhandled group {args.group!r}")
 
 
@@ -266,6 +282,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         return _fail(str(exc), "Fix the named payload field and retry.")
     except syncjob.SyncError as exc:
         return _fail(str(exc), "Fix the named id or argument and retry.")
+    except plaud.PlaudError as exc:
+        return _fail(str(exc), "Check the raw MCP JSON files named in the error.")
     except json.JSONDecodeError as exc:
         return _fail(f"payload is not valid JSON: {exc}",
                      "Pass a JSON object in a file, or - to read stdin.")
