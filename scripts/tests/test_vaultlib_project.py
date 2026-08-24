@@ -182,3 +182,65 @@ def test_index_uses_lf_endings(tmp_path):
     root = vault_with_entity(tmp_path)
     result = project.scaffold(root, **BASE)
     assert b"\r\n" not in (root / result["path"]).read_bytes()
+
+
+def make_touch_vault(tmp_path):
+    (tmp_path / "99-workflow-config").mkdir()
+    folder = tmp_path / "30-projects" / "alpha"
+    folder.mkdir(parents=True)
+    (folder / "index.md").write_text("\n".join([
+        "---", "type: project", 'project-name: "Alpha"', "slug: alpha",
+        "status: active", "project-type: initiative", "entity: acme",
+        "owner: exec-morgan", "created: 2026-01-01",
+        "last-updated: 2026-06-01", "---", "",
+        "> [!summary]+ **Now**", "> - Stage — running", "",
+        "## Decisions", "", "## Open Items", "", "## Related Meetings", "",
+    ]), encoding="utf-8")
+    return tmp_path
+
+
+def test_touch_bumps_last_updated_and_nothing_else(tmp_path):
+    root = make_touch_vault(tmp_path)
+    before = (root / "30-projects" / "alpha" / "index.md").read_text(encoding="utf-8")
+    result = project.touch(root, slug="alpha", date_iso="2026-06-12")
+    after = (root / "30-projects" / "alpha" / "index.md").read_text(encoding="utf-8")
+    assert result["last-updated"] == "2026-06-12" and result["changed"] is True
+    assert after == before.replace("last-updated: 2026-06-01",
+                                   "last-updated: 2026-06-12")
+
+
+def test_touch_upserts_the_milestone_pair(tmp_path):
+    root = make_touch_vault(tmp_path)
+    project.touch(root, slug="alpha", date_iso="2026-06-12",
+                  next_milestone="Vendor contract signature",
+                  next_milestone_date="2026-09-01")
+    text = (root / "30-projects" / "alpha" / "index.md").read_text(encoding="utf-8")
+    assert 'next-milestone: "Vendor contract signature"' in text
+    assert "next-milestone-date: 2026-09-01" in text
+
+
+def test_touch_milestone_fields_travel_together(tmp_path):
+    root = make_touch_vault(tmp_path)
+    with pytest.raises(project.ProjectError, match="travel together"):
+        project.touch(root, slug="alpha", date_iso="2026-06-12",
+                      next_milestone="Half a milestone")
+
+
+def test_touch_is_idempotent(tmp_path):
+    root = make_touch_vault(tmp_path)
+    project.touch(root, slug="alpha", date_iso="2026-06-12")
+    second = project.touch(root, slug="alpha", date_iso="2026-06-12")
+    assert second["changed"] is False
+
+
+def test_touch_rejects_unknown_project_and_bad_dates(tmp_path):
+    root = make_touch_vault(tmp_path)
+    with pytest.raises(project.ProjectError, match="no project"):
+        project.touch(root, slug="ghost", date_iso="2026-06-12")
+    with pytest.raises(project.ProjectError):
+        project.touch(root, slug="alpha", date_iso="2026-06-12",
+                      next_milestone="X", next_milestone_date="12-06-2026")
+    with pytest.raises(project.ProjectError, match="single line"):
+        project.touch(root, slug="alpha", date_iso="2026-06-12",
+                      next_milestone="two\nlines",
+                      next_milestone_date="2026-09-01")
