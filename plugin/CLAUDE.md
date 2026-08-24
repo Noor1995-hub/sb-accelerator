@@ -113,6 +113,15 @@ because by then the note may hold human text that outranks the calendar.
 Surface that error; do not delete the note to force a rewrite unless the user
 says so.
 
+Matching counts are not enough, so the `### {HH:MM} — {Subject}[ · [[entity]]]`
+headings are compared too: they sit *outside* the markers, nothing regenerates
+them, and a calendar that swapped one meeting for another between runs would
+otherwise file fresh prep under a stale heading. That comparison searches
+*upward* from each region rather than reading only the line directly above —
+the gap between a heading and its marker belongs to the user, and a blank line
+from an Obsidian formatter must not read as "no heading here" and refuse every
+run from then on.
+
 `daily-note read` returns the mirror image: `meetings[]` for prep filed under
 a `### ` heading, and `meetings_note` for a prep region with no heading above
 it (the no-meetings line, or whatever `meetings_note` the last write passed).

@@ -185,12 +185,35 @@ _STRUCTURAL_HINT = (
 )
 
 
-def _prep_heading(lines: List[str], region: dict) -> Optional[str]:
-    """The '### ...' heading text immediately above a prep region, if any."""
-    begin = region["begin"]
-    if begin > 0 and lines[begin - 1].startswith("### "):
-        return lines[begin - 1][len("### "):].strip()
+def _heading_above(lines: List[str], begin: int, floor: int) -> Optional[str]:
+    """The '### ...' heading a prep region belongs to, searching upward.
+
+    Not just the line directly above: the gap between a heading and its marker
+    is outside the markers, so it is the user's. A blank line inserted by an
+    Obsidian formatter, or a note they typed under the heading, must not read
+    as "this region has no heading" and refuse every run from then on. The
+    search stops at the previous region (so a missing heading never borrows
+    the one above it, and a `### ` inside recap content stays content) and at
+    any `#`/`##` line, which ends the meeting a heading would have introduced.
+    """
+    for index in range(begin - 1, floor - 1, -1):
+        line = lines[index].rstrip()
+        if line.startswith("### "):
+            return line[len("### "):].strip()
+        if line.startswith(("# ", "## ")):
+            return None
     return None
+
+
+def _prep_headings(lines: List[str], regions: List[dict]) -> List[Optional[str]]:
+    """Each prep region's heading, in document order — None where it has none."""
+    headings: List[Optional[str]] = []
+    floor = 0
+    for region in regions:
+        if region["name"] == "prep":
+            headings.append(_heading_above(lines, region["begin"], floor))
+        floor = region["end"] + 1
+    return headings
 
 
 def _merge(text: str, data: dict) -> Tuple[str, int]:
@@ -208,8 +231,8 @@ def _merge(text: str, data: dict) -> Tuple[str, int]:
             f"carries {expected_preps} — the meeting structure changed since "
             f"this note was written. {_STRUCTURAL_HINT}"
         )
+    prep_headings = _prep_headings(lines, regions)
     if data["meetings"]:
-        prep_headings = [_prep_heading(lines, region) for region in preps]
         if any(heading is None for heading in prep_headings):
             raise DailyNoteError(
                 "a prep region in the note has no meeting heading above it "
@@ -224,7 +247,7 @@ def _merge(text: str, data: dict) -> Tuple[str, int]:
                 f"{_STRUCTURAL_HINT}"
             )
     else:
-        if _prep_heading(lines, preps[0]) is not None:
+        if prep_headings[0] is not None:
             raise DailyNoteError(
                 "the note's prep region is headed by a meeting but the "
                 "payload carries no meetings — the meeting structure "

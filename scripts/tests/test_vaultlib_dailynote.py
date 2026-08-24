@@ -197,6 +197,56 @@ def test_merge_refuses_an_equal_count_meeting_swap(tmp_path):
         dailynote.write(root, swapped)
 
 
+def test_merge_tolerates_a_line_between_heading_and_marker(tmp_path):
+    """The gap between a heading and its prep marker is outside the markers,
+    so it is the user's: a blank line from an Obsidian formatter, or a note
+    typed under the heading, must not read as "this region has no heading"
+    and refuse every run from then on."""
+    root = make_vault(tmp_path)
+    dailynote.write(root, payload())
+    path = root / "60-daily-notes" / "2026-06-15.md"
+    path.write_text(
+        path.read_text(encoding="utf-8").replace(
+            "### 09:00 — Weekly Status · [[acme-industries]]\n"
+            "<!-- evening-sync:prep:begin -->",
+            "### 09:00 — Weekly Status · [[acme-industries]]\n\n"
+            "moved to room 3\n"
+            "<!-- evening-sync:prep:begin -->"),
+        encoding="utf-8")
+    fresh = payload()
+    fresh["meetings"][0]["prep"] = "**Attendees:** Sam, Dana · **Context:** new."
+    result = dailynote.write(root, fresh)
+    assert result["changed"] is True
+    text = path.read_text(encoding="utf-8")
+    assert "moved to room 3" in text
+    assert "**Attendees:** Sam, Dana · **Context:** new." in text
+
+
+def test_merge_ignores_a_heading_inside_recap_content(tmp_path):
+    """A `### ` line inside the recap region is content, not a meeting heading:
+    the search stops at the region above the prep region."""
+    root = make_vault(tmp_path)
+    (root / "60-daily-notes" / "2026-06-15.md").write_text(
+        "---\ndate: 2026-06-15\ntype: daily-note\n---\n\n"
+        "# 2026-06-15 · Monday\n\n"
+        "<!-- evening-sync:recap:begin -->\n"
+        "### 08:00 — a line the user pasted into the recap\n"
+        "<!-- evening-sync:recap:end -->\n\n"
+        "<!-- evening-sync:prep:begin -->\n*No meetings scheduled.*\n"
+        "<!-- evening-sync:prep:end -->\n", encoding="utf-8")
+    result = dailynote.write(root, payload(meetings=[]))
+    assert result["changed"] is True
+
+
+def test_merge_refuses_an_entity_only_heading_change(tmp_path):
+    root = make_vault(tmp_path)
+    dailynote.write(root, payload())
+    dropped = payload()
+    dropped["meetings"][0]["entity"] = None
+    with pytest.raises(dailynote.DailyNoteError, match="structure"):
+        dailynote.write(root, dropped)
+
+
 def test_rejects_markers_inside_payload_content(tmp_path):
     root = make_vault(tmp_path)
     with pytest.raises(dailynote.DailyNoteError, match="markers"):
