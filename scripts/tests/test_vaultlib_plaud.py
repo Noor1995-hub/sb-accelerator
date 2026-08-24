@@ -105,3 +105,23 @@ def test_path_escaping_meta_id_raises(tmp_path):
             write_json(tmp_path, "m.json", evil),
             write_json(tmp_path, "t.json", SEGMENTS),
             None, str(tmp_path / "s"), utc_offset="+00:00")
+
+
+def test_reassemble_recorded_local_handles_the_dst_edge(tmp_path):
+    try:
+        from zoneinfo import ZoneInfo
+        ZoneInfo("Europe/Brussels")
+    except Exception:
+        import pytest
+        pytest.skip("no tz database on host")
+    meta = tmp_path / "m.json"
+    meta.write_text(json.dumps({"id": "r1", "name": "T",
+                                "start_at": "2026-03-29T01:30:00",
+                                "duration": 60000}), encoding="utf-8")
+    tr = tmp_path / "t.json"
+    tr.write_text(json.dumps({"segments": [
+        {"speaker": "A", "content": "hi", "end_time": 60000}]}),
+        encoding="utf-8")
+    result = plaud.reassemble(str(meta), str(tr), None, str(tmp_path / "out"),
+                              timezone="Europe/Brussels")
+    assert result["recorded_local"] == "2026-03-29 03:30:00"

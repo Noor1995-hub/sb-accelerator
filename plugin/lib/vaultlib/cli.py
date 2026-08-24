@@ -77,6 +77,14 @@ def build_parser() -> argparse.ArgumentParser:
     dates_window.add_argument("--hours", type=float, default=2.0,
                               help="half-width of the window (default 2)")
 
+    dates_plan = dates_sub.add_parser(
+        "plan", help="authoritative date block: today, next business day, recap window")
+    _add_vault_argument(dates_plan)
+    dates_plan.add_argument("--today", help="ISO date override (tests, backfills)")
+    dates_plan.add_argument("--timezone", help="IANA timezone name")
+    dates_plan.add_argument("--utc-offset", dest="utc_offset",
+                            help="explicit offset like +02:00")
+
     people = top.add_parser("person", help="person notes")
     people_sub = people.add_subparsers(dest="action", required=True)
     person_ensure = people_sub.add_parser(
@@ -203,8 +211,11 @@ def _dispatch(args: argparse.Namespace) -> int:
     # dates (and later stateless subcommands) take no --vault.
     root = vault.resolve(args.vault) if hasattr(args, "vault") else None
     if args.group == "dates":
-        return _ok(dates.window(args.start, timezone=args.timezone,
-                                utc_offset=args.utc_offset, hours=args.hours))
+        if args.action == "window":
+            return _ok(dates.window(args.start, timezone=args.timezone,
+                                    utc_offset=args.utc_offset, hours=args.hours))
+        return _ok(dates.plan(root, args.today, timezone=args.timezone,
+                              utc_offset=args.utc_offset))
     if args.group == "identity":
         return _ok({"identity": vault.read_identity_block(root)})
     if args.group == "person":
