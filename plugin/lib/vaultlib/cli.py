@@ -31,7 +31,7 @@ if __package__ in (None, ""):
     # the skills invoke it.
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from vaultlib import dates, decision, entity, meeting, person, plaud, project, schema, syncjob, vault  # noqa: E402
+from vaultlib import dates, decision, entity, meeting, person, plaud, project, schema, syncjob, updatequeue, vault  # noqa: E402
 
 
 def _emit(payload: dict) -> None:
@@ -184,6 +184,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="flip review_status needs-review -> confirmed where reviewed is ticked")
     _add_vault_argument(sync_rec)
 
+    sync_queue = sync_sub.add_parser(
+        "update-queue",
+        help="write meeting metrics and list projects needing state synthesis")
+    _add_vault_argument(sync_queue)
+    sync_queue.add_argument("--executive", required=True,
+                            help="the executive's person slug (excluded from key-people)")
+    sync_queue.add_argument("--today", help="ISO date; defaults to today")
+
     meetings = top.add_parser("meeting", help="meeting notes")
     meetings_sub = meetings.add_subparsers(dest="action", required=True)
     meeting_write = meetings_sub.add_parser(
@@ -265,6 +273,9 @@ def _dispatch(args: argparse.Namespace) -> int:
             return _ok(syncjob.skip(root, args.recording_id))
         if args.action == "reconcile-reviews":
             return _ok(syncjob.reconcile_reviews(root))
+        if args.action == "update-queue":
+            return _ok(updatequeue.run(root, vault.today_iso(args.today),
+                                       args.executive))
     if args.group == "meeting":
         payload = (json.load(sys.stdin) if args.note == "-"
                    else json.loads(Path(args.note).read_text(encoding="utf-8")))
@@ -321,6 +332,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         return _fail(str(exc), "Fix the named id or argument and retry.")
     except plaud.PlaudError as exc:
         return _fail(str(exc), "Check the raw MCP JSON files named in the error.")
+    except updatequeue.UpdateQueueError as exc:
+        return _fail(str(exc), "Fix the named argument and retry.")
     except json.JSONDecodeError as exc:
         return _fail(f"payload is not valid JSON: {exc}",
                      "Pass a JSON object in a file, or - to read stdin.")

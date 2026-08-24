@@ -181,6 +181,24 @@ def replace_scalar_field(text: str, field: str, value: str) -> str:
     return normalized[: match.start(1)] + updated_block + normalized[match.end(1):]
 
 
+def upsert_scalar_field(text: str, field: str, value: str) -> str:
+    """replace_scalar_field, but inserting the field before the closing `---`
+    when it is absent. For metric fields that are optional in the schema —
+    every other byte, including hand-authored key order, stays put.
+    """
+    normalized = _normalize(text)
+    match = _FRONTMATTER_RE.match(normalized)
+    if not match:
+        raise ValueError("file has no YAML frontmatter")
+    block = match.group(1)
+    pattern = re.compile(rf"^({re.escape(field)}:)([ \t]*)(.*)$", re.MULTILINE)
+    if pattern.search(block):
+        updated_block = pattern.sub(rf"\g<1> {value}", block, count=1)
+    else:
+        updated_block = f"{block}\n{field}: {value}"
+    return normalized[: match.start(1)] + updated_block + normalized[match.end(1):]
+
+
 def split_sections(body: str, level: int = 2) -> List[Tuple[str, str]]:
     """Split a body into (heading title, content) pairs at the given heading
     level. Content before the first heading is returned under "".
