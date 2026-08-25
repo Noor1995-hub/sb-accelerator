@@ -54,7 +54,7 @@ reported the same way.
 |---|---|---|
 | `inbox` | `sync scan` over `10-inbox/` | always available |
 | `plaud` | Plaud MCP `list_files` | ToolSearch finds `mcp__plaud__list_files` |
-| `m365` | — | **not yet supported** — the retrieval path is pending verification; say so if enabled |
+| `m365` | M365 calendar search + full event reads | ToolSearch finds `outlook_calendar_search` **and** `read_resource` |
 
 ### Account binding — before anything is listed
 
@@ -62,9 +62,9 @@ A connector adapter runs against whatever account is signed in at the *user*
 level, which may not be this vault's account. The config's `account_hint`
 binds them, and the check is deterministic, not judgment:
 
-1. Call the connector's whoami tool (`mcp__plaud__get_current_user`; for
-   M365 calendar enrichment, `get_me`). Write the raw JSON to scratch with
-   the Write tool.
+1. Call the connector's whoami tool (`mcp__plaud__get_current_user` for
+   plaud; `get_me` for m365 — both the adapter and calendar enrichment).
+   Write the raw JSON to scratch with the Write tool.
 2. Run the gate:
 
 ```bash
@@ -216,11 +216,86 @@ never retry auth in a loop; re-authentication is interactive and belongs to
 the user.
 
 The executive's timezone is `timezone` from `config read` — pass the IANA
-name. If it is in `missing`, the plaud adapter and calendar enrichment
-cannot run: skip them with an explicit line. If the host cannot resolve
-timezone names, the error's hint says to pass `--utc-offset` instead.
+name. If it is in `missing`, the plaud and m365 adapters and calendar
+enrichment cannot run: skip them with an explicit line. If the host cannot
+resolve timezone names, the error's hint says to pass `--utc-offset` instead.
+
+**Microsoft 365** (when enabled, available, and account-verified): Teams
+transcribes meetings on the exec's calendar, and the calendar event is the
+key to its own transcript. Search the trailing **7 local days**
+(`outlook_calendar_search`, query `*`, `utc_from`/`utc_to` from
+`dates window`), drop cancelled and all-day events, and keep online
+meetings. For each candidate, fetch the **full event** with `read_resource`
+on its `calendar:///events/...` URI and write the raw JSON to
+`$SCRATCH/m365_event_<n>.json` with the Write tool — never echo it through
+Bash. Collect the full event objects into one array,
+`$SCRATCH/m365_events.json`, then derive the dedup ids:
+
+```bash
+python3 "$VAULTLIB" m365 ids --events "$SCRATCH/m365_events.json"
+```
+
+Events in `skipped` (`no-transcript-url`) have no transcript *yet* — report
+them as one count, not per-event lines; they retry naturally while inside
+the window. Feed the `recording_id` values through `sync dedup` exactly as
+for plaud. Only `new` ids proceed.
+
+For each new id, fetch the transcript: `read_resource` on the entry's
+`transcript_url` **exactly as `m365 ids` returned it** — never rebuild or
+re-scope the URL; a recurring series answers a rebuilt, unscoped URL with
+other occurrences' transcripts. A `NOT_FOUND` with `transcripts_empty` is an
+explicit skip line (transcription was off for that meeting), not an error.
+Write the raw result to `$SCRATCH/m365_<hex>.transcript.json`, then
+normalize:
+
+```bash
+python3 "$VAULTLIB" m365 reassemble --event "$SCRATCH/m365_event_3.json" \
+  --transcript "$SCRATCH/m365_3.transcript.json" \
+  --out "$SCRATCH" --timezone <config.timezone>
+```
+
+The result names the blob file and carries `recording_id`, `duration_min`,
+and `recorded_local`, like `plaud reassemble`.
+
+**Then check for a cross-adapter duplicate before anything is written.**
+The ledger keys on exact ids, so it cannot see that a Plaud recording and a
+Teams transcript are the same conversation captured twice. The window check
+can — derive `--start` from `recorded_local` (swap the space for `T`, drop
+the seconds):
+
+```bash
+python3 "$VAULTLIB" sync collide --vault "$VAULT" \
+  --start 2026-08-25T16:00 --duration-min 63
+```
+
+A match whose `source-recording-id` carries another namespace means this
+meeting is probably already in the vault. Interactively: show both — the
+existing note and this candidate — and ask once; the user either writes it
+anyway or drops it permanently with `sync skip --id m365:<hex> --reason
+"same meeting already synced as <existing id>"`. Under `--unattended`:
+**do not write it and do not skip it** — count it in the summary's
+cross-adapter duplicates line; it will keep deferring until an interactive
+run settles it, and that is the safe direction. A match flagged
+`imprecise: true` (a date-only note) is a *possible* duplicate — surface
+it the same way, never auto-resolve it.
+
+An m365 recording's routing starts ahead of plaud's: the event **is** the
+calendar record. Pre-fill `calendar-subject`, `organizer`, `location`,
+`attendee-emails`, and `recurring` from the event, set
+`calendar_match: true`, and use `calendar-match-high` as the calendar
+reason — step 2 below is skipped for m365-sourced items. `source` is
+`teams`. Resolve attendees from the event's attendee list via
+`person ensure`; Teams transcripts carry no speaker names (a tenant
+setting most deployments have off), and its speech recognition garbles
+names and product terms — so attendees come from the calendar, never from
+the transcript, and transcript keywords stay the weakest routing signal
+(step 3 already ranks them last).
 
 ### 2. Calendar enrichment (optional, honest about absence)
+
+This step is for recordings that arrived *without* a calendar record —
+inbox files and plaud recordings. An m365-sourced item skips it: its event
+read already is the match, stamped in step 1.
 
 Calendar enrichment uses the M365 connector, so it is gated like an adapter:
 it runs only when `adapters.m365.enabled` is true, the calendar tool exists
@@ -383,7 +458,8 @@ Payload rules the CLI enforces (so get them right the first time):
   CLI sets them.
 - `source-recording-id` is **required** on every write — it IS the dedup
   ledger. For inbox files it is the `recording_id` from `sync scan`; for
-  Plaud it comes from `plaud reassemble`.
+  Plaud and Microsoft 365 it comes from `plaud reassemble` /
+  `m365 reassemble`.
 
 Read the result: a `conflict` of kind `confirmed-target` means the CLI wrote a
 `-v2` sibling carrying a `conflicts-with` edge instead of touching a confirmed
@@ -423,8 +499,9 @@ Count what exists, not what you intended (a lab run once reported
 **New people:** {N} created in `50-people/`
 **Meetings you ticked as reviewed:** {N} now confirmed
 **Possible duplicates:** {N} ({list the stems}) — kept as separate notes; each would have overwritten a meeting you already confirmed
+**Possible cross-adapter duplicates:** {N} — deferred; needs an interactive run
 **Skipped / errors:** {N} (will retry next run)
-**Adapters:** inbox ok · plaud ok | REFUSED — signed in as a different account (account-mismatch) | REFUSED — no account bound to this vault yet (no-account-hint) | disabled | unavailable · m365 disabled | not yet supported
+**Adapters:** inbox ok · plaud ok | REFUSED — signed in as a different account (account-mismatch) | REFUSED — no account bound to this vault yet (no-account-hint) | disabled | unavailable · m365 ok | REFUSED — signed in as a different account (account-mismatch) | REFUSED — no account bound to this vault yet (no-account-hint) | disabled | unavailable
 **Calendar enrichment:** ok | UNAVAILABLE
 **Warnings:** {verbatim} | none
 ```
@@ -444,7 +521,7 @@ The names below are the ones this contract instructs; if you wrote any
 other raw connector file, delete it too.
 
 ```bash
-rm -f "$SCRATCH"/plaud.whoami.json "$SCRATCH"/m365.whoami.json "$SCRATCH"/rec_*.json "$SCRATCH"/plaud.list.json "$SCRATCH"/*.blob.md "$SCRATCH"/ids.json
+rm -f "$SCRATCH"/plaud.whoami.json "$SCRATCH"/m365.whoami.json "$SCRATCH"/rec_*.json "$SCRATCH"/plaud.list.json "$SCRATCH"/m365_*.json "$SCRATCH"/*.blob.md "$SCRATCH"/ids.json
 ```
 
 On an account-mismatch refusal, delete the whoami payload immediately —

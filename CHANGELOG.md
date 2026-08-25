@@ -15,6 +15,13 @@ delivers them.
 
 ## Unreleased
 
+- **Teams meetings now sync themselves.** With the Microsoft 365 connector
+  bound to the vault, /sync-recordings finds the past week's Teams meetings
+  on your calendar, pulls their transcripts, and writes the same meeting
+  notes the recorder path does — attendees and subject taken from the
+  calendar invitation itself. A meeting without a transcript is simply
+  reported, and when the recorder already captured the same conversation,
+  the sync flags the pair for you instead of writing the meeting twice. (#80)
 - **Tomorrow's note tells you when it is catching up.** After missed evenings —
   a holiday, travel, a laptop that stayed shut — the recap used to quietly cover
   the whole gap and look like any other day. It now opens by naming the window

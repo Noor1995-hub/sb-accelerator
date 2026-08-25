@@ -17,7 +17,9 @@ answer — see scancache.py.
 from __future__ import annotations
 
 import hashlib
+import re
 import shutil
+from datetime import datetime, timedelta
 from pathlib import Path, PurePosixPath
 from typing import Dict, List, Optional, Set, Tuple
 
@@ -299,6 +301,81 @@ def dedup(root: Path, ids: List[str]) -> dict:
         "skipped": [rid for rid in validated if rid in skipped_ids],
         "warnings": warnings,
     }
+
+
+_COLLIDE_START_RE = re.compile(r"\A\d{4}-\d{2}-\d{2}T\d{2}:\d{2}\Z")
+# A recorder is pressed a few minutes after the calendar start; the grace
+# absorbs that skew without matching a back-to-back meeting in the next slot.
+OVERLAP_GRACE_MIN = 15
+
+
+def collide(root: Path, start_local: str, duration_min: int) -> dict:
+    """Meeting notes whose time window overlaps a candidate recording.
+
+    The exact-id ledger cannot see that plaud:X and m365:Y are the same
+    conversation captured twice; this can. Fresh, uncached scan — it runs a
+    handful of times per sync over one folder, and the ledger cache's entry
+    shape only holds ids.
+
+    A date-only note (legal per the meeting payload) has no window; it
+    matches by calendar day and is flagged imprecise — a "look at it", never
+    a "duplicate".
+    """
+    start_text = str(start_local or "").strip()
+    if not _COLLIDE_START_RE.match(start_text):
+        raise SyncError(
+            "--start must be YYYY-MM-DDTHH:MM in the executive's local time")
+    if not isinstance(duration_min, int) or isinstance(duration_min, bool) \
+            or duration_min < 0:
+        raise SyncError(f"--duration-min {duration_min!r} must be an int >= 0")
+    q_start = datetime.fromisoformat(start_text)
+    q_end = q_start + timedelta(minutes=max(duration_min, 1))
+    grace = timedelta(minutes=OVERLAP_GRACE_MIN)
+
+    matches: List[dict] = []
+    warnings: List[str] = []
+    checked = 0
+    meetings = root / MEETINGS_DIR
+    for path in sorted(meetings.glob("*.md")) if meetings.is_dir() else []:
+        rel = path.relative_to(root).as_posix()
+        try:
+            data, _ = markdown.split_frontmatter(path.read_text(encoding="utf-8"))
+        except (ValueError, OSError) as exc:
+            warnings.append(f"{rel}: {exc}")
+            continue
+        checked += 1
+        date_text = str(data.get("date") or "").strip()
+        imprecise = False
+        if _COLLIDE_START_RE.match(date_text):
+            n_start = datetime.fromisoformat(date_text)
+            try:
+                note_min = max(int(data.get("recording-duration") or 0), 1)
+            except (TypeError, ValueError):
+                note_min = 1
+            n_end = n_start + timedelta(minutes=note_min)
+            hit = n_start <= q_end + grace and q_start <= n_end + grace
+        elif re.match(r"\A\d{4}-\d{2}-\d{2}\Z", date_text):
+            imprecise = True
+            hit = date_text in {q_start.date().isoformat(),
+                                q_end.date().isoformat()}
+        elif date_text:
+            warnings.append(f"{rel}: date {date_text!r} is not ISO — skipped")
+            continue
+        else:
+            warnings.append(f"{rel}: no date in frontmatter — skipped")
+            continue
+        if hit:
+            matches.append({
+                "path": rel,
+                "stem": path.stem,
+                "date": date_text,
+                "recording-duration": data.get("recording-duration"),
+                "source": data.get("source"),
+                "source-recording-id": data.get("source-recording-id"),
+                "calendar-subject": data.get("calendar-subject"),
+                "imprecise": imprecise,
+            })
+    return {"matches": matches, "checked": checked, "warnings": warnings}
 
 
 def reconcile_reviews(root: Path) -> dict:

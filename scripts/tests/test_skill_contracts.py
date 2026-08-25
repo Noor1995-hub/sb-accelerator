@@ -18,8 +18,9 @@ SKILLS_DIR = REPO_ROOT / "plugin" / "skills"
 SKILL_FILES = sorted(SKILLS_DIR.glob("*/SKILL.md"))
 # Skills invoke the CLI through the $VAULTLIB convention rather than repeating
 # the path, so match either form: `cli.py <group> <action>` or
-# `"$VAULTLIB" <group> <action>`.
-INVOCATION_RE = re.compile(r'(?:cli\.py|\$\{?VAULTLIB\}?)"?\s+([a-z-]+)\s+([a-z-]+)')
+# `"$VAULTLIB" <group> <action>`. Group and action names may carry digits
+# (m365) — a class without them silently exempts those invocations.
+INVOCATION_RE = re.compile(r'(?:cli\.py|\$\{?VAULTLIB\}?)"?\s+([a-z0-9-]+)\s+([a-z0-9-]+)')
 
 
 def known_subcommands() -> set:

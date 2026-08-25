@@ -179,6 +179,23 @@ def bound_vault(tmp_path, hint="morgan@example.com", enabled=True):
     return root
 
 
+def test_verify_account_matches_an_m365_get_me_shaped_payload(tmp_path):
+    """The m365 whoami is Graph get_me; its mail field must satisfy an
+    email hint bound on the m365 adapter."""
+    root = make_vault(tmp_path)
+    cfg = valid_config()
+    cfg["adapters"]["m365"] = {"enabled": True,
+                               "account_hint": "morgan@example.com"}
+    write_config(root, cfg)
+    payload = {"id": "68531043-31b4-4180-b61b-e32849a582ed",
+               "displayName": "Morgan Ellery",
+               "userPrincipalName": "morgane@corp.example.net",
+               "mail": "Morgan@Example.com", "jobTitle": None}
+    result = config.verify_account(root, "m365", payload)
+    assert result["match"] is True
+    assert result["reason"] == "matched"
+
+
 def test_verify_account_exact_match_casefolded(tmp_path):
     root = bound_vault(tmp_path, hint="Morgan@Example.com")
     result = config.verify_account(

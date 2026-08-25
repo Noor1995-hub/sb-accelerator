@@ -495,3 +495,80 @@ def test_sync_skip_carries_an_optional_reason_through(capsys, tmp_path):
     assert syncjob.read_skip_records(root) == [
         {"recording_id": "plaud:abc123",
          "reason": "a pocket recording, nothing said", "source_name": None}]
+
+
+M365_EVENT = {
+    "subject": "Weekly sync",
+    "start": {"dateTime": "2026-08-25T14:00:00.0000000", "timeZone": "UTC"},
+    "end": {"dateTime": "2026-08-25T15:00:00.0000000", "timeZone": "UTC"},
+    "meetingTranscriptUrl": "meeting-transcript:///events/dG9rZW4?start=x&end=y",
+}
+M365_TRANSCRIPT = {
+    "transcripts": [{
+        "id": "t-1", "createdDateTime": "2026-08-25T14:01:00Z",
+        "endDateTime": "2026-08-25T15:00:00Z",
+        "content": "00:00:01.000 --> 00:59:00.000\r\nAlles goed.\r\n",
+        "speakerAttribution": False,
+    }],
+}
+
+
+def test_m365_reassemble_through_the_cli(capsys, tmp_path):
+    event = tmp_path / "event.json"
+    event.write_text(json.dumps(M365_EVENT), encoding="utf-8")
+    transcript = tmp_path / "transcript.json"
+    transcript.write_text(json.dumps(M365_TRANSCRIPT), encoding="utf-8")
+
+    code, payload = run(capsys, [
+        "m365", "reassemble", "--event", str(event),
+        "--transcript", str(transcript), "--out", str(tmp_path / "scratch"),
+        "--utc-offset", "+02:00",
+    ])
+
+    assert code == 0
+    assert payload["ok"] is True
+    assert payload["result"]["recording_id"].startswith("m365:")
+    assert payload["result"]["recorded_local"] == "2026-08-25 16:00:00"
+
+
+def test_an_m365_error_is_a_structured_failure_not_a_traceback(capsys, tmp_path):
+    event = tmp_path / "event.json"
+    event.write_text(json.dumps({"subject": "no url"}), encoding="utf-8")
+    transcript = tmp_path / "transcript.json"
+    transcript.write_text(json.dumps(M365_TRANSCRIPT), encoding="utf-8")
+
+    code, payload = run(capsys, [
+        "m365", "reassemble", "--event", str(event),
+        "--transcript", str(transcript), "--out", str(tmp_path),
+        "--utc-offset", "+02:00",
+    ])
+
+    assert code == 1
+    assert payload["ok"] is False
+    assert payload["hint"] == "Check the raw M365 JSON files named in the error."
+
+
+def test_m365_ids_reads_events_from_stdin(capsys, monkeypatch, tmp_path):
+    import io
+    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps([M365_EVENT])))
+    code, payload = run(capsys, ["m365", "ids", "--events", "-"])
+    assert code == 0
+    assert len(payload["result"]["ids"]) == 1
+    assert payload["result"]["ids"][0]["recording_id"].startswith("m365:")
+
+
+def test_sync_collide_through_the_cli_reports_matches(capsys, tmp_path):
+    root = make_vault(tmp_path)
+    (root / "20-meetings" / "25-08-26-darta.md").write_text(
+        "---\ndate: 2026-08-25T16:01\ntype: meeting\n"
+        "recording-duration: 63\nsource: recorder\n"
+        "source-recording-id: plaud:abc123\n---\n\nbody\n", encoding="utf-8")
+
+    code, payload = run(capsys, [
+        "sync", "collide", "--vault", str(root),
+        "--start", "2026-08-25T16:00", "--duration-min", "64",
+    ])
+
+    assert code == 0
+    assert len(payload["result"]["matches"]) == 1
+    assert payload["result"]["matches"][0]["source-recording-id"] == "plaud:abc123"

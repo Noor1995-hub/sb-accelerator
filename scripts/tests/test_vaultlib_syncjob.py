@@ -812,3 +812,82 @@ def test_re_parking_a_legacy_bare_id_does_not_backdate_its_reason(tmp_path):
     assert syncjob.read_skip_records(root) == [
         {"recording_id": rid, "reason": "vendor whitepaper",
          "source_name": "report.pdf"}]
+
+
+def write_timed_meeting(root: Path, stem: str, *, date: str, duration: int,
+                        source: str, recording_id: str,
+                        subject: str = "A meeting") -> None:
+    lines = ["---", f"date: {date}", "type: meeting",
+             f'calendar-subject: "{subject}"',
+             f"recording-duration: {duration}", f"source: {source}",
+             f"source-recording-id: {recording_id}", "---", "", "body"]
+    (root / "20-meetings" / f"{stem}.md").write_text(
+        "\n".join(lines), encoding="utf-8")
+
+
+def test_collide_finds_a_window_overlapping_meeting_from_another_adapter(tmp_path):
+    """The exact-id ledger cannot see that plaud:X and m365:Y are one
+    conversation; the window check can."""
+    root = make_vault(tmp_path)
+    write_timed_meeting(root, "25-08-26-darta-sync", date="2026-08-25T16:01",
+                        duration=63, source="recorder",
+                        recording_id="plaud:abc123", subject="Darta sync")
+    result = syncjob.collide(root, "2026-08-25T16:00", 64)
+    assert len(result["matches"]) == 1
+    match = result["matches"][0]
+    assert match["source-recording-id"] == "plaud:abc123"
+    assert match["imprecise"] is False
+    assert result["checked"] == 1
+
+
+def test_collide_grace_absorbs_a_late_recorder_start(tmp_path):
+    root = make_vault(tmp_path)
+    write_timed_meeting(root, "25-08-26-late-start", date="2026-08-25T16:12",
+                        duration=45, source="recorder",
+                        recording_id="plaud:late1")
+    result = syncjob.collide(root, "2026-08-25T16:00", 60)
+    assert len(result["matches"]) == 1
+
+
+def test_collide_excludes_a_back_to_back_meeting_outside_the_grace(tmp_path):
+    root = make_vault(tmp_path)
+    write_timed_meeting(root, "25-08-26-next-slot", date="2026-08-25T17:30",
+                        duration=30, source="recorder",
+                        recording_id="plaud:next1")
+    result = syncjob.collide(root, "2026-08-25T16:00", 60)
+    assert result["matches"] == []
+    assert result["checked"] == 1
+
+
+def test_collide_reports_a_date_only_note_as_imprecise(tmp_path):
+    root = make_vault(tmp_path)
+    write_timed_meeting(root, "25-08-26-dateless", date="2026-08-25",
+                        duration=0, source="manual",
+                        recording_id="inbox:aaaa000011112222")
+    result = syncjob.collide(root, "2026-08-25T16:00", 60)
+    assert len(result["matches"]) == 1
+    assert result["matches"][0]["imprecise"] is True
+
+
+def test_collide_warns_on_an_unparseable_note_and_continues(tmp_path):
+    root = make_vault(tmp_path)
+    (root / "20-meetings" / "broken.md").write_text("---\n: not yaml\n",
+                                                    encoding="utf-8")
+    write_timed_meeting(root, "25-08-26-fine", date="2026-08-25T16:00",
+                        duration=30, source="teams",
+                        recording_id="m365:0123456789abcdef")
+    result = syncjob.collide(root, "2026-08-25T16:00", 30)
+    assert len(result["matches"]) == 1
+    assert result["warnings"]
+
+
+def test_collide_rejects_a_date_only_start_argument(tmp_path):
+    root = make_vault(tmp_path)
+    with pytest.raises(syncjob.SyncError, match="YYYY-MM-DDTHH:MM"):
+        syncjob.collide(root, "2026-08-25", 30)
+
+
+def test_collide_rejects_a_negative_duration(tmp_path):
+    root = make_vault(tmp_path)
+    with pytest.raises(syncjob.SyncError, match="duration-min"):
+        syncjob.collide(root, "2026-08-25T16:00", -5)

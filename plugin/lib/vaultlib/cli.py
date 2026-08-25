@@ -31,7 +31,7 @@ if __package__ in (None, ""):
     # the skills invoke it.
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from vaultlib import config, dailynote, dates, decision, entity, meeting, person, plaud, project, schema, syncjob, updatequeue, vault  # noqa: E402
+from vaultlib import config, dailynote, dates, decision, entity, m365, meeting, person, plaud, project, schema, syncjob, updatequeue, vault  # noqa: E402
 
 
 def _emit(payload: dict) -> None:
@@ -204,6 +204,16 @@ def build_parser() -> argparse.ArgumentParser:
     sync_dedup.add_argument("--ids", required=True,
                             help="path to a JSON array of ids, or - for stdin")
 
+    sync_collide = sync_sub.add_parser(
+        "collide",
+        help="find meeting notes whose time window overlaps a candidate recording")
+    _add_vault_argument(sync_collide)
+    sync_collide.add_argument("--start", required=True,
+                              help="exec-local start, YYYY-MM-DDTHH:MM")
+    sync_collide.add_argument("--duration-min", dest="duration_min",
+                              required=True, type=int,
+                              help="candidate recording length in minutes")
+
     sync_skip = sync_sub.add_parser(
         "skip", help="never propose this recording id again")
     _add_vault_argument(sync_skip)
@@ -272,6 +282,23 @@ def build_parser() -> argparse.ArgumentParser:
                           help="scratch directory for the blob (never the vault)")
     plaud_re.add_argument("--timezone", help="IANA timezone name")
     plaud_re.add_argument("--utc-offset", dest="utc_offset")
+
+    m365_group = top.add_parser(
+        "m365", help="Microsoft 365 / Teams transcript adapter helpers")
+    m365_sub = m365_group.add_subparsers(dest="action", required=True)
+    m365_ids = m365_sub.add_parser(
+        "ids", help="derive m365: recording ids from full calendar event reads")
+    m365_ids.add_argument("--events", required=True,
+                          help="path to a JSON array of event objects, or - for stdin")
+    m365_re = m365_sub.add_parser(
+        "reassemble",
+        help="render an event read + transcript read into one capture-bundle blob")
+    m365_re.add_argument("--event", required=True)
+    m365_re.add_argument("--transcript", required=True)
+    m365_re.add_argument("--out", required=True,
+                         help="scratch directory for the blob (never the vault)")
+    m365_re.add_argument("--timezone", help="IANA timezone name")
+    m365_re.add_argument("--utc-offset", dest="utc_offset")
 
     daily = top.add_parser("daily-note",
                            help="daily notes: region write and harvest read")
@@ -356,6 +383,8 @@ def _dispatch(args: argparse.Namespace) -> int:
             if not isinstance(payload, list):
                 raise syncjob.SyncError("--ids must be a JSON array of id strings")
             return _ok(syncjob.dedup(root, payload))
+        if args.action == "collide":
+            return _ok(syncjob.collide(root, args.start, args.duration_min))
         if args.action == "skip":
             return _ok(syncjob.skip(root, args.recording_id,
                                     reason=args.reason))
@@ -377,6 +406,14 @@ def _dispatch(args: argparse.Namespace) -> int:
     if args.group == "plaud":
         return _ok(plaud.reassemble(
             args.meta, args.transcript, args.note, args.out,
+            timezone=args.timezone, utc_offset=args.utc_offset))
+    if args.group == "m365":
+        if args.action == "ids":
+            payload = (json.load(sys.stdin) if args.events == "-"
+                       else json.loads(Path(args.events).read_text(encoding="utf-8")))
+            return _ok(m365.ids(payload))
+        return _ok(m365.reassemble(
+            args.event, args.transcript, args.out,
             timezone=args.timezone, utc_offset=args.utc_offset))
     if args.group == "daily-note":
         if args.action == "write":
@@ -436,6 +473,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         return _fail(str(exc), "Fix the named id or argument and retry.")
     except plaud.PlaudError as exc:
         return _fail(str(exc), "Check the raw MCP JSON files named in the error.")
+    except m365.M365Error as exc:
+        return _fail(str(exc), "Check the raw M365 JSON files named in the error.")
     except updatequeue.UpdateQueueError as exc:
         return _fail(str(exc), "Fix the named argument and retry.")
     except dailynote.DailyNoteError as exc:
