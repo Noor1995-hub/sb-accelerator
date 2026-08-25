@@ -32,8 +32,10 @@ Full background: `docs/visual-verification.md`.
    that simply looks wrong. Report what you see, and say plainly if a surface
    was not captured rather than implying full coverage.
 
-The tour runs in the background — the probe window is surfaced once when `up`
-launches it, then stays behind your work. If screenshots ever come back
-identical to one another, add `--foreground` to raise it before each capture.
+The tour is invisible — the probe window shows for the few seconds the
+instance takes to boot, then `up` cloaks it (opacity 0, clicks pass through)
+for the rest of the run; only a second Dock icon remains. If screenshots ever
+come back identical to one another, add `--foreground` to keep it visible and
+raise it before each capture.
 
 Tear down with `python scripts/obsidian_probe.py down` when finished.

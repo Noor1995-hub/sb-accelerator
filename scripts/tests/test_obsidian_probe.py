@@ -94,6 +94,58 @@ def test_up_refuses_a_vault_argument_outside_test_vaults(monkeypatch, tmp_path):
         probe.cmd_up(args_for(["--shared", "up", "--vault", str(real)]))
 
 
+# --- staying off the user's screen -------------------------------------------
+
+def _eval_exprs(calls):
+    """The JS expressions sent through dev:cdp, in order."""
+    exprs = []
+    for args, _kw in calls:
+        if args and args[0] == "dev:cdp":
+            for a in args:
+                if a.startswith("params="):
+                    exprs.append(json.loads(a[len("params="):])["expression"])
+    return exprs
+
+
+def _up_against_running_instance(monkeypatch, tmp_path, vault, extra=()):
+    """Run a non-shared `up` against a stubbed already-running instance."""
+    home = tmp_path / "probe-home"
+    home.mkdir()
+    monkeypatch.setattr(probe, "check_socket_path", lambda h: None)
+    probe.socket_path(home).write_text("")  # exists() is all cmd_up checks
+    calls = stub_cli(monkeypatch, vault)
+    argv = ["--home", str(home), *extra, "up", "--vault", str(vault)]
+    assert probe.cmd_up(args_for(argv)) == 0
+    return calls
+
+
+def test_up_cloaks_the_window_rather_than_blurring_it(monkeypatch, tmp_path, vault):
+    """The regression test for the foreground complaint. blur() drops key
+    focus but macOS never reorders a window on blur, so the probe stayed
+    top-of-stack covering the display. Background means invisible —
+    opacity 0, clicks passing through."""
+    calls = _up_against_running_instance(monkeypatch, tmp_path, vault)
+    exprs = _eval_exprs(calls)
+    assert any("setOpacity(0)" in e for e in exprs), f"no cloak issued: {exprs}"
+    assert not any("window.focus()" in e for e in exprs)
+
+
+def test_up_foreground_shows_instead_of_cloaking(monkeypatch, tmp_path, vault):
+    monkeypatch.setattr(probe, "FOREGROUND", True)
+    calls = _up_against_running_instance(monkeypatch, tmp_path, vault)
+    exprs = _eval_exprs(calls)
+    assert any("window.focus()" in e for e in exprs)
+    assert not any("setOpacity(0)" in e for e in exprs)
+
+
+def test_up_shared_never_cloaks_the_users_own_window(monkeypatch, vault):
+    """--shared drives the user's real Obsidian; making their window
+    invisible is never acceptable, backgrounded run or not."""
+    calls = stub_cli(monkeypatch, vault)
+    assert probe.cmd_up(args_for(["--shared", "up", "--vault", str(vault)])) == 0
+    assert not any("setOpacity(0)" in e for e in _eval_exprs(calls))
+
+
 # --- socket path length (macOS sun_path cap) --------------------------------
 
 def test_check_socket_path_rejects_a_deep_home(tmp_path):
