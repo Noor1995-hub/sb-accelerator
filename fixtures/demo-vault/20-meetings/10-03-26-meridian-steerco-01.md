@@ -10,6 +10,7 @@ start-time: 2026-03-10T14:00
 attendee-emails: [priya.nathan@cascadia-intermodal.example, leo.marchetti@meridianfreight.example, renee.castillo@meridianfreight.example, morgan.ellery@cascadia-intermodal.example]
 attendees: [priya-nathan, leo-marchetti, renee-castillo, morgan-ellery]
 projects: [meridian-yard-automation-program]
+entities: [meridian-freight-holdings]
 review_status: confirmed
 reviewed: true
 archived: false

@@ -29,6 +29,31 @@ MAX_CONTEXT_BULLETS = 8
 ROLE_VOCABULARY = ("sponsor", "champion", "evaluator", "influencer", "blocker")
 STANCE_VOCABULARY = ("champion", "neutral", "blocker")
 
+# Context and Sensitivities render as callouts so a dossier carries the same
+# visual weight as a project index, which opens with `> [!summary]+ **Now**`
+# and `> [!info]- **Context**`. That is a contract, not styling: it puts a
+# `> ` in front of every bullet those two sections hold, and every matcher in
+# this module has to look past it.
+CONTEXT_CALLOUT = "> [!info]+ **Standing context**"
+SENSITIVITIES_CALLOUT = "> [!warning]+ **Handle with care**"
+
+DYNAMICS_HEADING = "### Dynamics"
+# The Meeting Log's index. Slug-free by construction — `this.slug` resolves
+# from the dossier's own frontmatter at render time — so every dossier carries
+# the same bytes. Joins on the meeting's `entities[]` field: Dataview sees only
+# what the notes it filters say, and a meeting note names its projects, not the
+# organization behind them (ontology.md §Meeting).
+MEETING_LOG_QUERY = """```dataview
+TABLE WITHOUT ID
+  link(file.path, dateformat(date, "dd-MM-yy")) AS "Date",
+  calendar-subject AS "Subject",
+  projects AS "Projects"
+FROM "20-meetings"
+WHERE econtains(entities, this.slug)
+SORT date DESC
+LIMIT 20
+```"""
+
 STAKEHOLDER_HEADER = (
     "| Name | Title | Role in Decision | Stance | Notes |\n"
     "|------|-------|------------------|--------|-------|"
@@ -44,9 +69,19 @@ _REQUIRED_EDIT_FIELDS = {
     "context": ("label", "fact", "why"),
     "stakeholders": ("name",),
     "relationship_history": ("date", "what", "significance"),
-    "meeting_log": ("date", "topic"),
+    "meeting_log": ("date", "topic", "dynamics"),
     "sensitivities": ("topic", "detail", "implications"),
     "engagements": ("project",),
+}
+# Fields the Meeting Log used to carry as hand-written bullets and no longer
+# does. Rejected rather than ignored: dropping them silently would return an
+# ok envelope to a caller that believes the content was written.
+_RETIRED_EDIT_FIELDS = {
+    "meeting_log": {
+        "attendees": "the meeting note's own `attendees` frontmatter",
+        "outcomes": "the meeting note's `## Notes`",
+        "followups": "the meeting note's `## Action items`",
+    },
 }
 _SECTION_FOR_EDIT = {
     "context": "Context",
@@ -88,18 +123,29 @@ def _dossier_path(root: Path, slug: str) -> Path:
 
 # --- creation -------------------------------------------------------------
 
-def _empty_body() -> str:
-    parts = [""]
+def _empty_body(name: str) -> str:
+    parts = []
     for title in schema.body_sections("entity"):
         if title == "Context":
-            parts.append(f"## Context\n{UNVALIDATED}\n\n{PLACEHOLDER}\n")
+            # The marker stays outside the callout: it is a comment about the
+            # section, and inside it would render as a line of the box.
+            parts.append(f"## Context\n{UNVALIDATED}\n\n{CONTEXT_CALLOUT}\n"
+                         f"> {PLACEHOLDER}\n")
         elif title == "Stakeholders":
             parts.append(f"## Stakeholders\n\n{STAKEHOLDER_HEADER}\n")
+        elif title == "Meeting Log":
+            parts.append(f"## Meeting Log\n\n{MEETING_LOG_QUERY}\n\n"
+                         f"{DYNAMICS_HEADING}\n\n{PLACEHOLDER}\n")
+        elif title == "Sensitivities":
+            parts.append(f"## Sensitivities\n\n{SENSITIVITIES_CALLOUT}\n"
+                         f"> {PLACEHOLDER}\n")
         elif title == "Engagements":
             parts.append(f"## Engagements\n\n{ENGAGEMENT_HEADER}\n")
         else:
             parts.append(f"## {title}\n\n{PLACEHOLDER}\n")
-    return "\n" + BANNER + "\n\n" + "\n".join(parts[1:])
+    # `# {name}` because every dossier file is called dossier.md: without it
+    # the only title Obsidian shows for the note is the word "dossier".
+    return f"\n# {name}\n\n" + BANNER + "\n\n" + "\n".join(parts)
 
 
 def ensure(root: Path, *, slug: str, name: str, today: str,
@@ -140,7 +186,8 @@ def ensure(root: Path, *, slug: str, name: str, today: str,
             "refusing to write non-conformant entity frontmatter: "
             + "; ".join(problems)
         )
-    text = markdown.emit_frontmatter(frontmatter, ENTITY_QUOTE_KEYS) + _empty_body()
+    text = (markdown.emit_frontmatter(frontmatter, ENTITY_QUOTE_KEYS)
+            + _empty_body(name))
     vault.atomic_write(path, text)
     return {"slug": slug, "path": path.relative_to(root).as_posix(),
             "created": True}
@@ -189,8 +236,50 @@ def _lines(content: str) -> List[str]:
     return [line for line in content.split("\n")]
 
 
+_CALLOUT_PREFIX_RE = re.compile(r"\A[ \t]*(?:>[ \t]*)+")
+
+
+def _split_prefix(line: str) -> Tuple[str, str]:
+    """Split a line into its callout prefix and the markdown underneath.
+
+    Context and Sensitivities are callouts, so every bullet in them arrives
+    prefixed `> `. Every matcher here keys on `- **{Label}:**`, which that
+    prefix hides — and each failure is silent rather than loud: the placeholder
+    is never stripped, no label ever matches so every write appends a
+    duplicate, and the Context bullet ceiling counts zero and stops enforcing.
+    Strip the prefix to compare, re-attach it to render.
+    """
+    match = _CALLOUT_PREFIX_RE.match(line)
+    return (match.group(0), line[match.end():]) if match else ("", line)
+
+
+def _body(line: str) -> str:
+    """A line with its callout prefix and indentation removed."""
+    return _split_prefix(line)[1].strip()
+
+
 def _strip_placeholder(lines: List[str]) -> List[str]:
-    return [line for line in lines if line.strip() != PLACEHOLDER]
+    return [line for line in lines if _body(line) != PLACEHOLDER]
+
+
+def _append_point(lines: List[str]) -> Tuple[int, str]:
+    """Where a new bullet goes, and the callout prefix it needs there.
+
+    Inside a callout the section does not end where the last bullet does — the
+    callout ends at the first line without a `>`. A bullet appended past that
+    point renders as loose text below the box instead of inside it, which
+    reads as a rendering bug and is really a write-path bug. So append after
+    the last prefixed line and carry its prefix; with no callout in the
+    section, fall back to appending above any trailing blank lines.
+    """
+    for index in range(len(lines) - 1, -1, -1):
+        prefix, rest = _split_prefix(lines[index])
+        if prefix and rest.strip():
+            return index + 1, prefix
+    insert_at = len(lines)
+    while insert_at > 0 and not lines[insert_at - 1].strip():
+        insert_at -= 1
+    return insert_at, ""
 
 
 def _merge_labelled_bullets(content: str, items, label_key: str,
@@ -204,14 +293,13 @@ def _merge_labelled_bullets(content: str, items, label_key: str,
         rendered = render(item)
         marker = f"- **{label}:**"
         for index, line in enumerate(lines):
-            if line.strip().startswith(marker):
-                lines[index] = rendered
+            prefix, rest = _split_prefix(line)
+            if rest.strip().startswith(marker):
+                lines[index] = prefix + rendered
                 break
         else:
-            insert_at = len(lines)
-            while insert_at > 0 and not lines[insert_at - 1].strip():
-                insert_at -= 1
-            lines.insert(insert_at, rendered)
+            insert_at, prefix = _append_point(lines)
+            lines.insert(insert_at, prefix + rendered)
         touched += 1
     return "\n".join(lines), touched
 
@@ -284,7 +372,7 @@ def _merge_context(content: str, items) -> Tuple[str, int]:
                       f"— {_text(item['why'])}"),
     )
     count = len([line for line in merged.split("\n")
-                if line.strip().startswith("- **")])
+                if _body(line).startswith("- **")])
     if count > MAX_CONTEXT_BULLETS:
         raise EntityError(
             f"Context would hold {count} bullets, exceeding the maximum of "
@@ -427,8 +515,14 @@ def _merge_engagements(content: str, items) -> Tuple[str, int]:
     return _render_table(preamble, ENGAGEMENT_HEADER, rows, postamble), touched
 
 
-def _merge_relationship_history(content: str, items) -> Tuple[str, int]:
-    """Add dated entries, keeping every line that is not one.
+def _date_key(block: List[str]) -> str:
+    """The ISO date a dated bullet leads with: `- **2026-03-10 …`."""
+    return _split_prefix(block[0])[1][4:14]
+
+
+def _merge_dated_bullets(content: str, items, render, *,
+                         newest_first: bool) -> Tuple[str, int]:
+    """Add dated entries in date order, keeping every line that is not one.
 
     Only the top-level `- **date:**` bullets are sorted. Anything else a human
     put here survives: a lead-in paragraph stays above the entries, an indented
@@ -440,7 +534,7 @@ def _merge_relationship_history(content: str, items) -> Tuple[str, int]:
     blocks: List[List[str]] = []
     tail: List[str] = []
     for line in _strip_placeholder(_lines(content)):
-        if line.strip().startswith("- **"):
+        if _body(line).startswith("- **"):
             blocks.append([line])
         elif not blocks:
             lead.append(line)
@@ -449,10 +543,10 @@ def _merge_relationship_history(content: str, items) -> Tuple[str, int]:
         else:
             tail.append(line)
     for item in items:
-        blocks.append([
-            f"- **{_text(item['date'])}:** {_text(item['what'])} "
-            f"— {_text(item['significance'])}"])
-    blocks.sort(key=lambda block: block[0][4:14])
+        blocks.append([render(item)])
+    # Stable, so two entries sharing a date keep the order they arrived in
+    # under both directions.
+    blocks.sort(key=_date_key, reverse=newest_first)
 
     body: List[str] = []
     if any(line.strip() for line in lead):
@@ -472,23 +566,41 @@ def _merge_relationship_history(content: str, items) -> Tuple[str, int]:
     return "\n" + "\n".join(body).strip("\n") + "\n", len(items)
 
 
+def _merge_relationship_history(content: str, items) -> Tuple[str, int]:
+    return _merge_dated_bullets(
+        content, items,
+        lambda item: (f"- **{_text(item['date'])}:** {_text(item['what'])} "
+                      f"— {_text(item['significance'])}"),
+        newest_first=False)
+
+
 def _merge_meeting_log(content: str, items) -> Tuple[str, int]:
-    existing = "\n".join(_strip_placeholder(_lines(content))).strip("\n")
-    blocks = []
-    for item in items:
-        rows = [
-            ("Attendees", item.get("attendees")),
-            ("Key outcomes", item.get("outcomes")),
-            ("Follow-ups", item.get("followups")),
-            ("Dynamics", item.get("dynamics")),
-        ]
-        detail = "\n".join(f"- **{label}:** {_text(value)}"
-                           for label, value in rows if value)
-        blocks.append(
-            f"### {_text(item['date'])} — {_text(item['topic'])}\n\n{detail}")
-    fresh = "\n\n".join(blocks)
-    combined = "\n\n".join(part for part in (fresh, existing) if part)
-    return "\n" + combined + "\n", len(items)
+    """Add Dynamics bullets under the section's `### Dynamics` heading.
+
+    Everything above that heading is the Dataview index — a query, not
+    content — and comes back byte for byte. Attendees, outcomes and follow-ups
+    are deliberately not written here: they live in the meeting note's own
+    frontmatter, `## Notes` and `## Action items`, and a copy in the dossier
+    goes stale the moment the note is corrected. What the meeting note cannot
+    hold is the read of the room, so that is all this section keeps.
+    """
+    lines = _lines(content)
+    for position, line in enumerate(lines):
+        if line.strip() == DYNAMICS_HEADING:
+            break
+    else:
+        raise EntityError(
+            f"the Meeting Log section has no '{DYNAMICS_HEADING}' heading, so "
+            "there is nowhere to record the read of the room. Restore the "
+            "heading (whatever sits above it is a Dataview query and writes "
+            "nothing) and retry."
+        )
+    merged, touched = _merge_dated_bullets(
+        "\n".join(lines[position + 1:]), items,
+        lambda item: (f"- **{_text(item['date'])} — {_text(item['topic'])}:** "
+                      f"{_text(item['dynamics'])}"),
+        newest_first=True)
+    return "\n".join(lines[:position + 1]) + "\n" + merged, touched
 
 
 _MERGERS = {
@@ -511,6 +623,7 @@ def _validate_items(edit_key: str, items: list) -> None:
     caller reading stdout is a model that has been told to read `ok`.
     """
     required = _REQUIRED_EDIT_FIELDS[edit_key]
+    retired = _RETIRED_EDIT_FIELDS.get(edit_key, {})
     for index, item in enumerate(items):
         if not isinstance(item, dict):
             raise EntityError(
@@ -523,6 +636,15 @@ def _validate_items(edit_key: str, items: list) -> None:
             raise EntityError(
                 f"{edit_key}[{index}] is missing required field(s) {missing}; "
                 f"every {edit_key} entry needs {list(required)}"
+            )
+        gone = sorted(key for key in retired if item.get(key))
+        if gone:
+            raise EntityError(
+                f"{edit_key}[{index}] carries retired field(s) {gone}, which "
+                f"this section no longer holds — "
+                + "; ".join(f"{key} belongs in {retired[key]}"
+                            for key in gone)
+                + f". Pass only {list(required)}."
             )
 
 
@@ -586,13 +708,18 @@ def write(root: Path, slug: str, edits: Mapping, today: str) -> dict:
         # A human supplied this content, so the section is no longer
         # unvalidated.
         merged = "\n".join(line for line in merged.split("\n")
-                           if line.strip() != UNVALIDATED)
+                           if _body(line) != UNVALIDATED)
         updated.append((title, merged))
         changes.append(f"{title}: {touched} entr{'y' if touched == 1 else 'ies'}")
 
     new_body = markdown.render_sections(updated)
     if UNVALIDATED not in new_body:
-        new_body = new_body.replace(BANNER + "\n", "").replace(BANNER, "")
+        # The banner owns its own line and render_sections puts a blank one
+        # after it, so removing only the text leaves a widening gap under the
+        # H1. The narrower replacements stay as a fallback for a hand-edited
+        # file whose spacing is not ours.
+        new_body = (new_body.replace(BANNER + "\n\n", "")
+                    .replace(BANNER + "\n", "").replace(BANNER, ""))
         if parsed["banner"]:
             changes.append("removed the unvalidated banner")
 

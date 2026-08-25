@@ -18,6 +18,11 @@ def make_vault(tmp_path: Path) -> Path:
     (tmp_path / "30-projects" / "yard-automation").mkdir(parents=True)
     (tmp_path / "30-projects" / "yard-automation" / "index.md").write_text(
         "---\ntype: project\nslug: yard-automation\n---\n", encoding="utf-8")
+    (tmp_path / "40-entities" / "meridian-freight-holdings").mkdir(parents=True)
+    (tmp_path / "40-entities" / "meridian-freight-holdings"
+     / "dossier.md").write_text(
+        "---\ntype: entity\nslug: meridian-freight-holdings\n---\n",
+        encoding="utf-8")
     (tmp_path / "50-people").mkdir()
     for slug in ("priya-nathan", "morgan-ellery"):
         (tmp_path / "50-people" / f"{slug}.md").write_text(
@@ -94,6 +99,31 @@ def test_rejects_unknown_project_and_unknown_attendee(tmp_path):
         meeting.write(root, payload(projects=["no-such-project"]))
     with pytest.raises(meeting.MeetingError, match="person ensure"):
         meeting.write(root, payload(attendees=["ghost-attendee"]))
+
+
+def test_entities_is_written_when_supplied(tmp_path):
+    root = make_vault(tmp_path)
+    result = meeting.write(root, payload(entities=["meridian-freight-holdings"]))
+    data = yaml.safe_load(
+        (root / result["path"]).read_text(encoding="utf-8").split("---")[1])
+    assert data["entities"] == ["meridian-freight-holdings"]
+
+
+def test_entities_is_omitted_rather_than_written_empty(tmp_path):
+    # An entity dossier is the only reader of this field, so `entities: []` on
+    # every meeting without one is noise in the properties panel.
+    root = make_vault(tmp_path)
+    result = meeting.write(root, payload())
+    text = (root / result["path"]).read_text(encoding="utf-8")
+    assert "entities:" not in text.split("---")[1]
+
+
+def test_rejects_an_entity_slug_with_no_dossier(tmp_path):
+    # The dossier's Meeting Log is a Dataview query over this field: a slug
+    # that joins to nothing empties the table with no error anywhere.
+    root = make_vault(tmp_path)
+    with pytest.raises(meeting.MeetingError, match="40-entities/typo-co"):
+        meeting.write(root, payload(entities=["typo-co"]))
 
 
 def test_rejects_incomplete_confidence_stamp(tmp_path):

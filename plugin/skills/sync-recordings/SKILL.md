@@ -247,7 +247,7 @@ attendee-name matches beat same-day-only. A match pre-fills
 
 (Upstream, collapsing them hid a six-day connector outage.)
 
-### 3. Route: projects and attendees
+### 3. Route: projects, entities and attendees
 
 Judgment, with signals in this order — stop at the first confident match:
 
@@ -260,6 +260,19 @@ Judgment, with signals in this order — stop at the first confident match:
 
 An empty `projects: []` is fine — triage catches unassigned meetings. Never
 force a link.
+
+**Also pass `entities`** — the entity slugs the meeting was *about*, which is
+wider than who was in the room. You have them already: signal 1 resolves the
+entity directly, and a match via signal 2 or 3 gives a project whose
+`entity:` field names one. An internal 1:1 reviewing a client account carries
+that client; a meeting about no entity at all carries nothing.
+
+This is the field an entity dossier's Meeting Log joins on, and it is the
+*only* one: Dataview sees just what a meeting note itself says, and a note
+that names its projects does not name the organization behind them. So pass
+it even when `projects` is empty — an intro call with a prospect that has no
+project yet still belongs in that prospect's dossier, and this is the only
+way it gets there.
 
 Attendees are **person slugs**. For each attendee named by the calendar or
 clearly identified in the transcript, ensure the note exists:
@@ -339,6 +352,7 @@ cat > "$SCRATCH/rec_42.payload.json" <<'JSON'
   "calendar_match": false,
   "attendees": ["priya-nathan", "morgan-ellery"],
   "projects": ["meridian-yard-automation-program"],
+  "entities": ["meridian-freight-holdings"],
   "recording-duration": 40,
   "source": "recorder",
   "source-recording-id": "plaud:rec_42",
@@ -357,13 +371,14 @@ Payload rules the CLI enforces (so get them right the first time):
 
 - `title` is a short kebab-able label — the filename becomes
   `{DD-MM-YY}-{title-slug}.md`. `date` is ISO, the recording's local start.
-- `attendees`/`projects` are slugs and must resolve (person notes, project
-  folders). `attendees` must be non-empty — except on a `type: note`
-  capture, which may pass `[]` when the item names nobody. `projects` may be
-  empty (triage catches unassigned meetings). Optional `people` (slug list)
-  renders a `## People` wikilink section. `takeaways` is 1–5 strings. `type`
-  values with a colon (`"1:1"`) are handled by the CLI — pass them as plain
-  strings.
+- `attendees`/`projects`/`entities` are slugs and must resolve (person notes,
+  project folders, `40-entities/<slug>/dossier.md`). `attendees` must be
+  non-empty — except on a `type: note` capture, which may pass `[]` when the
+  item names nobody. `projects` may be empty (triage catches unassigned
+  meetings). `entities` is optional and omitted from the file when not passed.
+  Optional `people` (slug list) renders a `## People` wikilink section.
+  `takeaways` is 1–5 strings. `type` values with a colon (`"1:1"`) are handled
+  by the CLI — pass them as plain strings.
 - Do NOT pass `review_status`, `reviewed`, `archived`, or `processed` — the
   CLI sets them.
 - `source-recording-id` is **required** on every write — it IS the dedup

@@ -190,6 +190,36 @@ def test_project_entity_joins_resolve():
         assert entity in entity_slugs, f"{path}: entity {entity!r} matches no entity fixture"
 
 
+def test_meeting_entity_joins_resolve():
+    entity_slugs = slugs_of(SCHEMAS["entity"]["glob"])
+    for path in iter_fixture_files(SCHEMAS["meeting"]["glob"]):
+        for slug in parse_frontmatter(path).get("entities") or []:
+            assert slug in entity_slugs, (
+                f"{path}: entities {slug!r} matches no entity fixture — the "
+                "dossier's Meeting Log joins on this slug and would show "
+                "nothing for it"
+            )
+
+
+def test_every_dossier_meeting_log_query_would_return_rows():
+    """The dossier's Meeting Log is `WHERE econtains(entities, this.slug)`.
+
+    Dataview fails silently, so a dossier whose entity slug appears in no
+    meeting note renders an empty table — the exact "empty view in front of a
+    client" failure, and invisible to every other check here. This computes
+    the same join the query does, from frontmatter alone.
+    """
+    meetings = [parse_frontmatter(p)
+                for p in iter_fixture_files(SCHEMAS["meeting"]["glob"])]
+    for path in iter_fixture_files(SCHEMAS["entity"]["glob"]):
+        slug = parse_frontmatter(path)["slug"]
+        matched = [m for m in meetings if slug in (m.get("entities") or [])]
+        assert matched, (
+            f"{path}: no meeting fixture carries entities: [{slug}], so the "
+            "Meeting Log renders an empty table"
+        )
+
+
 def test_meeting_edges_resolve():
     project_slugs = slugs_of(SCHEMAS["project"]["glob"])
     person_slugs = slugs_of(SCHEMAS["person"]["glob"])

@@ -167,7 +167,8 @@ def test_context_at_exactly_the_cap_succeeds(tmp_path):
                          for i in range(8)]}
     entity.write(root, "meridian-freight-holdings", edits, TODAY)
     text = entity.read(root, "meridian-freight-holdings")["sections"]["Context"]
-    assert len([line for line in text.splitlines() if line.startswith("- **")]) == 8
+    assert len([line for line in text.splitlines()
+                if line.startswith("> - **")]) == 8
 
 
 def test_context_bullets_written_across_calls_are_never_dropped_by_the_cap(tmp_path):
@@ -179,10 +180,99 @@ def test_context_bullets_written_across_calls_are_never_dropped_by_the_cap(tmp_p
         {"label": f"L{i}", "fact": f"f{i}", "why": "w"} for i in range(5, 8)]},
         TODAY)
     text = entity.read(root, "meridian-freight-holdings")["sections"]["Context"]
-    bullets = [line for line in text.splitlines() if line.startswith("- **")]
+    bullets = [line for line in text.splitlines() if line.startswith("> - **")]
     assert len(bullets) == 8
     for i in range(8):
         assert f"L{i}" in text
+
+
+# --- write: callout sections ---------------------------------------------
+
+def test_a_fresh_dossier_titles_itself_with_the_entity_name(tmp_path):
+    # Every dossier file is named dossier.md, so with no H1 the only title
+    # Obsidian shows for the note is the word "dossier".
+    root = seeded(tmp_path)
+    body = (root / "40-entities" / "meridian-freight-holdings"
+            / "dossier.md").read_text(encoding="utf-8").split("---\n", 2)[2]
+    assert body.lstrip().startswith("# Meridian Freight Holdings")
+
+
+@pytest.mark.parametrize("section, callout", [
+    ("Context", entity.CONTEXT_CALLOUT),
+    ("Sensitivities", entity.SENSITIVITIES_CALLOUT),
+])
+def test_a_fresh_dossier_opens_those_sections_as_callouts(tmp_path, section, callout):
+    root = seeded(tmp_path)
+    assert callout in entity.read(
+        root, "meridian-freight-holdings")["sections"][section]
+
+
+@pytest.mark.parametrize("edits, section, needle", [
+    ({"context": [{"label": "Industry", "fact": "freight", "why": "scope"}]},
+     "Context", "- **Industry:**"),
+    ({"sensitivities": [{"topic": "Board pressure", "detail": "d",
+                         "implications": "i"}]},
+     "Sensitivities", "- **Board pressure:**"),
+])
+def test_a_new_bullet_lands_inside_the_callout(tmp_path, edits, section, needle):
+    # The failure this guards: appended past the callout's last `>` line, the
+    # bullet renders as loose text under the box rather than inside it. It
+    # looks like a rendering bug and is really a write-path bug.
+    root = seeded(tmp_path)
+    entity.write(root, "meridian-freight-holdings", edits, TODAY)
+    text = entity.read(root, "meridian-freight-holdings")["sections"][section]
+    line = [ln for ln in text.splitlines() if needle in ln][0]
+    assert line.startswith("> "), f"bullet fell outside the callout: {line!r}"
+
+
+def test_the_callout_placeholder_is_replaced_not_kept(tmp_path):
+    # `> *No entries yet.*` only matches the placeholder once the `> ` is
+    # stripped, so a prefix-blind strip leaves it above the first real bullet.
+    root = seeded(tmp_path)
+    entity.write(root, "meridian-freight-holdings", {"context": [
+        {"label": "Industry", "fact": "freight", "why": "scope"}]}, TODAY)
+    assert "*No entries yet.*" not in entity.read(
+        root, "meridian-freight-holdings")["sections"]["Context"]
+
+
+def test_a_matching_label_inside_a_callout_updates_rather_than_duplicates(tmp_path):
+    root = seeded(tmp_path)
+    for fact in ("three yards", "three yards, 240 trailers"):
+        entity.write(root, "meridian-freight-holdings", {"context": [
+            {"label": "Scale", "fact": fact, "why": "sizing"}]}, TODAY)
+    text = entity.read(root, "meridian-freight-holdings")["sections"]["Context"]
+    assert text.count("- **Scale:**") == 1
+    assert "240 trailers" in text
+
+
+def test_a_context_callout_unwrapped_by_hand_still_merges(tmp_path):
+    # A human may delete the callout and leave plain bullets. The matcher keys
+    # on the label after stripping any prefix, so both shapes keep working —
+    # otherwise an unwrapped section silently appends duplicates forever.
+    root = seeded(tmp_path)
+    entity.write(root, "meridian-freight-holdings", {"context": [
+        {"label": "Scale", "fact": "three yards", "why": "sizing"}]}, TODAY)
+    path = root / "40-entities" / "meridian-freight-holdings" / "dossier.md"
+    text = path.read_text(encoding="utf-8")
+    path.write_text(text.replace(entity.CONTEXT_CALLOUT + "\n", "")
+                    .replace("> - **Scale:**", "- **Scale:**"), encoding="utf-8")
+    entity.write(root, "meridian-freight-holdings", {"context": [
+        {"label": "Scale", "fact": "three yards, 240 trailers", "why": "sizing"}]},
+        TODAY)
+    section = entity.read(root, "meridian-freight-holdings")["sections"]["Context"]
+    assert section.count("- **Scale:**") == 1
+    assert "240 trailers" in section
+
+
+def test_the_context_cap_still_counts_bullets_inside_the_callout(tmp_path):
+    # A prefix-blind count reads zero bullets, so the ceiling stops enforcing
+    # and Context grows without limit — silently.
+    root = seeded(tmp_path)
+    entity.write(root, "meridian-freight-holdings", {"context": [
+        {"label": f"L{i}", "fact": "f", "why": "w"} for i in range(8)]}, TODAY)
+    with pytest.raises(entity.EntityError, match="Consolidate"):
+        entity.write(root, "meridian-freight-holdings", {"context": [
+            {"label": "L8", "fact": "f", "why": "w"}]}, TODAY)
 
 
 # --- write: stakeholders --------------------------------------------------
@@ -514,33 +604,66 @@ def test_repeated_writes_never_grow_the_gap_before_trailing_content(tmp_path):
     assert seen == {1}, f"the blank-run count drifted across writes: {sorted(seen)}"
 
 
-def test_meeting_log_prepends_newest_first(tmp_path):
+def test_meeting_log_dynamics_are_newest_first(tmp_path):
     root = seeded(tmp_path)
     entity.write(root, "meridian-freight-holdings", {"meeting_log": [
-        {"date": "2026-03-10", "topic": "SteerCo 01", "attendees": "Leo",
-         "outcomes": "scope agreed", "followups": "send plan",
-         "dynamics": "warm"}]}, TODAY)
+        {"date": "2026-03-10", "topic": "SteerCo 01",
+         "dynamics": "warm; Leo wanted a total"}]}, TODAY)
     entity.write(root, "meridian-freight-holdings", {"meeting_log": [
-        {"date": "2026-05-20", "topic": "Vendor strategy", "attendees": "Leo, Renee",
-         "outcomes": "consolidate", "followups": "draft memo", "dynamics": "tense"}]},
-        TODAY)
+        {"date": "2026-05-20", "topic": "Vendor strategy",
+         "dynamics": "tense; Renee absent"}]}, TODAY)
     text = entity.read(root, "meridian-freight-holdings")["sections"]["Meeting Log"]
     assert text.index("Vendor strategy") < text.index("SteerCo 01")
     assert "*No entries yet.*" not in text
 
 
+def test_meeting_log_keeps_its_dataview_index_byte_for_byte(tmp_path):
+    # The table above ### Dynamics is a query, not content. A merge that
+    # reflowed or dropped a line of it would empty the section in Obsidian
+    # while every assertion about the bullets still passed.
+    root = seeded(tmp_path)
+    for date in ("2026-03-10", "2026-05-20"):
+        entity.write(root, "meridian-freight-holdings", {"meeting_log": [
+            {"date": date, "topic": "T", "dynamics": "d"}]}, TODAY)
+    text = entity.read(root, "meridian-freight-holdings")["sections"]["Meeting Log"]
+    assert entity.MEETING_LOG_QUERY in text
+    assert text.index(entity.MEETING_LOG_QUERY) < text.index(entity.DYNAMICS_HEADING)
+
+
 def test_meeting_log_entries_are_never_modified(tmp_path):
     root = seeded(tmp_path)
     entity.write(root, "meridian-freight-holdings", {"meeting_log": [
-        {"date": "2026-03-10", "topic": "SteerCo 01", "outcomes": "scope agreed"}]},
+        {"date": "2026-03-10", "topic": "SteerCo 01", "dynamics": "scope agreed"}]},
         TODAY)
     before = entity.read(root, "meridian-freight-holdings")["sections"]["Meeting Log"]
     entity.write(root, "meridian-freight-holdings", {"meeting_log": [
-        {"date": "2026-03-10", "topic": "SteerCo 01", "outcomes": "different"}]},
+        {"date": "2026-03-10", "topic": "SteerCo 01", "dynamics": "different"}]},
         TODAY)
     after = entity.read(root, "meridian-freight-holdings")["sections"]["Meeting Log"]
     assert "scope agreed" in after
     assert before.strip() in after
+
+
+def test_meeting_log_refuses_the_retired_narrative_fields(tmp_path):
+    # Attendees/outcomes/follow-ups now live in the meeting note. Ignoring
+    # them would return an ok envelope for content that was never written.
+    root = seeded(tmp_path)
+    with pytest.raises(entity.EntityError, match="outcomes belongs in"):
+        entity.write(root, "meridian-freight-holdings", {"meeting_log": [
+            {"date": "2026-03-10", "topic": "SteerCo 01", "dynamics": "warm",
+             "outcomes": "scope agreed"}]}, TODAY)
+
+
+def test_meeting_log_without_its_dynamics_heading_refuses_the_write(tmp_path):
+    root = seeded(tmp_path)
+    path = root / "40-entities" / "meridian-freight-holdings" / "dossier.md"
+    path.write_text(
+        path.read_text(encoding="utf-8").replace(entity.DYNAMICS_HEADING, "### Notes"),
+        encoding="utf-8")
+    with pytest.raises(entity.EntityError, match="Dynamics"):
+        entity.write(root, "meridian-freight-holdings", {"meeting_log": [
+            {"date": "2026-03-10", "topic": "SteerCo 01", "dynamics": "warm"}]},
+            TODAY)
 
 
 # --- write: sensitivities & engagements ---------------------------------
@@ -759,7 +882,8 @@ def test_a_missing_heading_does_not_half_apply_the_rest(tmp_path):
     ({"context": [{"label": "L", "fact": "f"}]}, "why"),
     ({"context": ["a plain string"]}, "got str"),
     ({"engagements": [{"status": "Active"}]}, "project"),
-    ({"meeting_log": [{"topic": "only a topic"}]}, "date"),
+    ({"meeting_log": [{"topic": "only a topic", "dynamics": "d"}]}, "date"),
+    ({"meeting_log": [{"date": "2026-01-01", "topic": "T"}]}, "dynamics"),
     ({"sensitivities": [{"topic": "T", "detail": "d"}]}, "implications"),
     ({"relationship_history": [{"date": "2026-01-01", "what": "w"}]},
      "significance"),

@@ -348,7 +348,55 @@ surface is broken. The converse also holds — do not paper over a *reproducible
 failure with retries. If the same surface dies at the same point three times,
 that is a bug.
 
-These four entries are about the probe. Traps about what the vault renders —
+## 2026-08-25 — two sessions cannot share the visual-verification probe
+
+**What went wrong.** Mid-way through the visual pass for #60 items 4–5, the
+probe stopped answering for the vault it had been launched on. `obsidian_probe
+up --vault test-vaults/2026-08-25-entity` printed the entity vault, and ~15
+seconds later `doctor` reported a *different* vault — three different ones
+across successive attempts, one of them a directory that had not existed when
+the run started. A `dev:screenshot` taken in between captured a vault that was
+not under test at all: confidently wrong evidence.
+
+The cause was another agent session running its own visual pass concurrently — the #68 pass whose retry advice is the entry above. Those
+same three errors are what contention looks like from the inside, so "budget for retries" is right but incomplete: a retry loop that does not
+check *which* vault came back re-points at the wrong one and keeps going.
+Both used the default profile `~/.sb-probe`, and the probe registers every
+vault under one fixed id (`PROBE_VAULT_ID`, so the Restricted Mode click
+survives fresh vaults). So the two runs shared one profile, one CLI socket at
+`$HOME/.obsidian-cli.sock`, and one registry entry — each `up` overwrote the
+other's, and Obsidian persisted whichever window closed last. Killing the
+probe processes and pinning `obsidian.json` by hand did not hold: the other
+session simply claimed it again seconds later.
+
+**Why the guard does not catch it.** The guard resolves
+`app.vault.adapter.basePath` and refuses anything outside `test-vaults/` —
+which is exactly what it promises, and no help here. Both vaults were under
+`test-vaults/`, so it reported `ok` for the wrong one. It defends against
+touching a real vault, not against touching the wrong test vault.
+
+**The rule.** The probe is a single-tenant resource. Before starting a visual
+pass, check whether one is already running:
+
+```bash
+pgrep -f 'user-data-dir=.*sb-probe' >/dev/null && echo "probe in use — wait"
+cat ~/.sb-probe/userdata/obsidian.json   # whose vault is registered?
+```
+
+If it is in use, wait rather than launching — and never `pkill` it, which
+destroys the other run's instance mid-tour. `--home` starts an independent
+profile, but a fresh one needs the one-time Restricted Mode click, so it is
+not a fix an agent can apply alone: without trust, Dataview never loads and
+every Dataview assertion passes against an unrendered block.
+
+**Verify the vault after the fact, not just before.** `tour` writes the
+guarded path into `.obsidian-probe-out/summary.json`. Read it before trusting
+any capture — that field is what confirmed the 17 surfaces in this run were
+genuinely the intended vault, and it is the only durable record of which vault
+answered. Ad-hoc `dev:screenshot` calls outside `tour` carry no such record,
+which is why the wrong-vault capture was believable.
+
+These five entries are about the probe. Traps about what the vault renders —
 column virtualisation, occluded windows returning stale frames, non-pristine
 vaults poisoning the row cross-check — live in `docs/visual-verification.md`
 under "Traps worth knowing".
