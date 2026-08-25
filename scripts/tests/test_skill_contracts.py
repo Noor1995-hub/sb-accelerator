@@ -271,6 +271,26 @@ def test_evening_sync_mandates_wikilinks_for_looked_up_names():
     )
 
 
+def test_evening_sync_recovers_from_a_link_refusal_rather_than_ending_the_run():
+    # `_check_links` raises before a byte is written, so a stage-6 refusal
+    # leaves tomorrow with no note — found by the exec next morning, and
+    # flatly against both the failure-isolated stage promise and rule 7
+    # ("a refused calendar still writes the note"). The CLI cannot fix this
+    # for itself: only the caller knows which link to drop or rename. So the
+    # recovery has to be written down here, bounded, or a model improvises.
+    # Normalized whitespace: both anchors are multi-word and this paragraph
+    # will be reflowed sooner or later.
+    text = _normalized(_evening_sync()).lower()
+    assert "retry the write once" in text, (
+        "stage 6 must say to fix the link and retry once — an unbounded "
+        "retry loop is the other way this goes wrong"
+    )
+    assert "never end the run without a note" in text, (
+        "the bound needs the reason attached, or a model reads the retry as "
+        "optional and exits on the refusal"
+    )
+
+
 def test_evening_sync_states_unattended_catchup_behaviour():
     section = _evening_sync().split("## Unattended mode", 1)
     assert len(section) == 2, "evening-sync has no Unattended mode section"

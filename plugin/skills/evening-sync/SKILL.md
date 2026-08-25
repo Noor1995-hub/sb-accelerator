@@ -215,12 +215,14 @@ language and depth preferences in
 
 **Every entity, person and project you name is a wikilink to the object you
 looked up — never a name you recalled.**
-`daily-note write` refuses a link that resolves to nothing, and refuses
-`[[slug|Display Name]]` where the display name disagrees with the vault; a
-plain-prose name it cannot check at all, which is exactly why the linked
-form is required. If a name has no object, create it first or leave the
-name out. Open items live on projects — link them, never duplicate a task
-list.
+`daily-note write` refuses a link that resolves to nothing, and where the
+target is an **entity, person or project** it refuses `[[slug|Display Name]]`
+whose display name disagrees with the vault. Meeting, decision and
+daily-note aliases are free prose — "Friday's status call" is a reference,
+not a claim about what something is called. A plain-prose name it cannot
+check at all, which is exactly why the linked form is required. If a name
+has no object, create it first or leave the name out. Open items live on
+projects — link them, never duplicate a task list.
 
 $SCRATCH below is your session scratch directory — payloads never land in
 the vault.
@@ -248,6 +250,15 @@ meeting set: either a different number of meetings, or a meeting heading that
 no longer matches the payload (the calendar moved, or the user retyped the
 heading). Report it and leave the note alone (it may hold human jottings); do
 not delete it to force a rewrite.
+
+**A refused link must not cost the exec their note.** The link check runs
+before anything is written, so a refusal here means tomorrow has no note at
+all — discovered next morning, which is the failure rule 7 already forbids
+for a refused calendar. The error is precise enough to act on: an
+unresolvable target names the slug, an alias mismatch names the true display
+name. So take the resolved name from the error, or drop the offending link,
+and retry the write once — never a third attempt. Record the refusal and
+what you changed as a stage-7 warning. Never end the run without a note.
 
 `recap_window` is what makes the run idempotent: the CLI fingerprints the
 window's meetings, jottings and decisions and stamps the digest on the recap
