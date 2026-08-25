@@ -39,6 +39,11 @@ _ALLOWED_MEETING_KEYS = ("time", "subject", "entity", "prep")
 _ALLOWED_WINDOW_KEYS = ("from", "to", "detailed_from")
 _DIGEST_LENGTH = 16
 
+# `#heading` is stripped before resolution; `|alias` is the display-name
+# claim. `!?` catches embeds, which make the same claim as a plain link.
+_WIKILINK_RE = re.compile(
+    r"!?\[\[([^\[\]|#]+)(?:#[^\[\]|]*)?(?:\|([^\[\]]*))?\]\]")
+
 
 class DailyNoteError(Exception):
     """A payload field or note state the caller must fix."""
@@ -115,15 +120,86 @@ def _clean_region_text(value, label: str) -> str:
     return text
 
 
-def _validate(root: Path, payload) -> dict:
+def _resolve_link(root: Path, target: str):
+    """(kind, path, display-name key) for a wikilink target, or three Nones.
+
+    Identity objects come first: they are the ones whose *name* an alias
+    claims, and a slug that is both a person note and a project folder is a
+    collision the vault should not have. Event objects resolve but make no
+    name claim — "Friday's Acme sync" is a reference, not a name.
+    """
+    candidates = (
+        ("entity", root / vault.ENTITIES_DIR / target / "dossier.md",
+         "entity-name"),
+        ("person", root / vault.PEOPLE_DIR / f"{target}.md", "person-name"),
+        ("project", root / vault.PROJECTS_DIR / target / "index.md",
+         "project-name"),
+        ("meeting", root / vault.MEETINGS_DIR / f"{target}.md", None),
+        ("daily note", root / DAILY_NOTES_DIR / f"{target}.md", None),
+    )
+    for kind, path, name_key in candidates:
+        if path.is_file():
+            return kind, path, name_key
+    projects = root / vault.PROJECTS_DIR
+    for folder in sorted(projects.glob("*/decisions")) if projects.is_dir() else []:
+        path = folder / f"{target}.md"
+        if path.is_file():
+            return "decision", path, None
+    return None, None, None
+
+
+def _check_links(root: Path, text: str, label: str,
+                 warnings: List[str]) -> None:
+    """Every wikilink resolves; every identity alias matches the vault.
+
+    Decision 19. A plain-prose name cannot be checked by anything, which is
+    why the skill mandates the wikilink form — this is the half that a
+    machine can hold.
+    """
+    for match in _WIKILINK_RE.finditer(text):
+        target = match.group(1).strip()
+        alias = match.group(2)
+        kind, path, name_key = _resolve_link(root, target)
+        if kind is None:
+            raise DailyNoteError(
+                f"{label}: [[{target}]] resolves to no vault object — link "
+                "only to objects that exist (create one with /update-entity "
+                "or /new-project first), or leave the name out. Never write "
+                "a name you have not looked up.")
+        if alias is None or name_key is None:
+            continue
+        try:
+            frontmatter, _ = markdown.split_frontmatter(
+                path.read_text(encoding="utf-8"))
+        except ValueError as exc:
+            warnings.append(
+                f"{label}: [[{target}]] resolves but its frontmatter could "
+                f"not be read ({exc}) — display name not verified")
+            continue
+        actual = str(frontmatter.get(name_key) or "").strip()
+        if not actual:
+            warnings.append(
+                f"{label}: [[{target}]] carries no {name_key} — display name "
+                "not verified")
+            continue
+        if alias.strip() != actual:
+            raise DailyNoteError(
+                f"{label}: [[{target}|{alias}]] — that {kind} is called "
+                f"{actual!r}. Display names come from the vault, never from "
+                "the model.")
+
+
+def _validate(root: Path, payload) -> Tuple[dict, List[str]]:
     if not isinstance(payload, dict):
         raise DailyNoteError("the payload must be a JSON object")
+    warnings: List[str] = []
     unknown = sorted(set(payload) - set(_ALLOWED_KEYS))
     if unknown:
         raise DailyNoteError(f"unknown payload key(s) {unknown}")
     date_iso = _require_date(payload.get("date"))
     window = _validate_window(payload, date_iso)
     recap = _clean_region_text(payload.get("recap"), "recap")
+    _check_links(root, recap, "recap", warnings)
     raw_meetings = payload.get("meetings")
     if not isinstance(raw_meetings, list):
         raise DailyNoteError("meetings must be a list (possibly empty)")
@@ -161,6 +237,7 @@ def _validate(root: Path, payload) -> dict:
                     "rather than guessing")
         prep = _clean_region_text(entry.get("prep"),
                                   f"meeting {position} prep")
+        _check_links(root, prep, f"meeting {position} prep", warnings)
         meetings.append({"time": time_text, "subject": subject,
                          "entity": entity, "prep": prep})
     meetings_note = payload.get("meetings_note")
@@ -171,8 +248,10 @@ def _validate(root: Path, payload) -> dict:
         meetings_note = _clean_region_text(meetings_note, "meetings_note")
         if "\n" in meetings_note:
             raise DailyNoteError("meetings_note must be a single line")
-    return {"date": date_iso, "recap": recap, "meetings": meetings,
-            "meetings_note": meetings_note, "recap_window": window}
+        _check_links(root, meetings_note, "meetings_note", warnings)
+    return ({"date": date_iso, "recap": recap, "meetings": meetings,
+             "meetings_note": meetings_note, "recap_window": window},
+            warnings)
 
 
 def _iso_prefix_date(stem: str) -> Optional[date]:
@@ -455,7 +534,7 @@ def _merge(text: str, data: dict,
 
 
 def write(root: Path, payload) -> dict:
-    data = _validate(root, payload)
+    data, warnings = _validate(root, payload)
     window = data["recap_window"]
     fingerprint = recap_fingerprint(root, window) if window else None
     path = root / DAILY_NOTES_DIR / f"{data['date']}.md"
@@ -480,6 +559,7 @@ def write(root: Path, payload) -> dict:
         "changed": changed,
         "recap_skipped": recap_skipped,
         "recap_inputs": fingerprint,
+        "warnings": warnings,
     }
 
 

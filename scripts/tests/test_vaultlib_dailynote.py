@@ -29,6 +29,27 @@ def make_vault(tmp_path: Path) -> Path:
     return tmp_path
 
 
+def make_linkable_vault(tmp_path: Path) -> Path:
+    root = make_vault(tmp_path)
+    (root / "50-people").mkdir()
+    (root / "50-people" / "taylor-brooks.md").write_text(
+        "---\nperson-name: Taylor Brooks\nslug: taylor-brooks\n"
+        "relationship: external\n---\n", encoding="utf-8")
+    project = root / "30-projects" / "yard-automation"
+    project.mkdir(parents=True)
+    (project / "index.md").write_text(
+        "---\ntype: project\nproject-name: Yard Automation Program\n"
+        "slug: yard-automation\n---\n", encoding="utf-8")
+    (project / "decisions").mkdir()
+    (project / "decisions" / "2026-06-12-phase-1-deferred.md").write_text(
+        "---\ntype: decision\n---\n", encoding="utf-8")
+    (root / "20-meetings").mkdir()
+    (root / "20-meetings" / "12-06-26-weekly-status.md").write_text(
+        "---\ndate: 2026-06-12T09:00\ntype: status-update\n---\n",
+        encoding="utf-8")
+    return root
+
+
 def payload(**overrides) -> dict:
     base = {
         "date": "2026-06-15",
@@ -838,3 +859,109 @@ def test_banner_renders_through_the_merge_path_too(tmp_path):
     text = (root / "60-daily-notes" / "2026-06-15.md").read_text(encoding="utf-8")
     assert "> [!warning] Catch-up note" in text
     assert "1 business day without an evening run" in text
+
+
+def test_a_recap_link_to_no_vault_object_is_refused(tmp_path):
+    root = make_linkable_vault(tmp_path)
+    with pytest.raises(dailynote.DailyNoteError,
+                       match="resolves to no vault object"):
+        dailynote.write(root, payload(
+            recap="- [[meridian-industrial-holdings]] wants a comparison."))
+
+
+def test_links_to_every_object_kind_resolve(tmp_path):
+    root = make_linkable_vault(tmp_path)
+    result = dailynote.write(root, payload(recap=(
+        "- [[acme-industries]] · [[taylor-brooks]] · [[yard-automation]]\n"
+        "- [[12-06-26-weekly-status]] · [[2026-06-12-phase-1-deferred]]")))
+    assert result["created"] is True
+    assert result["warnings"] == []
+
+
+def test_an_entity_alias_that_contradicts_the_vault_is_refused(tmp_path):
+    """The H2 name defect: a display name the model invented."""
+    root = make_linkable_vault(tmp_path)
+    with pytest.raises(dailynote.DailyNoteError, match="called 'Acme'"):
+        dailynote.write(root, payload(
+            recap="- [[acme-industries|Acme Industrial Holdings]] escalated."))
+
+
+def test_a_person_alias_that_contradicts_the_vault_is_refused(tmp_path):
+    root = make_linkable_vault(tmp_path)
+    with pytest.raises(dailynote.DailyNoteError, match="Taylor Brooks"):
+        dailynote.write(root, payload(
+            recap="- [[taylor-brooks|Tyler Brooks]] owns the draft."))
+
+
+def test_a_project_alias_that_contradicts_the_vault_is_refused(tmp_path):
+    root = make_linkable_vault(tmp_path)
+    with pytest.raises(dailynote.DailyNoteError,
+                       match="Yard Automation Program"):
+        dailynote.write(root, payload(
+            recap="- [[yard-automation|Yard Automation Programme]] slipped."))
+
+
+def test_an_identity_alias_that_matches_the_vault_is_accepted(tmp_path):
+    root = make_linkable_vault(tmp_path)
+    result = dailynote.write(root, payload(
+        recap="- [[taylor-brooks|Taylor Brooks]] owns the board pack draft."))
+    assert result["created"] is True
+
+
+def test_an_event_object_alias_is_free_prose(tmp_path):
+    root = make_linkable_vault(tmp_path)
+    result = dailynote.write(root, payload(recap=(
+        "- [[12-06-26-weekly-status|Friday's status call]] — shortlist "
+        "approved.\n- [[2026-06-12-phase-1-deferred|the deferral]] is queued.")))
+    assert result["created"] is True
+
+
+def test_a_heading_anchor_is_stripped_before_resolution(tmp_path):
+    root = make_linkable_vault(tmp_path)
+    result = dailynote.write(root, payload(
+        recap="- [[acme-industries#Sensitivities|Acme]] needs care."))
+    assert result["created"] is True
+    with pytest.raises(dailynote.DailyNoteError,
+                       match="resolves to no vault object"):
+        dailynote.write(root, payload(
+            date="2026-06-16", recap="- [[nope#Context]] is nothing."))
+
+
+def test_an_embed_is_checked_like_a_link(tmp_path):
+    root = make_linkable_vault(tmp_path)
+    with pytest.raises(dailynote.DailyNoteError,
+                       match="resolves to no vault object"):
+        dailynote.write(root, payload(recap="- ![[not-a-thing]]"))
+
+
+def test_links_in_prep_and_in_meetings_note_are_checked_too(tmp_path):
+    root = make_linkable_vault(tmp_path)
+    with pytest.raises(dailynote.DailyNoteError, match="meeting 1 prep"):
+        bad = payload()
+        bad["meetings"][0]["prep"] = "**Context:** [[ghost-entity]] escalated."
+        dailynote.write(root, bad)
+    with pytest.raises(dailynote.DailyNoteError, match="meetings_note"):
+        dailynote.write(root, payload(
+            meetings=[], meetings_note="*Calendar down; see [[ghost-entity]].*"))
+
+
+def test_an_unreadable_dossier_warns_instead_of_blocking_the_note(tmp_path):
+    root = make_linkable_vault(tmp_path)
+    (root / "40-entities" / "acme-industries" / "dossier.md").write_text(
+        "no frontmatter here\n", encoding="utf-8")
+    result = dailynote.write(root, payload(
+        recap="- [[acme-industries|Acme]] escalated."))
+    assert result["created"] is True
+    assert len(result["warnings"]) == 1
+    assert "display name not verified" in result["warnings"][0]
+
+
+def test_a_missing_display_name_warns_instead_of_blocking(tmp_path):
+    root = make_linkable_vault(tmp_path)
+    (root / "50-people" / "taylor-brooks.md").write_text(
+        "---\nslug: taylor-brooks\nrelationship: external\n---\n",
+        encoding="utf-8")
+    result = dailynote.write(root, payload(
+        recap="- [[taylor-brooks|Taylor Brooks]] owns the draft."))
+    assert result["created"] is True
+    assert "person-name" in result["warnings"][0]
