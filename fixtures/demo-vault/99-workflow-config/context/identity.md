@@ -15,9 +15,9 @@ Who the executive is, in their own words. Read by every skill that writes on the
 
 <!-- setup-my-brain:begin -->
 Morgan Ellery — goes by Morgan. Chief Commercial Officer at Cascadia
-Intermodal Group, a mid-size industrial and logistics company (~1,400
-employees). 14 years in commercial leadership across logistics and
-industrial services, the last 4 as CCO. Works in English; time zone
-America/Chicago, typical working window 07:00–18:00 with client-site weeks
-running later.
+Intermodal Group, a mid-size industrial and logistics company headquartered in
+Antwerp (~1,400 employees). 14 years in commercial leadership across
+logistics and industrial services, the last 4 as CCO. Works in English;
+time zone Europe/Brussels, typical working window 07:00–18:00 with
+client-site weeks running later.
 <!-- setup-my-brain:end -->

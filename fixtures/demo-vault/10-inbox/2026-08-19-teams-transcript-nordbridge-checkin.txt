@@ -1,27 +1,273 @@
 Microsoft Teams — Meeting Transcript
 Meeting: Nordbridge Components / Cascadia Intermodal — Quarterly Check-in
-Date: 2026-08-19 10:00–10:35 (America/Chicago)
-Participants: Jordan Vance, Dana Whitfield
+Date: 2026-08-19 10:00–10:45 (Europe/Brussels)
+Participants: Jordan Vance, Dana Whitfield, Stijn Peeters
 
-[10:00:12] Jordan Vance: Thanks for jumping on, Dana. Wanted to check in
-ahead of the proposal submission — anything changed on your end since we
-last talked?
+[10:00:04] Jordan Vance: Morning, Dana — you're in Rotterdam this week,
+right?
 
-[10:00:41] Dana Whitfield: Not much has changed. The ERP freeze at Ohio
-Valley is still in effect through end of Q3, so keep that site out of Phase
-1 like we discussed.
+[10:00:11] Dana Whitfield: Antwerp, actually, but close enough. Give me one
+second, I'm dialling in from a meeting room with terrible Wi-Fi.
 
-[10:01:20] Jordan Vance: Understood, we've already scoped Phase 1 around
-the Kentucky plant instead. Timeline still looking like a September
-submission on our end.
+[10:00:26] Jordan Vance: Take your time.
 
-[10:02:05] Dana Whitfield: That works. One thing — procurement wants to see
-a total-cost-of-ownership comparison against our current manual process,
-not just the automation vendor pricing. Can you build that in?
+[10:00:52] Dana Whitfield: Okay, I think I'm stable now. Can you hear me?
 
-[10:02:40] Jordan Vance: Yes, we'll add a TCO section. I'll get you a draft
-before the formal submission so there's no surprises.
+[10:00:55] Jordan Vance: Loud and clear. So — before we get into it, I
+brought Stijn along this time. Stijn Peeters, he's the plant controller at
+Liège, thought it'd be useful to have him on given where the conversation's
+headed.
 
-[10:03:15] Dana Whitfield: Appreciated. That's all from my side.
+[10:01:10] Stijn Peeters: Hi, yes — thanks for having me. I'll mostly
+listen, jump in if something's relevant on the finance side.
 
-[10:03:22] Jordan Vance: Great, thanks Dana — talk soon.
+[10:01:22] Dana Whitfield: Good to have you, Stijn. Welcome to the — uhm,
+the fun part of procurement calls.
+
+[10:01:29] Jordan Vance: (laughs) Right. So, quick recap for everyone:
+we're heading toward a September submission for the regional rollout
+proposal. Dana, anything changed on your end since we last spoke?
+
+[10:01:50] Dana Whitfield: Not much has shifted, no. The ERP freeze at the
+Liège plant is still in effect — that one's not moving, it holds through
+end of Q3. So that site stays out of Phase 1, same as before.
+
+[10:02:15] Stijn Peeters: Yeah, I can actually speak to that a bit — the
+freeze is a finance-systems migration, general ledger and cost-centre
+mapping, nothing to do with the shop floor equipment itself. But integration
+work touching anything upstream of it is frozen too, so —
+
+[10:02:33] Jordan Vance: — right, which would include any automation
+tie-in to inventory valuation.
+
+[10:02:37] Stijn Peeters: Exactly. So even if the physical rollout wouldn't
+touch the frozen systems directly, the reporting layer would, and that's
+enough to keep it off the table until the freeze lifts.
+
+[10:02:52] Dana Whitfield: Which is why we said end of Q3, not before.
+
+[10:03:01] Jordan Vance: Understood — and that actually tracks with where
+things landed on your side too. Now that your ops review nominated
+Tilburg back in July, we've scoped Phase 1 around it.
+
+[10:03:20] Dana Whitfield: Right — that's the one ops flagged out of the
+July review. Wasn't a hard sell, just took a couple of passes before it
+stuck.
+
+[10:03:31] Jordan Vance: Good to hear it held. Okay, so — timeline still
+looking like September for the formal submission on our end. We'll
+walk you and the steering group through the site sequencing, the
+commissioning schedule, all of it.
+
+[10:03:50] Dana Whitfield: Good. One thing on my side — and this came
+from our CFO's office, not from me, so don't shoot the messenger —
+procurement wants to see a total-cost-of-ownership comparison, in euros,
+against our current manual process. Not just the automation vendor
+pricing side by side. They want the full picture: labour, error rates,
+rework, all of it, compared to what a do-nothing baseline actually costs
+us over the same period.
+
+[10:04:20] Jordan Vance: That's a fair ask. Can you say roughly what
+timeframe they want the TCO modelled over — three years, five?
+
+[10:04:29] Dana Whitfield: Five, I think, but let me confirm. Stijn, does
+finance usually run these over five years or is that too long given
+depreciation schedules?
+
+[10:04:40] Stijn Peeters: Five is normal for capital equipment here, yeah.
+Might be worth showing three and five side by side though, some board
+members get twitchy about anything past three.
+
+[10:04:52] Jordan Vance: Noted — three and five. Okay, we'll build that
+into the submission. I'll get you a TCO draft before the formal
+submission goes out, so there's no surprises on the numbers when it lands
+with the steering group.
+
+[10:05:10] Dana Whitfield: Appreciated. That takes a lot of the political
+risk off my plate.
+
+[10:05:18] Jordan Vance: Happy to. Alright — Stijn, anything from your
+side while we're on the topic of Tilburg, or should we come back to that?
+
+[10:05:30] Stijn Peeters: Actually, yeah, since we're — sorry, is this the
+wrong moment? I don't want to derail the call.
+
+[10:05:36] Jordan Vance: No, go ahead, this is exactly the moment.
+
+[10:05:40] Stijn Peeters: Okay so — Tilburg's maintenance windows are a
+mess right now, and I don't think anyone's factored that into the
+commissioning schedule yet. The site does planned downtime every second
+Saturday for the compressor overhaul programme, that's been running since
+March, and it eats basically the whole day. If commissioning needs a
+full-day window on the floor, you're fighting for slots against that.
+
+[10:06:05] Jordan Vance: How long does the compressor programme run for?
+
+[10:06:09] Stijn Peeters: Through November at least, could slip into
+December depending on parts lead time — they're waiting on a compressor
+head from a supplier in Duisburg and it's been delayed twice already.
+
+[10:06:16] Jordan Vance: Sorry — did you say the supplier's in Dortmund?
+
+[10:06:19] Stijn Peeters: Duisburg, not Dortmund. Different river, same
+kind of headache.
+
+[10:06:22] Dana Whitfield: This is news to me too, honestly.
+
+[10:06:26] Stijn Peeters: Sorry, I thought this had been flagged — it's
+been in the plant ops weekly for months, just maybe not surfaced up to
+you two. There's also a second thing, the night-shift crew rotation
+changed in July, so if commissioning assumed access to the same crew
+that was there in the spring, that's — that's not the case anymore.
+
+[10:06:50] Jordan Vance: Okay, this is useful, but also a lot to absorb
+mid-call. Can we take this offline — get you and our commissioning lead
+on a short call this week to map the actual available windows?
+
+[10:07:05] Stijn Peeters: Yeah, that makes sense. I didn't mean to turn
+this into a scheduling deep-dive, I just didn't want it to surprise
+anyone later.
+
+[10:07:15] Dana Whitfield: No, it's better to know now. Jordan, can you
+set that up?
+
+[10:07:20] Jordan Vance: Will do, I'll send an invite for Thursday or
+Friday, whichever works for Stijn's calendar.
+
+[10:07:28] Stijn Peeters: Thursday's better, Friday I'm at the Ghent site
+for month-end close.
+
+[10:07:34] Jordan Vance: Thursday it is.
+
+[10:07:40] Dana Whitfield: Okay — should we get back to the main thread?
+Where were we.
+
+[10:07:48] Jordan Vance: TCO draft, September submission, Tilburg as
+Phase 1, Liège excluded until the freeze lifts. I think that covers the
+substance. Anything on pricing structure you want to flag early, Dana?
+
+[10:08:05] Dana Whitfield: Not yet — that's really what the TCO exercise
+will settle. Once the board sees the comparison against manual process
+costs, the pricing conversation gets a lot easier, or a lot harder,
+depending on the number.
+
+[10:08:20] Jordan Vance: (laughs) Fair enough. We'll aim to make it the
+easier version.
+
+[10:08:26] Dana Whitfield: I'd expect nothing less.
+
+[10:08:35] Stijn Peeters: Can I ask something slightly off-topic? Sorry,
+unrelated to any of this.
+
+[10:08:40] Jordan Vance: Go for it.
+
+[10:08:42] Stijn Peeters: Did either of you take the Thalys down to Paris
+this summer? Mine got delayed by two hours out of Brussels-Midi last
+month, some signalling fault near Mons, and I'm trying to figure out if
+it's worth the hassle versus just driving down.
+
+[10:08:58] Dana Whitfield: Ha — yes, actually, same problem, different
+week. I've mostly given up on the Thalys for anything time-sensitive.
+Drove to the Ardennes for a long weekend instead in July, much less
+stressful even with the traffic around Namur.
+
+[10:09:15] Jordan Vance: I haven't been down that way in years. Worth it?
+
+[10:09:19] Dana Whitfield: Very. We stayed near Bouillon, did a lot of
+walking, terrible weather half the time but the kids didn't care.
+
+[10:09:30] Stijn Peeters: I keep meaning to do that instead of fighting
+the train. Anyway — sorry, that was completely off-topic, back to
+business.
+
+[10:09:38] Jordan Vance: No worries, we needed the break. Okay — let's
+talk through the rollout sequencing a bit more. After Tilburg, is Ghent
+still pencilled in as Phase 2?
+
+[10:09:55] Dana Whitfield: Provisionally, yes. Nothing's been formally
+approved beyond Phase 1, but Ghent's the next logical site given the
+layout similarities to Tilburg.
+
+[10:10:10] Jordan Vance: That's helpful context for the proposal — we can
+gesture at a Phase 2 direction without committing you to it formally.
+
+[10:10:22] Dana Whitfield: That's fine, as long as it's clearly marked as
+indicative only. Our board doesn't love seeing things that look more
+locked-in than they are.
+
+[10:10:35] Jordan Vance: Understood, we'll flag it as indicative
+throughout. Stijn, from a finance side, is there anything about Ghent
+that would change the TCO assumptions versus Tilburg?
+
+[10:10:50] Stijn Peeters: Not that I'm aware of, similar labour rates,
+similar throughput. I'd have to check with the Ghent controller to be
+sure, but nothing jumps out.
+
+[10:11:02] Jordan Vance: Okay, good enough for a Phase 2 placeholder. Let's
+move on — anything on the vendor side you two want to raise? We've had a
+couple of the automation vendors asking about exclusivity again.
+
+[10:11:20] Dana Whitfield: We're not ready to commit to exclusivity, and
+honestly I'd push back hard if that came up formally. Keep it open until
+Phase 1 proves out.
+
+[10:11:32] Jordan Vance: Agreed, that's our position too — we'll hold that
+line with them.
+
+[10:11:40] Stijn Peeters: Sorry — you cut out there for a second, Jordan,
+could you repeat the last bit?
+
+[10:11:45] Jordan Vance: Just said we agree, we'll hold the line on
+exclusivity until Phase 1 proves out.
+
+[10:11:50] Stijn Peeters: Got it, thanks.
+
+[10:11:58] Dana Whitfield: Before we wrap — completely unrelated, sorry —
+did either of you catch anything of the canteen renovation at the Ghent
+site? Stijn, you're there Friday, aren't you?
+
+[10:12:02] Stijn Peeters: Ha, yes, they're ripping out the whole kitchen
+for six weeks apparently, no idea what we're supposed to eat in the
+meantime. Sandwiches from the petrol station, probably.
+
+[10:12:06] Jordan Vance: That sounds like a genuine crisis, honestly.
+
+[10:12:09] Dana Whitfield: Right, sorry, anyway — anything else before we
+wrap? I've got another call in fifteen.
+
+[10:12:10] Jordan Vance: I think that covers the main items. Let me
+summarise: Liège stays out of Phase 1 until the freeze lifts end of Q3;
+Tilburg is confirmed as the Phase 1 site; TCO comparison in euros against
+manual process, three- and five-year views, draft to you before formal
+submission; Ghent flagged as indicative Phase 2; commissioning scheduling
+call with Stijn on Thursday; and no exclusivity commitments to vendors for
+now.
+
+[10:12:45] Dana Whitfield: That all sounds right to me.
+
+[10:12:50] Stijn Peeters: Agreed, matches what I heard.
+
+[10:12:58] Jordan Vance: Great, I'll circulate notes after this. Thanks
+both, appreciate the time.
+
+[10:13:05] Dana Whitfield: Thanks, talk soon — oh wait, one more thing,
+sorry, almost forgot.
+
+[10:13:10] Jordan Vance: Go ahead.
+
+[10:13:14] Dana Whitfield: Just to reconfirm — September is still the
+target for the formal submission, right? I want to flag it internally
+before our board calendar locks for the quarter.
+
+[10:13:25] Jordan Vance: Yes, September submission, confirmed on our end.
+We'll aim for the first half of the month if we can, but September at the
+latest.
+
+[10:13:35] Dana Whitfield: Perfect, that's what I'll tell them. Thanks for
+confirming.
+
+[10:13:40] Jordan Vance: Of course. Talk Thursday, Stijn.
+
+[10:13:44] Stijn Peeters: Thursday. Bye all.
+
+[10:13:47] Dana Whitfield: Bye.

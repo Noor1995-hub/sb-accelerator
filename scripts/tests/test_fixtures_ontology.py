@@ -77,7 +77,7 @@ def build_schemas() -> dict:
 
 SCHEMAS = build_schemas()
 
-MINIMUMS = {"entity": 3, "project": 4, "person": 8, "meeting": 6, "decision": 2,
+MINIMUMS = {"entity": 3, "project": 4, "person": 8, "meeting": 6, "decision": 6,
             "daily-note": 3}
 
 
@@ -623,4 +623,61 @@ def test_recording_id_namespaces_are_covered():
             seen.add(str(rid).split(":", 1)[0])
     assert {"inbox", "plaud"} <= seen, (
         f"fixtures should cover the shipping id namespaces; found {seen}"
+    )
+
+
+def test_a_packed_daily_note_models_a_senior_agenda():
+    """E2E finding A7 (#59): every fixture day had <=1 meeting, so the
+    one-prep-per-meeting region logic and recap rendering were never
+    exercised at realistic density."""
+    packed = []
+    for path in iter_fixture_files(SCHEMAS["daily-note"]["glob"]):
+        text = path.read_text(encoding="utf-8")
+        meetings = len(re.findall(r"^### ", text, re.MULTILINE))
+        preps = text.count("<!-- evening-sync:prep:begin -->")
+        if meetings >= 5:
+            assert preps == meetings, (
+                f"{path}: a packed day carries exactly one prep region per "
+                f"meeting heading ({preps} regions, {meetings} headings)"
+            )
+            packed.append(path)
+    assert packed, "at least one daily-note fixture must model a packed day (>=5 meetings)"
+
+
+PERSON_BODY_SECTIONS = ["Context", "Recent Meetings"]
+
+
+def test_curated_person_fixtures_carry_context_and_recent_meetings():
+    """E2E finding A15 (#59): person notes shipped frontmatter-only.
+    Curated people carry the two-section body; uncurated ones stay empty,
+    modelling person.ensure()'s auto-created output."""
+    curated, uncurated = [], []
+    for path in iter_fixture_files(SCHEMAS["person"]["glob"]):
+        target = curated if parse_frontmatter(path).get("relationship") else uncurated
+        target.append(path)
+    assert curated, "no curated person fixtures found"
+    for path in curated:
+        assert h2_titles(path.read_text(encoding="utf-8")) == PERSON_BODY_SECTIONS, (
+            f"{path}: curated person notes carry Context + Recent Meetings"
+        )
+    for path in uncurated:
+        assert h2_titles(path.read_text(encoding="utf-8")) == [], (
+            f"{path}: uncurated person notes model the auto-created empty body"
+        )
+
+
+def test_inbox_transcripts_are_realistically_thick():
+    """E2E finding A1 (#59): 16–27-line inbox fixtures capped what routing,
+    attendee extraction and confidence scoring could be exercised against."""
+    files = sorted((FIXTURE_ROOT / "10-inbox").glob("*.txt"))
+    assert len(files) >= 4, f"expected >=4 inbox fixtures, found {len(files)}"
+    thickness = {
+        p.name: sum(1 for line in p.read_text(encoding="utf-8").splitlines()
+                    if line.strip())
+        for p in files
+    }
+    thin = {name: n for name, n in thickness.items() if n < 30}
+    assert not thin, f"thin inbox fixtures (<30 non-empty lines): {thin}"
+    assert any(n >= 100 for n in thickness.values()), (
+        f"at least one fixture must be a long multi-speaker transcript: {thickness}"
     )

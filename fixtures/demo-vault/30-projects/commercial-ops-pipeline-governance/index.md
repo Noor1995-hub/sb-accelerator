@@ -10,8 +10,8 @@ stakeholders: [sam-okafor, taylor-brooks]
 created: 2026-01-20
 last-updated: 2026-06-05
 meetings-7d: 0
-meetings-30d: 0
-key-people: []
+meetings-30d: 1
+key-people: [sam-okafor, taylor-brooks]
 next-milestone: "Q3 pipeline governance review"
 next-milestone-date: 2026-09-30
 ---

@@ -1,0 +1,134 @@
+Microsoft Teams — Meeting Transcript
+Meeting: Logistics Ops Peer Exchange — August session
+Date: 2026-08-24 08:00–08:50 (Europe/Brussels)
+Participants: Morgan Ellery, Anneke Vermeulen, Bram De Smet
+
+[08:00:15] Anneke Vermeulen: Morning, can everyone hear me okay? I'm
+joining from a client site so bear with me if it drops.
+
+[08:00:22] Morgan Ellery: Loud and clear on my end.
+
+[08:00:26] Bram De Smet: Same, all good.
+
+[08:00:33] Anneke Vermeulen: Great. So, for anyone who wasn't at the last
+one — quick intro, I'm operations director at a Flemish food-logistics
+group, we run cold-chain distribution across three regional hubs. Bram
+you want to say a word?
+
+[08:00:50] Bram De Smet: Sure — independent supply-chain consultant, I
+work across a handful of clients in the Benelux, mostly on network design
+and vendor selection for warehouse and yard automation. Good to be back
+for another one of these.
+
+[08:01:10] Morgan Ellery: And I'm chief commercial officer at an
+intermodal logistics group, industrial and freight-heavy, roughly
+fourteen hundred people. Nice to put faces to names again.
+
+[08:01:25] Anneke Vermeulen: Likewise. Okay, so what did we say we'd cover
+this time — vendor consolidation and the CRM data quality thread, and then
+whatever else comes up?
+
+[08:01:40] Bram De Smet: That was the plan, yeah. Should we start with
+consolidation? I feel like every client I'm working with right now is
+somewhere in the middle of collapsing down to fewer automation vendors.
+
+[08:01:55] Morgan Ellery: Same experience here, generally. There's a
+pretty clear pattern where multi-vendor setups look good on paper for
+negotiating leverage but fall apart operationally — spares pooling,
+maintenance contracts, integration overhead, it adds up fast.
+
+[08:02:15] Anneke Vermeulen: Completely agree. We went through a
+consolidation exercise ourselves a couple of years back, cut from four
+automation vendors down to two, and honestly the harder part wasn't the
+technical integration, it was getting our own regional teams to stop
+defending "their" vendor relationships.
+
+[08:02:38] Bram De Smet: That's so common. I'd say it's more of a — sorry,
+did someone's line just drop? I heard a beep.
+
+[08:02:43] Anneke Vermeulen: That was me reconnecting, go ahead.
+
+[08:02:48] Bram De Smet: Right — more of a change management problem than
+a procurement problem, most of the time. Contracts are the easy part.
+
+[08:03:05] Morgan Ellery: Makes sense, yeah. We've seen a bit of that
+ourselves, though I don't want to get too specific on live commercial
+stuff, if that's alright.
+
+[08:03:15] Anneke Vermeulen: Of course, totally understand, this is meant
+to stay general anyway.
+
+[08:03:22] Bram De Smet: Same, I'll keep client specifics out of it too.
+Speaking generally though — boards pushing for longer contract terms
+right around renewal points, in exchange for a volume commitment, is a
+pattern I keep seeing. Anyone else?
+
+[08:03:45] Morgan Ellery: In a general sense, sure, tracks with what I'd
+expect at this stage of a cycle. Nothing specific to point to.
+
+[08:04:10] Bram De Smet: Fair enough. Should we move to the CRM data
+quality thing? That's the other one on the list.
+
+[08:04:20] Anneke Vermeulen: Yeah — so this is one I find genuinely
+interesting across almost every client. The core problem is always the
+same: sales and operations describe the same pipeline stage using
+completely different vocabulary, and nobody notices until you try to
+build a shared schema and it all falls apart.
+
+[08:04:45] Morgan Ellery: That resonates a lot, actually — vocabulary
+mismatch between floor-level operations language and whatever the CRM
+was designed around by sales. It's a pattern I'd bet shows up in
+basically any org past a certain size.
+
+[08:05:05] Bram De Smet: It's almost universal in my experience. The
+clients who solve it well are the ones who bring operations people into
+the schema design conversation early, not as an afterthought.
+
+[08:05:20] Anneke Vermeulen: Agreed. Though — sorry, quick tangent — has
+anyone gotten a vendor to commit to fixed-price data migration? Every
+quote I get is time-and-materials.
+
+[08:05:38] Bram De Smet: Same, always a range. One client got a fixed
+price once, fell apart at change order three.
+
+[08:05:55] Morgan Ellery: (laughs) Noted, will keep expecting a range
+then. Different tangent, sorry — did either of you get caught in the
+transport strikes last week? My commute turned into a two-hour ordeal.
+
+[08:06:25] Bram De Smet: Don't remind me, nearly missed a client meeting
+in Rotterdam, ended up driving and sat in traffic instead.
+
+[08:06:40] Anneke Vermeulen: I was lucky, worked from home those days.
+
+[08:06:50] Morgan Ellery: Fair enough. Okay, back to it — benchmarking,
+last topic on the list?
+
+[08:07:00] Bram De Smet: Yeah, benchmarking. Anyone got a good source for
+comparing automa— sorry, Morgan, you cut out completely there, could you
+say that again?
+
+[08:07:08] Morgan Ellery: I didn't say anything, that might've been you.
+
+[08:07:12] Bram De Smet: Odd. Anyway — automation ROI numbers across peer
+companies, everything I find is either vendor-published, which is
+obviously biased, or so old it's useless.
+
+[08:07:20] Anneke Vermeulen: I've mostly given up on external benchmarks
+and just build internal before-and-after comparisons instead. Less
+rigorous but at least it's honest.
+
+[08:07:35] Morgan Ellery: Roughly where we've landed too, in general
+terms. Internal over external, most of the time.
+
+[08:07:50] Bram De Smet: Makes sense. Alright, that's most of what was on
+the list for today. Same time next month?
+
+[08:08:00] Anneke Vermeulen: Works for me. I'll send the usual invite,
+no fixed agenda, we'll just see what's live for everyone by then.
+
+[08:08:10] Morgan Ellery: Sounds good, thanks both — always useful to
+compare notes outside the day-to-day.
+
+[08:08:16] Bram De Smet: Agreed, take care all.
+
+[08:08:19] Anneke Vermeulen: Bye all.

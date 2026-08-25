@@ -1,16 +1,64 @@
 Voice memo — dictated by Morgan Ellery
-Recorded: 2026-08-20, 16:42 (America/Chicago)
+Recorded: 2026-08-20, 16:42 (Europe/Brussels)
 Device: personal recorder, auto-transcribed
 
-Okay, quick notes from the site visit today with Sam at the regional
-distribution center. Two things worth flagging. One — the pipeline data
-Omar's team is cleaning up as part of the CRM modernization project, I saw
-firsthand today how bad the current stage definitions are, floor
-supervisors are literally using three different terms for the same
-handoff step. That's going to slow down the modernization timeline if we
-don't get operations input, not just sales input, into the new schema.
-Second thing — Sam mentioned informally that the pipeline governance
-review cadence, monthly isn't enough right now given how much is moving on
-the Meridian side, might want to bump that to biweekly for the rest of the
-quarter. Nothing urgent, just wanted to get this down before I forget it.
-That's it.
+Okay so, quick notes from today, uhm, site visit with Sam at the Ghent
+regional distribution centre. Let me just — okay, first thing, parking.
+Whoever redesigned the visitor lot out there needs to be fired, I drove
+around for actually fifteen minutes before I found a spot, there were
+three delivery trucks just parked sideways blocking half the bays. Not
+important, just needed to say it out loud.
+
+Right, actual notes. One — the pipeline data that Omar's team is cleaning
+up as part of the CRM modernization work, I saw it firsthand today, it's
+worse than I thought honestly. Floor supervisors are using — I counted —
+three different terms for the same handoff step. "Released to yard,"
+"cleared for dispatch," and somebody said "yard-ready" like it was
+obviously the same thing, which, to be fair, it basically is, but not to a
+system trying to match records. If we don't get operations input into the
+new schema, not just sales input, this is going to slow the modernization
+timeline down, and I don't think Omar even knows this is happening at that
+level of granularity. Need to flag that to him and to Sam.
+
+Second thing — and this one's more Sam's idea than mine, credit where
+it's due — Sam mentioned, kind of informally, in the car actually, not
+in a meeting, that the pipeline governance review cadence, monthly isn't
+really cutting it right now given how much is moving on the Meridian
+side. Might be worth bumping that to biweekly for the rest of the quarter.
+He wasn't proposing it formally, just floating it, but I think it's
+right. I'll raise it properly at the next governance session rather than
+just deciding unilaterally off a car conversation.
+
+Oh — also, completely unrelated, reminder to myself, Taylor's birthday is
+coming up, I think it's the first week of September? Need to actually
+check the date this time instead of finding out the day before again like
+last year. Put something on the calendar.
+
+Where was I. Right, so — to summarize for whoever's parsing this later:
+operations input into CRM schema, flag to Omar and Sam, and floating a
+biweekly cadence for pipeline governance through end of quarter. Both of
+those touch the same general area even though they came out of one site
+visit, so — don't merge them into one action item, they're separate
+threads.
+
+Also, completely unrelated, some dashboard warning light came on about
+halfway back — tyre pressure, I think, though it's genuinely impossible
+to tell that icon apart from two others at a glance. Pulled into a layby,
+checked, tyre looked completely fine, no idea what actually triggered it.
+Not remotely relevant to anything, just amused me enough to mention it.
+
+One more thing actually, before I forget — Sam also asked whether the
+scoring criteria Omar's drafting for the CRM vendor shortlist accounts for
+how a vendor handles exactly this kind of messy field-level terminology
+mismatch, or whether it's all weighted toward integration effort and
+price. I didn't have a good answer on the spot. Worth checking with Omar
+directly rather than guessing.
+
+And — sorry, one genuinely last thing — the site visit reminded me we
+still haven't scheduled the follow-up walkthrough for the other regional
+site, I think it was pencilled in for September but nobody's actually
+sent a calendar invite yet. Need to chase that this week, not let it slip
+another month like the last one did.
+
+That's it, that's everything, I'm losing signal going through the tunnel
+near the ring road anyway so — that's it.

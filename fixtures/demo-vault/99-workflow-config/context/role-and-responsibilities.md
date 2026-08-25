@@ -22,6 +22,6 @@ across the existing client base. Direct reports: Sam Okafor (VP Commercial
 Operations) and a regional sales-director bench including Jordan Vance and
 Priya Nathan. Chairs the monthly pipeline review and the Meridian Freight
 steering committee. Final approver on any vendor-strategy decision above
-$250K total cost of ownership; delegates day-to-day account management to
+€250K total cost of ownership; delegates day-to-day account management to
 account directors.
 <!-- setup-my-brain:end -->

@@ -19,10 +19,10 @@ next-milestone-date: 2026-09-15
 # Regional Rollout Proposal
 
 > [!summary]+ **Now** — as of 12-06-26
-> - **Stage** — Proposal in drafting for a September submission; Phase 1 site still unresolved after Ohio Valley came off the table.
+> - **Stage** — Proposal in drafting for a September submission; Phase 1 site still unresolved after Liège came off the table.
 > - **Defining decision** — [[2026-03-02-pilot-site-selection-withdrawn]]
 > - **Next event** — Submit regional rollout proposal, target 2026-09-15
-> - **Owe** — Phased proposal draft that keeps Ohio Valley out of Phase 1
+> - **Owe** — Phased proposal draft that keeps Liège out of Phase 1
 > - **Watch** — Six months from intro call to submission with no paid work in between; the only substantive contact so far is one call
 
 > [!info]- **Context**
@@ -43,8 +43,8 @@ LIMIT 20
 
 ## Open Items
 
-- **Owe** — Phased proposal draft excluding Ohio Valley from Phase 1 (Jordan Vance, ahead of the 2026-09-15 submission)
-- **Awaiting** — Nordbridge's preferred Phase 1 site now that Ohio Valley is frozen
+- **Owe** — Phased proposal draft excluding Liège from Phase 1 (Jordan Vance, ahead of the 2026-09-15 submission)
+- **Awaiting** — Nordbridge's preferred Phase 1 site now that Liège is frozen
 - **Question** — Whether all three plants go into one proposal or Phase 1 stands on its own
 - **Pending** — Proposal submission, target 2026-09-15
 

@@ -29,11 +29,18 @@ ALL_PROJECTS = {PROJECTS.format(s) for s in (
     "commercial-ops-crm-modernization", "commercial-ops-pipeline-governance",
     "meridian-warehouse-pilot-phase-0", "meridian-yard-automation-program",
     "nordbridge-regional-rollout-proposal")}
+CRM_DECISIONS = "30-projects/commercial-ops-crm-modernization/decisions/{}.md"
+MERIDIAN_DECISIONS = "30-projects/meridian-yard-automation-program/decisions/{}.md"
+NORDBRIDGE_DECISIONS = "30-projects/nordbridge-regional-rollout-proposal/decisions/{}.md"
 ALL_DECISIONS = {
-    "30-projects/commercial-ops-crm-modernization/decisions/2026-06-01-vendor-shortlist-approved.md",
-    "30-projects/meridian-yard-automation-program/decisions/2026-03-10-phased-regional-rollout-adopted.md",
-    "30-projects/meridian-yard-automation-program/decisions/2026-05-20-single-vendor-strategy-adopted.md",
-    "30-projects/nordbridge-regional-rollout-proposal/decisions/2026-03-02-pilot-site-selection-withdrawn.md",
+    CRM_DECISIONS.format("2026-04-20-big-bang-cutover-adopted"),
+    CRM_DECISIONS.format("2026-06-01-phased-migration-by-region-adopted"),
+    CRM_DECISIONS.format("2026-06-01-vendor-shortlist-approved"),
+    MERIDIAN_DECISIONS.format("2026-03-10-phased-regional-rollout-adopted"),
+    MERIDIAN_DECISIONS.format("2026-03-10-shared-spares-pool-withdrawn"),
+    MERIDIAN_DECISIONS.format("2026-05-20-single-vendor-strategy-adopted"),
+    NORDBRIDGE_DECISIONS.format("2026-03-02-pilot-site-selection-withdrawn"),
+    NORDBRIDGE_DECISIONS.format("2026-06-12-phase-1-site-nomination-deferred"),
 }
 ALL_MEETINGS = {MEETINGS.format(s) for s in (
     "01-06-26-commercial-ops-status-update", "02-03-26-nordbridge-intro-call",
@@ -57,26 +64,31 @@ EXPECTED = [
 
     ("30-projects/Decisions.base", "All", ALL_DECISIONS),
     ("30-projects/Decisions.base", "Active", {
-        "30-projects/commercial-ops-crm-modernization/decisions/2026-06-01-vendor-shortlist-approved.md",
-        "30-projects/meridian-yard-automation-program/decisions/2026-05-20-single-vendor-strategy-adopted.md",
+        CRM_DECISIONS.format("2026-06-01-vendor-shortlist-approved"),
+        CRM_DECISIONS.format("2026-06-01-phased-migration-by-region-adopted"),
+        MERIDIAN_DECISIONS.format("2026-05-20-single-vendor-strategy-adopted"),
+        NORDBRIDGE_DECISIONS.format("2026-06-12-phase-1-site-nomination-deferred"),
     }),
-    # The one fixture written as an unattended capture (reviewed: false); the
-    # absence-tolerant `reviewed != true` filter would also catch pre-0.2.0
-    # notes that carry no reviewed key at all.
+    # The unattended-capture queue: three decisions written by the pipeline
+    # and not yet validated by the exec/EA. The absence-tolerant
+    # `reviewed != true` filter would also catch pre-0.2.0 notes that carry
+    # no reviewed key at all.
     ("30-projects/Decisions.base", "Needs review", {
-        "30-projects/commercial-ops-crm-modernization/decisions/2026-06-01-vendor-shortlist-approved.md",
+        CRM_DECISIONS.format("2026-06-01-vendor-shortlist-approved"),
+        CRM_DECISIONS.format("2026-06-01-phased-migration-by-region-adopted"),
+        NORDBRIDGE_DECISIONS.format("2026-06-12-phase-1-site-nomination-deferred"),
     }),
 
     ("20-meetings/Meetings.base", "All Meetings", ALL_MEETINGS),
-    # Each exclusion path fires exactly once: 01-06 is reviewed, 05-06 is
-    # archived, and the three `confirmed` meetings fail the review_status or.
-    # The -v2 collision sibling is needs-attention, unreviewed, unarchived —
-    # it belongs in Triage alongside the needs-review fixtures.
+    # Each exclusion path stays represented: 20-04 is reviewed-but-not-yet-
+    # reconciled (reviewed: true holds it out of Triage until reconcile-reviews
+    # flips it to confirmed), 05-06 is archived, and the five `confirmed`
+    # meetings fail the review_status or. The -v2 collision sibling is
+    # needs-attention, unreviewed, unarchived — it stays in Triage alongside
+    # the unreviewed intro call.
     ("20-meetings/Meetings.base", "Triage", {
         MEETINGS.format("02-03-26-nordbridge-intro-call"),
         MEETINGS.format("12-06-26-jordan-1on1-v2"),
-        MEETINGS.format("20-04-26-commercial-ops-workshop"),
-        MEETINGS.format("20-05-26-meridian-vendor-strategy-brainstorm"),
     }),
 
     ("50-people/People.base", "All", ALL_PEOPLE),

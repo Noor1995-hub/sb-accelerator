@@ -5,8 +5,8 @@ calendar-subject: "Meridian Freight — Vendor Strategy Brainstorm"
 calendar_match: false
 attendees: [priya-nathan, leo-marchetti, jamie-ellwood, morgan-ellery]
 projects: [meridian-yard-automation-program]
-review_status: needs-review
-reviewed: false
+review_status: confirmed
+reviewed: true
 archived: false
 confidence: low
 confidence-reasons: [calendar-tool-unavailable, content-keyword-match, "new-attendees:1"]

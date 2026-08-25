@@ -24,9 +24,9 @@ processed: true
 
 - Nordbridge open to a regional rollout across all three plants, starting
   with whichever site is least disrupted by their ongoing ERP work.
-- Dana flagged the Ohio Valley plant is mid-ERP-migration — do not propose
+- Dana flagged the Liège plant is mid-ERP-migration — do not propose
   that site first.
 
 ## Action items
 
-- [ ] Jordan to draft a phased proposal excluding Ohio Valley from Phase 1.
+- [ ] Jordan to draft a phased proposal excluding Liège from Phase 1.
