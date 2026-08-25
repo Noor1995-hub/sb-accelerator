@@ -232,6 +232,45 @@ def recap_fingerprint(root: Path, window: dict) -> str:
     return digest[:_DIGEST_LENGTH]
 
 
+def _plural(count: int, noun: str) -> str:
+    return f"{count} {noun}" if count == 1 else f"{count} {noun}s"
+
+
+def _catchup_banner(window: Optional[dict]) -> Optional[str]:
+    """The exec-facing statement of decisions 15-17, or None on a normal run.
+
+    Rendered here rather than composed by the caller: the count is
+    arithmetic and the no-back-fill rule is a promise the CLI keeps, so
+    neither is left to a model to remember.
+    """
+    if window is None:
+        return None
+    missed = dates.business_days(window["from"], window["to"])
+    if missed <= 0:
+        return None
+    lines = [
+        "> [!warning] Catch-up note",
+        f"> Covers {window['from'].isoformat()} → {window['to'].isoformat()} "
+        f"— {_plural(missed, 'business day')} without an evening run. "
+        "Skipped days are not back-filled: this is the only note for that "
+        "window.",
+    ]
+    detailed = window.get("detailed_from")
+    if detailed is not None and detailed > window["from"]:
+        earlier = dates.business_days(window["from"], detailed)
+        verb = "is" if earlier == 1 else "are"
+        lines.append(
+            f"> Detailed from {detailed.isoformat()}; the "
+            f"{_plural(earlier, 'earlier business day')} {verb} counted, "
+            "not recapped in detail.")
+    return "\n".join(lines)
+
+
+def _recap_body(data: dict) -> str:
+    banner = _catchup_banner(data["recap_window"])
+    return f"{banner}\n\n{data['recap']}" if banner else data["recap"]
+
+
 def _marker_line(name: str, kind: str,
                  attrs: Optional[dict] = None) -> str:
     suffix = "".join(f" {key}={value}"
@@ -256,7 +295,7 @@ def _render(data: dict, fingerprint: Optional[str]) -> str:
     attrs = {"inputs": fingerprint} if fingerprint else None
     parts = ["---", f"date: {date_iso}", "type: daily-note", "---", "",
              f"# {date_iso} · {_day_name(date_iso)}", "",
-             "## Recap", _region("recap", data["recap"], attrs), "",
+             "## Recap", _region("recap", _recap_body(data), attrs), "",
              "## Meetings", ""]
     if data["meetings"]:
         chunks = []
@@ -397,7 +436,7 @@ def _merge(text: str, data: dict,
     if not recap_skipped:
         attrs = {"inputs": fingerprint} if fingerprint else None
         replacements[recap["begin"]] = (
-            recap, data["recap"], _marker_line("recap", "begin", attrs))
+            recap, _recap_body(data), _marker_line("recap", "begin", attrs))
     for region, content in zip(preps, prep_contents):
         replacements[region["begin"]] = (region, content, None)
     out: List[str] = []

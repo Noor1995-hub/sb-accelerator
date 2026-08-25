@@ -746,3 +746,71 @@ def test_window_rejects_a_reversed_range_and_unknown_keys(tmp_path):
     with pytest.raises(dailynote.DailyNoteError, match="required"):
         dailynote.write(root, windowed_payload(
             recap_window={"from": "2026-06-12"}))
+
+
+def test_no_banner_when_no_business_days_were_missed(tmp_path):
+    root = make_windowed_vault(tmp_path)
+    dailynote.write(root, windowed_payload(
+        recap_window={"from": "2026-06-12", "to": "2026-06-12"}))
+    text = (root / "60-daily-notes" / "2026-06-15.md").read_text(encoding="utf-8")
+    assert "Catch-up note" not in text
+    # The recap interior is exactly the payload's prose.
+    assert ("<!-- evening-sync:recap:begin inputs=" in text
+            and "-->\n> [!info] At a glance" in text)
+
+
+def test_banner_states_the_window_and_the_no_back_fill_rule(tmp_path):
+    root = make_windowed_vault(tmp_path)
+    dailynote.write(root, windowed_payload(
+        date="2026-08-24",
+        recap_window={"from": "2026-06-15", "to": "2026-08-21"}))
+    text = (root / "60-daily-notes" / "2026-08-24.md").read_text(encoding="utf-8")
+    assert "> [!warning] Catch-up note" in text
+    assert "Covers 2026-06-15 → 2026-08-21" in text
+    assert "49 business days without an evening run" in text
+    assert "not back-filled" in text
+    assert "Detailed from" not in text
+
+
+def test_banner_adds_the_detail_line_only_when_capped(tmp_path):
+    root = make_windowed_vault(tmp_path)
+    dailynote.write(root, windowed_payload(
+        date="2026-08-24",
+        recap_window={"from": "2026-06-15", "to": "2026-08-21",
+                      "detailed_from": "2026-08-17"}))
+    text = (root / "60-daily-notes" / "2026-08-24.md").read_text(encoding="utf-8")
+    assert ("Detailed from 2026-08-17; the 45 earlier business days are "
+            "counted, not recapped in detail.") in text
+
+
+def test_banner_omits_the_detail_line_when_it_covers_the_whole_window(tmp_path):
+    root = make_windowed_vault(tmp_path)
+    dailynote.write(root, windowed_payload(
+        date="2026-08-24",
+        recap_window={"from": "2026-06-15", "to": "2026-08-21",
+                      "detailed_from": "2026-06-15"}))
+    text = (root / "60-daily-notes" / "2026-08-24.md").read_text(encoding="utf-8")
+    assert "Detailed from" not in text
+
+
+def test_banner_is_singular_for_one_missed_day(tmp_path):
+    root = make_windowed_vault(tmp_path)
+    dailynote.write(root, windowed_payload(
+        recap_window={"from": "2026-06-12", "to": "2026-06-13",
+                      "detailed_from": "2026-06-13"}))
+    text = (root / "60-daily-notes" / "2026-06-15.md").read_text(encoding="utf-8")
+    assert "1 business day without an evening run" in text
+    assert "the 1 earlier business day is counted" in text
+
+
+def test_banner_sits_above_the_payload_prose_inside_the_region(tmp_path):
+    root = make_windowed_vault(tmp_path)
+    dailynote.write(root, windowed_payload(
+        date="2026-08-24",
+        recap="> [!info] At a glance\n> quiet stretch",
+        recap_window={"from": "2026-06-15", "to": "2026-08-21"}))
+    text = (root / "60-daily-notes" / "2026-08-24.md").read_text(encoding="utf-8")
+    region = text.split("<!-- evening-sync:recap:begin", 1)[1]
+    region = region.split("-->", 1)[1].split("<!-- evening-sync:recap:end", 1)[0]
+    assert region.strip().startswith("> [!warning] Catch-up note")
+    assert region.strip().endswith("> quiet stretch")
