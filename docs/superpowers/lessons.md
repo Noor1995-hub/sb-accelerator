@@ -396,7 +396,81 @@ genuinely the intended vault, and it is the only durable record of which vault
 answered. Ad-hoc `dev:screenshot` calls outside `tour` carry no such record,
 which is why the wrong-vault capture was believable.
 
-These five entries are about the probe. Traps about what the vault renders —
+## 2026-08-25 — `--home` *is* usable alone, if the capture vault has no plugins
+
+**Context.** The entry above concludes that `--home` is "not a fix an agent can
+apply alone", because a fresh profile needs the one-time Restricted Mode click
+and an agent cannot click it. That is right about the modal and wrong about the
+conclusion: the modal only appears for a vault that *has* community plugins.
+
+**What worked.** During the #56/#57 pass the shared profile was already taken
+(the #60 items 4–5 run), so rather than wait or fight for it:
+
+```bash
+python scripts/make_test_vault.py <vault>          # note: no --with-plugins
+rm -f <vault>/.obsidian/community-plugins.json
+rm -rf <vault>/.obsidian/plugins
+python scripts/obsidian_probe.py --home ~/.sbp2 up --vault <vault>
+```
+
+No modal, no contention, and the other session's instance was never touched.
+`doctor` confirmed the right vault, and `down` with the same `--home` stopped
+only that instance.
+
+**What it costs, and what it does not.** CSS snippets, callouts, marker hiding
+and core markdown all still render — `.obsidian/snippets/` and
+`appearance.json` ship in `template/` and are core Obsidian features. What is
+absent is the Minimal theme (so heading colours are the default), Notebook
+Navigator (the sidebar shows "Plugin no longer active") and Dataview.
+
+The Dataview loss is safe rather than silent, which is the important part:
+`test_obsidian_render.py` asserts `dom["dataviewTables"]` truthily, so a vault
+with no Dataview plugin makes those tests **fail loudly** at zero tables — it
+does not pass them against an unrendered block. The hazard the entry above
+warns about belongs to a trusted-but-uninitialised profile, not to this.
+
+**The rule.** For a question about core rendering — a callout, a snippet,
+marker visibility, markdown structure — a plugin-free vault on a private
+`--home` is a legitimate way to get an answer without queueing behind another
+session. For anything touching `.base` views, Dataview or the navigator, you
+need the shared profile and its accepted trust, so wait for it. Either way,
+state in the report which plugins were absent rather than implying full
+fidelity.
+
+## 2026-08-25 — "no template surfaces touched" does not mean "skip the visual tier"
+
+**What went wrong — nearly.** The merge queue's read of #56/#57 was that it
+needed no visual pass, because its diff touches no `.base` file and nothing
+under `template/`. That heuristic is reasonable and it has a hole. The change
+added an attribute to a marker the CLI writes *into* a daily note
+(`<!-- evening-sync:recap:begin inputs=<16 hex> -->`), and the vault's shipped
+CSS snippet hides marker lines by matching a shape:
+
+```css
+.markdown-source-view.mod-cm6 .cm-line:has(> .cm-comment:only-child) { display: none; }
+```
+
+`:only-child` is the fragile part. Had `inputs=a1b2…` caused CodeMirror to
+tokenise the comment into more than one span, the selector would have stopped
+matching and every stamped note would have shown machine bookkeeping in Live
+Preview — the view the exec types in. It does still match, verified live
+(`markerLines: 4`, `markerLinesHidden: true`), but that was a measurement, not
+a deduction.
+
+**Why the shipped test could not catch it.** `test_evening_sync_markers_are_hidden_in_live_preview`
+runs against whichever fixture daily note the tour picks, and those fixtures
+are deliberately left *unstamped* — stamping one would break
+`test_fresh_fixture_is_exactly_what_daily_note_write_renders`, which compares
+the fixture byte-for-byte against a no-window render. So the assertion exists,
+passes, and never sees the form that could break.
+
+**The rule.** Ask what the change makes appear in a note, not only which files
+it edits. A diff confined to `plugin/lib/` can still alter what template CSS
+has to match, and the pinned render assertions only cover the shapes the
+fixtures happen to contain. When a change alters *written* content, either
+capture it live or say plainly that it went unverified.
+
+These seven entries are about the probe. Traps about what the vault renders —
 column virtualisation, occluded windows returning stale frames, non-pristine
 vaults poisoning the row cross-check — live in `docs/visual-verification.md`
 under "Traps worth knowing".
