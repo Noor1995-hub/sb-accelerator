@@ -205,6 +205,8 @@ def build_parser() -> argparse.ArgumentParser:
         "skip", help="never propose this recording id again")
     _add_vault_argument(sync_skip)
     sync_skip.add_argument("--id", dest="recording_id", required=True)
+    sync_skip.add_argument("--reason",
+                           help="why, for whoever reads the list later")
 
     sync_rec = sync_sub.add_parser(
         "reconcile-reviews",
@@ -221,6 +223,24 @@ def build_parser() -> argparse.ArgumentParser:
         "--path", required=True,
         help="vault-relative path of the inbox file, e.g. 10-inbox/notes.txt")
     sync_archive.add_argument("--today", help="ISO date; defaults to today")
+
+    # --reason has no default on purpose. A park suppresses an id forever and
+    # moves a file out of sight; the reason is the only thing that makes that
+    # reviewable later, so argparse refuses the call rather than let it be
+    # omitted.
+    sync_park = sync_sub.add_parser(
+        "park",
+        help="archive a non-capture inbox file, suppress its id, record why")
+    _add_vault_argument(sync_park)
+    sync_park.add_argument(
+        "--path", required=True,
+        help="vault-relative path of the inbox file, e.g. 10-inbox/deck.pptx")
+    sync_park.add_argument("--id", dest="recording_id", required=True)
+    sync_park.add_argument(
+        "--reason", required=True,
+        help="why this is not a capture, e.g. 'vendor whitepaper, no capture "
+             "content'")
+    sync_park.add_argument("--today", help="ISO date; defaults to today")
 
     sync_queue = sync_sub.add_parser(
         "update-queue",
@@ -333,12 +353,16 @@ def _dispatch(args: argparse.Namespace) -> int:
                 raise syncjob.SyncError("--ids must be a JSON array of id strings")
             return _ok(syncjob.dedup(root, payload))
         if args.action == "skip":
-            return _ok(syncjob.skip(root, args.recording_id))
+            return _ok(syncjob.skip(root, args.recording_id,
+                                    reason=args.reason))
         if args.action == "reconcile-reviews":
             return _ok(syncjob.reconcile_reviews(root))
         if args.action == "archive":
             return _ok(syncjob.archive(root, args.path,
                                        vault.today_iso(args.today)))
+        if args.action == "park":
+            return _ok(syncjob.park(root, args.path, args.recording_id,
+                                    args.reason, vault.today_iso(args.today)))
         if args.action == "update-queue":
             return _ok(updatequeue.run(root, vault.today_iso(args.today),
                                        args.executive))

@@ -7,7 +7,7 @@ import json
 
 import pytest
 
-from vaultlib import cli
+from vaultlib import cli, syncjob
 
 from test_vaultlib_vault import make_vault
 
@@ -445,3 +445,53 @@ def test_sync_archive_surfaces_a_bad_path_as_a_failure_envelope(capsys, tmp_path
     assert payload["ok"] is False
     assert "directly inside" in payload["error"]
     assert payload["hint"] == "Fix the named id or argument and retry."
+
+
+def test_sync_park_archives_records_and_names_the_sidecar(capsys, tmp_path):
+    root = make_vault(tmp_path)
+    (root / "10-inbox" / "report.pdf").write_bytes(b"%PDF")
+
+    code, payload = run(capsys, [
+        "sync", "park", "--vault", str(root), "--path", "10-inbox/report.pdf",
+        "--id", "inbox:abc0000000000000",
+        "--reason", "vendor whitepaper, no capture content",
+        "--today", "2026-08-25",
+    ])
+
+    assert code == 0
+    assert payload["result"]["to"] == "90-archive/inbox/2026-08/report.pdf"
+    assert payload["result"]["sidecar"] == (
+        "90-archive/inbox/2026-08/report.pdf.parked.md")
+    assert payload["result"]["reason"] == "vendor whitepaper, no capture content"
+    assert (root / payload["result"]["sidecar"]).is_file()
+
+
+def test_sync_park_without_a_reason_is_refused_by_argparse(capsys, tmp_path):
+    """--reason is the point of the subcommand; a park that forgot it must not
+    be a park that silently succeeded."""
+    root = make_vault(tmp_path)
+    (root / "10-inbox" / "report.pdf").write_bytes(b"%PDF")
+
+    with pytest.raises(SystemExit):
+        run(capsys, ["sync", "park", "--vault", str(root),
+                     "--path", "10-inbox/report.pdf",
+                     "--id", "inbox:abc0000000000000"])
+
+    assert (root / "10-inbox" / "report.pdf").is_file()
+
+
+def test_sync_skip_carries_an_optional_reason_through(capsys, tmp_path):
+    """An adapter id has no inbox file, so it goes through `skip` rather than
+    `park` — but the list it lands on still deserves the explanation."""
+    root = make_vault(tmp_path)
+
+    code, payload = run(capsys, [
+        "sync", "skip", "--vault", str(root), "--id", "plaud:abc123",
+        "--reason", "a pocket recording, nothing said",
+    ])
+
+    assert code == 0
+    assert payload["result"]["reason"] == "a pocket recording, nothing said"
+    assert syncjob.read_skip_records(root) == [
+        {"recording_id": "plaud:abc123",
+         "reason": "a pocket recording, nothing said", "source_name": None}]

@@ -15,6 +15,7 @@ Rules:
   not a meeting — a forwarded email, a voice memo — becomes a note with
   `type: note`. Both land in the same triage queue, `Meetings.base`.
 - **Anything that is not a capture is parked**, not filed. A whitepaper or a
-  deck goes to the archive, and the run that parked it says why in its
-  summary; the sync does not decide where your reference material belongs.
+  deck goes to the archive with a short note beside it saying why it was
+  parked and how to have it processed after all; the sync does not decide
+  where your reference material belongs.
 - Skills never leave their outputs in this folder.

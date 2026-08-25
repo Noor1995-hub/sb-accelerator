@@ -5,7 +5,9 @@ The vault itself is the ledger — a recording is synced iff its namespaced
 source-recording-id appears in some 20-meetings/*.md. There is no second
 ledger to reconcile, so a failed item (which wrote nothing) retries
 naturally on the next run. The skip list exists for the one case the ledger
-cannot express: a human said "never propose this one again".
+cannot express: a human said "never propose this one again". It carries the
+reason alongside the id, because a permanent suppression no one can explain
+is indistinguishable from a mistake.
 
 scan-cache.json is a cache, not a ledger: it remembers what the vault
 already said, keyed on (mtime_ns, size), and is rebuilt in silence whenever
@@ -27,6 +29,8 @@ NAMESPACES = ("inbox", "plaud", "m365")
 SKIP_FILE_RELPATH = Path("99-workflow-config") / "sync-state" / "skipped-recordings.txt"
 ARCHIVE_DIR = vault.ARCHIVE_DIR
 ARCHIVE_INBOX_SUBDIR = "inbox"
+PARKED_SIDECAR_SUFFIX = ".parked.md"
+MAX_REASON_CHARS = 300
 _IGNORED_NAMES = {"README.md"}
 
 
@@ -131,25 +135,108 @@ def known_recording_ids(root: Path, cache: Optional[dict] = None
     return ids, warnings
 
 
-def read_skip_list(root: Path) -> Set[str]:
+def _flatten(text: Optional[str]) -> Optional[str]:
+    """Collapse all whitespace to single spaces, or None if nothing is left.
+
+    One record is one line: a tab would invent a field and a newline would
+    invent a record. A model writes these reasons, so neither can be assumed
+    absent.
+    """
+    collapsed = " ".join(str(text or "").split())
+    return collapsed or None
+
+
+def _clean_reason(reason: Optional[str]) -> Optional[str]:
+    """A reason short enough to stay readable in a list of them."""
+    text = _flatten(reason)
+    if text is not None and len(text) > MAX_REASON_CHARS:
+        text = text[:MAX_REASON_CHARS - 1].rstrip() + "…"
+    return text
+
+
+def _format_skip_line(record: dict) -> str:
+    r"""`id[\treason[\tfilename]]`, one line, LF-terminated.
+
+    Trailing empty fields are omitted rather than written as bare tabs, so an
+    id with nothing to say produces exactly the line this format started as —
+    what every deployed vault already holds.
+    """
+    fields = [record["recording_id"],
+              _clean_reason(record.get("reason")) or "",
+              _flatten(record.get("source_name")) or ""]
+    while len(fields) > 1 and not fields[-1]:
+        fields.pop()
+    return "\t".join(fields) + "\n"
+
+
+def _parse_skip_line(line: str) -> dict:
+    fields = [field.strip() for field in line.split("\t")]
+    fields += [""] * (3 - len(fields))
+    return {"recording_id": fields[0], "reason": fields[1] or None,
+            "source_name": fields[2] or None}
+
+
+def read_skip_records(root: Path) -> List[dict]:
+    """Every suppressed id in file order, with what it was and why.
+
+    A bare id line — all this format held before reasons were recorded, and
+    what deployed vaults still hold — parses as a complete record whose
+    reason is None. That is the honest rendering: no reason was ever captured,
+    and none is invented here.
+    """
     skip_file = root / SKIP_FILE_RELPATH
     if not skip_file.is_file():
-        return set()
-    return {line.strip() for line in
-            skip_file.read_text(encoding="utf-8").splitlines() if line.strip()}
+        return []
+    return [_parse_skip_line(line) for line
+            in skip_file.read_text(encoding="utf-8").splitlines()
+            if line.strip()]
 
 
-def skip(root: Path, recording_id: str) -> dict:
-    """Append one id to the skip list (idempotent)."""
+def read_skip_list(root: Path) -> Set[str]:
+    """Just the suppressed ids — what scan() and dedup() filter against.
+
+    Deliberately unchanged by the annotated format: every caller that asks
+    "is this id suppressed?" gets the same answer from either line shape.
+    """
+    return {record["recording_id"] for record in read_skip_records(root)}
+
+
+def skip(root: Path, recording_id: str, reason: Optional[str] = None,
+         source_name: Optional[str] = None) -> dict:
+    """Record one id as never-propose-again (idempotent on the id).
+
+    `reason` and `source_name` are what make this list legible a quarter
+    later; both are optional because an adapter id skipped by hand has no
+    inbox file and may have nothing to say. Inbox files come through park(),
+    which requires a reason.
+    """
     rid = _validate_id(recording_id)
-    existing = read_skip_list(root)
-    if rid in existing:
-        return {"recording_id": rid, "already_present": True}
+    cleaned = _clean_reason(reason)
+    records = read_skip_records(root)
+    present = next((r for r in records if r["recording_id"] == rid), None)
+    if present is not None:
+        # An id suppressed before reasons were recorded, whose file was
+        # dropped back in and parked again: annotate the line already there
+        # rather than duplicate the id. A reason already on record is the one
+        # a human would have read, so a re-park never revises it.
+        if cleaned and not present["reason"]:
+            present["reason"] = cleaned
+            present["source_name"] = _flatten(source_name) \
+                or present["source_name"]
+            vault.atomic_write(root / SKIP_FILE_RELPATH,
+                               "".join(_format_skip_line(r) for r in records))
+            return {"recording_id": rid, "already_present": True,
+                    "reason_added": True, "reason": cleaned}
+        return {"recording_id": rid, "already_present": True,
+                "reason_added": False, "reason": present["reason"]}
     skip_file = root / SKIP_FILE_RELPATH
     skip_file.parent.mkdir(parents=True, exist_ok=True)
     with open(skip_file, "a", encoding="utf-8", newline="\n") as handle:
-        handle.write(rid + "\n")
-    return {"recording_id": rid, "already_present": False}
+        handle.write(_format_skip_line(
+            {"recording_id": rid, "reason": cleaned,
+             "source_name": source_name}))
+    return {"recording_id": rid, "already_present": False,
+            "reason_added": bool(cleaned), "reason": cleaned}
 
 
 def scan(root: Path) -> dict:
@@ -330,3 +417,91 @@ def archive(root: Path, relpath: str, today: str) -> dict:
     shutil.move(str(source), str(target))
     return {"from": rel.as_posix(),
             "to": target.relative_to(root).as_posix()}
+
+
+def _sidecar_text(name: str, source_relpath: str, recording_id: str,
+                  reason: str, day: str, prior: Optional[dict] = None) -> str:
+    """Prose for whoever opens the archive a quarter later.
+
+    Deliberately without frontmatter: this explains a file, it is not a vault
+    object, and nothing should ever try to validate it as one.
+
+    `prior` is the skip record this id already had, if any. The three cases
+    read differently and must not be flattened: a first park, a re-park whose
+    reason was already on record, and a re-park of an id suppressed back when
+    the list held ids alone — where the reason below is new, and saying
+    otherwise would backdate it.
+    """
+    again = ""
+    if prior is not None:
+        again = (" This item was parked on an earlier run too; the reason "
+                 "below is the one recorded then."
+                 if prior.get("reason") else
+                 " This item was parked on an earlier run too, but no reason "
+                 "was recorded at the time — the one below was written now.")
+    return (
+        f"# Parked: {name}\n"
+        "\n"
+        f"Parked by `/sync-recordings` on {day} — not a capture, so no note "
+        f"was written for it.{again}\n"
+        "\n"
+        f"- **Why:** {reason}\n"
+        f"- **Came from:** `{source_relpath}`\n"
+        f"- **Recording id:** `{recording_id}`, now on the never-propose-again "
+        f"list in `{SKIP_FILE_RELPATH.as_posix()}`\n"
+        "\n"
+        "Nothing reads this file. To have the item processed after all, delete "
+        f"that id's line from the skip list and drop the file back into "
+        f"`{INBOX_DIR}/`.\n"
+    )
+
+
+def park(root: Path, relpath: str, recording_id: str, reason: str,
+         today: str) -> dict:
+    """Archive a non-capture, suppress its id, and record why — in one call.
+
+    Parking is two writes that must not come apart: the file leaves the inbox
+    and its id joins the never-propose-again list. Neither is legible without
+    the reason, and a reason threaded through two separate calls can be
+    omitted from one or drift between them. So this is the only entry point
+    that parks an inbox file, and it refuses to run without a reason.
+
+    The reason is written twice on purpose, because the two readers are
+    different people at different times: the skip list answers "what has this
+    vault suppressed, and why?", and the sidecar answers "why is this file
+    sitting in my archive?" for someone browsing the folder who will never
+    open a config directory.
+
+    Order is deliberate. The id is validated and the reason required before
+    anything moves; the suppression is recorded only after the move. A move
+    that failed suppresses nothing, whereas recording first would leave an id
+    suppressed while its file sat in the inbox — offered by scan() as skipped
+    and unable ever to leave.
+    """
+    rid = _validate_id(recording_id)
+    cleaned = _clean_reason(reason)
+    if cleaned is None:
+        raise SyncError(
+            "a reason is required to park an item: it is the only record of "
+            "why this was not a capture. Say what the file is and what it is "
+            "not — for example 'vendor whitepaper, no capture content'."
+        )
+    # An id already suppressed with a reason keeps that reason — including in
+    # this run's sidecar. The alternative is a vault telling two stories about
+    # one decision: the skip list saying why the item was parked in August,
+    # and a September sidecar for the same id asserting something else.
+    prior = next((r for r in read_skip_records(root)
+                  if r["recording_id"] == rid), None)
+    effective = prior["reason"] if prior and prior["reason"] else cleaned
+    moved = archive(root, relpath, today)
+    landed = PurePosixPath(moved["to"]).name
+    sidecar = root / PurePosixPath(moved["to"]).parent \
+        / (landed + PARKED_SIDECAR_SUFFIX)
+    vault.atomic_write(sidecar, _sidecar_text(
+        landed, moved["from"], rid, effective, vault.today_iso(today),
+        prior=prior))
+    recorded = skip(root, rid, reason=effective,
+                    source_name=PurePosixPath(moved["from"]).name)
+    return {**moved, "sidecar": sidecar.relative_to(root).as_posix(),
+            "recording_id": rid, "reason": effective,
+            "already_present": recorded["already_present"]}
