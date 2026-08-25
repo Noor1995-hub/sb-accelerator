@@ -52,5 +52,7 @@ value that was inferred and wants your eye.
 - `99-workflow-config` — how the assistant works: who you are, how you like
   things written, what the vocabulary means. Worth editing when something
   reads wrong.
+- `claude` — the assistant's own machinery. Visible on purpose, so nothing
+  about how it works is hidden from you; nothing you need day to day.
 
 Ask for anything in plain language. If a command would help, you'll be told.

@@ -9,10 +9,17 @@ def test_missing_template_dir_fails(tmp_path):
     assert any("template" in p for p in problems)
 
 
-def test_readme_only_template_passes(tmp_path):
+def test_empty_template_passes(tmp_path):
+    (tmp_path / "template").mkdir()
+    assert main(tmp_path) == []
+
+
+def test_lone_readme_is_not_a_bootstrap_state(tmp_path):
+    """template/ ships no README of its own — a root README is not exempt."""
     (tmp_path / "template").mkdir()
     (tmp_path / "template" / "README.md").write_text("stub", encoding="utf-8")
-    assert main(tmp_path) == []
+    problems = main(tmp_path)
+    assert any("CLAUDE.md" in p for p in problems)
 
 
 def test_populated_template_requires_markers(tmp_path):

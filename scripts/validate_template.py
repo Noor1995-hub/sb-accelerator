@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
 """Template skeleton invariants.
 
-While template/ holds only its README, that's the valid bootstrap state.
-The moment anything else exists (the template-extraction issue), the template
+While template/ is empty, that's the valid bootstrap state. The template
+ships no README of its own — builder-facing instantiation documentation lives
+in playbooks/ and docs/, because everything under template/ is copied into the
+client's vault and read by the executive.
+
+The moment anything exists in it (the template-extraction issue), the template
 must carry its markers: CLAUDE.md (vault instructions), structure-version
 (consumed by /upgrade-vault), and 99-workflow-config/config.json in the safe
 shipping state (identity values null, connector adapters disabled, unbound).
@@ -19,8 +23,7 @@ def main(root: Path) -> list[str]:
     if not template.is_dir():
         return ["template/ directory is missing"]
     entries = [p for p in template.rglob("*") if p.name != ".gitkeep"]
-    non_readme = [p for p in entries if p.relative_to(template) != Path("README.md")]
-    if not non_readme:
+    if not entries:
         return []  # unpopulated skeleton — valid bootstrap state
     problems = []
     if not (template / "CLAUDE.md").is_file():

@@ -27,6 +27,14 @@ delivers them.
   triage queue until the pending vault migration runs, so check for them at
   the next visit. Sync and evening summaries read as sentences instead of
   field names. (#58)
+
+- **The vault no longer carries its own installation notes.** Three notes that
+  explained how the vault is *set up* — a `README` at the root and two under
+  `claude/` — were visible in your file tree and in search, alongside your own
+  notes. They have moved out of the vault into delaware's deployment
+  documentation. `Start here` is now the only orientation note, and it also
+  explains the `claude` folder, which was visible but unexplained. (#68)
+
 - **Connectors are now bound to the vault, and refuse to sync anyone else's
   account.** Each vault carries a deployment config
   (`99-workflow-config/config.json`) naming its timezone, its executive, and

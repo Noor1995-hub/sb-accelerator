@@ -52,15 +52,22 @@ than reasoning about it.
 
 ## 3. Vault and sync
 
+The setup-day steps themselves live in `provisioning-runbook.md`. These are
+the questions to settle before you get that far.
+
 - [ ] Device/MDM policy permits **Obsidian** and **Claude Desktop**.
 - [ ] Obsidian Sync account available (or an agreed alternative), signed in
       on both machines.
-- [ ] Sync exclusions verified **on each machine independently**:
-      `95-private/` and `_heavy-assets/`.
-- [ ] The `.claude → claude` symlink can be created. On Windows this needs
-      `mklink /D` from an elevated shell or Developer Mode. If it cannot be
-      created, point Claude Code at `claude/` directly — the vault still
-      works, only the dot-path convenience is lost.
+- [ ] Sync exclusions agreed: `95-private/` and `_heavy-assets/`. Applying
+      them is per-machine, not per-vault — runbook §4–5.
+- [ ] The `.claude → claude` symlink **can** be created on both machines. On
+      Windows this needs `mklink /D` from an elevated shell or Developer
+      Mode; if that is off the table the vault still works on a degraded
+      path — runbook §3.
+- [ ] The client machines can reach GitHub releases, so
+      `scripts/provision_plugins.py` can fetch the pinned Obsidian plugins.
+      On a locked-down fleet, agree the by-hand install fallback instead —
+      runbook §2.
 - [ ] Vault folder connected in Cowork on both machines. Confirm Cowork
       picks up the vault's `CLAUDE.md` as folder instructions — it does so by
       default, and it should appear in Cowork's context panel as
