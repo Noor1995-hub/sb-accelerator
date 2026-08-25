@@ -184,6 +184,44 @@ it (the no-meetings line, or whatever `meetings_note` the last write passed).
 Unparseable frontmatter is a warning, not a failure — the jottings the harvest
 needs live in the body, so `frontmatter` comes back empty and the run goes on.
 
+Region markers may carry CLI-owned `key=value` attributes, and exactly one
+is defined: `<!-- evening-sync:recap:begin inputs=<16 hex> -->`. That digest
+fingerprints what the recap was composed *from* — the window's meeting
+notes, the daily notes holding its jottings, and any decision notes written
+inside it. `daily-note write` recomputes it whenever the payload carries
+`recap_window`, and when it matches the stamp already on the note the recap
+region is skipped outright: bytes untouched, `recap_skipped: true`, prep
+regions still merged. That is what stops a re-run replacing a recap the exec
+already read with a differently-worded, occasionally worse one.
+
+The stamp lives on the marker line rather than in frontmatter (which a merge
+may never touch) or a sidecar file (which the design rules out), and a
+payload with no `recap_window` *strips* any stamp it finds — leaving one
+above a recap whose inputs nobody verified would make the marker lie, and a
+lying stamp causes a skip, which is the one failure mode that silently does
+nothing. An unknown attribute is an error, not an ignore: guessing at a
+marker is how a note gets mis-merged.
+
+### Wikilinks in region content resolve, or the write fails
+
+Every `[[target]]` in a `daily-note write` payload — recap, prep,
+`meetings_note` — must resolve to a vault object: an entity dossier, a
+person note, a project index, a meeting note, a decision note, or a daily
+note. `#heading` is stripped first; embeds count.
+
+Where the link carries an alias and the target is an *identity* object
+(entity, person, project), the alias must equal that object's `entity-name`
+/ `person-name` / `project-name` exactly, and the error names the real one
+so a caller can fix it without a second lookup. Meetings, decisions and
+daily notes must resolve but their aliases are free prose — "Friday's Acme
+sync" is a reference, not a claim about what something is called.
+
+This is the same boundary lesson as the two above it. There, a caller that
+re-sends what it read corrupts the value; here, a caller that writes a name
+it *remembers* instead of one it looked up publishes a plausible fiction
+into the exec's daily note. An unreadable dossier is a warning rather than a
+refusal: one mangled file must not cost the exec their note.
+
 ## After changing the ontology
 
 ```bash

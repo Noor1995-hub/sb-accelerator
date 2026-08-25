@@ -212,3 +212,58 @@ def test_sync_recordings_parks_through_the_one_call_that_records_why():
     assert "--reason" in text
     park_block = text.split("sync park", 1)[1][:400]
     assert "--reason" in park_block, "the park invocation itself must carry --reason"
+
+
+def _evening_sync() -> str:
+    return read_skill("evening-sync")
+
+
+def test_evening_sync_states_the_no_back_fill_rule():
+    # Decision 16: one catch-up note covers the window; the exec is told so.
+    text = _evening_sync().lower()
+    assert "back-fill" in text, (
+        "the no-back-fill decision was real but unstated, which is the "
+        "finding — the skill has to say it"
+    )
+
+
+def test_evening_sync_consumes_the_catchup_facts_rather_than_deriving_them():
+    text = _evening_sync()
+    for key in ("business_days_missed", "over_threshold",
+                "recap_detail_from", "business_days_not_detailed"):
+        assert key in text, f"stage 1 must consume {key} from dates plan"
+
+
+def test_evening_sync_payload_example_carries_the_recap_window():
+    # recap_window is optional in the CLI for backward compatibility, so
+    # this test is the only thing keeping the idempotence guard wired up.
+    text = _evening_sync()
+    assert '"recap_window"' in text, (
+        "without recap_window in the payload there is no fingerprint and no "
+        "catch-up banner — the guard is silently off"
+    )
+
+
+def test_evening_sync_mandates_wikilinks_for_looked_up_names():
+    # Anchored on the mandate sentence itself, not on the word "wikilink":
+    # that already appears in stage 4, and "never" appears 19 times, so the
+    # loose form of this assertion passes before the mandate is written.
+    text = _evening_sync()
+    assert "never a name you recalled" in text, (
+        "decision 19: a plain-prose name cannot be validated by anything, so "
+        "the skill has to require the linked form in stage 6"
+    )
+    assert "refuses a link that resolves to nothing" in text, (
+        "the skill has to say what the CLI does about it, or a model reads "
+        "the mandate as advice"
+    )
+
+
+def test_evening_sync_states_unattended_catchup_behaviour():
+    section = _evening_sync().split("## Unattended mode", 1)
+    assert len(section) == 2, "evening-sync has no Unattended mode section"
+    body = section[1].split("\n## ", 1)[0].lower()
+    assert "catch-up" in body or "catchup" in body, (
+        "unattended mode caps and flags rather than composing a mega-recap; "
+        "finding F4 is that this mode has no coverage at all"
+    )
