@@ -15,6 +15,20 @@ delivers them.
 
 ## Unreleased
 
+- **Tomorrow's note tells you when it is catching up.** After missed evenings —
+  a holiday, travel, a laptop that stayed shut — the recap used to quietly cover
+  the whole gap and look like any other day. It now opens by naming the window
+  it covers, how many working days went without a run, and the fact that the
+  skipped days are not written up separately: one note covers the stretch. Past
+  a week, it recaps the recent days properly and counts the rest rather than
+  compressing two months into one summary. (#56)
+- **Re-running the evening sync no longer rewrites a recap you have read.** A
+  second run on the same day used to regenerate the recap from scratch, which
+  could quietly replace a real takeaway with a worse line. It now leaves the
+  recap exactly as it was unless the meetings or your jottings actually changed.
+  Company, people and project names in the recap are also read from the vault
+  instead of recalled, so a near-miss like the wrong middle word in a client's
+  name cannot reach the note. (#57)
 - **A parked file now says why it was parked.** When the sync decides
   something you dropped in `10-inbox/` isn't a capture at all — a whitepaper, a
   deck, a stray file — it moves it to `90-archive/inbox/` and leaves a short
