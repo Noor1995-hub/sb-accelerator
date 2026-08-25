@@ -48,6 +48,30 @@ user_invocable: true
 
 `name` must match the directory name. `scripts/lint_plugin.py` enforces this.
 
+## Visual verification (UI-impacting changes)
+
+The vault is the UI, and CI cannot see it: a renamed property silently empties
+a Base table, an inert `displayName` silently renders a raw column name. Both
+shipped. `python -m pytest scripts/tests -q` going green does **not** mean a
+rendering change is verified.
+
+A change is **UI-impacting** when it touches any of:
+
+- `template/.obsidian/**` — theme, Minimal Theme Settings, CSS snippets, navigator
+- any `*.base` or `*.canvas`
+- `fixtures/demo-vault/**` — it changes what renders
+- `template/99-workflow-config/reference/ontology.md` — property renames empty views
+- `plugin/lib/vaultlib/markdown.py` — it emits the bodies that render
+
+For those, run `/visual-check` (or the loop in `docs/visual-verification.md`)
+and report the evidence — the assertions **and** what the screenshots show —
+before calling the change done. A `PostToolUse` hook prints a reminder, but the
+obligation is here, not in the hook.
+
+This tier is local-only by construction and never becomes a CI check: it needs
+a licensed macOS GUI app and a Restricted Mode dialog that cannot ship as
+files.
+
 ## How to test locally
 
 ```bash

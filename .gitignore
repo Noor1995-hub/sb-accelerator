@@ -8,3 +8,6 @@ __pycache__/
 
 # Local hand-testing vaults (make_test_vault.py output, dated) — never committed
 test-vaults/
+
+# Probe tour artifacts (screenshots + DOM dumps) — regenerated, never committed
+.obsidian-probe-out/

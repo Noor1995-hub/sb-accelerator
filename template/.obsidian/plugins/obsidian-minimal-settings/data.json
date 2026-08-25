@@ -1,0 +1,22 @@
+{
+  "lightStyle": "minimal-light",
+  "darkStyle": "minimal-dark",
+  "lightScheme": "minimal-default-light",
+  "darkScheme": "minimal-default-dark",
+  "colorfulHeadings": true,
+  "colorfulFrame": true,
+  "readableLineLength": true,
+  "lineWidth": 55,
+  "lineWidthWide": 120,
+  "maxWidth": 88,
+  "lineHeight": 1.5,
+  "textNormal": 16,
+  "textSmall": 13,
+  "trimNames": true,
+  "underlineInternal": true,
+  "underlineExternal": true,
+  "folding": true,
+  "bordersToggle": true,
+  "minimalStatus": true,
+  "fullWidthMedia": true
+}

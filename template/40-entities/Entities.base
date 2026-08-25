@@ -7,17 +7,17 @@ formulas:
 properties:
   formula.open:
     displayName: " "
-  entity-name:
+  note.entity-name:
     displayName: Entity
-  entity-type:
+  note.entity-type:
     displayName: Type
-  status:
+  note.status:
     displayName: Status
-  industry:
+  note.industry:
     displayName: Industry
-  owner:
+  note.owner:
     displayName: Owner
-  last-updated:
+  note.last-updated:
     displayName: Updated
 views:
   - type: table

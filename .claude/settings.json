@@ -24,6 +24,19 @@
           }
         ]
       }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/ui-change-reminder.py\"",
+            "shell": "bash",
+            "timeout": 10
+          }
+        ]
+      }
     ]
   },
   "permissions": {
@@ -37,7 +50,11 @@
       "Bash(gh pr view:*)",
       "Bash(gh pr list:*)",
       "Bash(gh issue view:*)",
-      "Bash(gh issue list:*)"
+      "Bash(gh issue list:*)",
+      "Bash(python scripts/obsidian_probe.py:*)",
+      "Bash(python3 scripts/obsidian_probe.py:*)",
+      "Bash(python scripts/make_test_vault.py:*)",
+      "Bash(python3 scripts/make_test_vault.py:*)"
     ],
     "ask": [
       "Bash(git push --force:*)",

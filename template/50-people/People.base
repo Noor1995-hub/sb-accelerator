@@ -8,19 +8,19 @@ formulas:
 properties:
   formula.open:
     displayName: " "
-  person-name:
+  note.person-name:
     displayName: Name
-  relationship:
+  note.relationship:
     displayName: Relationship
-  company:
+  note.company:
     displayName: Company
-  role:
+  note.role:
     displayName: Role
-  projects:
+  note.projects:
     displayName: Projects
-  meetings-30d:
+  note.meetings-30d:
     displayName: Meetings (30d)
-  last-updated:
+  note.last-updated:
     displayName: Updated
 views:
   - type: table

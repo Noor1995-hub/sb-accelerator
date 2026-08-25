@@ -7,23 +7,23 @@ formulas:
 properties:
   formula.open:
     displayName: " "
-  date:
+  note.date:
     displayName: Date
-  calendar-subject:
+  note.calendar-subject:
     displayName: Subject
-  calendar_match:
+  note.calendar_match:
     displayName: Cal
-  attendees:
+  note.attendees:
     displayName: Attendees
-  projects:
+  note.projects:
     displayName: Projects
-  review_status:
+  note.review_status:
     displayName: Review Status
-  reviewed:
+  note.reviewed:
     displayName: ✓ Reviewed
-  archived:
+  note.archived:
     displayName: 🗑 Archive
-  recording-duration:
+  note.recording-duration:
     displayName: Duration
 views:
   - type: table

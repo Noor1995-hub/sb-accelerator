@@ -23,6 +23,15 @@ delivers them.
   the config — a mismatch is refused outright, and an unattended run raises
   an alert instead of syncing. Raw connector data is wiped from the work
   area at the end of every run. (#54)
+- **The vault looks the way it was meant to.** Table columns now show their
+  intended headings — "Subject", "Review Status", "Duration" — instead of the
+  raw property names every shipped vault had been showing. Headings are
+  colour-coded by level, pages are wider and more readable, and the bookkeeping
+  markers the evening routine writes into daily notes are no longer visible
+  while you type. (#60)
+- **A "Start here" note, pinned first in the sidebar.** A fresh vault used to
+  open on a blank tab with nothing explaining the daily loop, the five tables,
+  or what a review tick means. Now it opens on a page that does. (#60)
 - **Editing properties in Obsidian no longer risks corrupting a note.** Obsidian
   rewrites a note's whole property block on any edit — quotes disappear, lists
   change shape — and a later plugin write over that rewritten form could leave

@@ -14,6 +14,7 @@
       "navigationBanner": null,
       "periodicNotesFolder": "",
       "shortcuts": [
+        { "type": "note", "path": "Start here.md" },
         { "type": "note", "path": "20-meetings/Meetings.base" },
         { "type": "note", "path": "30-projects/Projects.base" },
         { "type": "note", "path": "40-entities/Entities.base" },

@@ -434,7 +434,13 @@ def test_decisions_base_columns_all_exist_in_the_ontology():
     for name in config.get("properties", {}):
         if name.startswith("formula.") or name in BASE_PROPERTY_EXEMPTIONS:
             continue
-        assert name in known, (
+        # Note properties are namespaced `note.<prop>` in the properties: block —
+        # Obsidian ignores a displayName keyed on the bare name. The ontology
+        # names the bare property, so compare on that.
+        bare = name[len("note."):] if name.startswith("note.") else name
+        if bare in BASE_PROPERTY_EXEMPTIONS:
+            continue
+        assert bare in known, (
             f"Decisions.base declares property {name!r}, which ontology.md "
             "§Decision does not define"
         )

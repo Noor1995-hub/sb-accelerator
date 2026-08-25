@@ -7,25 +7,28 @@ formulas:
 properties:
   formula.open:
     displayName: " "
-  project-name:
+  note.project-name:
     displayName: Project
-  status:
+  note.status:
     displayName: Status
-  project-type:
+  note.project-type:
     displayName: Type
-  entity:
+  note.entity:
     displayName: Entity
-  owner:
+  note.owner:
     displayName: Owner
-  next-milestone:
+  note.next-milestone:
     displayName: Next Milestone
-  next-milestone-date:
+  note.next-milestone-date:
     displayName: Due
-  last-updated:
+  note.last-updated:
     displayName: Updated
 views:
   - type: table
     name: Active
+    groupBy:
+      property: note.project-type
+      direction: ASC
     filters:
       and:
         - status == "active"

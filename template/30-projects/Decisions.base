@@ -7,17 +7,17 @@ formulas:
 properties:
   formula.open:
     displayName: " "
-  summary:
+  note.summary:
     displayName: Decision
-  project:
+  note.project:
     displayName: Project
-  date:
+  note.date:
     displayName: Date
-  status:
+  note.status:
     displayName: Status
-  reviewed:
+  note.reviewed:
     displayName: Reviewed
-  supersedes:
+  note.supersedes:
     displayName: Supersedes
 views:
   - type: table

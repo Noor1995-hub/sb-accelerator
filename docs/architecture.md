@@ -26,3 +26,12 @@ Three required checks on every PR (see `.github/workflows/ci.yml`):
 - `plugin (skill lint + tests)` — skill frontmatter + clean-room lint + pytest over `scripts/tests/`
 - `template (structure validation)` — template skeleton invariants
 - `plugin version (not already released)` — plugin/ changes require a version bump; bumped version must not be already tagged
+
+## Verification below CI
+
+One tier exists that CI never runs: `scripts/obsidian_probe.py` drives a real
+Obsidian and `scripts/tests/test_obsidian_render.py` asserts what it rendered.
+It needs a licensed macOS GUI app and a Restricted Mode dialog that cannot ship
+as files, so it runs on a builder's machine before a PR — never as a status
+check. The test module skips itself when no capture is present, which is what
+the Ubuntu runners see. See `docs/visual-verification.md`.

@@ -63,39 +63,54 @@ and reopen the vault, or install by hand per `template/README.md` (Dataview,
 Minimal Theme Settings, Style Settings, Notebook Navigator + the Minimal
 theme via Settings → Appearance).
 
-### 3. Verify the five Bases render
+### 3. Verify what the vault renders
 
-**Which rows each view shows is now asserted in CI**, so you no longer count
-rows by hand. `scripts/tests/test_bases_views.py` evaluates all five `.base`
-files against these fixtures and pins the exact row set of every view;
-`scripts/tests/test_dataview_refs.py` checks that every property a Dataview
-block names still exists in the ontology. Both run inside
-`python -m pytest scripts/tests -q`, so a filter left pointing at a renamed
-property fails in seconds instead of surfacing as an empty table in front of
-a client.
+**Both halves of this are now automated.** Which rows each view shows is
+asserted in CI (`scripts/tests/test_bases_views.py` via `scripts/basesim.py`,
+plus `test_dataview_refs.py` for property references). What it *looks like* is
+asserted locally by the probe harness:
 
-That leaves this manual pass for what only Obsidian can tell you —
-**rendering, not row correctness**:
+```bash
+# The probe only drives vaults under test-vaults/ (see the guard, below), so
+# build one there rather than in /tmp:
+python scripts/make_test_vault.py test-vaults/$(date +%F)-visual --with-plugins
+python scripts/obsidian_probe.py doctor
+python scripts/obsidian_probe.py up --vault test-vaults/$(date +%F)-visual
+python scripts/obsidian_probe.py tour
+python -m pytest scripts/tests -q -m obsidian
+```
 
-- Each Base opens as a table rather than an error, with readable column
-  widths and the `displayName` headers, not raw property names.
-- `30-projects/Decisions.base` "All" has the `supersedes` column populated on
-  one row — the tests check which rows appear, not how a cell renders.
-- Project index bodies (e.g.
-  `30-projects/meridian-yard-automation-program/index.md`) render their
-  Dataview tables. Two projects — `commercial-ops-pipeline-governance` and
+That launches an isolated Obsidian, opens each Base view, project index, entity
+dossier and a daily note in Live Preview, and captures a screenshot plus a DOM
+dump of each into `.obsidian-probe-out/`. It asserts no view errors or renders
+empty, that column headers are the declared `displayName`s rather than raw
+property names, that Dataview blocks render tables, that the
+`<!-- evening-sync:* -->` markers are hidden in Live Preview, and that the real
+Bases engine agrees with `basesim.py` row for row. Full guide, prerequisites
+and traps: `docs/visual-verification.md`.
+
+The probe refuses any vault outside `test-vaults/` — that guard is what keeps a
+mistargeted `vault=` away from your real notes. `test-vaults/` is gitignored.
+
+**What still needs your eyes** — read the PNGs the tour captured, or open the
+vault. Assertions cover what a selector can express; these are judgement:
+
+- Column widths and date/duration/list formatting are legible rather than
+  cramped or raw.
+- Heading colours, page width and spacing look deliberate.
+- Two projects — `commercial-ops-pipeline-governance` and
   `meridian-warehouse-pilot-phase-0` — have no decisions yet, so an empty
   decisions table there is correct, not a bug.
-- Dates, durations and list columns (attendees, projects) are legible rather
-  than raw arrays.
+- Notebook Navigator's Shortcuts section lists Meetings, Projects, Entities,
+  People, Decisions and the daily-notes folder (rainbow-tinted), and
+  `claude/skills` is browsable in the file tree (`ls -la` shows
+  `.claude -> claude`).
 
-If a row set ever disagrees with what Obsidian actually shows, **Obsidian is
-right** — fix `scripts/basesim.py` and the expectations it pinned.
-
-Also verify the navigator defaults: Notebook Navigator's Shortcuts section
-lists Meetings, Projects, Entities, People, Decisions and the daily-notes
-folder (rainbow-tinted), and `claude/skills` is browsable in the file tree
-(`ls -la` in the vault shows `.claude -> claude`).
+If a row set ever disagrees with what Obsidian shows, **Obsidian is right** —
+fix `scripts/basesim.py` and the expectations it pinned. The probe's
+cross-check enforces that continuously, but only on a **pristine** vault: it
+skips on one you have been hand-testing in, because notes created during
+testing are legitimate rows that `basesim` cannot know about.
 
 ### 4. Load the plugin locally and verify skills are invocable
 
