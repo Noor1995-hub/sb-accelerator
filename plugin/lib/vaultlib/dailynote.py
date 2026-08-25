@@ -10,12 +10,13 @@ and those outrank the calendar.
 """
 from __future__ import annotations
 
+import hashlib
 import re
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-from . import dates, markdown, naming, vault
+from . import dates, markdown, meeting, naming, vault
 
 DAILY_NOTES_DIR = vault.DAILY_NOTES_DIR
 NO_MEETINGS_LINE = "*No meetings scheduled.*"
@@ -33,23 +34,70 @@ _KNOWN_REGIONS = ("recap", "prep")
 _TIME_RE = re.compile(r"\A([01]\d|2[0-3]):[0-5]\d\Z")
 _HEADING_RE = re.compile(
     r"\A(\d{2}:\d{2}) — (.*?)(?: · \[\[([a-z0-9-]+)\]\])?\Z")
-_ALLOWED_KEYS = ("date", "recap", "meetings", "meetings_note")
+_ALLOWED_KEYS = ("date", "recap", "meetings", "meetings_note", "recap_window")
 _ALLOWED_MEETING_KEYS = ("time", "subject", "entity", "prep")
+_ALLOWED_WINDOW_KEYS = ("from", "to", "detailed_from")
+_DIGEST_LENGTH = 16
 
 
 class DailyNoteError(Exception):
     """A payload field or note state the caller must fix."""
 
 
-def _require_date(raw) -> str:
+def _require_date(raw, label: str = "date") -> str:
     text = str(raw or "").strip()
     if not vault.ISO_DATE_RE.match(text):
-        raise DailyNoteError(f"date {raw!r} must be ISO YYYY-MM-DD")
+        raise DailyNoteError(f"{label} {raw!r} must be ISO YYYY-MM-DD")
     try:
         datetime.strptime(text, "%Y-%m-%d")
     except ValueError as exc:
-        raise DailyNoteError(f"date {raw!r} is not a real date") from exc
+        raise DailyNoteError(f"{label} {raw!r} is not a real date") from exc
     return text
+
+
+def _require_date_obj(raw, label: str) -> date:
+    return datetime.strptime(_require_date(raw, label), "%Y-%m-%d").date()
+
+
+def _validate_window(payload: dict, note_date: str) -> Optional[dict]:
+    """The recap window: what the recap covers, and what it was built from.
+
+    Optional so existing callers keep working — but a caller that omits it
+    forgoes both the catch-up banner and the idempotence guard, which is
+    why a skill-contract test pins it into the SKILL.md payload example.
+    """
+    raw = payload.get("recap_window")
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise DailyNoteError("recap_window must be a JSON object")
+    unknown = sorted(set(raw) - set(_ALLOWED_WINDOW_KEYS))
+    if unknown:
+        raise DailyNoteError(f"recap_window: unknown key(s) {unknown}")
+    for key in ("from", "to"):
+        if key not in raw:
+            raise DailyNoteError(
+                f"recap_window: {key} is required — pass recap_from and "
+                "recap_to from `dates plan` verbatim")
+    start = _require_date_obj(raw["from"], "recap_window.from")
+    end = _require_date_obj(raw["to"], "recap_window.to")
+    if start > end:
+        raise DailyNoteError(
+            f"recap_window: from {start.isoformat()} is after to "
+            f"{end.isoformat()}")
+    if end >= datetime.strptime(note_date, "%Y-%m-%d").date():
+        raise DailyNoteError(
+            f"recap_window.to ({end.isoformat()}) must be before the note's "
+            f"own date ({note_date}) — the window is what the note recaps, "
+            "not the note itself")
+    detailed = raw.get("detailed_from")
+    if detailed is not None:
+        detailed = _require_date_obj(detailed, "recap_window.detailed_from")
+        if not start <= detailed <= end:
+            raise DailyNoteError(
+                f"recap_window.detailed_from ({detailed.isoformat()}) must "
+                f"fall within {start.isoformat()}..{end.isoformat()}")
+    return {"from": start, "to": end, "detailed_from": detailed}
 
 
 def _day_name(date_iso: str) -> str:
@@ -74,6 +122,7 @@ def _validate(root: Path, payload) -> dict:
     if unknown:
         raise DailyNoteError(f"unknown payload key(s) {unknown}")
     date_iso = _require_date(payload.get("date"))
+    window = _validate_window(payload, date_iso)
     recap = _clean_region_text(payload.get("recap"), "recap")
     raw_meetings = payload.get("meetings")
     if not isinstance(raw_meetings, list):
@@ -123,7 +172,64 @@ def _validate(root: Path, payload) -> dict:
         if "\n" in meetings_note:
             raise DailyNoteError("meetings_note must be a single line")
     return {"date": date_iso, "recap": recap, "meetings": meetings,
-            "meetings_note": meetings_note}
+            "meetings_note": meetings_note, "recap_window": window}
+
+
+def _iso_prefix_date(stem: str) -> Optional[date]:
+    head = str(stem)[:10]
+    if not vault.ISO_DATE_RE.match(head):
+        return None
+    try:
+        return datetime.strptime(head, "%Y-%m-%d").date()
+    except ValueError:
+        return None
+
+
+def _fingerprint_inputs(root: Path, start: date, end: date) -> List[Tuple[str, Path]]:
+    """Every file whose content the recap for [start, end] was built from.
+
+    Meetings and jottings are the recap's stated inputs; decisions are here
+    so a stage-4 retry that finally wrote one is not read as "unchanged".
+    """
+    found: List[Tuple[str, Path]] = []
+    meetings = root / vault.MEETINGS_DIR
+    for path in sorted(meetings.glob("*.md")) if meetings.is_dir() else []:
+        noted = meeting.date_from_stem(path.stem)
+        if noted is not None and start <= noted <= end:
+            found.append((f"{vault.MEETINGS_DIR}/{path.name}", path))
+    notes = root / DAILY_NOTES_DIR
+    for path in sorted(notes.glob("*.md")) if notes.is_dir() else []:
+        noted = _iso_prefix_date(path.stem)
+        # The stem must be the date and nothing else: an editor's
+        # `2026-06-12-backup.md` is not that day's note, and hashing it would
+        # invalidate every recap fingerprint for the window.
+        if noted is not None and path.stem == noted.isoformat() and start <= noted <= end:
+            found.append((f"{DAILY_NOTES_DIR}/{path.name}", path))
+    projects = root / vault.PROJECTS_DIR
+    for folder in sorted(projects.glob("*/decisions")) if projects.is_dir() else []:
+        for path in sorted(folder.glob("*.md")):
+            noted = _iso_prefix_date(path.stem)
+            if noted is not None and start <= noted <= end:
+                found.append((
+                    f"{vault.PROJECTS_DIR}/{folder.parent.name}/decisions/"
+                    f"{path.name}", path))
+    return found
+
+
+def recap_fingerprint(root: Path, window: dict) -> str:
+    """A content hash of the recap's inputs — 16 hex, as `syncjob.content_id`.
+
+    Computed here, never accepted from a caller: a caller-supplied hash is
+    a caller-supplied fact, and the whole point is that this one is not.
+    The window bounds are part of the digest, so widening the window
+    invalidates even when no file changed.
+    """
+    start, end = window["from"], window["to"]
+    lines = [f"window\t{start.isoformat()}\t{end.isoformat()}"]
+    for relpath, path in sorted(_fingerprint_inputs(root, start, end)):
+        lines.append(f"{relpath}\t{hashlib.sha256(path.read_bytes()).hexdigest()}")
+    digest = hashlib.sha256("\n".join(lines).encode("utf-8")).hexdigest()
+    return digest[:_DIGEST_LENGTH]
 
 
 def _marker_line(name: str, kind: str,
@@ -145,11 +251,12 @@ def _heading(meeting: dict) -> str:
     return heading
 
 
-def _render(data: dict) -> str:
+def _render(data: dict, fingerprint: Optional[str]) -> str:
     date_iso = data["date"]
+    attrs = {"inputs": fingerprint} if fingerprint else None
     parts = ["---", f"date: {date_iso}", "type: daily-note", "---", "",
              f"# {date_iso} · {_day_name(date_iso)}", "",
-             "## Recap", _region("recap", data["recap"]), "",
+             "## Recap", _region("recap", data["recap"], attrs), "",
              "## Meetings", ""]
     if data["meetings"]:
         chunks = []
@@ -239,7 +346,8 @@ def _prep_headings(lines: List[str], regions: List[dict]) -> List[Optional[str]]
     return headings
 
 
-def _merge(text: str, data: dict) -> Tuple[str, int]:
+def _merge(text: str, data: dict,
+           fingerprint: Optional[str]) -> Tuple[str, int, bool]:
     lines = text.split("\n")
     regions = _find_regions(lines)
     recaps = [r for r in regions if r["name"] == "recap"]
@@ -279,39 +387,50 @@ def _merge(text: str, data: dict) -> Tuple[str, int]:
     prep_contents = ([m["prep"] for m in data["meetings"]]
                      if data["meetings"]
                      else [data["meetings_note"] or NO_MEETINGS_LINE])
-    replacements: Dict[int, Tuple[dict, str]] = {
-        recaps[0]["begin"]: (recaps[0], data["recap"])}
+    # Each entry: begin index -> (region, content, marker line or None).
+    # None means "re-emit the line that is already there"; only the recap's
+    # begin marker is ever rewritten, and only to restamp `inputs`.
+    replacements: Dict[int, Tuple[dict, str, Optional[str]]] = {}
+    recap = recaps[0]
+    recap_skipped = (fingerprint is not None
+                     and recap["attrs"].get("inputs") == fingerprint)
+    if not recap_skipped:
+        attrs = {"inputs": fingerprint} if fingerprint else None
+        replacements[recap["begin"]] = (
+            recap, data["recap"], _marker_line("recap", "begin", attrs))
     for region, content in zip(preps, prep_contents):
-        replacements[region["begin"]] = (region, content)
+        replacements[region["begin"]] = (region, content, None)
     out: List[str] = []
     index = 0
     while index < len(lines):
         if index in replacements:
-            region, content = replacements[index]
-            out.append(lines[region["begin"]])
+            region, content, marker = replacements[index]
+            out.append(marker if marker is not None else lines[region["begin"]])
             out.extend(content.split("\n"))
             out.append(lines[region["end"]])
             index = region["end"] + 1
         else:
             out.append(lines[index])
             index += 1
-    return "\n".join(out), len(replacements)
+    return "\n".join(out), len(replacements), recap_skipped
 
 
 def write(root: Path, payload) -> dict:
     data = _validate(root, payload)
+    window = data["recap_window"]
+    fingerprint = recap_fingerprint(root, window) if window else None
     path = root / DAILY_NOTES_DIR / f"{data['date']}.md"
     if path.is_file():
         original = path.read_text(encoding="utf-8")
-        merged, replaced = _merge(original, data)
+        merged, replaced, recap_skipped = _merge(original, data, fingerprint)
         changed = merged != original
         if changed:
             vault.atomic_write(path, merged)
         created = False
     else:
-        merged = _render(data)
+        merged = _render(data, fingerprint)
         replaced = 1 + (len(data["meetings"]) or 1)
-        changed, created = True, True
+        changed, created, recap_skipped = True, True, False
         vault.atomic_write(path, merged)
     return {
         "path": f"{DAILY_NOTES_DIR}/{data['date']}.md",
@@ -320,6 +439,8 @@ def write(root: Path, payload) -> dict:
         "created": created,
         "regions_replaced": replaced,
         "changed": changed,
+        "recap_skipped": recap_skipped,
+        "recap_inputs": fingerprint,
     }
 
 
@@ -360,10 +481,12 @@ def read(root: Path, date_iso_raw) -> dict:
     for region in regions:
         region_lines.update(range(region["begin"], region["end"] + 1))
     recap = None
+    recap_inputs = None
     recap_regions = [r for r in regions if r["name"] == "recap"]
     if recap_regions:
         region = recap_regions[0]
         recap = "\n".join(lines[region["begin"] + 1:region["end"]])
+        recap_inputs = region["attrs"].get("inputs")
     prep_by_begin = {r["begin"]: "\n".join(lines[r["begin"] + 1:r["end"]])
                      for r in regions if r["name"] == "prep"}
 
@@ -420,7 +543,8 @@ def read(root: Path, date_iso_raw) -> dict:
             other_lines.append(content)
     return {
         "exists": True, "path": rel, "date": date_iso,
-        "frontmatter": frontmatter, "recap": recap, "meetings": meetings,
+        "frontmatter": frontmatter, "recap": recap,
+        "recap_inputs": recap_inputs, "meetings": meetings,
         "meetings_note": meetings_note,
         "end_of_day": end_of_day, "other_lines": other_lines,
         "warnings": warnings,
