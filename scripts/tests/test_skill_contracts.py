@@ -218,6 +218,15 @@ def _evening_sync() -> str:
     return read_skill("evening-sync")
 
 
+def _normalized(text: str) -> str:
+    # Markdown prose is hard-wrapped for readability, so a multi-word phrase
+    # can legitimately span a line break. Collapse whitespace runs to a
+    # single space before matching so re-wrapping the prose (an ordinary
+    # markdown edit) can never flip one of these assertions — the check is
+    # about the words, not about where the lines happen to break.
+    return re.sub(r"\s+", " ", text)
+
+
 def test_evening_sync_states_the_no_back_fill_rule():
     # Decision 16: one catch-up note covers the window; the exec is told so.
     text = _evening_sync().lower()
@@ -248,7 +257,10 @@ def test_evening_sync_mandates_wikilinks_for_looked_up_names():
     # Anchored on the mandate sentence itself, not on the word "wikilink":
     # that already appears in stage 4, and "never" appears 19 times, so the
     # loose form of this assertion passes before the mandate is written.
-    text = _evening_sync()
+    # Matched against normalized whitespace: both phrases are multi-word and
+    # markdown hard-wrapping could otherwise split either across a line
+    # break the next time this paragraph is reflowed.
+    text = _normalized(_evening_sync())
     assert "never a name you recalled" in text, (
         "decision 19: a plain-prose name cannot be validated by anything, so "
         "the skill has to require the linked form in stage 6"
