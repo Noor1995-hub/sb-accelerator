@@ -184,6 +184,72 @@ it (the no-meetings line, or whatever `meetings_note` the last write passed).
 Unparseable frontmatter is a warning, not a failure — the jottings the harvest
 needs live in the body, so `frontmatter` comes back empty and the run goes on.
 
+Region markers may carry CLI-owned `key=value` attributes, and exactly one
+is defined: `<!-- evening-sync:recap:begin inputs=<16 hex> -->`. That digest
+fingerprints what the recap region's machine-generated content is composed
+*from* — the catch-up banner the CLI renders, the window's meeting notes,
+the daily notes holding its jottings, and any decision notes written inside
+it. The banner enters as its rendered text, not as the raw window bounds: a
+Saturday run over an untouched vault has a wider window than Friday's but
+the same banner and the same files, and hashing the bounds made that look
+like a change and regenerated a recap the exec had already read. Hashing
+the rendered banner also brings `detailed_from` inside the digest, which
+the bounds did not cover. `daily-note write` recomputes it whenever the
+payload carries `recap_window`, and when it matches the stamp already on the
+note the recap region is skipped outright: bytes untouched,
+`recap_skipped: true`, prep regions still merged. That is what stops a
+re-run replacing a recap the exec already read with a differently-worded,
+occasionally worse one.
+
+What the stamp does **not** cover is project indexes, and the recap does
+read from them (project pulse comes from each project's `Now` callout). The
+tradeoff is deliberate: stage 4 touches `last-updated` on every project it
+visits, so hashing the indexes would churn the digest on essentially every
+run and the guard would never fire. So read the stamp as *"the window's
+meetings, jottings and decisions are unchanged"*, not *"nothing anywhere
+changed"*. The visible consequence: a re-run whose stage 4 rewrote a project
+index but wrote no new decision — a valid outcome — skips the recap, leaving
+project pulse one revision behind. A guard that holds beats a guard that
+covers everything and fires always.
+
+The stamp lives on the marker line rather than in frontmatter (which a merge
+may never touch) or a sidecar file (which the design rules out), and a
+payload with no `recap_window` *strips* any stamp it finds — leaving one
+above a recap whose inputs nobody verified would make the marker lie, and a
+lying stamp causes a skip, which is the one failure mode that silently does
+nothing. An unknown attribute is an error, not an ignore: guessing at a
+marker is how a note gets mis-merged.
+
+### Wikilinks in region content resolve, or the write fails
+
+Every `[[target]]` in a `daily-note write` payload — recap, prep,
+`meetings_note` — must resolve to a vault object: an entity dossier, a
+person note, a project index, a meeting note, a decision note, or a daily
+note. `#heading` is stripped first; embeds count.
+
+**Resolving here is not the same as resolving in Obsidian.** This check asks
+whether the object exists where the vault's layout puts it. Obsidian resolves
+a `[[link]]` by note name, and two of these kinds are folders — an entity is
+`<slug>/dossier.md`, a project is `<slug>/index.md` — so
+`[[acme-industries]]` passes this check and still renders as an unresolved
+link in the app. That is vault layout, it predates this rule, and it is
+tracked separately; what the rule buys is that the *name* was looked up,
+which is the failure it exists to stop. People, meetings, decisions and daily
+notes are single notes and resolve in both senses.
+
+Where the link carries an alias and the target is an *identity* object
+(entity, person, project), the alias must equal that object's `entity-name`
+/ `person-name` / `project-name` exactly, and the error names the real one
+so a caller can fix it without a second lookup. Meetings, decisions and
+daily notes must resolve but their aliases are free prose — "Friday's Acme
+sync" is a reference, not a claim about what something is called.
+
+This is the same boundary lesson as the two above it. There, a caller that
+re-sends what it read corrupts the value; here, a caller that writes a name
+it *remembers* instead of one it looked up publishes a plausible fiction
+into the exec's daily note. An unreadable dossier is a warning rather than a
+refusal: one mangled file must not cost the exec their note.
+
 ## After changing the ontology
 
 ```bash

@@ -29,6 +29,27 @@ def make_vault(tmp_path: Path) -> Path:
     return tmp_path
 
 
+def make_linkable_vault(tmp_path: Path) -> Path:
+    root = make_vault(tmp_path)
+    (root / "50-people").mkdir()
+    (root / "50-people" / "taylor-brooks.md").write_text(
+        "---\nperson-name: Taylor Brooks\nslug: taylor-brooks\n"
+        "relationship: external\n---\n", encoding="utf-8")
+    project = root / "30-projects" / "yard-automation"
+    project.mkdir(parents=True)
+    (project / "index.md").write_text(
+        "---\ntype: project\nproject-name: Yard Automation Program\n"
+        "slug: yard-automation\n---\n", encoding="utf-8")
+    (project / "decisions").mkdir()
+    (project / "decisions" / "2026-06-12-phase-1-deferred.md").write_text(
+        "---\ntype: decision\n---\n", encoding="utf-8")
+    (root / "20-meetings").mkdir()
+    (root / "20-meetings" / "12-06-26-weekly-status.md").write_text(
+        "---\ndate: 2026-06-12T09:00\ntype: status-update\n---\n",
+        encoding="utf-8")
+    return root
+
+
 def payload(**overrides) -> dict:
     base = {
         "date": "2026-06-15",
@@ -44,6 +65,26 @@ def payload(**overrides) -> dict:
              "prep": "**Attendees:** Omar · **Last meeting:** none · **Context:** first session."},
         ],
     }
+    base.update(overrides)
+    return base
+
+
+def make_windowed_vault(tmp_path: Path) -> Path:
+    """A vault whose recap window 2026-06-12..2026-06-12 has real inputs."""
+    root = make_vault(tmp_path)
+    (root / "20-meetings").mkdir()
+    (root / "20-meetings" / "12-06-26-weekly-status.md").write_text(
+        "---\ndate: 2026-06-12T09:00\ntype: status-update\n---\n\n"
+        "## Key Takeaways\n- Shortlist approved.\n", encoding="utf-8")
+    (root / "60-daily-notes" / "2026-06-12.md").write_text(
+        "---\ndate: 2026-06-12\ntype: daily-note\n---\n\n"
+        "## End of day\n- Ran long.\n", encoding="utf-8")
+    return root
+
+
+def windowed_payload(**overrides) -> dict:
+    base = payload(date="2026-06-15",
+                   recap_window={"from": "2026-06-12", "to": "2026-06-12"})
     base.update(overrides)
     return base
 
@@ -549,3 +590,469 @@ def test_fresh_fixture_is_exactly_what_daily_note_write_renders(tmp_path):
         "content (headings, markers, prep/recap content); hand-written jottings "
         "outside markers are the only exemption"
     )
+
+
+def test_find_regions_reads_an_inputs_attribute():
+    lines = [
+        "<!-- evening-sync:recap:begin inputs=a1b2c3d4e5f6a7b8 -->",
+        "recap prose",
+        "<!-- evening-sync:recap:end -->",
+    ]
+    regions = dailynote._find_regions(lines)
+    assert regions[0]["attrs"] == {"inputs": "a1b2c3d4e5f6a7b8"}
+
+
+def test_find_regions_defaults_attrs_to_empty():
+    lines = ["<!-- evening-sync:recap:begin -->", "x",
+             "<!-- evening-sync:recap:end -->"]
+    assert dailynote._find_regions(lines)[0]["attrs"] == {}
+
+
+def test_find_regions_refuses_an_unknown_attribute():
+    lines = ["<!-- evening-sync:recap:begin mode=terse -->", "x",
+             "<!-- evening-sync:recap:end -->"]
+    with pytest.raises(dailynote.DailyNoteError, match="mode"):
+        dailynote._find_regions(lines)
+
+
+def test_find_regions_refuses_an_attribute_on_an_end_marker():
+    lines = ["<!-- evening-sync:recap:begin -->", "x",
+             "<!-- evening-sync:recap:end inputs=a1b2c3d4e5f6a7b8 -->"]
+    with pytest.raises(dailynote.DailyNoteError, match="inputs"):
+        dailynote._find_regions(lines)
+
+
+def test_find_regions_refuses_an_attribute_on_a_prep_region():
+    lines = ["<!-- evening-sync:prep:begin inputs=a1b2c3d4e5f6a7b8 -->", "x",
+             "<!-- evening-sync:prep:end -->"]
+    with pytest.raises(dailynote.DailyNoteError, match="inputs"):
+        dailynote._find_regions(lines)
+
+
+def test_region_without_attrs_renders_exactly_as_before():
+    assert dailynote._region("recap", "body") == (
+        "<!-- evening-sync:recap:begin -->\nbody\n"
+        "<!-- evening-sync:recap:end -->")
+
+
+def test_region_with_attrs_renders_them_on_the_begin_marker():
+    assert dailynote._region("recap", "body", {"inputs": "abc123"}) == (
+        "<!-- evening-sync:recap:begin inputs=abc123 -->\nbody\n"
+        "<!-- evening-sync:recap:end -->")
+
+
+def test_marker_line_renders_one_line():
+    assert dailynote._marker_line("recap", "begin", {"inputs": "abc123"}) == (
+        "<!-- evening-sync:recap:begin inputs=abc123 -->")
+    assert dailynote._marker_line("recap", "end") == (
+        "<!-- evening-sync:recap:end -->")
+
+
+def test_fresh_render_stamps_the_recap_inputs(tmp_path):
+    root = make_windowed_vault(tmp_path)
+    result = dailynote.write(root, windowed_payload())
+    assert re.fullmatch(r"[0-9a-f]{16}", result["recap_inputs"])
+    text = (root / "60-daily-notes" / "2026-06-15.md").read_text(encoding="utf-8")
+    assert f"<!-- evening-sync:recap:begin inputs={result['recap_inputs']} -->" in text
+
+
+def test_second_write_over_unchanged_inputs_leaves_the_file_byte_identical(tmp_path):
+    """The H2 repro: a re-run must not regenerate the recap with LLM variance."""
+    root = make_windowed_vault(tmp_path)
+    dailynote.write(root, windowed_payload())
+    path = root / "60-daily-notes" / "2026-06-15.md"
+    before = path.read_bytes()
+    result = dailynote.write(root, windowed_payload(
+        recap="> [!info] At a glance\n> synced from Teams transcript"))
+    assert result["recap_skipped"] is True
+    assert result["changed"] is False
+    assert path.read_bytes() == before
+
+
+def test_a_changed_meeting_inside_the_window_regenerates_the_recap(tmp_path):
+    root = make_windowed_vault(tmp_path)
+    dailynote.write(root, windowed_payload())
+    (root / "20-meetings" / "12-06-26-weekly-status.md").write_text(
+        "---\ndate: 2026-06-12T09:00\ntype: status-update\n---\n\n"
+        "## Key Takeaways\n- Shortlist approved.\n- TCO comparison owed.\n",
+        encoding="utf-8")
+    result = dailynote.write(root, windowed_payload(
+        recap="> [!info] At a glance\n> 1 meeting · TCO comparison now owed"))
+    assert result["recap_skipped"] is False
+    text = (root / "60-daily-notes" / "2026-06-15.md").read_text(encoding="utf-8")
+    assert "TCO comparison now owed" in text
+
+
+def test_a_meeting_outside_the_window_does_not_invalidate_the_recap(tmp_path):
+    root = make_windowed_vault(tmp_path)
+    dailynote.write(root, windowed_payload())
+    (root / "20-meetings" / "01-06-26-older-call.md").write_text(
+        "---\ndate: 2026-06-01T09:00\ntype: status-update\n---\n",
+        encoding="utf-8")
+    assert dailynote.write(root, windowed_payload())["recap_skipped"] is True
+
+
+def test_a_new_jotting_in_the_window_regenerates_the_recap(tmp_path):
+    root = make_windowed_vault(tmp_path)
+    dailynote.write(root, windowed_payload())
+    note_path = root / "60-daily-notes" / "2026-06-12.md"
+    note_path.write_text(
+        note_path.read_text(encoding="utf-8") + "- Call Dana about scope.\n",
+        encoding="utf-8")
+    assert dailynote.write(root, windowed_payload())["recap_skipped"] is False
+
+
+def test_a_decision_written_in_the_window_regenerates_the_recap(tmp_path):
+    root = make_windowed_vault(tmp_path)
+    dailynote.write(root, windowed_payload())
+    decisions = root / "30-projects" / "yard-automation" / "decisions"
+    decisions.mkdir(parents=True)
+    (decisions / "2026-06-12-phase-1-deferred.md").write_text(
+        "---\ntype: decision\n---\n", encoding="utf-8")
+    assert dailynote.write(root, windowed_payload())["recap_skipped"] is False
+
+
+def test_prep_regions_still_merge_when_the_recap_is_skipped(tmp_path):
+    root = make_windowed_vault(tmp_path)
+    dailynote.write(root, windowed_payload())
+    updated = windowed_payload()
+    updated["meetings"][0]["prep"] = "**Attendees:** Sam · **Context:** rescheduled."
+    result = dailynote.write(root, updated)
+    assert result["recap_skipped"] is True
+    assert result["changed"] is True
+    text = (root / "60-daily-notes" / "2026-06-15.md").read_text(encoding="utf-8")
+    assert "**Context:** rescheduled." in text
+    assert "Recap bullet one." in text          # the recap survived untouched
+
+
+def test_a_write_without_a_window_strips_a_stale_stamp(tmp_path):
+    root = make_windowed_vault(tmp_path)
+    dailynote.write(root, windowed_payload())
+    result = dailynote.write(root, payload(date="2026-06-15"))
+    assert result["recap_inputs"] is None
+    assert result["recap_skipped"] is False
+    text = (root / "60-daily-notes" / "2026-06-15.md").read_text(encoding="utf-8")
+    assert "<!-- evening-sync:recap:begin -->" in text
+    assert "inputs=" not in text
+
+
+def test_read_returns_the_recap_inputs(tmp_path):
+    root = make_windowed_vault(tmp_path)
+    written = dailynote.write(root, windowed_payload())
+    assert dailynote.read(root, "2026-06-15")["recap_inputs"] == written["recap_inputs"]
+
+
+def test_read_returns_a_null_recap_inputs_for_an_unstamped_note(tmp_path):
+    root = make_vault(tmp_path)
+    dailynote.write(root, payload())
+    assert dailynote.read(root, "2026-06-15")["recap_inputs"] is None
+
+
+def test_window_must_end_before_the_note_it_recaps(tmp_path):
+    root = make_windowed_vault(tmp_path)
+    with pytest.raises(dailynote.DailyNoteError, match="before the note"):
+        dailynote.write(root, windowed_payload(
+            recap_window={"from": "2026-06-12", "to": "2026-06-15"}))
+
+
+def test_window_rejects_a_reversed_range_and_unknown_keys(tmp_path):
+    root = make_windowed_vault(tmp_path)
+    with pytest.raises(dailynote.DailyNoteError, match="after"):
+        dailynote.write(root, windowed_payload(
+            recap_window={"from": "2026-06-12", "to": "2026-06-10"}))
+    with pytest.raises(dailynote.DailyNoteError, match="unknown key"):
+        dailynote.write(root, windowed_payload(
+            recap_window={"from": "2026-06-12", "to": "2026-06-12",
+                          "until": "2026-06-12"}))
+    with pytest.raises(dailynote.DailyNoteError, match="required"):
+        dailynote.write(root, windowed_payload(
+            recap_window={"from": "2026-06-12"}))
+
+
+def test_no_banner_when_no_business_days_were_missed(tmp_path):
+    root = make_windowed_vault(tmp_path)
+    dailynote.write(root, windowed_payload(
+        recap_window={"from": "2026-06-12", "to": "2026-06-12"}))
+    text = (root / "60-daily-notes" / "2026-06-15.md").read_text(encoding="utf-8")
+    assert "Catch-up note" not in text
+    # The recap interior is exactly the payload's prose.
+    assert ("<!-- evening-sync:recap:begin inputs=" in text
+            and "-->\n> [!info] At a glance" in text)
+
+
+def test_banner_states_the_window_and_the_no_back_fill_rule(tmp_path):
+    root = make_windowed_vault(tmp_path)
+    dailynote.write(root, windowed_payload(
+        date="2026-08-24",
+        recap_window={"from": "2026-06-15", "to": "2026-08-21"}))
+    text = (root / "60-daily-notes" / "2026-08-24.md").read_text(encoding="utf-8")
+    assert "> [!warning] Catch-up note" in text
+    assert "Covers 2026-06-15 → 2026-08-21" in text
+    assert "49 business days without an evening run" in text
+    assert "not back-filled" in text
+    assert "Detailed from" not in text
+
+
+def test_banner_adds_the_detail_line_only_when_capped(tmp_path):
+    root = make_windowed_vault(tmp_path)
+    dailynote.write(root, windowed_payload(
+        date="2026-08-24",
+        recap_window={"from": "2026-06-15", "to": "2026-08-21",
+                      "detailed_from": "2026-08-17"}))
+    text = (root / "60-daily-notes" / "2026-08-24.md").read_text(encoding="utf-8")
+    assert ("Detailed from 2026-08-17; the 45 earlier business days are "
+            "counted, not recapped in detail.") in text
+
+
+def test_banner_omits_the_detail_line_when_it_covers_the_whole_window(tmp_path):
+    root = make_windowed_vault(tmp_path)
+    dailynote.write(root, windowed_payload(
+        date="2026-08-24",
+        recap_window={"from": "2026-06-15", "to": "2026-08-21",
+                      "detailed_from": "2026-06-15"}))
+    text = (root / "60-daily-notes" / "2026-08-24.md").read_text(encoding="utf-8")
+    assert "[!warning] Catch-up note" in text
+    assert "Detailed from" not in text
+
+
+def test_banner_is_singular_for_one_missed_day(tmp_path):
+    root = make_windowed_vault(tmp_path)
+    dailynote.write(root, windowed_payload(
+        recap_window={"from": "2026-06-12", "to": "2026-06-13",
+                      "detailed_from": "2026-06-13"}))
+    text = (root / "60-daily-notes" / "2026-06-15.md").read_text(encoding="utf-8")
+    assert "1 business day without an evening run" in text
+    assert "the 1 earlier business day is counted" in text
+
+
+def test_banner_sits_above_the_payload_prose_inside_the_region(tmp_path):
+    root = make_windowed_vault(tmp_path)
+    dailynote.write(root, windowed_payload(
+        date="2026-08-24",
+        recap="> [!info] At a glance\n> quiet stretch",
+        recap_window={"from": "2026-06-15", "to": "2026-08-21"}))
+    text = (root / "60-daily-notes" / "2026-08-24.md").read_text(encoding="utf-8")
+    region = text.split("<!-- evening-sync:recap:begin", 1)[1]
+    region = region.split("-->", 1)[1].split("<!-- evening-sync:recap:end", 1)[0]
+    assert region.strip().startswith("> [!warning] Catch-up note")
+    assert region.strip().endswith("> quiet stretch")
+
+
+def test_banner_renders_through_the_merge_path_too(tmp_path):
+    """A banner wired into only _render (and not _merge) would drop silently
+    on a re-run — the path a stale note actually takes. The first write here
+    goes through _render (the note does not exist yet); the meeting note
+    inside the window is then edited so the fingerprint changes, and the
+    second write goes through _merge with the recap actually regenerated
+    (not skipped) — the banner must still be there afterward.
+
+    The window starts Wed 2026-06-10 so that one run really is missing:
+    nbd(Wed 06-10) = Thu 06-11 is not on disk, while nbd(Thu 06-11) = Fri
+    06-12 is (the vault's jottings note), so the count is 1."""
+    root = make_windowed_vault(tmp_path)
+    window = {"from": "2026-06-10", "to": "2026-06-12"}
+    dailynote.write(root, windowed_payload(recap_window=dict(window)))
+    (root / "20-meetings" / "12-06-26-weekly-status.md").write_text(
+        "---\ndate: 2026-06-12T09:00\ntype: status-update\n---\n\n"
+        "## Key Takeaways\n- Shortlist approved.\n- TCO comparison owed.\n",
+        encoding="utf-8")
+    result = dailynote.write(root, windowed_payload(
+        recap="> [!info] At a glance\n> 1 meeting · TCO comparison now owed",
+        recap_window=dict(window)))
+    assert result["recap_skipped"] is False
+    text = (root / "60-daily-notes" / "2026-06-15.md").read_text(encoding="utf-8")
+    assert "> [!warning] Catch-up note" in text
+    assert "1 business day without an evening run" in text
+
+
+def make_weekend_vault(tmp_path: Path) -> Path:
+    """The Finding-1 repro as the write path sees it.
+
+    A vault whose Friday 2026-08-21 has one meeting and one note with
+    jottings. Friday's run writes 2026-08-24.md — and so does a Saturday or
+    Sunday run, because the next business day is the same Monday.
+    """
+    root = make_vault(tmp_path)
+    (root / "20-meetings").mkdir()
+    (root / "20-meetings" / "21-08-26-weekly-status.md").write_text(
+        "---\ndate: 2026-08-21T09:00\ntype: status-update\n---\n\n"
+        "## Key Takeaways\n- Scoring criteria signed off.\n", encoding="utf-8")
+    (root / "60-daily-notes" / "2026-08-21.md").write_text(
+        "---\ndate: 2026-08-21\ntype: daily-note\n---\n\n"
+        "## End of day\n- Chase the TCO comparison.\n", encoding="utf-8")
+    return root
+
+
+def weekend_payload(**overrides) -> dict:
+    base = payload(date="2026-08-24")
+    base.update(overrides)
+    return base
+
+
+def test_a_weekend_rerun_over_an_unchanged_vault_leaves_the_note_alone(tmp_path):
+    """Finding 1 end to end. Friday's run writes Monday's note; the Saturday
+    and Sunday runs see a window that has widened (08-21..08-22, then
+    ..08-23) but not one changed input file. Hashing the raw bounds made both
+    of those look changed and regenerated a recap the exec had already read,
+    with LLM variance — two nights in seven."""
+    root = make_weekend_vault(tmp_path)
+    path = root / "60-daily-notes" / "2026-08-24.md"
+    friday = dailynote.write(root, weekend_payload(
+        recap_window={"from": "2026-08-21", "to": "2026-08-21"}))
+    assert friday["created"] is True
+    before = path.read_bytes()
+    assert b"Catch-up note" not in before
+
+    for last_day in ("2026-08-22", "2026-08-23"):
+        result = dailynote.write(root, weekend_payload(
+            recap=("> [!info] At a glance\n"
+                   f"> a differently worded recap on {last_day}"),
+            recap_window={"from": "2026-08-21", "to": last_day}))
+        assert result["recap_skipped"] is True, last_day
+        assert result["changed"] is False, last_day
+        assert result["recap_inputs"] == friday["recap_inputs"], last_day
+        assert path.read_bytes() == before, last_day
+    # And the banner never appears on a weekend run over a healthy vault:
+    # nbd(Fri 08-21) is this very note, so no run was missed.
+    assert "Catch-up note" not in path.read_text(encoding="utf-8")
+
+
+def test_a_missed_friday_still_banners_on_the_monday_run(tmp_path):
+    """The other half of the same rule: the count follows the vault. Monday's
+    note is absent, so Friday's run really did not happen, and the Monday
+    run — writing Tuesday's note — says so."""
+    root = make_weekend_vault(tmp_path)
+    dailynote.write(root, weekend_payload(
+        date="2026-08-25",
+        recap_window={"from": "2026-08-21", "to": "2026-08-24"}))
+    text = (root / "60-daily-notes" / "2026-08-25.md").read_text(encoding="utf-8")
+    assert "> [!warning] Catch-up note" in text
+    assert "1 business day without an evening run" in text
+
+
+def test_changing_only_detailed_from_changes_the_digest(tmp_path):
+    """`detailed_from` changes the rendered banner, so it has to change the
+    digest. Under the old recipe it did not — a run that moved only its
+    detail bound kept a stamp describing a banner the note no longer had."""
+    root = make_windowed_vault(tmp_path)
+    wide = {"from": "2026-06-15", "to": "2026-08-21"}
+    first = dailynote.write(root, windowed_payload(
+        date="2026-08-24", recap_window=dict(wide)))
+    capped = dailynote.write(root, windowed_payload(
+        date="2026-08-24",
+        recap_window=dict(wide, detailed_from="2026-08-17")))
+    assert capped["recap_skipped"] is False
+    assert capped["recap_inputs"] != first["recap_inputs"]
+    text = (root / "60-daily-notes" / "2026-08-24.md").read_text(encoding="utf-8")
+    assert "Detailed from 2026-08-17" in text
+    # Re-running the capped window is a no-op, as it must be.
+    assert dailynote.write(root, windowed_payload(
+        date="2026-08-24",
+        recap_window=dict(wide, detailed_from="2026-08-17"),
+    ))["recap_skipped"] is True
+
+
+def test_a_recap_link_to_no_vault_object_is_refused(tmp_path):
+    root = make_linkable_vault(tmp_path)
+    with pytest.raises(dailynote.DailyNoteError,
+                       match="resolves to no vault object"):
+        dailynote.write(root, payload(
+            recap="- [[meridian-industrial-holdings]] wants a comparison."))
+
+
+def test_links_to_every_object_kind_resolve(tmp_path):
+    root = make_linkable_vault(tmp_path)
+    result = dailynote.write(root, payload(recap=(
+        "- [[acme-industries]] · [[taylor-brooks]] · [[yard-automation]]\n"
+        "- [[12-06-26-weekly-status]] · [[2026-06-12-phase-1-deferred]]")))
+    assert result["created"] is True
+    assert result["warnings"] == []
+
+
+def test_an_entity_alias_that_contradicts_the_vault_is_refused(tmp_path):
+    """The H2 name defect: a display name the model invented."""
+    root = make_linkable_vault(tmp_path)
+    with pytest.raises(dailynote.DailyNoteError, match="called 'Acme'"):
+        dailynote.write(root, payload(
+            recap="- [[acme-industries|Acme Industrial Holdings]] escalated."))
+
+
+def test_a_person_alias_that_contradicts_the_vault_is_refused(tmp_path):
+    root = make_linkable_vault(tmp_path)
+    with pytest.raises(dailynote.DailyNoteError, match="Taylor Brooks"):
+        dailynote.write(root, payload(
+            recap="- [[taylor-brooks|Tyler Brooks]] owns the draft."))
+
+
+def test_a_project_alias_that_contradicts_the_vault_is_refused(tmp_path):
+    root = make_linkable_vault(tmp_path)
+    with pytest.raises(dailynote.DailyNoteError,
+                       match="Yard Automation Program"):
+        dailynote.write(root, payload(
+            recap="- [[yard-automation|Yard Automation Programme]] slipped."))
+
+
+def test_an_identity_alias_that_matches_the_vault_is_accepted(tmp_path):
+    root = make_linkable_vault(tmp_path)
+    result = dailynote.write(root, payload(
+        recap="- [[taylor-brooks|Taylor Brooks]] owns the board pack draft."))
+    assert result["created"] is True
+
+
+def test_an_event_object_alias_is_free_prose(tmp_path):
+    root = make_linkable_vault(tmp_path)
+    result = dailynote.write(root, payload(recap=(
+        "- [[12-06-26-weekly-status|Friday's status call]] — shortlist "
+        "approved.\n- [[2026-06-12-phase-1-deferred|the deferral]] is queued.")))
+    assert result["created"] is True
+
+
+def test_a_heading_anchor_is_stripped_before_resolution(tmp_path):
+    root = make_linkable_vault(tmp_path)
+    result = dailynote.write(root, payload(
+        recap="- [[acme-industries#Sensitivities|Acme]] needs care."))
+    assert result["created"] is True
+    with pytest.raises(dailynote.DailyNoteError,
+                       match="resolves to no vault object"):
+        dailynote.write(root, payload(
+            date="2026-06-16", recap="- [[nope#Context]] is nothing."))
+
+
+def test_an_embed_is_checked_like_a_link(tmp_path):
+    root = make_linkable_vault(tmp_path)
+    with pytest.raises(dailynote.DailyNoteError,
+                       match="resolves to no vault object"):
+        dailynote.write(root, payload(recap="- ![[not-a-thing]]"))
+
+
+def test_links_in_prep_and_in_meetings_note_are_checked_too(tmp_path):
+    root = make_linkable_vault(tmp_path)
+    with pytest.raises(dailynote.DailyNoteError, match="meeting 1 prep"):
+        bad = payload()
+        bad["meetings"][0]["prep"] = "**Context:** [[ghost-entity]] escalated."
+        dailynote.write(root, bad)
+    with pytest.raises(dailynote.DailyNoteError, match="meetings_note"):
+        dailynote.write(root, payload(
+            meetings=[], meetings_note="*Calendar down; see [[ghost-entity]].*"))
+
+
+def test_an_unreadable_dossier_warns_instead_of_blocking_the_note(tmp_path):
+    root = make_linkable_vault(tmp_path)
+    (root / "40-entities" / "acme-industries" / "dossier.md").write_text(
+        "no frontmatter here\n", encoding="utf-8")
+    result = dailynote.write(root, payload(
+        recap="- [[acme-industries|Acme]] escalated."))
+    assert result["created"] is True
+    assert len(result["warnings"]) == 1
+    assert "display name not verified" in result["warnings"][0]
+
+
+def test_a_missing_display_name_warns_instead_of_blocking(tmp_path):
+    root = make_linkable_vault(tmp_path)
+    (root / "50-people" / "taylor-brooks.md").write_text(
+        "---\nslug: taylor-brooks\nrelationship: external\n---\n",
+        encoding="utf-8")
+    result = dailynote.write(root, payload(
+        recap="- [[taylor-brooks|Taylor Brooks]] owns the draft."))
+    assert result["created"] is True
+    assert "person-name" in result["warnings"][0]

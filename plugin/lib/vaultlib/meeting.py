@@ -9,7 +9,7 @@ does not have), and the only paths out of it are the reviewed checkbox
 from __future__ import annotations
 
 import re
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from typing import Optional
 
@@ -157,6 +157,21 @@ def _validate_scalars(payload: dict) -> None:
 def _date_prefix(date_value: str) -> str:
     day = datetime.strptime(str(date_value)[:10], "%Y-%m-%d").date()
     return day.strftime("%d-%m-%y")
+
+
+def date_from_stem(stem: str) -> Optional[date]:
+    """The meeting date encoded in a stem, or None if it carries none.
+
+    The inverse of _date_prefix, and it lives here so the pair moves
+    together: meeting stems are DD-MM-YY-title, never ISO, and a caller
+    that assumes otherwise (the recap fingerprint's window filter, for one)
+    silently matches nothing. An ISO-prefixed stem is a decision note, and
+    a hand-named note is simply not in any window.
+    """
+    try:
+        return datetime.strptime(str(stem)[:8], "%d-%m-%y").date()
+    except ValueError:
+        return None
 
 
 def _render_body(payload: dict) -> str:

@@ -61,6 +61,25 @@ subcommand exists to kill. The recap window is *everything since the last
 daily note*: after a missed run or a gap, it widens automatically — no
 weekend special case.
 
+**The catch-up block.** `business_days_missed` is how many evening runs did
+not happen; `is_catchup` is that count above zero. Skipped days are **never
+back-filled** — one note covers the whole window, because fabricating past
+daily notes would invent days that have no jottings. The CLI writes that
+sentence into the note itself (stage 6); you do not have to compose it.
+
+When `over_threshold` is true, the window is too wide to recap in full.
+Detail the window from `recap_detail_from` onward and let
+`business_days_not_detailed` stand as a count:
+
+- **interactive** — ask once, here, before any work: detail the last
+  `catchup_threshold` business days (the default), or the whole window? Pass
+  `detailed_from` in stage 6 only if the answer was to cap.
+- **unattended** — always cap, never ask, and carry the catch-up window into
+  the Warnings block so a human reviews it.
+
+Every number above is read, never computed. If you find yourself counting
+days, you are re-introducing the bug `dates plan` exists to prevent.
+
 The executive's **person slug** is `executive` from the config — a slug,
 used as-is. Stage 3 needs it.
 
@@ -176,19 +195,45 @@ nothing" — say which one happened in the summary.
 ## Stage 6 — Write tomorrow's note
 
 Compose the recap from: the recap window's meetings (everything in
-`20-meetings/` dated within `recap_from`..`recap_to` — takeaway one-liners,
-entities, themes when there are ≥2 meetings), decisions written in stage 4,
-harvest jottings worth carrying forward, and watch items (conflicts,
-unresolved duplicates, self-check warnings). Respect the language and depth
-preferences in `99-workflow-config/context/preferences-and-constraints.md`.
-Open items live on projects — link them, never duplicate a task list.
-$SCRATCH below is your session scratch directory — payloads never land in the vault.
+`20-meetings/` dated within `recap_from`..`recap_to`), decisions written in
+stage 4, harvest jottings worth carrying forward, and watch items
+(conflicts, unresolved duplicates, self-check warnings). Respect the
+language and depth preferences in
+`99-workflow-config/context/preferences-and-constraints.md`.
+
+**A flat list of meetings is not a recap.** Required shape, in order:
+
+1. `> [!info] At a glance` — one line: N meetings · entities touched · themes.
+2. **Themes** — with ≥2 meetings in the window, 2–4 bullets, each a pattern
+   *across* meetings and each naming what it draws on. With one meeting, say
+   what it means, not that it happened.
+3. **Project pulse** — one line per project touched: where it stands (from
+   the project's `Now` callout) and what moved this window.
+4. **Decisions logged** — from stage 4, wikilinked.
+5. **Watch** — conflicts, unresolved duplicates, `SELF-CHECK` lines.
+6. **Carried forward** — jottings worth carrying.
+
+**Every entity, person and project you name is a wikilink to the object you
+looked up — never a name you recalled.**
+`daily-note write` refuses a link that resolves to nothing, and where the
+target is an **entity, person or project** it refuses `[[slug|Display Name]]`
+whose display name disagrees with the vault. Meeting, decision and
+daily-note aliases are free prose — "Friday's status call" is a reference,
+not a claim about what something is called. A plain-prose name it cannot
+check at all, which is exactly why the linked form is required. If a name
+has no object, create it first or leave the name out. Open items live on
+projects — link them, never duplicate a task list.
+
+$SCRATCH below is your session scratch directory — payloads never land in
+the vault.
 
 ```bash
 cat > "$SCRATCH/daily-note.payload.json" <<'JSON'
 {
   "date": "<next_business_day>",
-  "recap": "> [!info] At a glance\n> {N meetings · entities · themes}\n- {takeaway bullets, decisions logged, watch items}",
+  "recap_window": {"from": "<recap_from>", "to": "<recap_to>",
+                   "detailed_from": "<recap_detail_from, only when capped>"},
+  "recap": "> [!info] At a glance\n> {N meetings · entities · themes}\n\n**Themes**\n- {pattern across meetings}\n\n**Project pulse**\n- [[project-slug]] — {where it stands; what moved}",
   "meetings": [
     {"time": "09:00", "subject": "Weekly Status", "entity": "acme-industries",
      "prep": "**Attendees:** … · **Last meeting:** … · **Context:** …"}
@@ -205,6 +250,23 @@ meeting set: either a different number of meetings, or a meeting heading that
 no longer matches the payload (the calendar moved, or the user retyped the
 heading). Report it and leave the note alone (it may hold human jottings); do
 not delete it to force a rewrite.
+
+**A refused link must not cost the exec their note.** The link check runs
+before anything is written, so a refusal here means tomorrow has no note at
+all — discovered next morning, which is the failure rule 7 already forbids
+for a refused calendar. The error is precise enough to act on: an
+unresolvable target names the slug, an alias mismatch names the true display
+name. So take the resolved name from the error, or drop the offending link,
+and retry the write once — never a third attempt. Record the refusal and
+what you changed as a stage-7 warning. Never end the run without a note.
+
+`recap_window` is what makes the run idempotent: the CLI fingerprints the
+window's meetings, jottings and decisions and stamps the digest on the recap
+marker. A re-run over an unchanged input set comes back with
+`recap_skipped: true` and leaves the recap byte-identical — that is success,
+not a failure to write. Omitting `recap_window` silently forfeits both the
+guard and the catch-up banner, so always pass it. Carry any `warnings` from
+the result into stage 7 verbatim.
 
 ## Stage 7 — Verify against disk, then summarize
 
@@ -224,6 +286,8 @@ reported "Processed: 0" after writing a meeting correctly):
 **Metrics refreshed:** {P} projects · {Q} people
 **Projects updated:** {N} ({slugs}) — {M} decisions captured for review, {K} candidates skipped
 **Tomorrow's note:** `60-daily-notes/{date}.md` ({DayName}) — {N} meetings prepped | calendar unavailable | calendar REFUSED — signed in as a different account (account-mismatch) | calendar REFUSED — no account bound to this vault yet (no-account-hint) | m365 disabled
+**Recap window:** {recap_from} → {recap_to} — {catch-up: N business days missed, detailed from {date}} | current
+**Recap:** regenerated | unchanged since the last run (inputs identical)
 **Warnings:** {verbatim, including SELF-CHECK lines} | none
 ```
 
@@ -240,6 +304,11 @@ A non-empty warnings block means investigate before tomorrow's run.
    for the Decisions.base review queue).
 3. **Prefer under-doing to wrong-doing.** No confident project match, no
    confident prep — leave it out and say so.
+4. **A catch-up run caps rather than sprawls.** When `over_threshold` is
+   true, detail from `recap_detail_from` and never ask which to do; put the
+   window and `business_days_missed` in the Warnings block so a human
+   reviews the note before relying on it. A two-month mega-recap composed
+   unattended is the "wrong-doing" rule 3 is about.
 
 ## Rules
 
@@ -259,3 +328,9 @@ A non-empty warnings block means investigate before tomorrow's run.
 9. **Machine decisions come from `config read`** — timezone, executive
    slug, adapter enablement. Prose context files carry style and narrative,
    never these.
+10. **Catch-up state is reported, never inferred, and never back-filled.**
+    `business_days_missed` and `recap_detail_from` come from `dates plan`;
+    the banner comes from the CLI; one note covers the whole window.
+11. **Names in a machine region are looked up, not recalled.** Entities,
+    people and projects appear as wikilinks to objects that exist. The CLI
+    refuses the rest — treat a refusal as a lookup you skipped.

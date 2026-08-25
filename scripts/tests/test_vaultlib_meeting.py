@@ -266,3 +266,26 @@ def test_empty_attendees_still_refused_for_every_other_type(tmp_path):
     root = make_vault(tmp_path)
     with pytest.raises(meeting.MeetingError, match="non-empty"):
         meeting.write(root, payload(attendees=[]))
+
+
+def test_date_from_stem_is_the_inverse_of_the_date_prefix():
+    from datetime import date
+    # meeting._date_prefix renders 2026-06-01 as 01-06-26; this reads it back.
+    assert meeting.date_from_stem(
+        "01-06-26-commercial-ops-status-update") == date(2026, 6, 1)
+    # A conflict variant keeps its prefix.
+    assert meeting.date_from_stem("12-06-26-jordan-1on1-v2") == date(2026, 6, 12)
+
+
+def test_date_from_stem_returns_none_for_a_non_conforming_stem():
+    # An ISO-prefixed stem is a decision note, not a meeting note.
+    assert meeting.date_from_stem("2026-06-12-phase-1-deferred") is None
+    assert meeting.date_from_stem("notes-from-the-call") is None
+    assert meeting.date_from_stem("") is None
+    # A real-looking but impossible date.
+    assert meeting.date_from_stem("32-06-26-nope") is None
+
+
+def test_date_prefix_round_trips_through_date_from_stem():
+    stem = f"{meeting._date_prefix('2026-05-20T11:00')}-vendor-strategy"
+    assert meeting.date_from_stem(stem).isoformat() == "2026-05-20"

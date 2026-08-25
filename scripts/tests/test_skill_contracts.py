@@ -212,3 +212,90 @@ def test_sync_recordings_parks_through_the_one_call_that_records_why():
     assert "--reason" in text
     park_block = text.split("sync park", 1)[1][:400]
     assert "--reason" in park_block, "the park invocation itself must carry --reason"
+
+
+def _evening_sync() -> str:
+    return read_skill("evening-sync")
+
+
+def _normalized(text: str) -> str:
+    # Markdown prose is hard-wrapped for readability, so a multi-word phrase
+    # can legitimately span a line break. Collapse whitespace runs to a
+    # single space before matching so re-wrapping the prose (an ordinary
+    # markdown edit) can never flip one of these assertions — the check is
+    # about the words, not about where the lines happen to break.
+    return re.sub(r"\s+", " ", text)
+
+
+def test_evening_sync_states_the_no_back_fill_rule():
+    # Decision 16: one catch-up note covers the window; the exec is told so.
+    text = _evening_sync().lower()
+    assert "back-fill" in text, (
+        "the no-back-fill decision was real but unstated, which is the "
+        "finding — the skill has to say it"
+    )
+
+
+def test_evening_sync_consumes_the_catchup_facts_rather_than_deriving_them():
+    text = _evening_sync()
+    for key in ("business_days_missed", "over_threshold",
+                "recap_detail_from", "business_days_not_detailed"):
+        assert key in text, f"stage 1 must consume {key} from dates plan"
+
+
+def test_evening_sync_payload_example_carries_the_recap_window():
+    # recap_window is optional in the CLI for backward compatibility, so
+    # this test is the only thing keeping the idempotence guard wired up.
+    text = _evening_sync()
+    assert '"recap_window"' in text, (
+        "without recap_window in the payload there is no fingerprint and no "
+        "catch-up banner — the guard is silently off"
+    )
+
+
+def test_evening_sync_mandates_wikilinks_for_looked_up_names():
+    # Anchored on the mandate sentence itself, not on the word "wikilink":
+    # that already appears in stage 4, and "never" appears 19 times, so the
+    # loose form of this assertion passes before the mandate is written.
+    # Matched against normalized whitespace: both phrases are multi-word and
+    # markdown hard-wrapping could otherwise split either across a line
+    # break the next time this paragraph is reflowed.
+    text = _normalized(_evening_sync())
+    assert "never a name you recalled" in text, (
+        "decision 19: a plain-prose name cannot be validated by anything, so "
+        "the skill has to require the linked form in stage 6"
+    )
+    assert "refuses a link that resolves to nothing" in text, (
+        "the skill has to say what the CLI does about it, or a model reads "
+        "the mandate as advice"
+    )
+
+
+def test_evening_sync_recovers_from_a_link_refusal_rather_than_ending_the_run():
+    # `_check_links` raises before a byte is written, so a stage-6 refusal
+    # leaves tomorrow with no note — found by the exec next morning, and
+    # flatly against both the failure-isolated stage promise and rule 7
+    # ("a refused calendar still writes the note"). The CLI cannot fix this
+    # for itself: only the caller knows which link to drop or rename. So the
+    # recovery has to be written down here, bounded, or a model improvises.
+    # Normalized whitespace: both anchors are multi-word and this paragraph
+    # will be reflowed sooner or later.
+    text = _normalized(_evening_sync()).lower()
+    assert "retry the write once" in text, (
+        "stage 6 must say to fix the link and retry once — an unbounded "
+        "retry loop is the other way this goes wrong"
+    )
+    assert "never end the run without a note" in text, (
+        "the bound needs the reason attached, or a model reads the retry as "
+        "optional and exits on the refusal"
+    )
+
+
+def test_evening_sync_states_unattended_catchup_behaviour():
+    section = _evening_sync().split("## Unattended mode", 1)
+    assert len(section) == 2, "evening-sync has no Unattended mode section"
+    body = section[1].split("\n## ", 1)[0].lower()
+    assert "catch-up" in body or "catchup" in body, (
+        "unattended mode caps and flags rather than composing a mega-recap; "
+        "finding F4 is that this mode has no coverage at all"
+    )
