@@ -477,15 +477,35 @@ otherwise, wrongly. It claimed stamping a fixture would break
 `2026-06-15.md`, not the captured `2026-06-01.md`, and nothing in the suite
 pins `2026-06-01.md` byte-for-byte. A placeholder attribute
 (`inputs=0000000000000000`) parses under the marker grammar and would put the
-stamped shape in front of the CSS assertion. What genuinely cannot ship is a
-*real* digest: it is a hash over the fixture vault, so any fixture edit makes
-it stale, and a stale stamp causes a skip — the one failure mode that silently
-does nothing.
+stamped shape in front of the CSS assertion.
 
-The lesson inside the lesson: both errors above were deductions presented as
-findings, in an entry whose own rule is that a measurement is not a deduction.
-An automated review caught them; check the file and the test name before
-writing either into a lessons entry.
+A placeholder is also the *right* value, rather than merely a convenient one. A
+real digest is a hash over the fixture vault, so committing one bakes in a
+value that every later fixture edit falsifies — churn in the diff, and a
+committed number that means nothing to a reader. It is not a hazard at runtime:
+the skip fires only on a stamp that **matches** the freshly computed
+fingerprint, so a stale stamp fails the equality, falls through to the
+regeneration branch, and gets restamped. Measured, not reasoned:
+
+```text
+write 1  (fresh note)                     inputs=1f5e8f3933f59593  skipped=False
+write 2  (unchanged inputs, stamp matches)                         skipped=True   changed=False
+write 3  (stamp tampered to a stale value)                         skipped=False  changed=True
+```
+
+The dangerous stamp is the *matching* one, which is why `daily-note write`
+**strips** the attribute when it rewrites a recap with no `recap_window` rather
+than leaving it: a stamp left standing over prose whose inputs nobody verified
+could later match and skip.
+
+The lesson inside the lesson: three errors went into these two entries — `.base`
+on the wrong side of the rule, the wrong test named, and the skip condition
+stated backwards — and all three were deductions presented as findings, inside
+an entry whose own rule is that a measurement is not a deduction. Each was
+caught by the automated review on the PR, not by me. Before writing a mechanism
+into a lessons entry, check the file, check the test name, and if the claim is
+about behaviour, **run it** — the three-line script above took under a minute
+and would have caught the third error before it shipped.
 
 **The rule.** Ask what the change makes appear in a note, not only which files
 it edits. A diff confined to `plugin/lib/` can still alter what template CSS
