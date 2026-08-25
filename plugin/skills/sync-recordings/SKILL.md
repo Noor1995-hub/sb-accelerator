@@ -129,8 +129,9 @@ it has exactly three outcomes:
 
 **When you cannot decide between a capture and a park, write the `note`.**
 A wrongly written note sits in Triage and is one click from `archived: true`;
-a wrongly parked file is invisible and on a never-propose-again list. The
-error direction matters more than the error rate. Both modes decide all
+a wrongly parked file is out of the queue and on a never-propose-again list,
+and getting it back means reading the archive and editing that list. The error
+direction matters more than the error rate. Both modes decide all
 three outcomes — `--unattended` does not defer, because routing captures
 into the pipeline is the point.
 
@@ -157,15 +158,26 @@ one type for which that is valid — and still carries `all-attendees-known`,
 because with nobody named there is nobody unknown. `takeaways` and `debrief`
 keep their meanings: what this says, and what it means.
 
-To park an item, skip it and sweep it:
+Parking is one call, and it will not run without a reason:
 
 ```bash
-python3 "$VAULTLIB" sync skip --vault "$VAULT" --id "inbox:<hash>"
-python3 "$VAULTLIB" sync archive --vault "$VAULT" --path "10-inbox/<name>"
+python3 "$VAULTLIB" sync park --vault "$VAULT" \
+  --path "10-inbox/<name>" --id "inbox:<hash>" \
+  --reason "<what it is, and what it is not>"
 ```
 
-Report every parked item in the summary **with why it was not a capture** —
-a park is a decision, not a throughput number.
+That moves the file to `90-archive/inbox/{YYYY-MM}/`, puts the id on the
+never-propose-again list with the reason and the original filename, and writes
+a short `<name>.parked.md` beside the archived file explaining it. Write the
+reason for someone reading it in three months with no memory of this run:
+name the thing and say what it lacks — `"vendor whitepaper on yard automation,
+no meeting and no context about people or projects"`, not `"not a capture"`.
+One or two sentences.
+
+Report every parked item in the summary **with why it was not a capture** — a
+park is a decision, not a throughput number. The summary is no longer the only
+record of that decision, but it is still the only place the user sees it the
+day it happens.
 
 Every file `already_synced` reports is swept the same way (it was processed
 by an earlier run, or dropped back in), and so is every file under
@@ -287,18 +299,25 @@ projects, new people, confidence — and ask once: proceed / edit / skip
 items. For a recording the user says to permanently drop:
 
 ```bash
-python3 "$VAULTLIB" sync skip --vault "$VAULT" --id plaud:abc123
+python3 "$VAULTLIB" sync skip --vault "$VAULT" --id plaud:abc123 \
+  --reason "user dropped it: pocket recording, nothing said"
 ```
 
-If the dropped item came from the inbox, sweep it too — the skip list
-records the decision, but only the move gets the file out of the pending
-set:
+`--reason` is optional here but always worth passing — record what the user
+said, so the entry still makes sense to whoever reads the list next year.
+
+If the dropped item came from the inbox, use `sync park` instead. It does the
+same suppression *and* gets the file out of the pending set, which the skip
+list alone does not:
 
 ```bash
-python3 "$VAULTLIB" sync archive --vault "$VAULT" --path "10-inbox/<name>"
+python3 "$VAULTLIB" sync park --vault "$VAULT" \
+  --path "10-inbox/<name>" --id "inbox:<hash>" \
+  --reason "user dropped it: <what they said>"
 ```
 
-A `plaud:` or `m365:` id has no inbox file, so there is nothing to move.
+A `plaud:` or `m365:` id has no inbox file, so `skip` is the whole story
+there.
 
 ### 6. Extract and write
 
@@ -427,8 +446,8 @@ rules, not negotiable:
    and report it; it retries next run. Classification is not covered by this
    rule: the three-outcome call in step 1 is decided in both modes, and its
    own ambiguity rule resolves toward writing the `note`. Note also that
-   "skip" here means *defer to the next run* — unrelated to `sync skip`,
-   which is the permanent never-propose-again list used when parking.
+   "skip" here means *defer to the next run* — unrelated to `sync skip` and
+   `sync park`, which write the permanent never-propose-again list.
 2. **Prefer under-routing to wrong routing.** No confident project match →
    `projects: []` and low confidence; triage exists for exactly this.
 3. **A refused account binding is an alert, not a fallback.** The summary

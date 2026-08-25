@@ -521,3 +521,294 @@ def test_a_transient_read_failure_is_not_cached(tmp_path, monkeypatch):
     assert after["candidates"] == []
     assert after["warnings"] == []
     assert after["already_synced"][0]["synced_as"] == "20-meetings/20-08-26-locked.md"
+# --- the skip list carries why, and park is the one call that writes it ------
+#
+# A bare id line records that something is suppressed forever without saying
+# what it was or why. These cover the extended format (id, reason, original
+# filename), the bare lines already sitting in deployed vaults, and park() —
+# the single call that moves a non-capture out of the inbox and explains it in
+# both places.
+
+SKIP_RELPATH = Path("99-workflow-config") / "sync-state" / "skipped-recordings.txt"
+
+
+def write_skip_file(root: Path, *lines: str) -> Path:
+    path = root / SKIP_RELPATH
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return path
+
+
+def read_skip_lines(root: Path) -> list:
+    return [line for line in
+            (root / SKIP_RELPATH).read_text(encoding="utf-8").splitlines()
+            if line.strip()]
+
+
+def test_read_skip_list_returns_ids_only_from_both_line_formats(tmp_path):
+    """Deployed vaults hold bare ids; new runs write three fields. Every reader
+    of the id set — scan(), dedup() — must see exactly the ids either way."""
+    root = make_vault(tmp_path)
+    write_skip_file(root,
+                    "plaud:legacy01",
+                    "inbox:deadbeefcafe0000\tvendor whitepaper\treport.pdf")
+
+    assert syncjob.read_skip_list(root) == {"plaud:legacy01",
+                                            "inbox:deadbeefcafe0000"}
+
+
+def test_read_skip_records_reports_an_unannotated_line_as_unknown(tmp_path):
+    """A bare line is a complete record with no reason — never a parse error,
+    and never invented prose."""
+    root = make_vault(tmp_path)
+    write_skip_file(root,
+                    "plaud:legacy01",
+                    "inbox:deadbeefcafe0000\tvendor whitepaper\treport.pdf")
+
+    records = syncjob.read_skip_records(root)
+
+    assert records == [
+        {"recording_id": "plaud:legacy01", "reason": None, "source_name": None},
+        {"recording_id": "inbox:deadbeefcafe0000",
+         "reason": "vendor whitepaper", "source_name": "report.pdf"},
+    ]
+
+
+def test_skip_without_a_reason_still_writes_a_bare_line(tmp_path):
+    """An adapter id with nothing to say stays one field wide, so the file a
+    deployed vault already has keeps the shape it already had."""
+    root = make_vault(tmp_path)
+    syncjob.skip(root, "plaud:x1")
+    assert read_skip_lines(root) == ["plaud:x1"]
+
+
+def test_skip_records_the_reason_and_the_original_filename(tmp_path):
+    root = make_vault(tmp_path)
+    result = syncjob.skip(root, "inbox:abc0000000000000",
+                          reason="vendor whitepaper, no capture content",
+                          source_name="yard-automation.pdf")
+
+    assert result["reason"] == "vendor whitepaper, no capture content"
+    assert read_skip_lines(root) == [
+        "inbox:abc0000000000000\tvendor whitepaper, no capture content"
+        "\tyard-automation.pdf"]
+
+
+def test_skip_flattens_whitespace_so_one_record_is_one_line(tmp_path):
+    """A tab would invent a field and a newline would invent a record. A model
+    writes these reasons, so neither can be assumed absent."""
+    root = make_vault(tmp_path)
+    syncjob.skip(root, "inbox:abc0000000000000",
+                 reason="deck\tabout\nyard   automation", source_name="d.pptx")
+
+    assert read_skip_lines(root) == [
+        "inbox:abc0000000000000\tdeck about yard automation\td.pptx"]
+
+
+def test_skip_truncates_an_overlong_reason(tmp_path):
+    root = make_vault(tmp_path)
+    syncjob.skip(root, "inbox:abc0000000000000", reason="x" * 500,
+                 source_name="d.pptx")
+
+    stored = read_skip_lines(root)[0].split("\t")[1]
+    assert len(stored) == syncjob.MAX_REASON_CHARS
+    assert stored.endswith("…")
+
+
+def test_skip_annotates_an_existing_bare_record_in_place(tmp_path):
+    """The deployed-vault case: an id parked before reasons existed, whose file
+    is dropped back in and parked again. The reason lands on the line that is
+    already there rather than duplicating the id."""
+    root = make_vault(tmp_path)
+    write_skip_file(root, "plaud:keep01", "inbox:abc0000000000000", "plaud:keep02")
+
+    result = syncjob.skip(root, "inbox:abc0000000000000",
+                          reason="a spreadsheet", source_name="q3.xlsx")
+
+    assert result["already_present"] is True
+    assert result["reason_added"] is True
+    assert read_skip_lines(root) == [
+        "plaud:keep01",
+        "inbox:abc0000000000000\ta spreadsheet\tq3.xlsx",
+        "plaud:keep02",
+    ]
+
+
+def test_skip_never_overwrites_a_reason_already_recorded(tmp_path):
+    """The first explanation is the one a human would have read. A re-park does
+    not get to revise history."""
+    root = make_vault(tmp_path)
+    syncjob.skip(root, "inbox:abc0000000000000", reason="first call",
+                 source_name="a.pdf")
+
+    result = syncjob.skip(root, "inbox:abc0000000000000", reason="second call",
+                          source_name="b.pdf")
+
+    assert result["already_present"] is True
+    assert result["reason_added"] is False
+    assert read_skip_lines(root) == [
+        "inbox:abc0000000000000\tfirst call\ta.pdf"]
+
+
+def test_scan_partitions_an_annotated_skip_record(tmp_path):
+    """The format change must not resurrect a parked file as a candidate."""
+    root = make_vault(tmp_path)
+    parked = root / "10-inbox" / "noise.txt"
+    parked.write_text("pocket recording", encoding="utf-8")
+    syncjob.skip(root, syncjob.content_id(parked), reason="stray binary",
+                 source_name="noise.txt")
+
+    result = syncjob.scan(root)
+
+    assert result["candidates"] == []
+    assert [s["name"] for s in result["skipped"]] == ["noise.txt"]
+
+
+def test_park_moves_records_and_explains_in_one_call(tmp_path):
+    root = make_vault(tmp_path)
+    src = root / "10-inbox" / "yard-automation.pdf"
+    src.write_bytes(b"%PDF-1.7 whitepaper")
+    rid = syncjob.content_id(src)
+
+    result = syncjob.park(root, "10-inbox/yard-automation.pdf", rid,
+                          "vendor whitepaper, no capture content", "2026-08-25")
+
+    assert result["from"] == "10-inbox/yard-automation.pdf"
+    assert result["to"] == "90-archive/inbox/2026-08/yard-automation.pdf"
+    assert result["sidecar"] == (
+        "90-archive/inbox/2026-08/yard-automation.pdf.parked.md")
+    assert result["recording_id"] == rid
+    assert not src.exists()
+    assert (root / result["to"]).read_bytes() == b"%PDF-1.7 whitepaper"
+    assert rid in syncjob.read_skip_list(root)
+    assert syncjob.read_skip_records(root) == [
+        {"recording_id": rid, "reason": "vendor whitepaper, no capture content",
+         "source_name": "yard-automation.pdf"}]
+
+
+def test_park_sidecar_says_what_why_and_how_to_undo_it(tmp_path):
+    """The whole point: the folder explains itself a quarter later."""
+    root = make_vault(tmp_path)
+    src = root / "10-inbox" / "yard-automation.pdf"
+    src.write_bytes(b"%PDF")
+    rid = syncjob.content_id(src)
+
+    result = syncjob.park(root, "10-inbox/yard-automation.pdf", rid,
+                          "vendor whitepaper, no capture content", "2026-08-25")
+    sidecar = (root / result["sidecar"]).read_text(encoding="utf-8")
+
+    assert "yard-automation.pdf" in sidecar
+    assert "vendor whitepaper, no capture content" in sidecar
+    assert "10-inbox/yard-automation.pdf" in sidecar
+    assert rid in sidecar
+    assert "skipped-recordings.txt" in sidecar
+    assert "2026-08-25" in sidecar
+    # No frontmatter: this is prose for a human, not a vault object, and no
+    # ontology check may ever try to validate it.
+    assert not sidecar.startswith("---")
+
+
+def test_park_sidecar_follows_a_collision_suffixed_name(tmp_path):
+    """archive() renames on collision; the explanation must name the file that
+    actually landed, not the one that was asked for."""
+    root = make_vault(tmp_path)
+    (root / "10-inbox" / "notes.txt").write_text("first", encoding="utf-8")
+    syncjob.archive(root, "10-inbox/notes.txt", "2026-08-25")
+    (root / "10-inbox" / "notes.txt").write_text("second", encoding="utf-8")
+    rid = syncjob.content_id(root / "10-inbox" / "notes.txt")
+
+    result = syncjob.park(root, "10-inbox/notes.txt", rid, "a stray file",
+                          "2026-08-25")
+
+    assert result["to"] == "90-archive/inbox/2026-08/notes-2.txt"
+    assert result["sidecar"] == "90-archive/inbox/2026-08/notes-2.txt.parked.md"
+    assert (root / result["sidecar"]).is_file()
+
+
+def test_park_refuses_an_empty_reason_and_moves_nothing(tmp_path):
+    """A park with no reason is the defect being fixed. It cannot be reachable
+    by omission."""
+    root = make_vault(tmp_path)
+    src = root / "10-inbox" / "a.pdf"
+    src.write_bytes(b"x")
+
+    with pytest.raises(syncjob.SyncError, match="reason"):
+        syncjob.park(root, "10-inbox/a.pdf", "inbox:abc0000000000000", "   ",
+                     "2026-08-25")
+
+    assert src.exists()
+    assert syncjob.read_skip_list(root) == set()
+
+
+def test_park_validates_the_id_before_touching_the_file(tmp_path):
+    root = make_vault(tmp_path)
+    src = root / "10-inbox" / "a.pdf"
+    src.write_bytes(b"x")
+
+    with pytest.raises(syncjob.SyncError, match="namespace"):
+        syncjob.park(root, "10-inbox/a.pdf", "abc123", "a deck", "2026-08-25")
+
+    assert src.exists()
+
+
+def test_park_inherits_the_archive_guards(tmp_path):
+    """park() suppresses an id forever, so it must refuse everything archive()
+    refuses — and suppress nothing when it does."""
+    root = make_vault(tmp_path)
+    (root / "10-inbox" / "README.md").write_text("# Inbox", encoding="utf-8")
+    (root / "20-meetings" / "note.md").write_text("x", encoding="utf-8")
+
+    with pytest.raises(syncjob.SyncError):
+        syncjob.park(root, "10-inbox/README.md", "inbox:abc0000000000000",
+                     "the folder readme", "2026-08-25")
+    with pytest.raises(syncjob.SyncError):
+        syncjob.park(root, "20-meetings/note.md", "inbox:abc0000000000000",
+                     "not in the inbox", "2026-08-25")
+
+    assert (root / "10-inbox" / "README.md").is_file()
+    assert syncjob.read_skip_list(root) == set()
+
+
+def test_re_parking_an_id_explains_it_the_way_it_was_first_explained(tmp_path):
+    """The same non-capture dropped back in and parked again. The skip list
+    keeps the first reason, so a second sidecar asserting a different one
+    would leave the vault telling two stories about one decision."""
+    root = make_vault(tmp_path)
+    (root / "10-inbox" / "report.pdf").write_bytes(b"%PDF")
+    rid = syncjob.content_id(root / "10-inbox" / "report.pdf")
+    syncjob.park(root, "10-inbox/report.pdf", rid, "vendor whitepaper",
+                 "2026-08-25")
+
+    (root / "10-inbox" / "report.pdf").write_bytes(b"%PDF")
+    result = syncjob.park(root, "10-inbox/report.pdf", rid,
+                          "a wholly different explanation", "2026-09-02")
+
+    assert result["already_present"] is True
+    assert result["reason"] == "vendor whitepaper"
+    sidecar = (root / result["sidecar"]).read_text(encoding="utf-8")
+    assert "vendor whitepaper" in sidecar
+    assert "a wholly different explanation" not in sidecar
+    assert "earlier run" in sidecar
+
+
+def test_re_parking_a_legacy_bare_id_does_not_backdate_its_reason(tmp_path):
+    """The deployed-vault case. The id was suppressed before reasons existed,
+    so the reason written now is new — the sidecar must not claim it was on
+    record all along."""
+    root = make_vault(tmp_path)
+    (root / "10-inbox" / "report.pdf").write_bytes(b"%PDF")
+    rid = syncjob.content_id(root / "10-inbox" / "report.pdf")
+    write_skip_file(root, rid)
+
+    result = syncjob.park(root, "10-inbox/report.pdf", rid,
+                          "vendor whitepaper", "2026-08-25")
+    sidecar = (root / result["sidecar"]).read_text(encoding="utf-8")
+
+    assert result["reason"] == "vendor whitepaper"
+    assert "vendor whitepaper" in sidecar
+    assert "recorded then" not in sidecar
+    assert "no reason was recorded" in sidecar
+    # ...and the bare line gains the reason rather than gaining a twin.
+    assert syncjob.read_skip_records(root) == [
+        {"recording_id": rid, "reason": "vendor whitepaper",
+         "source_name": "report.pdf"}]

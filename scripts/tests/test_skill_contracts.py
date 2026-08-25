@@ -201,3 +201,14 @@ def test_sync_recordings_no_longer_asks_the_user_to_archive_by_hand():
     promised to do and never did."""
     text = (SKILLS_DIR / "sync-recordings" / "SKILL.md").read_text(encoding="utf-8")
     assert "so the user can archive them" not in text
+
+
+def test_sync_recordings_parks_through_the_one_call_that_records_why():
+    """A park is a permanent suppression. The skill must reach it through
+    `sync park`, which cannot run without a reason — not through a bare
+    `sync skip` plus `sync archive`, which can."""
+    text = (SKILLS_DIR / "sync-recordings" / "SKILL.md").read_text(encoding="utf-8")
+    assert "sync park" in text
+    assert "--reason" in text
+    park_block = text.split("sync park", 1)[1][:400]
+    assert "--reason" in park_block, "the park invocation itself must carry --reason"

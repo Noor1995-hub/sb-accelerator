@@ -27,3 +27,9 @@ Discipline section. **Most important: refresh
 its own ontology does not list — the skill and the vault contradict each
 other, and an agent resolving toward the vault writes a wrong confidence
 reason.
+
+**Not** a migration candidate, recorded so nobody writes one: the skip list
+`99-workflow-config/sync-state/skipped-recordings.txt` gained two optional
+tab-separated fields (reason, original filename). A bare id line is still a
+valid record, read as "reason unknown" — which is the truth, since no reason
+was captured when it was written. There is nothing to backfill.

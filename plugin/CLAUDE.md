@@ -52,6 +52,41 @@ gets and the caller has to strip it. Here the CLI owns both directions, because
 a caller that re-wraps a stem it just read produces `[[[[...]]]]`, and the write
 succeeds while the edge silently resolves to nothing.
 
+### A park cannot be reasonless, by argparse
+
+`sync park` is the only way an inbox file gets suppressed, and `--reason` is
+required with no default. Parking is two writes that must not come apart —
+the file leaves `10-inbox/`, its content hash joins the never-propose-again
+list — and neither is legible later without the reason. The earlier shape
+(`sync skip` then `sync archive`) let both happen with nothing recorded, so
+the exec found a bare file in `90-archive/inbox/` and a bare hash in the skip
+list with no way to tell a deliberate call from a mistake. `sync skip` keeps
+an *optional* `--reason` for adapter ids (`plaud:`, `m365:`), which have no
+inbox file to move.
+
+The reason is written in two places on purpose, because the readers differ:
+`skipped-recordings.txt` answers "what has this vault suppressed, and why?",
+and the `{filename}.parked.md` sidecar answers "why is this file in my
+archive?" for someone browsing the folder who will never open a config
+directory. The sidecar carries no frontmatter — it explains a file, it is not
+a vault object, and no ontology check should ever try to validate it.
+
+The skip list is `id[\treason[\tfilename]]`, and a bare id line stays valid
+forever: that is all the format held before reasons were recorded, so every
+already-deployed vault reads correctly with nothing to migrate. Trailing
+empty fields are omitted rather than written as bare tabs, whitespace inside
+a reason is collapsed (a tab would invent a field, a newline a record), and
+`read_skip_list()` returns the id set from either line shape — that contract
+is what `scan()` and `dedup()` filter against and it does not change.
+Re-parking an id already on the list annotates a bare line in place, but
+never revises a reason already recorded: the first explanation is the one a
+human would have read. That run's sidecar carries the recorded reason too,
+not the one it was called with — otherwise the list would say why an item was
+parked in August while a September sidecar for the same id asserted something
+else, and the vault would be telling two stories about one decision. The
+sidecar says which of the three cases it is, because a re-park of an id
+suppressed before reasons existed writes a reason that is genuinely new.
+
 ### The mode flag decides an audit field
 
 `decision write` requires exactly one of `--foreground` or `--background`, and

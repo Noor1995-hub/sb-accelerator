@@ -10,3 +10,9 @@ untouched, so a file here can always be dropped back into `10-inbox/` if
 something needs redoing — though a note that was already written will keep
 it deduped, so delete that meeting note in `20-meetings/` first. It is the
 note that gets deleted, never the archived file itself.
+
+A **parked** file — one the sync decided was not a capture at all — has a
+short `{filename}.parked.md` beside it saying what it was, why nothing was
+written for it, and how to have it processed after all. That note is also how
+you tell the two kinds of file in here apart: a file with one was parked, a
+file without one was processed normally and its note is in `20-meetings/`.
