@@ -33,12 +33,28 @@ it is simply not mandated where the prose is composed.
 
 ## Decisions
 
-15. **The gap is a reported fact, not an inference.** `dates plan` returns
-    `business_days_missed` — business days (Mon–Fri) in
-    `[recap_from, recap_to)`. That half-open interval is exactly the set of
-    evening runs that did not happen: a note dated `recap_from` on disk
-    proves the run on the evening before it completed. The normal case
-    (`recap_from == recap_to`) is 0, so nothing changes for a healthy vault.
+15. **The gap is a reported fact, not an inference — and the fact is read
+    off disk.** `dates plan` returns `business_days_missed`: the number of
+    business days `D` in `[recap_from, recap_to)` for which **no** daily note
+    dated `next_business_day(D)` exists in `60-daily-notes/`. A run on
+    business day `D` writes the note for `next_business_day(D)`, so that note
+    existing is exactly the proof that the run happened. Existence is checked
+    against every ISO-named note on disk, **future-dated ones included** — a
+    future-dated note is not "the last daily note" for the window
+    (`recap_from` deliberately ignores it), but it is precisely the proof
+    this count needs.
+
+    The first version of this decision counted business days in the window
+    outright, justified by "a note dated `recap_from` on disk proves the run
+    on the evening before it completed." That reasoning fails whenever today
+    is not a business day: on a Saturday the newest note on or before today
+    is Friday's, which proves *Thursday's* run, while the proof of Friday's
+    run is Monday's note — the one the window logic excludes for being
+    future-dated. A healthy vault therefore reported a missed run on every
+    Saturday and every Sunday, two nights in seven for an unattended
+    schedule, and the banner said so in the note. The corrected count is 0
+    for a healthy vault on any day of the week.
+
     No holiday calendar ships: a public holiday reads as a missed day, which
     is literally true ("no run happened") and is the honest reading rather
     than a silent one.
@@ -81,15 +97,23 @@ it is simply not mandated where the prose is composed.
 ## D1 — `dates plan`: the gap becomes a fact
 
 `dates.business_days(start, end) -> int` counts Mon–Fri in `[start, end)`.
-Module-level and public, because `dailynote` renders from the same function
-rather than a second implementation of the same arithmetic.
+Calendar arithmetic only — it measures the *width* of a span, which is what
+`business_days_not_detailed` and the banner's detail line need.
+
+`dates.missed_runs(root, recap_from, recap_to) -> int` is the count of runs
+that did not happen, per decision 15: business days `D` in
+`[recap_from, recap_to)` with no note dated `next_business_day(D)` on disk.
+Module-level and public beside `business_days`, because `dates.plan` and
+`dailynote` both need it and a second implementation of the same rule is how
+the banner and the plan block come to disagree. `dates.next_business_day(day)`
+is factored out of `plan` for the same reason.
 
 `dates.plan(root, today, *, timezone, utc_offset, catchup_threshold=5)`
 keeps every existing key and adds five:
 
 | Key | Type | Meaning |
 |---|---|---|
-| `business_days_missed` | int | business days in `[recap_from, recap_to)` — the evening runs that did not happen |
+| `business_days_missed` | int | `missed_runs(root, recap_from, recap_to)` — business days in the window whose run left no note behind |
 | `is_catchup` | bool | `business_days_missed > 0` |
 | `catchup_threshold` | int | the bound in force (CLI default 5) |
 | `over_threshold` | bool | `business_days_missed > catchup_threshold` |
@@ -155,8 +179,9 @@ legitimate call (`to` is today, the note is the next business day) and it
 closes the self-reference hazard in D3. `detailed_from`, when present, must
 be within `[from, to]`.
 
-When `dates.business_days(from, to) > 0`, the CLI prepends to the recap
-region interior, above the model's prose, separated by one blank line:
+When `dates.missed_runs(root, from, to) > 0` — the decision-15 count, read
+off disk, not the width of the window — the CLI prepends to the recap region
+interior, above the model's prose, separated by one blank line:
 
 ```markdown
 > [!warning] Catch-up note
@@ -165,9 +190,11 @@ region interior, above the model's prose, separated by one blank line:
 ```
 
 The third line appears only when `detailed_from` is present and later than
-`from`. Counts are pluralised (`1 business day`, `is counted`). When the
-window shows 0 missed days — every healthy run — there is no banner and the
-rendered bytes are identical to today's output.
+`from`. Its count is `business_days(from, detailed_from)` — the *width* of
+the span that was not detailed, which is a length rather than a count of
+failures, so `business_days` is right there. When 0 runs were missed — every
+healthy run, weekend runs included — there is no banner and the rendered
+bytes are identical to today's output.
 
 `recap_window` is optional so that existing callers keep working. The
 consequence is that a skill which forgets it silently loses both the banner
@@ -210,16 +237,36 @@ fact. Inputs, given `recap_window` `from`..`to`:
   (`2026-06-12-phase-1-site-nomination-deferred`), so a stage-4 retry that
   finally wrote a decision is not skipped as "unchanged"
 
+Project indexes are deliberately **not** inputs, even though D5's project
+pulse reads from them: stage 4 touches `last-updated` on every project it
+visits, so hashing them would churn the digest on nearly every run and the
+guard would never fire. The stamp therefore means "meetings, jottings and
+decisions are unchanged", not "nothing anywhere changed" — recorded in
+`plugin/CLAUDE.md` so the next reader of the code finds it.
+
 Canonical form, then SHA-256, then the first 16 hex characters (the
 convention `syncjob.content_id` already uses):
 
 ```
-window\t{from}\t{to}
+banner\t{sha256-hex of the rendered banner, or of "" when there is none}
 {relpath}\t{sha256-hex}          # one line per input path, sorted by relpath
 ```
 
-The window bounds are part of the digest, so a widened window invalidates
-even when no file changed.
+The first line is the **rendered banner**, not the raw `from`/`to` bounds:
+the digest must cover exactly what determines the region's machine-generated
+content, which is the banner plus the input files. Hashing the bounds made a
+weekend run over an untouched vault look changed — Saturday's window is
+`08-21..08-22` where Friday's was `08-21..08-21` — and regenerate a recap the
+exec had already read, which is the defect the fingerprint exists to prevent.
+It also left `detailed_from` outside the digest even though it changes the
+rendered banner, so a run that moved only its detail bound kept a stamp
+describing a banner the note no longer carried. Hashing the banner closes
+both.
+
+Dropping the bounds is safe: if they move enough to change what the recap is
+built from, the input *file set* moves with them and the digest follows. If
+they move without changing either the banner or the file set, the rendered
+region is byte-identical and skipping it is the correct answer.
 
 **Write behaviour.**
 
