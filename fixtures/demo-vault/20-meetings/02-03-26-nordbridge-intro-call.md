@@ -10,6 +10,7 @@ start-time: 2026-03-02T10:00
 attendee-emails: [jordan.vance@cascadia-intermodal.example, dana.whitfield@nordbridge.example, morgan.ellery@cascadia-intermodal.example]
 attendees: [jordan-vance, dana-whitfield, morgan-ellery]
 projects: [nordbridge-regional-rollout-proposal]
+entities: [nordbridge-components]
 review_status: needs-review
 reviewed: false
 archived: false

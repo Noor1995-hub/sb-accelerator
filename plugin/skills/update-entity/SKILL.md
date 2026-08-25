@@ -83,17 +83,30 @@ political dynamic worth remembering.
 |---|---|
 | Company facts — industry, size, systems, strategy, recent news | `context` |
 | People — names, titles, who decides, where they stand | `stakeholders` |
-| A meeting — who was there, what came out of it, what is owed | `meeting_log` |
+| A meeting's *read of the room* — the tone, who held back, what went unsaid | `meeting_log` |
 | Political dynamics, sore points, topics to avoid, competitor ties | `sensitivities` |
 | Milestones in the relationship — trust earned or lost, turning points | `relationship_history` |
 | Projects and their status | `engagements` |
 
 Judgment calls worth getting right:
 
+- **`meeting_log` holds only the read of the room.** The section is a
+  Dataview index of the entity's meetings plus a `### Dynamics` bullet per
+  meeting, and the CLI **refuses** `attendees`, `outcomes` and `followups`.
+  That is not a formatting rule: attendees are the meeting note's own
+  frontmatter, outcomes are its `## Notes`, follow-ups are its
+  `## Action items`, and a copy here goes stale the moment the note is
+  corrected. What no query can reproduce is "exploratory throughout; no
+  commitment asked for or offered" — write that, and nothing else.
 - **A meeting that revealed a dynamic** goes in *both* `meeting_log` and
   `sensitivities`. Do not make the user choose.
 - **`relationship_history` is for turning points**, not every interaction. If
   it would read as noise in a year, it belongs in `meeting_log` only.
+- **For the meeting to appear in the table at all**, its note needs
+  `entities: [<slug>]` in frontmatter — the query joins on that field and
+  nothing else. A note written before the field existed, or by hand without
+  it, is simply absent. If the user is looking for a meeting that is not
+  listed, that is the first thing to check.
 - **`context` is capped at eight bullets** and the CLI enforces it. Prefer
   updating an existing label to adding a ninth.
 - **Vocabularies are closed.** Role in decision: sponsor · champion ·
@@ -131,9 +144,6 @@ cat > /tmp/entity-edits.json <<'JSON'
   ],
   "meeting_log": [
     {"date": "2026-08-21", "topic": "Renewal planning",
-     "attendees": "Leo Marchetti, Renee Castillo",
-     "outcomes": "Renewal in principle; scope revisit in September",
-     "followups": "Send revised scope by 2026-09-05",
      "dynamics": "Warm; Renee quieter than usual on integration"}
   ],
   "sensitivities": [
@@ -148,7 +158,8 @@ python3 "$VAULTLIB" entity write --vault "$VAULT" \
 
 Every *section* key is optional; send only the sections you have something for.
 Within an entry the fields are not: `context` needs all of `label`, `fact` and
-`why`, `stakeholders` needs `name`, `meeting_log` needs `date` and `topic`,
+`why`, `stakeholders` needs `name`, `meeting_log` needs `date`, `topic` and
+`dynamics`,
 `sensitivities` needs `topic`, `detail` and `implications`,
 `relationship_history` needs `date`, `what` and `significance`, and
 `engagements` needs `project` — as the project's **slug**, not its display

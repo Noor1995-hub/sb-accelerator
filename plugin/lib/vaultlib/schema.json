@@ -139,7 +139,8 @@
         "confidence",
         "confidence-reasons",
         "reviewed",
-        "archived"
+        "archived",
+        "entities"
       ],
       "required": [
         "date",

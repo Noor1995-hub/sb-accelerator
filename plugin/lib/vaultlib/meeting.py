@@ -24,7 +24,7 @@ REQUIRED_PAYLOAD = ("title", "date", "type", "calendar-subject",
 OPTIONAL_PAYLOAD = ("attendee-emails", "organizer", "location", "recurring",
                     "source-filename",
                     "confidence", "confidence-reasons",
-                    "action-items", "people")
+                    "action-items", "people", "entities")
 
 # confidence-reasons is quoted wholesale: a "new-attendees:1" item in an
 # unquoted flow list is exactly the kind of value PyYAML may read as a nested
@@ -70,13 +70,23 @@ def _require_slug_list(payload: dict, key: str, *, allow_empty: bool) -> list:
 
 
 def _require_joins(root: Path, attendees: list, projects: list,
-                   people: list) -> None:
+                   people: list, entities: list) -> None:
     for slug in projects:
         if not (root / vault.PROJECTS_DIR / slug / "index.md").is_file():
             raise MeetingError(
                 f"projects entry {slug!r} matches no project at "
                 f"30-projects/{slug}/index.md — create it with /new-project, "
                 "or leave projects empty for triage to catch"
+            )
+    for slug in entities:
+        # The entity dossier's Meeting Log is a Dataview query over this
+        # field. A slug with no dossier joins to nothing and fails silently:
+        # the meeting simply never appears, with no error anywhere.
+        if not (root / vault.ENTITIES_DIR / slug / "dossier.md").is_file():
+            raise MeetingError(
+                f"entities entry {slug!r} matches no dossier at "
+                f"40-entities/{slug}/dossier.md — the entity's Meeting Log "
+                "joins on this slug, so a typo silently empties it"
             )
     for slug in dict.fromkeys(attendees + people):
         if not (root / vault.PEOPLE_DIR / f"{slug}.md").is_file():
@@ -177,6 +187,13 @@ def _frontmatter(payload: dict, review_status: str,
     data.update({
         "attendees": payload["attendees"],
         "projects": payload["projects"],
+    })
+    # Omitted rather than written empty: an entity dossier is the only reader,
+    # and `entities: []` on a meeting with no entity counterparty is noise in
+    # the properties panel of every note that has one.
+    if payload.get("entities"):
+        data["entities"] = payload["entities"]
+    data.update({
         "review_status": review_status,
         "reviewed": False,
         "archived": False,
@@ -205,7 +222,8 @@ def write(root: Path, payload: dict) -> dict:
         payload, "attendees", allow_empty=(payload["type"] == "note"))
     projects = _require_slug_list(payload, "projects", allow_empty=True)
     people = _require_slug_list(payload, "people", allow_empty=True)
-    _require_joins(root, attendees, projects, people)
+    entities = _require_slug_list(payload, "entities", allow_empty=True)
+    _require_joins(root, attendees, projects, people, entities)
 
     prefix = _date_prefix(payload["date"])
     title_slug = naming.slugify(str(payload["title"]))

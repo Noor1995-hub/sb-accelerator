@@ -10,6 +10,7 @@ start-time: 2026-06-01T09:00
 attendee-emails: [sam.okafor@cascadia-intermodal.example, omar.siddiqui@cascadia-intermodal.example, morgan.ellery@cascadia-intermodal.example]
 attendees: [sam-okafor, omar-siddiqui, morgan-ellery]
 projects: [commercial-ops-crm-modernization]
+entities: [commercial-operations]
 review_status: confirmed
 reviewed: true
 archived: false

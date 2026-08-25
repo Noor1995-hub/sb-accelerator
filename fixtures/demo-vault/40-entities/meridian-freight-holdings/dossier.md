@@ -10,13 +10,16 @@ created: 2025-09-15
 last-updated: 2026-06-01
 ---
 
+# Meridian Freight Holdings
+
 ## Context
 
-- **Industry:** regional freight and intermodal logistics — yard automation lands in the operation they are measured on.
-- **Scale:** three yards, roughly 240 trailers — large enough to justify automation, small enough to decide in one room.
-- **Systems:** mixed PLC estate, historically one vendor per site — the integration overhead that drove the May consolidation.
-- **Decision style:** Leo decides fast once a case is quantified — bring the numbers, not the narrative.
-- **Relationship age:** client since the Phase 0 pilot signed 2025-10-01 — past trust-building, into delivery scrutiny.
+> [!info]+ **Standing context**
+> - **Industry:** regional freight and intermodal logistics — yard automation lands in the operation they are measured on.
+> - **Scale:** three yards, roughly 240 trailers — large enough to justify automation, small enough to decide in one room.
+> - **Systems:** mixed PLC estate, historically one vendor per site — the integration overhead that drove the May consolidation.
+> - **Decision style:** Leo decides fast once a case is quantified — bring the numbers, not the narrative.
+> - **Relationship age:** client since the Phase 0 pilot signed 2025-10-01 — past trust-building, into delivery scrutiny.
 
 ## Stakeholders
 
@@ -36,25 +39,28 @@ last-updated: 2026-06-01
 
 ## Meeting Log
 
-### 2026-05-20 — Vendor Strategy Brainstorm
+```dataview
+TABLE WITHOUT ID
+  link(file.path, dateformat(date, "dd-MM-yy")) AS "Date",
+  calendar-subject AS "Subject",
+  projects AS "Projects"
+FROM "20-meetings"
+WHERE econtains(entities, this.slug)
+SORT date DESC
+LIMIT 20
+```
 
-- **Attendees:** Priya Nathan, Leo Marchetti, Jamie Ellwood
-- **Key outcomes:** Consolidate on one automation vendor across all three yards, reversing the phased multi-vendor plan
-- **Follow-ups:** Re-scope yards 2–3 onto the yard-1 platform; revised commissioning schedule to Leo
-- **Dynamics:** Leo drove it and closed it inside the hour. Jamie's floor-operations detail was what moved him. Renee was not in the room.
+### Dynamics
 
-### 2026-03-10 — Yard Automation Steering Committee #1
-
-- **Attendees:** Priya Nathan, Leo Marchetti, Renee Castillo
-- **Key outcomes:** Phased, multi-vendor rollout approved as the working plan, starting with the highest-volume yard
-- **Follow-ups:** Confirm yard sequencing
-- **Dynamics:** No dissent surfaced. The integration cost nobody priced in this room is what undid the plan ten weeks later.
+- **2026-05-20 — Vendor Strategy Brainstorm:** Leo drove it and closed it inside the hour. Jamie's floor-operations detail was what moved him. Renee was not in the room.
+- **2026-03-10 — Yard Automation Steering Committee #1:** No dissent surfaced. The integration cost nobody priced in this room is what undid the plan ten weeks later.
 
 ## Sensitivities
 
-- **Incumbent yard-1 integrator:** their relationship predates ours and survived the consolidation — frame the single platform as extending that footprint. Any wording that reads as displacing them comes back through Leo.
-- **The May reversal:** the phased plan was Leo's own and he reversed it himself — do not retell it as a correction, and keep the six-week slip out of anything he has to present.
-- **Renee's position:** the consolidation handed her the integration work and she was not at the table when it was agreed — get her read directly before the next steerco, because her silence in that room has never been tested.
+> [!warning]+ **Handle with care**
+> - **Incumbent yard-1 integrator:** their relationship predates ours and survived the consolidation — frame the single platform as extending that footprint. Any wording that reads as displacing them comes back through Leo.
+> - **The May reversal:** the phased plan was Leo's own and he reversed it himself — do not retell it as a correction, and keep the six-week slip out of anything he has to present.
+> - **Renee's position:** the consolidation handed her the integration work and she was not at the table when it was agreed — get her read directly before the next steerco, because her silence in that room has never been tested.
 
 ## Engagements
 

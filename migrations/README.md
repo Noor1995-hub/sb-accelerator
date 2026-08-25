@@ -33,3 +33,38 @@ reason.
 tab-separated fields (reason, original filename). A bare id line is still a
 valid record, read as "reason unknown" — which is the truth, since no reason
 was captured when it was written. There is nothing to backfill.
+
+Pending migration (entity dossier contract, v0.6.2 — #60). Two changes, and
+the first one is the only migration in the list so far that a vault silently
+*needs*: without it a shipped view goes from wrong-but-populated to empty.
+
+1. **Meeting notes need `entities: [<slug>]`.** The dossier's Meeting Log is
+   now a Dataview query joining on that field, and no existing note has it, so
+   every dossier shows an empty table until it is backfilled. Derive it: for
+   each note in `20-meetings/`, map each `projects[]` slug to that project's
+   `entity:` field, dedupe, write the list. A note with an empty `projects[]`
+   cannot be derived and needs a human read (or is legitimately entity-less).
+   The field means the entities a meeting was *about*, so an internal 1:1
+   reviewing a client account carries that client — derivation from
+   `projects[]` already gets that right.
+2. **Dossier bodies need restructuring** in `40-entities/*/dossier.md`: add
+   `# {entity-name}` above the first section; wrap the `## Context` and
+   `## Sensitivities` bullets in their callouts (`> [!info]+ **Standing
+   context**`, `> [!warning]+ **Handle with care**`) — every bullet gains a
+   `> ` prefix, and the write path matches on the label *after* stripping it,
+   so a half-converted section still merges; and replace the `## Meeting Log`
+   body with the Dataview block plus a `### Dynamics` list, carrying each old
+   `### {date} — {Topic}` block's **Dynamics** line across as
+   `- **{date} — {Topic}:** {dynamics}`, newest first. The Attendees, Key
+   outcomes and Follow-ups lines are dropped — that content is in the meeting
+   note. Dropping them is the one lossy step here, so snapshot before running
+   and say so in the log.
+
+This one also needs the vault's own
+`99-workflow-config/reference/ontology.md` refreshed, for the reason the #55
+entry above gives: `entities` is a new Meeting field, so a vault provisioned
+before this release has `/sync-recordings` telling an agent to write a field
+the vault's ontology does not list.
+
+Idempotency for both: skip a meeting note that already has `entities`, and a
+dossier whose Meeting Log already contains the Dataview block.

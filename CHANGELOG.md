@@ -54,6 +54,20 @@ delivers them.
   notes. They have moved out of the vault into delaware's deployment
   documentation. `Start here` is now the only orientation note, and it also
   explains the `claude` folder, which was visible but unexplained. (#68)
+- **An entity dossier now lists its meetings by itself, and always
+  correctly.** The Meeting Log used to be typed out by hand, so it was
+  accurate on the day it was written and drifting from then on. It is now a
+  live table — every meeting held about that organization, newest first, with
+  no maintenance. What stays hand-written is the one thing a table cannot
+  hold: the read of the room, under **Dynamics**. Attendees, outcomes and
+  follow-ups are no longer copied into the dossier; they live in the meeting
+  note, where corrections actually land. **At the tune-up:** the table only
+  finds meetings tagged with the organization, so meeting notes written
+  before this release need that tag added — the upgrade does it. (#60)
+- **Dossiers read like project pages now.** The organization's name at the
+  top (every dossier file is called "dossier", so before this the page had no
+  title), background facts in a boxed summary, and sensitivities in a box that
+  looks like a warning, because that is what they are. (#60)
 
 - **Connectors are now bound to the vault, and refuse to sync anyone else's
   account.** Each vault carries a deployment config

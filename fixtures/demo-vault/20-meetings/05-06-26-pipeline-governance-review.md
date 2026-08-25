@@ -10,6 +10,7 @@ start-time: 2026-06-05T15:00
 attendee-emails: [sam.okafor@cascadia-intermodal.example, taylor.brooks@cascadia-intermodal.example, morgan.ellery@cascadia-intermodal.example]
 attendees: [sam-okafor, taylor-brooks, morgan-ellery]
 projects: [commercial-ops-pipeline-governance]
+entities: [commercial-operations]
 review_status: confirmed
 reviewed: true
 archived: true

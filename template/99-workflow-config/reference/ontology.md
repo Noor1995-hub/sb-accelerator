@@ -32,7 +32,7 @@ required: [date, type, calendar-subject, calendar_match, attendees, projects,
            review_status, recording-duration, source, processed]
 optional: [attendee-emails, organizer, location, recurring, start-time,
            source-recording-id, source-filename, conflicts-with,
-           confidence, confidence-reasons, reviewed, archived]
+           confidence, confidence-reasons, reviewed, archived, entities]
 enums:
   type: [meeting, "1:1", steerco, workshop, brainstorm, status-update, note]
   review_status: [needs-review, confirmed]
@@ -56,6 +56,24 @@ confidence_reasons:
   disposal; the file stays).
 - Write-once; only triage fields (`attendees`, `projects`, `review_status`,
   `reviewed`, `archived`) are edited later.
+- `entities[]` holds entity slugs: the organizations the meeting was
+  **about** — not only the ones in the room. An internal 1:1 reviewing a
+  client account carries that client, the same way the daily note's prep
+  heading labels it `### {HH:MM} — 1:1 — {Name} · [[entity]]`. "About" rather
+  than "with" is deliberate: the account 1:1s are part of the account's
+  record, a `business-unit` entity has no external meetings at all, and every
+  meeting *with* an entity is also about it, so the narrower reading only
+  loses rows. Omitted entirely when no entity is in scope.
+- **Why the field exists at all**, given that `projects[]` already implies it
+  (each project names its `entity`): Dataview cannot follow that second hop.
+  A query filtering `20-meetings` sees only what the meeting notes themselves
+  say, and a note naming its projects does not name the organizations behind
+  them. With `entities[]`, an entity dossier joins directly —
+  `WHERE econtains(entities, this.slug)`, the same shape a project index
+  already uses for `projects`. Two consequences worth knowing: a meeting with
+  an empty `projects[]` still reaches its dossier (an intro call with a
+  prospect that has no project yet), and re-triaging `projects[]` does not
+  update `entities[]`, so a re-routed meeting needs both edited.
 - The `1:1` type value must stay **quoted** in frontmatter and in the block
   above — unquoted YAML parses `1:1` as the integer 61.
 - `source` is the capture channel: `teams` (platform transcript), `recorder`
@@ -266,21 +284,49 @@ last-updated: 2026-04-01
 
 ### Entity body structure
 
-The dossier body carries exactly the six H2 sections in `body_sections`
+The body opens with `# {entity-name}` — every dossier file is named
+`dossier.md`, so without it the only title Obsidian shows is the word
+"dossier" — and then carries exactly the six H2 sections in `body_sections`
 above, in that order. Two skills write it — `/new-project` creates a
 baseline, `/update-entity` maintains it — so this is the shared contract, not
 a per-skill template.
 
 | Section | Shape | Merge rule |
 |---|---|---|
-| `## Context` | `- **{Label}:** {fact} — {why it matters}` | Update the bullet with a matching label; otherwise append. Maximum 8 bullets; consolidate the least important rather than exceeding it. |
+| `## Context` | `> [!info]+ **Standing context**` callout holding `> - **{Label}:** {fact} — {why it matters}` | Update the bullet with a matching label; otherwise append inside the callout. Maximum 8 bullets; consolidate the least important rather than exceeding it. |
 | `## Stakeholders` | Table: Name · Title · Role in Decision · Stance · Notes | Match on name, case-insensitive. Update only fields carrying new information; never overwrite specific data with vaguer data. Never remove a row. New rows get `<!-- needs-review -->` in Notes. |
 | `## Relationship History` | `- **{YYYY-MM-DD}:** {what happened} — {significance}` | Insert in date order. Never modify or remove an existing entry. |
-| `## Meeting Log` | `### {YYYY-MM-DD} — {Topic}` then Attendees / Key outcomes / Follow-ups / Dynamics bullets | Append-only, newest first (prepend). Never modify an existing entry. |
-| `## Sensitivities` | `- **{topic}:** {detail} — {implications}` | Update a matching topic; otherwise append. Never remove. |
+| `## Meeting Log` | A Dataview index of the entity's meetings, then `### Dynamics` holding `- **{YYYY-MM-DD} — {Topic}:** {the read of the room}` | The table is a query — nothing writes it, and it needs no maintenance. Dynamics bullets are append-only, newest first. Never modify or remove an existing bullet. |
+| `## Sensitivities` | `> [!warning]+ **Handle with care**` callout holding `> - **{topic}:** {detail} — {implications}` | Update a matching topic; otherwise append inside the callout. Never remove. |
 | `## Engagements` | Table: Project · Status · One-liner | Match on project slug. Update status and one-liner. Never remove. Link `[{slug}](../../30-projects/{slug}/index.md)`. |
 
 Empty sections carry `*No entries yet.*` — replaced on first real entry.
+
+**Two sections are callouts, and that is part of the contract, not styling.**
+`## Context` and `## Sensitivities` render as Obsidian callouts so a dossier
+carries the same visual weight as a project index, which opens with
+`> [!summary]+ **Now**` and `> [!info]- **Context**`. The consequence for
+writers: every bullet in those two sections is prefixed `> `, and the merge
+matches the bullet label *after* stripping that prefix. A bullet appended
+without the prefix lands outside the callout and renders as loose text below
+a box — which looks like a rendering bug and is really a write-path bug.
+
+**The Meeting Log is a hybrid, deliberately.** The table is the always-current
+index; the `### Dynamics` bullets are the only part a human writes. Attendees,
+outcomes and follow-ups are *not* duplicated here — they live in the meeting
+note's own `## Notes` and `## Action items`, and a copy in the dossier goes
+stale the moment the note is corrected. "Dynamics" is the read of the room
+("exploratory throughout; no commitment asked for or offered"), which is
+synthesis no query can reproduce, so it is the one thing worth keeping.
+
+The table selects `FROM "20-meetings"` and joins on
+`WHERE econtains(entities, this.slug)`, showing Date · Subject · Projects,
+newest first. The query text itself is not reproduced here — `entity.py`
+emits it and every dossier carries a copy, so a second copy in prose would
+be one more thing to keep in sync. A meeting note that predates `entities[]`,
+or was written by hand without it, is absent from the table until the field
+is added: the query has no other way to reach it. See §Meeting for why the
+field exists rather than the join being computed from `projects[]`.
 
 **Role in Decision** vocabulary: sponsor · champion · evaluator · influencer
 · blocker. **Stance** vocabulary: champion · neutral · blocker.

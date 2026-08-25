@@ -451,6 +451,11 @@ def capture_dom(surface: dict, **kw) -> dict:
               "return JSON.stringify({"
               "dataviewTables:q('.block-language-dataview table').length,"
               "dataviewErrors:q('.block-language-dataview .dataview-error').length,"
+              # Row counts, not just table counts: Dataview renders a table
+              # element for a query that matches nothing, so "a table rendered"
+              # passes for the empty-table-in-front-of-a-client failure.
+              "dataviewRows:q('.block-language-dataview table')"
+              ".map(t=>t.querySelectorAll('tbody tr').length),"
               "markerNodes:markers.length,"
               "markerLines:markerLines.length,"
               # [].every() is vacuously true, so a note with no markers must

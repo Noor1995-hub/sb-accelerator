@@ -10,13 +10,16 @@ created: 2025-06-01
 last-updated: 2026-06-05
 ---
 
+# Commercial Operations
+
 ## Context
 
-- **Mandate:** CRM and pipeline tooling plus forecast governance for the whole commercial org — every number in the monthly pipeline review originates here.
-- **Scale:** two workstreams behind one VP and one analytics lead — thin for the surface area it covers.
-- **Systems:** internal Salesforce instance, not integrated with this vault — pipeline figures are reconciled by hand each week.
-- **Known weakness:** pipeline stage definitions differ by region — the reason every forecast-accuracy conversation turns into a definitions conversation.
-- **Reporting line:** reports to the CCO directly, so there is no layer to absorb an escalation — contested calls land on Morgan.
+> [!info]+ **Standing context**
+> - **Mandate:** CRM and pipeline tooling plus forecast governance for the whole commercial org — every number in the monthly pipeline review originates here.
+> - **Scale:** two workstreams behind one VP and one analytics lead — thin for the surface area it covers.
+> - **Systems:** internal Salesforce instance, not integrated with this vault — pipeline figures are reconciled by hand each week.
+> - **Known weakness:** pipeline stage definitions differ by region — the reason every forecast-accuracy conversation turns into a definitions conversation.
+> - **Reporting line:** reports to the CCO directly, so there is no layer to absorb an escalation — contested calls land on Morgan.
 
 ## Stakeholders
 
@@ -36,32 +39,29 @@ last-updated: 2026-06-05
 
 ## Meeting Log
 
-### 2026-06-05 — Pipeline Governance Review
+```dataview
+TABLE WITHOUT ID
+  link(file.path, dateformat(date, "dd-MM-yy")) AS "Date",
+  calendar-subject AS "Subject",
+  projects AS "Projects"
+FROM "20-meetings"
+WHERE econtains(entities, this.slug)
+SORT date DESC
+LIMIT 20
+```
 
-- **Attendees:** Sam Okafor, Taylor Brooks
-- **Key outcomes:** Forecast-call cadence reviewed; no change agreed this cycle
-- **Follow-ups:** None recorded — filed and archived
-- **Dynamics:** Short and procedural. Nobody argued for a change, which is not the same as nobody wanting one.
+### Dynamics
 
-### 2026-06-01 — Weekly Status Update
-
-- **Attendees:** Sam Okafor, Omar Siddiqui
-- **Key outcomes:** Three-vendor CRM RFP shortlist approved
-- **Follow-ups:** RFP scoring criteria sign-off; Omar owns scoring
-- **Dynamics:** Sam had the shortlist ready and asked for a yes.
-
-### 2026-04-20 — CRM Data Modernization Kickoff Workshop
-
-- **Attendees:** Sam Okafor, Omar Siddiqui, Taylor Brooks
-- **Key outcomes:** Scoped the CRM data-model gaps; Omar to draft the target schema
-- **Follow-ups:** Regional pipeline-stage definitions need a governance decision, not just a data fix
-- **Dynamics:** Longest session of the quarter at 75 minutes. The stage-definition problem surfaced here, well off the agenda.
+- **2026-06-05 — Pipeline Governance Review:** Short and procedural. Nobody argued for a change, which is not the same as nobody wanting one.
+- **2026-06-01 — Weekly Status Update:** Sam had the shortlist ready and asked for a yes.
+- **2026-04-20 — CRM Data Modernization Kickoff Workshop:** Longest session of the quarter at 75 minutes. The stage-definition problem surfaced here, well off the agenda.
 
 ## Sensitivities
 
-- **Split ownership:** governance sits with Taylor and tooling with Sam, and the stage-definition problem falls between them — do not let the vendor decision settle it by default.
-- **Manual reconciliation:** weekly pipeline figures are stitched together by hand, so any number in a review is one person's work — naming an error names a person.
-- **Forecast accuracy:** it has been questioned in the pipeline review before — keep the conversation on the measurement the unit collectively owns.
+> [!warning]+ **Handle with care**
+> - **Split ownership:** governance sits with Taylor and tooling with Sam, and the stage-definition problem falls between them — do not let the vendor decision settle it by default.
+> - **Manual reconciliation:** weekly pipeline figures are stitched together by hand, so any number in a review is one person's work — naming an error names a person.
+> - **Forecast accuracy:** it has been questioned in the pipeline review before — keep the conversation on the measurement the unit collectively owns.
 
 ## Engagements
 

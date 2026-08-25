@@ -185,6 +185,29 @@ def test_project_indexes_render_dataview_tables(note_surfaces):
             f"{key} rendered no Dataview table — a project index carries two")
 
 
+def test_entity_dossiers_render_their_meeting_log_table(note_surfaces):
+    """#60 item 4. The Meeting Log is a Dataview join on the meeting's
+    `entities[]`. Dataview fails silently, so a dossier whose slug no meeting
+    carries renders an empty table — and an empty table still renders a
+    <table>, which is why the row count is asserted and not just the count of
+    tables."""
+    dossiers = {k: v for k, v in note_surfaces.items() if k.startswith("entity-")}
+    if not dossiers:
+        pytest.skip("tour captured no entity dossier")
+    for key, payload in dossiers.items():
+        dom = payload["dom"]
+        assert not dom.get("dataviewErrors"), f"{key} renders a Dataview error"
+        assert dom.get("dataviewTables"), (
+            f"{key} rendered no Dataview table — the Meeting Log carries one")
+        rows = dom.get("dataviewRows")
+        assert rows is not None, (
+            f"{key}: capture predates dataviewRows — re-run `obsidian_probe tour`")
+        assert all(count > 0 for count in rows), (
+            f"{key}: Meeting Log table rendered {rows} rows. The join "
+            "`econtains(entities, this.slug)` matched nothing — no meeting "
+            "note carries this entity's slug.")
+
+
 def test_evening_sync_markers_are_hidden_in_live_preview(note_surfaces):
     """#60 item 3. The markers are a CLI contract so the syntax stays; a CSS
     snippet hides them in the one view where the exec actually types."""

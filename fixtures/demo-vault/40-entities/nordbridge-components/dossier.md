@@ -10,13 +10,16 @@ created: 2026-02-01
 last-updated: 2026-06-12
 ---
 
+# Nordbridge Components
+
 ## Context
 
-- **Industry:** tier-2 automotive and industrial components — the automation case rests on labour cost, not throughput.
-- **Scale:** roughly 2,200 employees across three plants — larger than Meridian, and the buying centre sits in procurement, a step removed from the floor.
-- **Systems:** ERP migration mid-flight at the Liège plant with a change freeze in effect — the constraint that killed the first site proposal.
-- **Buying process:** procurement-led with Dana Whitfield as gatekeeper — expect to win or lose this on a written business case.
-- **Relationship age:** conference introduction in February, one call since, nothing delivered — still earning the right to propose.
+> [!info]+ **Standing context**
+> - **Industry:** tier-2 automotive and industrial components — the automation case rests on labour cost, not throughput.
+> - **Scale:** roughly 2,200 employees across three plants — larger than Meridian, and the buying centre sits in procurement, a step removed from the floor.
+> - **Systems:** ERP migration mid-flight at the Liège plant with a change freeze in effect — the constraint that killed the first site proposal.
+> - **Buying process:** procurement-led with Dana Whitfield as gatekeeper — expect to win or lose this on a written business case.
+> - **Relationship age:** conference introduction in February, one call since, nothing delivered — still earning the right to propose.
 
 ## Stakeholders
 
@@ -30,17 +33,26 @@ last-updated: 2026-06-12
 
 ## Meeting Log
 
-### 2026-03-02 — Intro Call
+```dataview
+TABLE WITHOUT ID
+  link(file.path, dateformat(date, "dd-MM-yy")) AS "Date",
+  calendar-subject AS "Subject",
+  projects AS "Projects"
+FROM "20-meetings"
+WHERE econtains(entities, this.slug)
+SORT date DESC
+LIMIT 20
+```
 
-- **Attendees:** Jordan Vance, Dana Whitfield
-- **Key outcomes:** Open to a regional rollout across all three plants, starting wherever their ERP work is least disrupted
-- **Follow-ups:** Phased proposal excluding Liège from Phase 1
-- **Dynamics:** Exploratory throughout; no commitment asked for or offered. Dana flagged the Liège ERP freeze unprompted, which was the most useful thing said in the call.
+### Dynamics
+
+- **2026-03-02 — Intro Call:** Exploratory throughout; no commitment asked for or offered. Dana flagged the Liège ERP freeze unprompted, which was the most useful thing said in the call.
 
 ## Sensitivities
 
-- **Liège ERP freeze:** an unrelated migration has that plant locked — never propose it as a Phase 1 site, and do not re-ask before their freeze lifts.
-- **No delivery history with us:** every claim needs a reference other than our own work for them — the Meridian pilot carries that weight, and its commercial terms stay out of the room.
+> [!warning]+ **Handle with care**
+> - **Liège ERP freeze:** an unrelated migration has that plant locked — never propose it as a Phase 1 site, and do not re-ask before their freeze lifts.
+> - **No delivery history with us:** every claim needs a reference other than our own work for them — the Meridian pilot carries that weight, and its commercial terms stay out of the room.
 
 ## Engagements
 
