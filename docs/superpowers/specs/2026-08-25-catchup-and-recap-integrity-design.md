@@ -94,6 +94,16 @@ it is simply not mandated where the prose is composed.
     aliases are free prose, because "Friday's Acme sync" is a reference, not
     a name claim.
 
+    **What this buys, and what it does not.** The check proves the named
+    object exists where the vault's layout puts it, which is what stops an
+    invented name reaching the note. It does not prove the link resolves in
+    *Obsidian*: an entity is `<slug>/dossier.md` and a project is
+    `<slug>/index.md`, so a bare-slug link to either renders unresolved in
+    the app while passing here. Verified live after the fact, and confirmed
+    pre-existing against untouched fixture notes — people, meetings,
+    decisions and daily notes are single notes and resolve both ways. The
+    dead-link half is vault layout and is tracked on its own.
+
 ## D1 — `dates plan`: the gap becomes a fact
 
 `dates.business_days(start, end) -> int` counts Mon–Fri in `[start, end)`.

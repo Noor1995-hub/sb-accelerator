@@ -227,6 +227,16 @@ Every `[[target]]` in a `daily-note write` payload — recap, prep,
 person note, a project index, a meeting note, a decision note, or a daily
 note. `#heading` is stripped first; embeds count.
 
+**Resolving here is not the same as resolving in Obsidian.** This check asks
+whether the object exists where the vault's layout puts it. Obsidian resolves
+a `[[link]]` by note name, and two of these kinds are folders — an entity is
+`<slug>/dossier.md`, a project is `<slug>/index.md` — so
+`[[acme-industries]]` passes this check and still renders as an unresolved
+link in the app. That is vault layout, it predates this rule, and it is
+tracked separately; what the rule buys is that the *name* was looked up,
+which is the failure it exists to stop. People, meetings, decisions and daily
+notes are single notes and resolve in both senses.
+
 Where the link carries an alias and the target is an *identity* object
 (entity, person, project), the alias must equal that object's `entity-name`
 / `person-name` / `project-name` exactly, and the error names the real one
