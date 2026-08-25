@@ -549,3 +549,59 @@ def test_fresh_fixture_is_exactly_what_daily_note_write_renders(tmp_path):
         "content (headings, markers, prep/recap content); hand-written jottings "
         "outside markers are the only exemption"
     )
+
+
+def test_find_regions_reads_an_inputs_attribute():
+    lines = [
+        "<!-- evening-sync:recap:begin inputs=a1b2c3d4e5f6a7b8 -->",
+        "recap prose",
+        "<!-- evening-sync:recap:end -->",
+    ]
+    regions = dailynote._find_regions(lines)
+    assert regions[0]["attrs"] == {"inputs": "a1b2c3d4e5f6a7b8"}
+
+
+def test_find_regions_defaults_attrs_to_empty():
+    lines = ["<!-- evening-sync:recap:begin -->", "x",
+             "<!-- evening-sync:recap:end -->"]
+    assert dailynote._find_regions(lines)[0]["attrs"] == {}
+
+
+def test_find_regions_refuses_an_unknown_attribute():
+    lines = ["<!-- evening-sync:recap:begin mode=terse -->", "x",
+             "<!-- evening-sync:recap:end -->"]
+    with pytest.raises(dailynote.DailyNoteError, match="mode"):
+        dailynote._find_regions(lines)
+
+
+def test_find_regions_refuses_an_attribute_on_an_end_marker():
+    lines = ["<!-- evening-sync:recap:begin -->", "x",
+             "<!-- evening-sync:recap:end inputs=a1b2c3d4e5f6a7b8 -->"]
+    with pytest.raises(dailynote.DailyNoteError, match="inputs"):
+        dailynote._find_regions(lines)
+
+
+def test_find_regions_refuses_an_attribute_on_a_prep_region():
+    lines = ["<!-- evening-sync:prep:begin inputs=a1b2c3d4e5f6a7b8 -->", "x",
+             "<!-- evening-sync:prep:end -->"]
+    with pytest.raises(dailynote.DailyNoteError, match="inputs"):
+        dailynote._find_regions(lines)
+
+
+def test_region_without_attrs_renders_exactly_as_before():
+    assert dailynote._region("recap", "body") == (
+        "<!-- evening-sync:recap:begin -->\nbody\n"
+        "<!-- evening-sync:recap:end -->")
+
+
+def test_region_with_attrs_renders_them_on_the_begin_marker():
+    assert dailynote._region("recap", "body", {"inputs": "abc123"}) == (
+        "<!-- evening-sync:recap:begin inputs=abc123 -->\nbody\n"
+        "<!-- evening-sync:recap:end -->")
+
+
+def test_marker_line_renders_one_line():
+    assert dailynote._marker_line("recap", "begin", {"inputs": "abc123"}) == (
+        "<!-- evening-sync:recap:begin inputs=abc123 -->")
+    assert dailynote._marker_line("recap", "end") == (
+        "<!-- evening-sync:recap:end -->")

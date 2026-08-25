@@ -20,7 +20,15 @@ from . import dates, markdown, naming, vault
 DAILY_NOTES_DIR = vault.DAILY_NOTES_DIR
 NO_MEETINGS_LINE = "*No meetings scheduled.*"
 
-_MARKER_RE = re.compile(r"\A<!-- evening-sync:([a-z-]+):(begin|end) -->\s*\Z")
+_MARKER_RE = re.compile(
+    r"\A<!-- evening-sync:([a-z-]+):(begin|end)"
+    r"((?: [a-z][a-z0-9-]*=[A-Za-z0-9._-]+)*) -->\s*\Z")
+_ATTR_RE = re.compile(r"([a-z][a-z0-9-]*)=([A-Za-z0-9._-]+)")
+# Region metadata the CLI owns. Only the recap's begin marker carries any:
+# `inputs` is the fingerprint of what the recap was composed from. Anything
+# else means a version this plugin does not understand, and guessing at a
+# marker is how a note gets silently mis-merged.
+_ALLOWED_ATTRS = {("recap", "begin"): frozenset({"inputs"})}
 _KNOWN_REGIONS = ("recap", "prep")
 _TIME_RE = re.compile(r"\A([01]\d|2[0-3]):[0-5]\d\Z")
 _HEADING_RE = re.compile(
@@ -118,9 +126,16 @@ def _validate(root: Path, payload) -> dict:
             "meetings_note": meetings_note}
 
 
-def _region(name: str, content: str) -> str:
-    return (f"<!-- evening-sync:{name}:begin -->\n{content}\n"
-            f"<!-- evening-sync:{name}:end -->")
+def _marker_line(name: str, kind: str,
+                 attrs: Optional[dict] = None) -> str:
+    suffix = "".join(f" {key}={value}"
+                     for key, value in sorted((attrs or {}).items()))
+    return f"<!-- evening-sync:{name}:{kind}{suffix} -->"
+
+
+def _region(name: str, content: str, attrs: Optional[dict] = None) -> str:
+    return (f"{_marker_line(name, 'begin', attrs)}\n{content}\n"
+            f"{_marker_line(name, 'end')}")
 
 
 def _heading(meeting: dict) -> str:
@@ -152,7 +167,7 @@ def _render(data: dict) -> str:
 
 def _find_regions(lines: List[str]) -> List[dict]:
     regions: List[dict] = []
-    open_marker: Optional[Tuple[str, int]] = None
+    open_marker: Optional[Tuple[str, int, dict]] = None
     for index, line in enumerate(lines):
         match = _MARKER_RE.match(line)
         if not match:
@@ -162,17 +177,25 @@ def _find_regions(lines: List[str]) -> List[dict]:
             raise DailyNoteError(
                 f"unknown region {name!r} at line {index + 1}; "
                 f"known regions: {_KNOWN_REGIONS}")
+        attrs = dict(_ATTR_RE.findall(match.group(3)))
+        stray = sorted(set(attrs) - _ALLOWED_ATTRS.get((name, kind), frozenset()))
+        if stray:
+            raise DailyNoteError(
+                f"unknown region attribute(s) {stray} on {name}:{kind} at "
+                f"line {index + 1} — this note may have been written by a "
+                "newer plugin version; upgrade the plugin rather than "
+                "editing the marker")
         if kind == "begin":
             if open_marker is not None:
                 raise DailyNoteError(
                     f"nested region marker at line {index + 1}")
-            open_marker = (name, index)
+            open_marker = (name, index, attrs)
         else:
             if open_marker is None or open_marker[0] != name:
                 raise DailyNoteError(
                     f"unmatched end marker for {name!r} at line {index + 1}")
             regions.append({"name": name, "begin": open_marker[1],
-                            "end": index})
+                            "end": index, "attrs": open_marker[2]})
             open_marker = None
     if open_marker is not None:
         raise DailyNoteError(f"region {open_marker[0]!r} is never closed")
