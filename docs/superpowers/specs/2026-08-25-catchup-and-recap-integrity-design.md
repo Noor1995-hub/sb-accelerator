@@ -2,7 +2,11 @@
 
 **Date:** 2026-08-25 · **Issues:** #56, #57 · **Extends:**
 `2026-08-23-daily-loop-port-design.md` (decisions 1–14 there; this spec
-continues that numbering at 15)
+continues that numbering at 15) · **Builds on:**
+`2026-08-25-deployment-config-design.md` (merged as #62 — `config.json`
+now supplies the timezone and executive slug that stage 1 used to read
+from prose, and its rule "machine decisions come from `config read`" is
+Rule 9 of the skill this spec edits)
 
 Two findings from the 2026-08-24/25 end-to-end test of plugin 0.4.0 at
 `3c91b70`, fixed together because they are the same defect seen twice: the
@@ -123,6 +127,14 @@ dated `2026-06-15`:
 CLI: `dates plan` gains `--catchup-threshold` (int, default 5). A negative
 value is a `DatesError`.
 
+The threshold stays a CLI default rather than becoming a `config.json` key.
+Rule 9 ("machine decisions come from `config read`") targets decisions a
+skill would otherwise read out of *prose*; a defaulted CLI flag is already
+deterministic, and `config.py` validates a closed key set — so adding a key
+costs a `config-version` bump, a template change, and a `/setup-my-brain`
+writer that does not exist yet. Parked, with the trigger written down: the
+first engagement that actually wants a different bound.
+
 ## D2 — the catch-up banner is rendered, not remembered
 
 `daily-note write`'s payload gains one optional object:
@@ -181,13 +193,22 @@ payload content, so a payload cannot forge a marker.
 supplied by the caller, because a model-supplied hash is a model-supplied
 fact. Inputs, given `recap_window` `from`..`to`:
 
-- `20-meetings/<stem>.md` where `stem[:10]` is an ISO date in `[from, to]`
+- `20-meetings/<stem>.md` where the stem's date falls in `[from, to]`.
+  **Meeting stems are `DD-MM-YY-title`, not ISO** — `meeting._date_prefix`
+  renders `date` through `%d-%m-%y`. So this needs the inverse:
+  `meeting.date_from_stem(stem) -> date | None`, parsing `stem[:8]` with
+  `%d-%m-%y` and returning None for anything that does not parse (a
+  hand-named note is simply not in the window). It lands directly beside
+  `_date_prefix`, because a round-trip pair that drifts apart is the exact
+  failure `plugin/CLAUDE.md` already documents twice (table-cell escaping,
+  bare wikilink stems).
 - `60-daily-notes/<date>.md` where `date` is in `[from, to]` — this is the
   jottings input (the note being written is dated after `to`, so it can
-  never hash itself)
-- `30-projects/*/decisions/<stem>.md` where `stem[:10]` is in `[from, to]`
-  — so a stage-4 retry that finally wrote a decision is not skipped as
-  "unchanged"
+  never hash itself). Daily-note stems *are* ISO.
+- `30-projects/*/decisions/<stem>.md` where `stem[:10]` is an ISO date in
+  `[from, to]` — decision stems *are* ISO-prefixed
+  (`2026-06-12-phase-1-site-nomination-deferred`), so a stage-4 retry that
+  finally wrote a decision is not skipped as "unchanged"
 
 Canonical form, then SHA-256, then the first 16 hex characters (the
 convention `syncjob.content_id` already uses):
@@ -314,9 +335,10 @@ transcript shows it:
 | `daily-note write` validation | wikilinks resolve; identity aliases match | **breaking for a payload that names things that do not exist** — which is the point |
 | `daily-note read` result | `recap_inputs` | additive |
 | region marker grammar | optional `key=value` attributes | notes without attributes parse unchanged |
+| `meeting` module | `date_from_stem` becomes public | additive |
 
-Version: **0.5.0**. New behaviour plus one intentionally breaking
-validation rule.
+Version: **0.5.0 → 0.6.0** (#62 took 0.5.0). New behaviour plus one
+intentionally breaking validation rule.
 
 ## Documentation
 
@@ -326,7 +348,11 @@ validation rule.
   bare-stem rules it belongs beside (all three are "what crosses the CLI
   boundary" lessons).
 - `plugin/skills/evening-sync/SKILL.md` — stages 1, 6, 7, the unattended
-  section, and two new entries in Rules.
+  section, and **Rules 10 and 11** (#62 took the list to 9). Stage 1's
+  edits build on its post-#62 form: `config read` first, then
+  `dates plan --timezone <config.timezone>`. No new text may name
+  `identity.md` or `tools-and-systems.md` — a contract test from #62
+  forbids it.
 - `CHANGELOG.md` under `Unreleased` — two client-visible lines: the note now
   tells you when it is catching up, and a re-run no longer rewrites a recap
   you already read.
@@ -373,6 +399,15 @@ New tests in `test_vaultlib_dailynote.py`:
   `prep` and inside `meetings_note` is checked too
 - `daily-note read` returns `recap_inputs`, and null for an unstamped note
 
+Preconditions verified against the fixture vault before writing any of
+this, so D4 is known not to break the two fixture-conformance tests: every
+wikilink in `fixtures/demo-vault/60-daily-notes/*.md` and in
+`FRESH_FIXTURE_PAYLOAD` resolves (entities, `DD-MM-YY` meeting stems, ISO
+decision stems), and not one carries an alias. The fixture notes stay
+*unstamped* — they legitimately represent the "exists, no attribute" row of
+D3's table, and stamping them would pin a digest that changes every time a
+fixture changes.
+
 New tests in `test_skill_contracts.py`:
 
 - `/evening-sync` states the no-back-fill rule and the catch-up threshold
@@ -396,7 +431,7 @@ Hand-test, in the dated local vault (`test-vaults/`, made with
 
 ## Scope
 
-One PR, closing **#56** and **#57**, version **0.4.3 → 0.5.0**. They share
+One PR, closing **#56** and **#57**, version **0.5.0 → 0.6.0**. They share
 `dailynote.py`, the same payload object, and the same skill stage; splitting
 them would mean two passes over the same 40 lines and a half-written
 `recap_window` contract in between.
@@ -406,6 +441,11 @@ them would mean two passes over the same 40 lines and a half-written
 - **A holiday calendar.** `business_days_missed` counts a public holiday as
   missed. Fixing it needs a per-deployment holiday source, which is
   configuration work, not this fix.
+- **`catchup-threshold` as a `config.json` key.** The trigger is the first
+  engagement that wants a bound other than 5. It arrives with a
+  `config-version` bump (the validator's key set is closed), a template
+  default, and `/setup-my-brain` (#3) as its writer — none of which exists
+  to hang it on today.
 - **Per-day back-fill.** Decision 16 says one catch-up note, deliberately.
   If an engagement ever wants real per-day notes, the lever is repeated
   `--today` runs, and a `/backfill` skill would be its own design.
