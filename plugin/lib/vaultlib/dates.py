@@ -120,6 +120,46 @@ DAY_NAMES = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday",
 _NEXT_BUSINESS_DAYS = {4: 3, 5: 2, 6: 1}
 
 
+def business_days(start: date, end: date) -> int:
+    """Mon-Fri days in the half-open interval [start, end).
+
+    Half-open on purpose: with start = the last daily note's date and
+    end = today, the count is exactly the number of evening runs that did
+    not happen. A note dated `start` on disk proves the run on the evening
+    before it completed, so `start` itself is not a missed day.
+
+    No holiday calendar: a public holiday counts as missed, which is
+    literally true ("no run happened") and is the honest reading rather
+    than a silent one.
+    """
+    if end <= start:
+        return 0
+    # Whole weeks contribute 5 each; walk only the remainder. A 6-month gap
+    # must not become a 180-iteration loop on the client's machine.
+    whole_weeks, remainder = divmod((end - start).days, 7)
+    count = whole_weeks * 5
+    for offset in range(remainder):
+        if (start + timedelta(days=offset)).weekday() < 5:
+            count += 1
+    return count
+
+
+def _walk_back_business_days(end: date, count: int) -> date:
+    """The date `count` business days back from `end`, counting `end` itself.
+
+    A weekend `end` contributes nothing, so the walk simply continues into
+    the previous week.
+    """
+    remaining = max(count, 1)
+    cursor = end
+    while True:
+        if cursor.weekday() < 5:
+            remaining -= 1
+            if remaining == 0:
+                return cursor
+        cursor -= timedelta(days=1)
+
+
 def _parse_date(text, label: str) -> date:
     raw = str(text).strip()
     if not vault.ISO_DATE_RE.match(raw):
@@ -161,7 +201,8 @@ def utc_to_local(utc_dt: datetime, timezone: Optional[str],
 
 def plan(root: Path, today: Optional[str] = None, *,
          timezone: Optional[str] = None,
-         utc_offset: Optional[str] = None) -> dict:
+         utc_offset: Optional[str] = None,
+         catchup_threshold: int = 5) -> dict:
     """The authoritative date block for the evening run.
 
     Everything downstream consumes these values verbatim — the model never
@@ -169,6 +210,12 @@ def plan(root: Path, today: Optional[str] = None, *,
     design decision 9: everything since the last daily note on disk
     (inclusive), through today. A note dated in the future (tomorrow's,
     written by an earlier run today) is not "the last daily note".
+
+    A gap is reported, not inferred (decision 15): business_days_missed is
+    the count of business days in [recap_from, recap_to), which is exactly
+    the set of evening runs that did not happen. Above catchup_threshold,
+    recap_detail_from bounds how far back the caller should recap in detail
+    (decision 17) — the caller does no arithmetic, only prose.
     """
     if today is not None:
         today_date = _parse_date(today, "today")
@@ -181,6 +228,12 @@ def plan(root: Path, today: Optional[str] = None, *,
         now_utc = datetime.now(_timezone.utc).replace(tzinfo=None, microsecond=0)
         local_now, _ = utc_to_local(now_utc, timezone, utc_offset)
         today_date = local_now.date()
+
+    if not isinstance(catchup_threshold, int) or isinstance(catchup_threshold, bool):
+        raise DatesError("catchup-threshold must be an integer")
+    if catchup_threshold < 0:
+        raise DatesError(
+            f"catchup-threshold {catchup_threshold} must be >= 0")
 
     notes_dir = root / DAILY_NOTES_DIR
     existing = []
@@ -197,6 +250,12 @@ def plan(root: Path, today: Optional[str] = None, *,
 
     nxt = today_date + timedelta(
         days=_NEXT_BUSINESS_DAYS.get(today_date.weekday(), 1))
+    recap_from = last or today_date
+    missed = business_days(recap_from, today_date)
+    over_threshold = missed > catchup_threshold
+    detail_from = (max(recap_from,
+                       _walk_back_business_days(today_date, catchup_threshold))
+                   if over_threshold else recap_from)
     return {
         "today": today_date.isoformat(),
         "today_day_name": DAY_NAMES[today_date.weekday()],
@@ -205,6 +264,12 @@ def plan(root: Path, today: Optional[str] = None, *,
         "note_to_write": f"{DAILY_NOTES_DIR}/{nxt.isoformat()}.md",
         "last_daily_note": (f"{DAILY_NOTES_DIR}/{last.isoformat()}.md"
                             if last else None),
-        "recap_from": (last or today_date).isoformat(),
+        "recap_from": recap_from.isoformat(),
         "recap_to": today_date.isoformat(),
+        "business_days_missed": missed,
+        "is_catchup": missed > 0,
+        "catchup_threshold": catchup_threshold,
+        "over_threshold": over_threshold,
+        "recap_detail_from": detail_from.isoformat(),
+        "business_days_not_detailed": business_days(recap_from, detail_from),
     }

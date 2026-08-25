@@ -101,6 +101,9 @@ def build_parser() -> argparse.ArgumentParser:
     dates_plan.add_argument("--timezone", help="IANA timezone name")
     dates_plan.add_argument("--utc-offset", dest="utc_offset",
                             help="explicit offset like +02:00")
+    dates_plan.add_argument(
+        "--catchup-threshold", dest="catchup_threshold", type=int, default=5,
+        help="business days missed before the recap is bounded (default 5)")
 
     people = top.add_parser("person", help="person notes")
     people_sub = people.add_subparsers(dest="action", required=True)
@@ -294,7 +297,8 @@ def _dispatch(args: argparse.Namespace) -> int:
             return _ok(dates.window(args.start, timezone=args.timezone,
                                     utc_offset=args.utc_offset, hours=args.hours))
         return _ok(dates.plan(root, args.today, timezone=args.timezone,
-                              utc_offset=args.utc_offset))
+                              utc_offset=args.utc_offset,
+                              catchup_threshold=args.catchup_threshold))
     if args.group == "identity":
         return _ok({"identity": vault.read_identity_block(root)})
     if args.group == "config":
