@@ -790,6 +790,7 @@ def test_banner_omits_the_detail_line_when_it_covers_the_whole_window(tmp_path):
         recap_window={"from": "2026-06-15", "to": "2026-08-21",
                       "detailed_from": "2026-06-15"}))
     text = (root / "60-daily-notes" / "2026-08-24.md").read_text(encoding="utf-8")
+    assert "[!warning] Catch-up note" in text
     assert "Detailed from" not in text
 
 
@@ -814,3 +815,26 @@ def test_banner_sits_above_the_payload_prose_inside_the_region(tmp_path):
     region = region.split("-->", 1)[1].split("<!-- evening-sync:recap:end", 1)[0]
     assert region.strip().startswith("> [!warning] Catch-up note")
     assert region.strip().endswith("> quiet stretch")
+
+
+def test_banner_renders_through_the_merge_path_too(tmp_path):
+    """A banner wired into only _render (and not _merge) would drop silently
+    on a re-run — the path a stale note actually takes. The first write here
+    goes through _render (the note does not exist yet); the meeting note
+    inside the window is then edited so the fingerprint changes, and the
+    second write goes through _merge with the recap actually regenerated
+    (not skipped) — the banner must still be there afterward."""
+    root = make_windowed_vault(tmp_path)
+    window = {"from": "2026-06-11", "to": "2026-06-12"}
+    dailynote.write(root, windowed_payload(recap_window=dict(window)))
+    (root / "20-meetings" / "12-06-26-weekly-status.md").write_text(
+        "---\ndate: 2026-06-12T09:00\ntype: status-update\n---\n\n"
+        "## Key Takeaways\n- Shortlist approved.\n- TCO comparison owed.\n",
+        encoding="utf-8")
+    result = dailynote.write(root, windowed_payload(
+        recap="> [!info] At a glance\n> 1 meeting · TCO comparison now owed",
+        recap_window=dict(window)))
+    assert result["recap_skipped"] is False
+    text = (root / "60-daily-notes" / "2026-06-15.md").read_text(encoding="utf-8")
+    assert "> [!warning] Catch-up note" in text
+    assert "1 business day without an evening run" in text
