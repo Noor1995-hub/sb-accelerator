@@ -15,6 +15,14 @@ delivers them.
 
 ## Unreleased
 
+- **Connectors are now bound to the vault, and refuse to sync anyone else's
+  account.** Each vault carries a deployment config
+  (`99-workflow-config/config.json`) naming its timezone, its executive, and
+  which capture channels are on. A connector (Plaud, Microsoft 365) only
+  lists content after the signed-in account matches the account written in
+  the config — a mismatch is refused outright, and an unattended run raises
+  an alert instead of syncing. Raw connector data is wiped from the work
+  area at the end of every run. (#54)
 - **Editing properties in Obsidian no longer risks corrupting a note.** Obsidian
   rewrites a note's whole property block on any edit — quotes disappear, lists
   change shape — and a later plugin write over that rewritten form could leave

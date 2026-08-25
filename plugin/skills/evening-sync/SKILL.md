@@ -42,12 +42,17 @@ a failed sync still gets metrics and project updates.
 
 ## Stage 1 — Dates (authoritative, never re-derived)
 
-Read the executive's timezone from
-`99-workflow-config/context/identity.md` (IANA name in prose), then:
+Read the deployment config, then plan the dates:
 
 ```bash
-python3 "$VAULTLIB" dates plan --vault "$VAULT" --timezone <executive-timezone>
+python3 "$VAULTLIB" config read --vault "$VAULT"
+python3 "$VAULTLIB" dates plan --vault "$VAULT" --timezone <config.timezone>
 ```
+
+If `timezone` or `executive` is in `missing`, the pipeline cannot run
+deterministically: stop, and say which key to fill in
+`99-workflow-config/config.json` (interactive), or write the alert as the
+run's only output (unattended).
 
 Consume the result **verbatim** — `today`, `next_business_day`, the day
 names, `recap_from`/`recap_to`, `last_daily_note`, `note_to_write`. Never
@@ -56,9 +61,8 @@ subcommand exists to kill. The recap window is *everything since the last
 daily note*: after a missed run or a gap, it widens automatically — no
 weekend special case.
 
-Also resolve the executive's **person slug**: their name is in the identity
-block; the matching note is in `50-people/` (its `person-name`). Stage 3
-needs the slug.
+The executive's **person slug** is `executive` from the config — a slug,
+used as-is. Stage 3 needs it.
 
 ## Stage 2 — Harvest (read-only)
 
@@ -132,9 +136,23 @@ Projects with only `needs-review` meetings never reach the queue — do not
 
 ## Stage 5 — Tomorrow's calendar and prep
 
-If the Microsoft 365 calendar tool is available (ToolSearch
-`outlook_calendar_search`), pull `next_business_day`'s events; compute the
-query window deterministically:
+The calendar pull uses the M365 connector, so it is gated like an adapter:
+it runs only when `adapters.m365.enabled` is true, the calendar tool exists
+(ToolSearch `outlook_calendar_search`), and the account binding verifies —
+call `get_me`, write the raw JSON to scratch, then:
+
+```bash
+python3 "$VAULTLIB" config verify-account --vault "$VAULT" \
+  --adapter m365 --identity "$SCRATCH/m365.whoami.json"
+```
+
+Only `match: true` pulls events. A refusal (`account-mismatch`,
+`no-account-hint`) or a disabled adapter takes the calendar-unavailable
+path below, and the summary names the cause — a signed-in account from the
+wrong engagement must never prep this vault's meetings. Delete the whoami
+scratch file immediately on a refusal, and in any case before the run ends.
+When the gate passes, pull `next_business_day`'s events; compute the query
+window deterministically:
 
 ```bash
 python3 "$VAULTLIB" dates window --start <next_business_day> --timezone <tz> --hours 0
@@ -204,7 +222,7 @@ reported "Processed: 0" after writing a meeting correctly):
 **Reviewed ticks folded:** {N} confirmed
 **Metrics refreshed:** {P} projects · {Q} people
 **Projects updated:** {N} ({slugs}) — {M} decisions written (reviewed: false), {K} candidates skipped
-**Tomorrow's note:** `60-daily-notes/{date}.md` ({DayName}) — {N} meetings prepped | calendar unavailable
+**Tomorrow's note:** `60-daily-notes/{date}.md` ({DayName}) — {N} meetings prepped | calendar unavailable | calendar REFUSED (account-mismatch | no-account-hint) | m365 disabled
 **Warnings:** {verbatim, including SELF-CHECK lines} | none
 ```
 
@@ -234,6 +252,9 @@ A non-empty warnings block means investigate before tomorrow's run.
    it; never work around a structure error.
 6. **Supersession needs explicit conflict language; never delete a
    decision.** Status flips only.
-7. **Calendar unavailable still writes the note** — with the explicit
-   unavailable line, never a silent empty section.
+7. **Calendar unavailable, refused, or disabled still writes the note** —
+   with the explicit line naming which, never a silent empty section.
 8. **Verify against disk before claiming success.**
+9. **Machine decisions come from `config read`** — timezone, executive
+   slug, adapter enablement. Prose context files carry style and narrative,
+   never these.

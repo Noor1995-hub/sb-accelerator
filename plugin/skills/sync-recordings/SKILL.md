@@ -37,16 +37,59 @@ The JSON envelope and interpreter resolution are documented in the plugin's
 
 ## The three adapters
 
-Read `99-workflow-config/context/tools-and-systems.md` first: it says which
-capture channels this deployment uses. Then, per adapter, verify the tools
-actually exist before running it. An adapter that is declared but unavailable
-is **skipped with an explicit line in the summary** — never a silent zero.
+Read the deployment config first — it, not prose, says which adapters this
+vault uses:
+
+```bash
+python3 "$VAULTLIB" config read --vault "$VAULT"
+```
+
+Adapters with `enabled: false` are skipped with an explicit line in the
+summary. For an enabled adapter, verify the tools actually exist before
+running it — declared but unavailable is also **an explicit skip line,
+never a silent zero**. Anything in `missing` that blocks a step below is
+reported the same way.
 
 | Adapter | Discovery | Availability check |
 |---|---|---|
 | `inbox` | `sync scan` over `10-inbox/` | always available |
 | `plaud` | Plaud MCP `list_files` | ToolSearch finds `mcp__plaud__list_files` |
-| `m365` | — | **not yet supported** — the retrieval path is pending verification; say so if declared |
+| `m365` | — | **not yet supported** — the retrieval path is pending verification; say so if enabled |
+
+### Account binding — before anything is listed
+
+A connector adapter runs against whatever account is signed in at the *user*
+level, which may not be this vault's account. The config's `account_hint`
+binds them, and the check is deterministic, not judgment:
+
+1. Call the connector's whoami tool (`mcp__plaud__get_current_user`; for
+   M365 calendar enrichment, `get_me`). Write the raw JSON to scratch with
+   the Write tool.
+2. Run the gate:
+
+```bash
+python3 "$VAULTLIB" config verify-account --vault "$VAULT" \
+  --adapter plaud --identity "$SCRATCH/plaud.whoami.json"
+```
+
+3. Only `match: true` proceeds. On `match: false` the adapter is **refused,
+   in both modes** — nothing is listed, nothing is synced. Delete the whoami
+   scratch file immediately. Interactively, tell the user the `reason` and
+   that binding the account means writing its identifier into
+   `adapters.<name>.account_hint` in `99-workflow-config/config.json` — a
+   conscious act, not something you do for them. Quote the signed-in
+   account's stable identifiers from the whoami payload you just read (its
+   `id` and account email) so binding is copy-paste: connectors often
+   report a synthetic address for Apple/Google sign-ins, so the email the
+   user knows may never appear in the whoami — and a display name is never
+   a valid hint (the CLI rejects it). Under `--unattended`, write
+   a refuse-and-alert line in the summary (see below) and move on to the
+   other adapters.
+
+The reasons: `account-mismatch` (wrong account signed in — the S1 this gate
+exists for), `no-account-hint` (enabled but never bound — same refusal), and
+`adapter-disabled`. A whoami tool that is missing or errors means the
+adapter is *unavailable* (skip line), not unbound — do not guess either way.
 
 ## Workflow
 
@@ -75,9 +118,9 @@ read the head of each file; a forwarded email that is meeting notes by
 another name qualifies, a random PDF does not. Report `already_synced` files
 so the user can archive them (inbox discipline: nothing lives there).
 
-**Plaud** (when available): call `mcp__plaud__list_files` for the recent
-window. Write the raw JSON result to your session scratch directory with the
-Write tool — never echo large JSON through Bash. Then dedup the ids,
+**Plaud** (when enabled, available, and account-verified): call `mcp__plaud__list_files` for the recent
+window. Write the raw JSON result to `$SCRATCH/plaud.list.json` with the Write tool
+— never echo large JSON through Bash. Then dedup the ids,
 namespaced:
 
 ```bash
@@ -96,7 +139,7 @@ python3 "$VAULTLIB" plaud reassemble \
   --meta "$SCRATCH/rec_42.meta.json" \
   --transcript "$SCRATCH/rec_42.transcript.json" \
   --note "$SCRATCH/rec_42.note.json" \
-  --out "$SCRATCH" --timezone <executive-timezone>
+  --out "$SCRATCH" --timezone <config.timezone>
 ```
 
 The result names the blob file and carries `recording_id`, `duration_min`,
@@ -104,15 +147,21 @@ and `recorded_local`. On a Plaud **401**: report it and stop this adapter —
 never retry auth in a loop; re-authentication is interactive and belongs to
 the user.
 
-The executive's timezone is prose in
-`99-workflow-config/context/identity.md` — read it and pass the IANA name.
-If the host cannot resolve timezone names, the error's hint says to pass
-`--utc-offset` instead.
+The executive's timezone is `timezone` from `config read` — pass the IANA
+name. If it is in `missing`, the plaud adapter and calendar enrichment
+cannot run: skip them with an explicit line. If the host cannot resolve
+timezone names, the error's hint says to pass `--utc-offset` instead.
 
 ### 2. Calendar enrichment (optional, honest about absence)
 
-If the Microsoft 365 calendar tool is available (ToolSearch
-`outlook_calendar_search`), match each recording to a calendar event. Compute
+Calendar enrichment uses the M365 connector, so it is gated like an adapter:
+it runs only when `adapters.m365.enabled` is true, the calendar tool exists
+(ToolSearch `outlook_calendar_search`), and `config verify-account
+--adapter m365` (whoami: `get_me`, raw JSON written to
+`$SCRATCH/m365.whoami.json`) returns `match: true`. Disabled, missing
+tool, or a refused account all stamp `calendar-tool-unavailable` — the
+calendar was never consulted — and the summary says which one happened.
+When the gate passes, match each recording to a calendar event. Compute
 the query window deterministically:
 
 ```bash
@@ -247,13 +296,30 @@ Count what exists, not what you intended (a lab run once reported
 **Reviewed ticks folded:** {N} confirmed
 **Needs attention:** {N} (would have overwritten confirmed notes)
 **Skipped / errors:** {N} (will retry next run)
-**Adapters:** inbox ok · plaud ok · m365 not configured
+**Adapters:** inbox ok · plaud ok | REFUSED (account-mismatch | no-account-hint) | disabled | unavailable · m365 disabled | not yet supported
 **Calendar enrichment:** ok | UNAVAILABLE
 ```
 
+## Scratch hygiene
+
+Raw connector JSON — whoami payloads, `list_files` listings, transcripts —
+is engagement data that must not outlive the run. It lands only in the
+session scratch directory, never the vault. At the end of the run, success
+or refusal, delete the raw connector files this run wrote:
+The names below are the ones this contract instructs; if you wrote any
+other raw connector file, delete it too.
+
+```bash
+rm -f "$SCRATCH"/plaud.whoami.json "$SCRATCH"/m365.whoami.json "$SCRATCH"/rec_*.json "$SCRATCH"/plaud.list.json "$SCRATCH"/*.blob.md "$SCRATCH"/ids.json
+```
+
+On an account-mismatch refusal, delete the whoami payload immediately —
+before writing the summary. (The gate runs before listing, so on a refusal
+no listing ever reaches disk.)
+
 ## Unattended mode
 
-`--unattended` is what scheduled runs and the evening pipeline pass. Two
+`--unattended` is what scheduled runs and the evening pipeline pass. Three
 rules, not negotiable:
 
 1. **Never ask a question.** A blocked prompt means the run exits having
@@ -261,6 +327,9 @@ rules, not negotiable:
    next run.
 2. **Prefer under-routing to wrong routing.** No confident project match →
    `projects: []` and low confidence; triage exists for exactly this.
+3. **A refused account binding is an alert, not a fallback.** The summary
+   carries the refuse-and-alert line; the adapter synced nothing, and no
+   judgment call overrides the gate.
 
 ## Rules
 

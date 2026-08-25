@@ -31,7 +31,7 @@ if __package__ in (None, ""):
     # the skills invoke it.
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from vaultlib import dailynote, dates, decision, entity, meeting, person, plaud, project, schema, syncjob, updatequeue, vault  # noqa: E402
+from vaultlib import config, dailynote, dates, decision, entity, meeting, person, plaud, project, schema, syncjob, updatequeue, vault  # noqa: E402
 
 
 def _emit(payload: dict) -> None:
@@ -64,6 +64,23 @@ def build_parser() -> argparse.ArgumentParser:
     identity_show = identity_sub.add_parser(
         "show", help="print identity.md's setup-my-brain content block")
     _add_vault_argument(identity_show)
+
+    config_group = top.add_parser(
+        "config", help="deployment config — the machine-read half of 99-workflow-config")
+    config_sub = config_group.add_subparsers(dest="action", required=True)
+    config_read = config_sub.add_parser(
+        "read", help="read and validate 99-workflow-config/config.json")
+    _add_vault_argument(config_read)
+    config_verify = config_sub.add_parser(
+        "verify-account",
+        help="check a connector's signed-in account against its account_hint")
+    _add_vault_argument(config_verify)
+    config_verify.add_argument(
+        "--adapter", required=True, choices=sorted(config.CONNECTOR_ADAPTERS),
+        help="which connector adapter's binding to check")
+    config_verify.add_argument(
+        "--identity", required=True,
+        help="path to the raw whoami JSON the connector returned (or - for stdin)")
 
     dates_group = top.add_parser("dates", help="date and timezone arithmetic")
     dates_sub = dates_group.add_subparsers(dest="action", required=True)
@@ -249,6 +266,12 @@ def _dispatch(args: argparse.Namespace) -> int:
                               utc_offset=args.utc_offset))
     if args.group == "identity":
         return _ok({"identity": vault.read_identity_block(root)})
+    if args.group == "config":
+        if args.action == "read":
+            return _ok(config.read(root))
+        payload = (json.load(sys.stdin) if args.identity == "-"
+                   else json.loads(Path(args.identity).read_text(encoding="utf-8")))
+        return _ok(config.verify_account(root, args.adapter, payload))
     if args.group == "person":
         today = vault.today_iso(getattr(args, "today", None))
         return _ok(person.ensure(root, args.name, today))
@@ -353,6 +376,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         return _dispatch(args)
     except vault.VaultError as exc:
         return _fail(str(exc), "Check the --vault path points at the vault root.")
+    except config.ConfigError as exc:
+        return _fail(str(exc),
+                     "Fix 99-workflow-config/config.json (see the template "
+                     "default) and retry.")
     except dates.DatesError as exc:
         return _fail(str(exc), "Fix the date or timezone argument and retry.")
     except project.ProjectError as exc:

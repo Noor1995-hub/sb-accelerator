@@ -94,22 +94,21 @@ If the user skips, omit the flags — the index falls back to placeholders.
 ### 3. Resolve the owner
 
 The owner is a person slug, and it must resolve to a real person note.
-Default to the executive.
+Default to the executive:
 
 ```bash
-python3 "$VAULTLIB" identity show --vault "$VAULT"
+python3 "$VAULTLIB" config read --vault "$VAULT"
 ```
 
-Read the executive's name out of the returned `identity` text — that judgment
-is yours, the CLI only extracts the block. Then make sure the note exists:
+`executive` in the result is the executive's person slug — use it as
+`--owner` directly. If it is in `missing`, ask the user who owns this
+project (never guess), then make sure the note exists:
 
 ```bash
 python3 "$VAULTLIB" person ensure --vault "$VAULT" --name "<Full Name>"
 ```
 
-Use the returned `slug` as `--owner`. If `identity` comes back `null` the
-portfolio is unfilled: ask who owns this project, and offer that
-`/setup-my-brain` fills the portfolio properly.
+Use the returned `slug` as `--owner`.
 
 If the user names a different owner, `person ensure` them instead — the same
 call handles both cases and never touches an existing note.

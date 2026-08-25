@@ -124,3 +124,34 @@ def test_plugin_claude_md_documents_the_bare_stem_boundary():
         "the wikilink-never-crosses-the-boundary rule belongs next to the "
         "pipe-escaping rule — they are the same lesson twice"
     )
+
+
+def read_skill(name: str) -> str:
+    return (SKILLS_DIR / name / "SKILL.md").read_text(encoding="utf-8")
+
+
+def test_sync_skills_gate_connectors_through_config():
+    """#54: adapter enablement and account binding are deterministic —
+    both sync skills must read the config and run the verify gate."""
+    for name in ("sync-recordings", "evening-sync"):
+        text = read_skill(name)
+        assert "config read" in text, f"{name} must read the deployment config"
+        assert "verify-account" in text, f"{name} must run the binding gate"
+
+
+def test_sync_recordings_states_the_scratch_hygiene_rule():
+    assert "## Scratch hygiene" in read_skill("sync-recordings")
+
+
+def test_new_project_resolves_owner_from_config():
+    assert "config read" in read_skill("new-project")
+
+
+@pytest.mark.parametrize("path", SKILL_FILES, ids=lambda p: p.parent.name)
+def test_no_skill_reads_machine_decisions_from_prose(path):
+    """#54 acceptance: timezone, exec slug, and adapter enablement come from
+    config.json. The prose context files carry style and narrative only, so
+    no skill may name the two files that used to hold machine decisions."""
+    text = path.read_text(encoding="utf-8")
+    assert "identity.md" not in text, f"{path.parent.name} reads prose config"
+    assert "tools-and-systems" not in text, f"{path.parent.name} reads prose config"

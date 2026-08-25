@@ -343,3 +343,72 @@ def test_a_decision_payload_that_is_not_json_is_a_structured_error(
     ])
     assert code == 1
     assert "not valid JSON" in out["error"]
+
+
+def write_vault_config(root, extra=None):
+    cfg = {
+        "config-version": 1,
+        "timezone": "Europe/Brussels",
+        "executive": "morgan-ellery",
+        "adapters": {
+            "inbox": {"enabled": True},
+            "plaud": {"enabled": True, "account_hint": "morgan@example.com"},
+            "m365": {"enabled": False, "account_hint": None},
+        },
+    }
+    if extra:
+        cfg.update(extra)
+    path = root / "99-workflow-config" / "config.json"
+    path.write_text(json.dumps(cfg), encoding="utf-8")
+
+
+def test_config_read_returns_config_and_missing(capsys, tmp_path):
+    root = make_vault(tmp_path)
+    write_vault_config(root, extra={"timezone": None})
+    code, payload = run(capsys, ["config", "read", "--vault", str(root)])
+    assert code == 0
+    assert payload["result"]["config"]["executive"] == "morgan-ellery"
+    assert payload["result"]["missing"] == ["timezone"]
+
+
+def test_config_read_missing_file_is_a_structured_error(capsys, tmp_path):
+    root = make_vault(tmp_path)
+    code, payload = run(capsys, ["config", "read", "--vault", str(root)])
+    assert code == 1
+    assert payload["ok"] is False
+    assert "config.json" in payload["error"]
+    assert payload["hint"]
+
+
+def test_config_verify_account_matches_from_identity_file(capsys, tmp_path):
+    root = make_vault(tmp_path)
+    write_vault_config(root)
+    identity = tmp_path / "whoami.json"
+    identity.write_text(
+        json.dumps({"user": {"email": "morgan@example.com"}}),
+        encoding="utf-8")
+    code, payload = run(capsys, [
+        "config", "verify-account", "--vault", str(root),
+        "--adapter", "plaud", "--identity", str(identity),
+    ])
+    assert code == 0
+    assert payload["result"]["match"] is True
+
+
+def test_config_verify_account_mismatch_is_ok_false_free(capsys, tmp_path):
+    # A mismatch is a *result* (the gate worked), not an envelope error.
+    root = make_vault(tmp_path)
+    write_vault_config(root)
+    identity = tmp_path / "whoami.json"
+    identity.write_text(
+        json.dumps({"user": {"email": "someone.else@client.example"}}),
+        encoding="utf-8")
+    code, payload = run(capsys, [
+        "config", "verify-account", "--vault", str(root),
+        "--adapter", "plaud", "--identity", str(identity),
+    ])
+    assert code == 0
+    assert payload["result"] == {
+        "match": False, "reason": "account-mismatch", "values_checked": 1,
+    }
+    assert "someone.else" not in json.dumps(payload)

@@ -61,6 +61,27 @@ is what `Decisions.base`'s **Needs review** view queues up. A default here would
 write a lie into the audit trail, which is why argparse is made to refuse the
 call instead.
 
+## Deployment config is CLI-owned JSON
+
+Machine decisions — adapter enablement, timezone, the executive's person
+slug, connector account binding — live in `99-workflow-config/config.json`,
+read via `config read`. It is deliberately JSON and deliberately not
+frontmatter: nothing about it should be editable from Obsidian's property
+panel. Keys starting with `_` are human commentary and are ignored. Null
+values are the honest pre-onboarding state and come back in `missing`
+rather than failing the read.
+
+`config verify-account` is the binding gate: it takes the raw whoami JSON a
+connector returned (Plaud `get_current_user`, M365 `get_me`) and reports
+whether the signed-in account matches the adapter's `account_hint`. Only
+`match: true` may proceed to listing content. The result never echoes the
+connected account's values — a mismatch means those values belong to an
+unrelated engagement, and they must not propagate further than the raw
+scratch file, which the skill deletes.
+
+Style and narrative (language, recap depth, identity prose) stay in
+`99-workflow-config/context/*.md` — judgment, not machine config.
+
 ## Interpreter resolution
 
 Never hardcode one interpreter name. Try in order, using the first that

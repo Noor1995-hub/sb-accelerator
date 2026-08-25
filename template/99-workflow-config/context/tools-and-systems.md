@@ -5,7 +5,10 @@
 
 ## Purpose
 
-The systems around the vault. Read by capture and sync skills to know where information comes from and where outputs must land.
+The systems around the vault, as narrative — what they are, who runs them,
+where things land. Machine decisions (which adapters sync, account binding,
+timezone) live in `99-workflow-config/config.json`, not here: skills read
+that file, and this one stays human context.
 
 ## Interview questions
 
