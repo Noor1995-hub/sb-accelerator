@@ -26,6 +26,40 @@ from typing import Any, Dict, Optional, Set
 
 import yaml
 
+
+class _ObsidianYamlLoader(yaml.SafeLoader):
+    """SafeLoader minus YAML-1.1 sexagesimal integers.
+
+    Obsidian's property editor strips quotes, so a real vault can carry
+    `type: 1:1` bare. Stock PyYAML reads that as int 61 (base-60 notation);
+    Obsidian's js-yaml (v4+) dropped sexagesimal and reads the string "1:1".
+    The FIDELITY RULE above says Obsidian wins. Sexagesimal *floats* need a
+    trailing `.digits` part (`2:30.5`), which no vault field shape can
+    produce, so only the int resolver is replaced.
+    """
+
+
+_ObsidianYamlLoader.yaml_implicit_resolvers = {
+    first_char: [(tag, regexp) for tag, regexp in resolvers
+                 if tag != "tag:yaml.org,2002:int"]
+    for first_char, resolvers in yaml.SafeLoader.yaml_implicit_resolvers.items()
+}
+_ObsidianYamlLoader.add_implicit_resolver(
+    "tag:yaml.org,2002:int",
+    re.compile(r"\A[-+]?[0-9]+\Z"),
+    list("-+0123456789"))
+# The stock constructor keeps YAML-1.1 semantics where a leading 0 means
+# octal, so `08` (which the resolver above tags as int) would raise. YAML-1.2
+# core — what js-yaml v4 implements — is plain decimal.
+_ObsidianYamlLoader.add_constructor(
+    "tag:yaml.org,2002:int",
+    lambda loader, node: int(loader.construct_scalar(node), 10))
+
+
+def _yaml_load(text: str):
+    return yaml.load(text, Loader=_ObsidianYamlLoader)
+
+
 Corpus = Dict[str, Dict[str, Any]]
 
 # `file.<attr>` attributes this module knows how to compute.
@@ -231,7 +265,7 @@ def compile_filters(node) -> Optional[object]:
 
 def load_base(path) -> dict:
     """Parse a .base file."""
-    return yaml.safe_load(Path(path).read_text(encoding="utf-8"))
+    return _yaml_load(Path(path).read_text(encoding="utf-8"))
 
 
 def load_corpus(vault_root) -> Corpus:
@@ -263,7 +297,7 @@ def _frontmatter(path: Path) -> dict:
     end = text.find("\n---", 4)
     if end == -1:
         return {}
-    data = yaml.safe_load(text[4:end])
+    data = _yaml_load(text[4:end])
     return data if isinstance(data, dict) else {}
 
 

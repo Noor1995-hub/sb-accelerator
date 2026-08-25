@@ -227,6 +227,22 @@ def test_touch_upserts_the_milestone_pair(tmp_path):
     assert "next-milestone-date: 2026-09-01" in text
 
 
+def test_touch_escapes_backslashes_in_the_milestone(tmp_path):
+    # Same class as issue #47: this path quotes the milestone itself, and an
+    # unescaped backslash inside double quotes corrupts the note for every
+    # real YAML parser.
+    root = make_touch_vault(tmp_path)
+    project.touch(root, slug="alpha", date_iso="2026-06-12",
+                  next_milestone=r"UNC share \\fileserver cutover",
+                  next_milestone_date="2026-09-01")
+    text = (root / "30-projects" / "alpha" / "index.md").read_text(encoding="utf-8")
+    data, _ = md.split_frontmatter(text)
+    assert data["next-milestone"] == r"UNC share \\fileserver cutover"
+    import yaml
+    parsed = yaml.safe_load(text.split("---")[1])
+    assert parsed["next-milestone"] == r"UNC share \\fileserver cutover"
+
+
 def test_touch_milestone_fields_travel_together(tmp_path):
     root = make_touch_vault(tmp_path)
     with pytest.raises(project.ProjectError, match="travel together"):

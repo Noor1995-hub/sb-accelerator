@@ -15,6 +15,12 @@ delivers them.
 
 ## Unreleased
 
+- **Editing properties in Obsidian no longer risks corrupting a note.** Obsidian
+  rewrites a note's whole property block on any edit — quotes disappear, lists
+  change shape — and a later plugin write over that rewritten form could leave
+  the note unreadable, silently dropping the project from metrics and views.
+  Plugin writes now handle every rewritten form, repair the known corruption
+  shape where possible, and explain exactly what to fix when they cannot. (#53)
 - **`/evening-sync` — the vault maintains itself overnight.** One run syncs the
   day's recordings, folds review ticks into confirmations, refreshes each
   project's meeting metrics, updates the state of projects with new confirmed

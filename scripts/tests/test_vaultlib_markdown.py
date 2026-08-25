@@ -1,6 +1,7 @@
 """Frontmatter and section handling. The parser is ours because PyYAML is not
 verified present in the Cowork VM, so its narrow subset is pinned here."""
 import pytest
+import yaml
 
 from vaultlib import markdown as md
 
@@ -144,6 +145,25 @@ def test_emit_escapes_embedded_quotes():
     assert md.parse_frontmatter_block(text[4:-4])["n"] == 'a "quoted" word'
 
 
+def test_emit_escapes_backslashes_so_real_yaml_parsers_survive(tmp_path):
+    # Issue #47: an unescaped backslash inside a double-quoted scalar is an
+    # escape sequence to PyYAML/js-yaml — `\new` becomes a newline, `\s`
+    # raises. The note would vanish from every .base view.
+    text = md.emit_frontmatter({"summary": r"the C:\new path"},
+                               quote_keys={"summary"})
+    assert r'summary: "the C:\\new path"' in text
+    data, _ = md.split_frontmatter(text)
+    assert data["summary"] == r"the C:\new path"
+    assert yaml.safe_load(text.split("---")[1])["summary"] == r"the C:\new path"
+
+
+def test_parser_leaves_legacy_lone_backslashes_verbatim():
+    # Files written before the escaping fix carry `\s`-style sequences; only
+    # \\ and \" are unescaped, anything else stays as-is.
+    data = md.parse_frontmatter_block(r'summary: "a back\slash"')
+    assert data["summary"] == r"a back\slash"
+
+
 def test_emit_refuses_a_newline_even_inside_a_quoted_value():
     # Writing frontmatter nothing can parse and reporting success bricks the
     # object: every later read of that file fails permanently. Quoting does not
@@ -221,3 +241,100 @@ def test_upsert_scalar_field_inserts_before_the_closing_fence():
 def test_upsert_scalar_field_requires_frontmatter():
     with pytest.raises(ValueError):
         md.upsert_scalar_field("no fences here", "a", "b")
+
+
+# Obsidian's property editor rewrites the whole frontmatter block on any edit:
+# quotes stripped, flow lists expanded to block lists. The replace/upsert paths
+# must treat such a block list as one node, or the write orphans the
+# continuation lines and the file stops parsing (issue #53, finding G4).
+
+OBSIDIAN_EXPANDED = """---
+slug: x
+key-people:
+  - priya-nathan
+  - stale-slug
+status: active
+---
+Body stays.
+"""
+
+
+def test_replace_scalar_field_collapses_an_obsidian_block_list():
+    updated = md.replace_scalar_field(
+        OBSIDIAN_EXPANDED, "key-people", "[leo-marchetti, priya-nathan]")
+    assert updated == ("---\nslug: x\n"
+                       "key-people: [leo-marchetti, priya-nathan]\n"
+                       "status: active\n---\nBody stays.\n")
+    data, _ = md.split_frontmatter(updated)
+    assert data["key-people"] == ["leo-marchetti", "priya-nathan"]
+
+
+def test_upsert_scalar_field_collapses_an_obsidian_block_list():
+    updated = md.upsert_scalar_field(
+        OBSIDIAN_EXPANDED, "key-people", "[leo-marchetti]")
+    data, _ = md.split_frontmatter(updated)
+    assert data["key-people"] == ["leo-marchetti"]
+    assert "stale-slug" not in updated
+
+
+def test_replace_scalar_field_repairs_the_orphaned_continuation_shape():
+    # The corrupted-in-the-wild form G4 produced: a rewritten key line with the
+    # old block items left dangling under it. A write to that field must
+    # consume the orphans, never stack a second generation of them.
+    corrupted = ("---\nslug: x\n"
+                 "key-people: [leo-marchetti, priya-nathan]\n"
+                 "  - priya-nathan\n"
+                 "status: active\n---\n")
+    updated = md.replace_scalar_field(corrupted, "key-people", "[priya-nathan]")
+    data, _ = md.split_frontmatter(updated)
+    assert data["key-people"] == ["priya-nathan"]
+    assert "leo-marchetti" not in updated
+
+
+def test_replace_scalar_field_consumes_blanks_inside_the_node_only():
+    # The parser keeps the current key across blank lines, so an item after a
+    # blank still belongs to the node — but a trailing blank line before the
+    # next key is layout, not node, and must survive.
+    text = ("---\nkey-people:\n\n  - priya-nathan\n\nstatus: active\n---\n")
+    updated = md.replace_scalar_field(text, "key-people", "[a-b]")
+    assert updated == "---\nkey-people: [a-b]\n\nstatus: active\n---\n"
+
+
+def test_orphaned_continuation_error_names_the_field_and_hints():
+    # A file we only read (not write) can still carry the corrupted shape;
+    # rejection must say which field and what to do, not just "list item".
+    with pytest.raises(ValueError, match=r"key-people.*orphan"):
+        md.parse_frontmatter_block(
+            "key-people: [leo-marchetti]\n  - priya-nathan")
+
+
+def test_list_item_with_no_key_at_all_still_raises():
+    with pytest.raises(ValueError, match="before any key"):
+        md.parse_frontmatter_block("- floating item")
+
+
+def test_unquoted_wikilink_value_reads_as_the_wikilink_string():
+    # Wikilink fields are written quoted, but an Obsidian property edit strips
+    # the quotes (issue #53, finding C2). The shape can only mean a wikilink —
+    # a vault inline list never starts `[[` — so repair on read rather than
+    # returning the silently mangled ['[stem]'].
+    data = md.parse_frontmatter_block(
+        "supersedes: [[2026-03-10-phased-rollout-adopted]]")
+    assert data["supersedes"] == "[[2026-03-10-phased-rollout-adopted]]"
+
+
+def test_unquoted_wikilink_with_alias_reads_as_a_string_too():
+    data = md.parse_frontmatter_block("source: [[stem|Display Name]]")
+    assert data["source"] == "[[stem|Display Name]]"
+
+
+def test_inline_lists_still_parse_after_wikilink_repair():
+    data = md.parse_frontmatter_block("key-people: [a-b, c-d]")
+    assert data["key-people"] == ["a-b", "c-d"]
+
+
+def test_replace_scalar_field_leaves_a_following_scalar_key_alone():
+    updated = md.replace_scalar_field(
+        OBSIDIAN_EXPANDED, "status", "dormant")
+    assert "status: dormant" in updated
+    assert "  - priya-nathan\n" in updated  # other nodes untouched

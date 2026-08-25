@@ -230,15 +230,15 @@ def touch(root, *, slug: str, date_iso: str,
     milestone_date = None
     if next_milestone is not None:
         milestone = str(next_milestone).strip()
-        # A lone \r counts: this module quotes and upserts the value itself
-        # rather than going through markdown._emit_scalar, and the frontmatter
-        # parser normalizes \r to \n on the way back in, so the scalar would
-        # split there.
+        # emit_scalar refuses newlines too, but this check keeps the error a
+        # ProjectError that names the flag, and also catches the empty string.
+        # A lone \r counts because the frontmatter parser normalizes it to \n
+        # on the way back in.
         if not milestone or "\n" in milestone or "\r" in milestone:
             raise ProjectError("next-milestone must be a single line of text")
         milestone_date = _require_iso_date(next_milestone_date,
                                            "next-milestone-date")
-        quoted = '"{}"'.format(milestone.replace('"', '\\"'))
+        quoted = markdown.emit_scalar(milestone, quoted=True)
         updated = markdown.upsert_scalar_field(updated, "next-milestone", quoted)
         updated = markdown.upsert_scalar_field(updated, "next-milestone-date",
                                                milestone_date)

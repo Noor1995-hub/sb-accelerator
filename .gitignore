@@ -5,3 +5,6 @@ __pycache__/
 
 # SDD / superpowers scratch — never committed
 .superpowers/
+
+# Local hand-testing vaults (make_test_vault.py output, dated) — never committed
+test-vaults/

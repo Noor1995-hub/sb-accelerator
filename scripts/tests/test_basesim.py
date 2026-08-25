@@ -219,3 +219,30 @@ def test_load_corpus_skips_dot_directories(tmp_path):
 def test_load_corpus_tolerates_a_markdown_file_with_no_frontmatter(tmp_path):
     (tmp_path / "README.md").write_text("# just prose\n", encoding="utf-8")
     assert basesim.load_corpus(tmp_path) == {"README.md": {}}
+
+
+def test_load_corpus_reads_obsidian_unquoted_1_1_as_a_string(tmp_path):
+    # Obsidian's property editor strips the quotes from `type: "1:1"`, and
+    # YAML-1.1 sexagesimal notation then makes stock PyYAML read int 61
+    # (issue #53, finding C1). Obsidian's own js-yaml dropped sexagesimal, so
+    # the fidelity rule says string — a `type == "1:1"` filter must still hit.
+    (tmp_path / "a.md").write_text("---\ntype: 1:1\n---\n", encoding="utf-8")
+    assert basesim.load_corpus(tmp_path) == {"a.md": {"type": "1:1"}}
+
+
+def test_zero_padded_numbers_load_as_base_ten_ints_not_a_crash(tmp_path):
+    # The replaced int resolver tags `08` as an int, but PyYAML's stock
+    # constructor keeps YAML-1.1 semantics where a leading 0 means octal and
+    # int("08", 8) raises, killing the whole corpus load. js-yaml v4 (the
+    # fidelity target) is YAML-1.2 core: plain decimal, `08` is 8.
+    (tmp_path / "a.md").write_text("---\npadded: 08\noctal-ish: 010\n---\n",
+                                   encoding="utf-8")
+    assert basesim.load_corpus(tmp_path) == {"a.md": {"padded": 8,
+                                                      "octal-ish": 10}}
+
+
+def test_plain_integers_still_load_as_integers(tmp_path):
+    (tmp_path / "a.md").write_text("---\nmeetings-7d: 3\nneg: -2\n---\n",
+                                   encoding="utf-8")
+    assert basesim.load_corpus(tmp_path) == {"a.md": {"meetings-7d": 3,
+                                                      "neg": -2}}
