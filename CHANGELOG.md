@@ -15,6 +15,15 @@ delivers them.
 
 ## Unreleased
 
+- **A parked file now says why it was parked.** When the sync decides
+  something you dropped in `10-inbox/` isn't a capture at all — a whitepaper, a
+  deck, a stray file — it moves it to `90-archive/inbox/` and leaves a short
+  note beside it: what it was, why nothing was written for it, and how to have
+  it processed after all. The never-propose-again list records the reason and
+  the original filename too, instead of just a content hash. Previously the
+  reason existed only in that evening's run summary, so a decision made in
+  August was unexplainable by November. (#73)
+
 - **The inbox empties itself, and context that isn't a meeting is captured
   honestly.** Files you drop in `10-inbox/` now move to `90-archive/inbox/`
   once they've been handled, so what's left in the folder is exactly what's
