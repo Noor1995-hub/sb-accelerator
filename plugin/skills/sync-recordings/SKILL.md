@@ -118,10 +118,61 @@ python3 "$VAULTLIB" sync scan --vault "$VAULT"
 ```
 
 `candidates` are files whose content hash is in no meeting note and not on
-the skip list. Which candidates are actually transcripts is your judgment —
-read the head of each file; a forwarded email that is meeting notes by
-another name qualifies, a random PDF does not. Report `already_synced` files
-so the user can archive them (inbox discipline: nothing lives there).
+the skip list. Read the head of each and classify it — this is judgment, and
+it has exactly three outcomes:
+
+| Shape | Outcome |
+|---|---|
+| A record of an interaction — transcript, meeting recording, meeting notes | a meeting note, the normal path below |
+| Carries context about people, projects or entities but is not a meeting — forwarded correspondence, a voice memo, pasted context | a capture: a note with `type: note` |
+| Not a capture at all — a whitepaper, a deck, a spreadsheet, an image, a stray binary | **park** it |
+
+**When you cannot decide between a capture and a park, write the `note`.**
+A wrongly written note sits in Triage and is one click from `archived: true`;
+a wrongly parked file is invisible and on a never-propose-again list. The
+error direction matters more than the error rate. Both modes decide all
+three outcomes — `--unattended` does not defer, because routing captures
+into the pipeline is the point.
+
+A capture's payload differs from a meeting's in five fields and nothing else:
+
+- `type: note`
+- `calendar_match: false` — no calendar is ever consulted for a capture.
+  `calendar-subject` is still required and still non-empty: give it the
+  item's own subject (a forwarded email's `Subject:` line) or a short
+  descriptive title (a voice memo). It is the Subject column in
+  `Meetings.base`, so this is the label a human triages by.
+- `recording-duration: 0` — nothing was recorded
+- `source` is still the arrival channel: `email` for forwarded mail,
+  `recorder` for a voice memo, `manual` for pasted text
+- `confidence` uses the capture rule in step 4 (`medium` only on
+  `entity-domain-match` plus `all-attendees-known`, otherwise `low`), and the
+  calendar reason is `calendar-not-applicable` — never `no-calendar-match`
+  (that means you searched) and never `calendar-tool-unavailable` (that means
+  you tried)
+
+`attendees` are the people the item names, resolved through `person ensure`
+as usual. A capture that names nobody may pass `attendees: []` — it is the
+one type for which that is valid — and still carries `all-attendees-known`,
+because with nobody named there is nobody unknown. `takeaways` and `debrief`
+keep their meanings: what this says, and what it means.
+
+To park an item, skip it and sweep it:
+
+```bash
+python3 "$VAULTLIB" sync skip --vault "$VAULT" --id "inbox:<hash>"
+python3 "$VAULTLIB" sync archive --vault "$VAULT" --path "10-inbox/<name>"
+```
+
+Report every parked item in the summary **with why it was not a capture** —
+a park is a decision, not a throughput number.
+
+Every file `already_synced` reports is swept the same way (it was processed
+by an earlier run, or dropped back in), and so is every file under
+`skipped` — those were dropped permanently on some earlier run and the skip
+list already records the decision, so leaving them in the inbox only
+inflates the pending count. Ids are content hashes, so an archived file
+keeps its id and stays deduped.
 
 **Plaud** (when enabled, available, and account-verified): call `mcp__plaud__list_files` for the recent
 window. Write the raw JSON result to `$SCRATCH/plaud.list.json` with the Write tool
@@ -220,6 +271,11 @@ per group (vocabulary: ontology §Meeting):
 | `medium` | calendar match high or medium AND any project link AND at most one new attendee — but not qualifying for high |
 | `low` | everything else |
 
+A **capture** (`type: note`) is rated on a different axis, because it has no
+calendar to match: `medium` when the project link is `entity-domain-match`
+*and* `all-attendees-known`; `low` otherwise. `high` is unreachable for a
+capture by construction, and that is correct — nothing corroborated it.
+
 There is no auto-confirm: every synced meeting lands `needs-review`, and the
 reviewed checkbox in Meetings.base is the confirm path. The stamp is the data
 a future calibration needs — write it accurately, not optimistically.
@@ -233,6 +289,16 @@ items. For a recording the user says to permanently drop:
 ```bash
 python3 "$VAULTLIB" sync skip --vault "$VAULT" --id plaud:abc123
 ```
+
+If the dropped item came from the inbox, sweep it too — the skip list
+records the decision, but only the move gets the file out of the pending
+set:
+
+```bash
+python3 "$VAULTLIB" sync archive --vault "$VAULT" --path "10-inbox/<name>"
+```
+
+A `plaud:` or `m365:` id has no inbox file, so there is nothing to move.
 
 ### 6. Extract and write
 
@@ -273,10 +339,12 @@ Payload rules the CLI enforces (so get them right the first time):
 - `title` is a short kebab-able label — the filename becomes
   `{DD-MM-YY}-{title-slug}.md`. `date` is ISO, the recording's local start.
 - `attendees`/`projects` are slugs and must resolve (person notes, project
-  folders). `attendees` must be non-empty; `projects` may be empty (triage
-  catches unassigned meetings). Optional `people` (slug list) renders a
-  `## People` wikilink section. `takeaways` is 1–5 strings. `type` values
-  with a colon (`"1:1"`) are handled by the CLI — pass them as plain strings.
+  folders). `attendees` must be non-empty — except on a `type: note`
+  capture, which may pass `[]` when the item names nobody. `projects` may be
+  empty (triage catches unassigned meetings). Optional `people` (slug list)
+  renders a `## People` wikilink section. `takeaways` is 1–5 strings. `type`
+  values with a colon (`"1:1"`) are handled by the CLI — pass them as plain
+  strings.
 - Do NOT pass `review_status`, `reviewed`, `archived`, or `processed` — the
   CLI sets them.
 - `source-recording-id` is **required** on every write — it IS the dedup
@@ -290,6 +358,23 @@ note — report it as a possible duplicate; it shows in triage under
 risk. An `error` about an already-synced id means dedup was bypassed — stop and
 say so.
 
+**Then sweep what you wrote.** For each recording whose `meeting write`
+returned a `path` that exists on disk, move its inbox source out of the
+queue:
+
+```bash
+python3 "$VAULTLIB" sync archive --vault "$VAULT" --path "10-inbox/<name>"
+```
+
+Only after the note is verified against disk — a file that produced nothing
+stays in the inbox and retries next run, which is the same failure rule as
+everywhere else here. This applies to inbox-sourced items only; Plaud and
+M365 recordings have no inbox file to move.
+
+`10-inbox/` is the pending set. What is left in it after a run is exactly
+what still needs processing — that is what makes the folder answerable
+without running anything, and why no index note or state file exists.
+
 ### 7. Summarize — from disk, not from memory
 
 Count what exists, not what you intended (a lab run once reported
@@ -297,7 +382,10 @@ Count what exists, not what you intended (a lab run once reported
 
 ```
 ## Sync Complete
-**Processed:** {N} → `20-meetings/` ({list the stems})
+**Processed:** {N} meetings → `20-meetings/` ({list the stems})
+**Captures:** {N} → `20-meetings/` as `type: note` ({list the stems})
+**Parked:** {N} → `90-archive/inbox/` ({filenames, each with why it was not a capture})
+**Inbox swept:** {N} files → `90-archive/inbox/{YYYY-MM}/` · {N} left pending in `10-inbox/`
 **New people:** {N} created in `50-people/`
 **Meetings you ticked as reviewed:** {N} now confirmed
 **Possible duplicates:** {N} ({list the stems}) — kept as separate notes; each would have overwritten a meeting you already confirmed
@@ -306,6 +394,11 @@ Count what exists, not what you intended (a lab run once reported
 **Calendar enrichment:** ok | UNAVAILABLE
 **Warnings:** {verbatim} | none
 ```
+
+`Inbox swept` counts every file moved this run — processed meetings,
+captures and parks alike, plus anything already synced — and reports the
+pending remainder — that remainder is the number the executive actually
+cares about. Count it from disk like everything else in this step.
 
 ## Scratch hygiene
 
@@ -330,8 +423,12 @@ no listing ever reaches disk.)
 rules, not negotiable:
 
 1. **Never ask a question.** A blocked prompt means the run exits having
-   done nothing. Ambiguity → skip that recording and report it; it retries
-   next run.
+   done nothing. Ambiguity in *extraction or routing* → skip that recording
+   and report it; it retries next run. Classification is not covered by this
+   rule: the three-outcome call in step 1 is decided in both modes, and its
+   own ambiguity rule resolves toward writing the `note`. Note also that
+   "skip" here means *defer to the next run* — unrelated to `sync skip`,
+   which is the permanent never-propose-again list used when parking.
 2. **Prefer under-routing to wrong routing.** No confident project match →
    `projects: []` and low confidence; triage exists for exactly this.
 3. **A refused account binding is an alert, not a fallback.** The summary

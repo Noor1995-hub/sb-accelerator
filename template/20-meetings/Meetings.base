@@ -9,6 +9,8 @@ properties:
     displayName: " "
   note.date:
     displayName: Date
+  note.type:
+    displayName: Type
   note.calendar-subject:
     displayName: Subject
   note.calendar_match:
@@ -27,6 +29,8 @@ properties:
     displayName: 🗑 Archive
   note.recording-duration:
     displayName: Duration
+  note.source:
+    displayName: Source
 views:
   - type: table
     name: Triage
@@ -38,6 +42,7 @@ views:
     order:
       - formula.open
       - date
+      - type
       - calendar-subject
       - calendar_match
       - attendees
@@ -47,7 +52,6 @@ views:
       - archived
       - recording-duration
       - source
-      - type
     sort:
       - property: date
         direction: DESC

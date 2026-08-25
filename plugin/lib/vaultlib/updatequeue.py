@@ -28,6 +28,12 @@ PEOPLE_DIR = vault.PEOPLE_DIR
 KEY_PEOPLE_WINDOW_DAYS = 90
 TOP_KEY_PEOPLE = 3
 
+# A type: note is a capture, not a meeting. It feeds project-state synthesis
+# and decision capture — that is why captures route into 20-meetings/ at all
+# — but it must never move a meeting count. meetings-7d feeds Projects.base;
+# counting an email as a meeting is a quiet lie in a number a human reads.
+NOT_A_MEETING = "note"
+
 
 class UpdateQueueError(Exception):
     """An argument the caller must fix."""
@@ -81,6 +87,7 @@ def _index_meetings(root: Path) -> Tuple[List[dict], List[str]]:
         meetings.append({
             "file": rel,
             "date": _parse_first_iso_date(data.get("date")),
+            "type": data.get("type"),
             "review_status": data.get("review_status"),
             "projects": _slug_list(data.get("projects"), "projects", rel,
                                    warnings),
@@ -143,6 +150,9 @@ def run(root: Path, today: str, executive: str) -> dict:
     meetings, warnings = _index_meetings(root)
     confirmed = [m for m in meetings
                  if m["review_status"] == "confirmed" and m["date"]]
+    # confirmed drives the queue and the self-check; countable drives every
+    # number written into a note. The two lists are deliberately different.
+    countable = [m for m in confirmed if m["type"] != NOT_A_MEETING]
 
     queue: List[dict] = []
     active_last_updated: Dict[str, Optional[date]] = {}
@@ -163,10 +173,12 @@ def run(root: Path, today: str, executive: str) -> dict:
         slug = str(slug)
 
         for_project = [m for m in confirmed if slug in m["projects"]]
-        m7 = sum(1 for m in for_project if m["date"] > d7)
-        m30 = sum(1 for m in for_project if m["date"] > d30)
+        countable_for_project = [m for m in countable
+                                 if slug in m["projects"]]
+        m7 = sum(1 for m in countable_for_project if m["date"] > d7)
+        m30 = sum(1 for m in countable_for_project if m["date"] > d30)
         counts: Dict[str, int] = {}
-        for meeting in for_project:
+        for meeting in countable_for_project:
             if meeting["date"] > d90:
                 for attendee in meeting["attendees"]:
                     if attendee != exec_slug:
@@ -220,9 +232,9 @@ def run(root: Path, today: str, executive: str) -> dict:
             warnings.append(f"{rel}: no slug — metrics skipped")
             continue
         slug = str(slug)
-        m7 = sum(1 for m in confirmed
+        m7 = sum(1 for m in countable
                  if slug in m["attendees"] and m["date"] > d7)
-        m30 = sum(1 for m in confirmed
+        m30 = sum(1 for m in countable
                   if slug in m["attendees"] and m["date"] > d30)
         updated = _upsert_all(text, {"meetings-7d": str(m7),
                                      "meetings-30d": str(m30)})

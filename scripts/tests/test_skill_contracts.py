@@ -179,3 +179,25 @@ def test_sync_summaries_speak_plainly(name):
     assert "**Meetings you ticked as reviewed:**" in text, (
         f"{name}: the fold result needs a plain-speech summary line"
     )
+
+
+def test_sync_recordings_routes_non_meetings_to_a_type_note():
+    text = (SKILLS_DIR / "sync-recordings" / "SKILL.md").read_text(encoding="utf-8")
+    assert "type: note" in text, "no non-meeting destination documented"
+    assert "calendar-not-applicable" in text
+    # The ambiguity rule is the load-bearing sentence: a wrongly written note
+    # sits in Triage, a wrongly parked file is invisible.
+    assert "write the `note`" in text
+
+
+def test_sync_recordings_sweeps_the_inbox():
+    text = (SKILLS_DIR / "sync-recordings" / "SKILL.md").read_text(encoding="utf-8")
+    assert "sync archive" in text, "the sweep the README promises is missing"
+    assert "90-archive/inbox/" in text
+
+
+def test_sync_recordings_no_longer_asks_the_user_to_archive_by_hand():
+    """F0: the skill used to tell the user to do the thing the plugin
+    promised to do and never did."""
+    text = (SKILLS_DIR / "sync-recordings" / "SKILL.md").read_text(encoding="utf-8")
+    assert "so the user can archive them" not in text

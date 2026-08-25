@@ -188,3 +188,51 @@ def test_unconfirmed_stem_collision_suffixes_instead_of_overwriting(tmp_path):
     assert result["conflict"]["kind"] == "stem-collision"
     # Both notes exist; nothing was overwritten.
     assert (root / first["path"]).is_file() and (root / result["path"]).is_file()
+
+
+def note_payload(**overrides) -> dict:
+    """A forwarded email: a capture, not a meeting. No calendar was ever
+    consulted and nothing was recorded — but it is still filed under its
+    own subject line, because a required field may not be empty."""
+    base = payload(
+        title="meridian renewal terms heads up",
+        type="note",
+        **{"calendar-subject": "Renewal terms — heads up before next steerco"},
+    )
+    base["calendar_match"] = False
+    base["recording-duration"] = 0
+    base["source"] = "email"
+    base["confidence-reasons"] = ["calendar-not-applicable",
+                                  "content-keyword-match",
+                                  "all-attendees-known"]
+    base.pop("source-filename", None)
+    base.update(overrides)
+    return base
+
+
+def test_note_type_is_written_like_any_other_capture(tmp_path):
+    root = make_vault(tmp_path)
+    result = meeting.write(root, note_payload())
+    assert result["stem"] == "20-05-26-meridian-renewal-terms-heads-up"
+    assert result["review_status"] == "needs-review"
+    written = (root / result["path"]).read_text(encoding="utf-8")
+    data = yaml.safe_load(written.split("---")[1])
+    assert data["type"] == "note"
+    assert data["calendar-subject"] == "Renewal terms — heads up before next steerco"
+    assert data["recording-duration"] == 0
+    assert data["source"] == "email"
+
+
+def test_note_may_carry_no_attendees(tmp_path):
+    """A voice memo musing names nobody. Every other type still must."""
+    root = make_vault(tmp_path)
+    result = meeting.write(root, note_payload(attendees=[]))
+    written = (root / result["path"]).read_text(encoding="utf-8")
+    data = yaml.safe_load(written.split("---")[1])
+    assert data["attendees"] == []
+
+
+def test_empty_attendees_still_refused_for_every_other_type(tmp_path):
+    root = make_vault(tmp_path)
+    with pytest.raises(meeting.MeetingError, match="non-empty"):
+        meeting.write(root, payload(attendees=[]))

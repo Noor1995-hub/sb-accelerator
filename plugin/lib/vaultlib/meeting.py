@@ -199,7 +199,10 @@ def write(root: Path, payload: dict) -> dict:
     _require_keys(payload)
     _validate_scalars(payload)
     _validate_confidence(payload)
-    attendees = _require_slug_list(payload, "attendees", allow_empty=False)
+    # A note is the one capture that legitimately names nobody — a voice memo
+    # musing, a pasted paragraph. Every meeting has attendees by definition.
+    attendees = _require_slug_list(
+        payload, "attendees", allow_empty=(payload["type"] == "note"))
     projects = _require_slug_list(payload, "projects", allow_empty=True)
     people = _require_slug_list(payload, "people", allow_empty=True)
     _require_joins(root, attendees, projects, people)

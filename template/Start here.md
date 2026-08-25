@@ -22,7 +22,7 @@ Each is a live view, not a document — they update themselves as notes change.
 
 | | What it holds |
 |---|---|
-| **Meetings** | Every meeting, newest first. The *Triage* view is your queue. |
+| **Meetings** | Every meeting, and notes captured from email or voice memo — newest first. The *Triage* view is your queue. |
 | **Projects** | What's in flight, with the next milestone. |
 | **Entities** | Organisations you deal with — one dossier each. |
 | **People** | Individuals, their role, and when you last spoke. |
@@ -32,10 +32,16 @@ They're pinned at the top of the sidebar.
 
 ## Reviewing
 
-Meetings arrive marked **needs-review** because something was inferred rather
-than known — a name matched by guess, a calendar entry matched loosely. Open
-the *Triage* view and tick **Reviewed** once it looks right. That tick is the
-signal that a meeting can be trusted downstream; nothing else writes it.
+Everything in that table arrives marked **needs-review** because something was
+inferred rather than known — a name matched by guess, a calendar entry matched
+loosely, an email routed to a project by its sender's domain. Open the *Triage*
+view and tick **Reviewed** once it looks right. That tick is the signal that a
+row can be trusted downstream; nothing else writes it.
+
+A row typed `note` is a capture rather than a meeting: a forwarded email or a
+voice memo that carried context worth keeping. Its **Cal** column is empty
+because no calendar was ever consulted — nothing corroborated it but the item
+itself.
 
 Anything marked `<!-- needs-review -->` in a table cell is the same idea: a
 value that was inferred and wants your eye.

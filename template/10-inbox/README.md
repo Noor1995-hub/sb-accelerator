@@ -6,9 +6,15 @@ transcripts, voice memos, forwarded emails, recorder exports, documents to file.
 Rules:
 
 - **Everything unprocessed lands here first.** Drop files in; don't sort them.
-- **Processing skills consume from here** and produce meeting notes, project
-  updates, or dossier entries in their proper folders.
-- **Nothing lives here.** A file still in the inbox after a few days means
-  processing is overdue — the assistant sweeps this folder as part of the
-  daily rhythm.
+- **What is in this folder is what still needs processing.** The sync moves
+  every file it handles out to `90-archive/inbox/{YYYY-MM}/` — whether it
+  became a note or was parked as not-a-capture. So the folder answers "what
+  is still outstanding?" by itself, without running anything.
+- **Processing produces notes in `20-meetings/`.** A recording of an
+  interaction becomes a meeting note. Something that carries context but is
+  not a meeting — a forwarded email, a voice memo — becomes a note with
+  `type: note`. Both land in the same triage queue, `Meetings.base`.
+- **Anything that is not a capture is parked**, not filed. A whitepaper or a
+  deck goes to the archive, and the run that parked it says why in its
+  summary; the sync does not decide where your reference material belongs.
 - Skills never leave their outputs in this folder.

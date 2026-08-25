@@ -34,13 +34,14 @@ optional: [attendee-emails, organizer, location, recurring, start-time,
            source-recording-id, source-filename, conflicts-with,
            confidence, confidence-reasons, reviewed, archived]
 enums:
-  type: [meeting, "1:1", steerco, workshop, brainstorm, status-update]
+  type: [meeting, "1:1", steerco, workshop, brainstorm, status-update, note]
   review_status: [needs-review, confirmed]
   source: [teams, recorder, manual, email]
   confidence: [high, medium, low]
 confidence_reasons:
   calendar: [calendar-match-high, calendar-match-medium, calendar-match-low,
-             no-calendar-match, calendar-tool-unavailable]
+             no-calendar-match, calendar-tool-unavailable,
+             calendar-not-applicable]
   project-link: [entity-domain-match, calendar-subject-match,
                  content-keyword-match, no-project-match]
   attendees: [all-attendees-known]
@@ -61,6 +62,26 @@ confidence_reasons:
   (device capture), `manual` (typed notes), `email` (an emailed summary or
   transcript). `recording-duration` is `0` when nothing was recorded
   (`manual`, `email`).
+- **`type: note` is a capture that is not a record of an interaction** —
+  forwarded correspondence, a voice memo, pasted context. It lives here
+  because `20-meetings/` is the vault's capture ledger, not because an email
+  is a meeting. A `note` carries `calendar_match: false`,
+  `recording-duration: 0`, and **may carry empty `attendees`** — it is the
+  one type for which an empty attendee list is valid. Its `calendar-subject`
+  is a descriptive subject drawn from the item itself — a forwarded email's
+  own `Subject:` line, a voice memo's short title — and is never empty; a
+  required field with an empty value fails schema validation, and
+  `calendar_match: false` alone records that no calendar corroborated it.
+  `type` and `source` are orthogonal: a forwarded email is `type: note` +
+  `source: email`, while an emailed *meeting summary* is `type: meeting` +
+  `source: email`.
+- `calendar-not-applicable` means the calendar was never consulted **because
+  the item is not a meeting**. It is a third distinct fact alongside
+  `no-calendar-match` (searched, found nothing) and
+  `calendar-tool-unavailable` (could not search). Never collapse the three.
+  A `note` with empty `attendees` still carries `all-attendees-known`: the
+  attendees vocabulary stays closed, and with nobody named there is nobody
+  unknown.
 - `source-recording-id` is the sync ledger: a namespaced id
   (`plaud:{id}`, `m365:{id}`, `inbox:{content-hash}`) written by
   `/sync-recordings`. A recording whose id appears in any meeting note is

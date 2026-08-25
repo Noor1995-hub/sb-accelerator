@@ -25,6 +25,7 @@ PROJECTS_DIR = "30-projects"
 ENTITIES_DIR = "40-entities"
 PEOPLE_DIR = "50-people"
 DAILY_NOTES_DIR = "60-daily-notes"
+ARCHIVE_DIR = "90-archive"
 ISO_DATE_RE = re.compile(r"\A\d{4}-\d{2}-\d{2}\Z")
 
 # A directory is a vault if it carries the config folder and at least one

@@ -1,0 +1,49 @@
+YARD AUTOMATION IN EUROPEAN INTERMODAL LOGISTICS
+Market Outlook 2026-2030 — Sample Chapter
+
+Published by Harbourline Research (fictional). Distributed for evaluation.
+
+CONTENTS
+
+1. Executive summary .................................... 3
+2. Market sizing and segmentation ....................... 11
+3. Automation maturity by terminal class ................ 24
+4. Vendor landscape ..................................... 38
+5. Procurement patterns and contract structures ......... 52
+6. Outlook and scenarios ................................ 67
+
+1. EXECUTIVE SUMMARY
+
+European intermodal terminals are entering the second wave of yard
+automation. Where the first wave optimised crane scheduling in isolation,
+the second integrates yard, gate and hinterland planning into a single
+control layer. Terminals in the 200,000-800,000 TEU band show the widest
+spread in automation maturity and therefore the largest addressable gap.
+
+Adoption is gated less by technology than by contract structure. Multi-year
+volume commitments remain the dominant financing mechanism, and terminals
+without them consistently defer investment past the point where the
+business case peaks.
+
+Three findings frame the rest of this report.
+
+First, the integration layer is where value concentrates. Terminals that
+automated cranes alone recovered a fraction of the modelled benefit,
+because gate congestion simply moved the queue rather than removing it.
+
+Second, the vendor market is consolidating faster than buyers expect.
+Single-vendor consolidation has become the default procurement posture in
+the segment, which shortens evaluation cycles but raises switching costs
+materially over a five-year horizon.
+
+Third, workforce transition is the most consistently underestimated line
+item. Programmes that budgeted for retraining at under eight percent of
+capital cost reported schedule slippage at roughly twice the rate of those
+that budgeted above twelve percent.
+
+Method note: findings draw on 41 terminal operators surveyed between
+January and May 2026, supplemented by 12 structured interviews with
+operations directors. Terminal names are withheld under the survey's
+confidentiality terms.
+
+[Sample chapter ends. Full report available under evaluation licence.]

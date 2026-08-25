@@ -81,3 +81,42 @@ def test_validate_flags_unknown_fields():
         "person-name": "A", "slug": "a", "relationship": None, "invented": 1,
     })
     assert any("invented" in p for p in problems)
+
+
+def test_meeting_type_admits_the_non_meeting_capture():
+    """A forwarded email is a dated capture, not a meeting. It lives in
+    20-meetings/ because that folder is the vault's capture ledger — the
+    honest label is what keeps that from being a lie."""
+    values = schema.enum_values("meeting", "type")
+    assert "note" in values
+    assert values[:6] == ["meeting", "1:1", "steerco", "workshop",
+                          "brainstorm", "status-update"]
+
+
+def test_calendar_reasons_distinguish_not_applicable_from_not_found():
+    """Three different facts that must never collapse: searched and found
+    nothing, could not search, and never searched because it is not a
+    meeting."""
+    calendar = schema.for_object("meeting")["confidence_reasons"]["calendar"]
+    assert "no-calendar-match" in calendar
+    assert "calendar-tool-unavailable" in calendar
+    assert "calendar-not-applicable" in calendar
+
+
+def test_a_note_still_needs_a_real_calendar_subject():
+    """calendar-subject is required, and validate() rejects "" for any
+    required field — so a capture is filed under its own subject line, not
+    under nothing. attendees: [] is the one genuinely empty field."""
+    frontmatter = {
+        "date": "2026-08-21", "type": "note", "calendar_match": False,
+        "attendees": [], "projects": [], "review_status": "needs-review",
+        "recording-duration": 0, "source": "email", "processed": True,
+    }
+    assert schema.validate(
+        "meeting", {**frontmatter, "calendar-subject": ""}
+    ) == ["required field 'calendar-subject' is empty"]
+    assert schema.validate(
+        "meeting",
+        {**frontmatter,
+         "calendar-subject": "Renewal terms — heads up before next steerco"},
+    ) == []

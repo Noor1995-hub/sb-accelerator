@@ -122,6 +122,31 @@ def test_base_property_keys_are_namespaced():
         f"silently ignored: {offenders}")
 
 
+def test_every_ordered_column_has_a_display_name():
+    """A prefix fix only helps a column that has a declaration at all. A column
+    listed in a view's `order:` with no `properties:` entry renders its raw
+    property name — `type` beside `Subject` and `✓ Reviewed`. That is the same
+    defect as an inert displayName, one step earlier, and it is what promoting
+    `type` to the second Triage column exposed: it was the only unlabelled
+    column on the vault's busiest surface."""
+    import yaml
+    offenders = {}
+    for base in sorted(TEMPLATE.rglob("*.base")):
+        doc = yaml.safe_load(base.read_text(encoding="utf-8")) or {}
+        labelled = {k.split(".", 1)[1] for k in (doc.get("properties") or {})
+                    if k.startswith("note.")}
+        for view in doc.get("views") or []:
+            unlabelled = [col for col in view.get("order") or []
+                          if not col.startswith(("file.", "formula."))
+                          and col not in labelled]
+            if unlabelled:
+                key = f"{base.relative_to(TEMPLATE).as_posix()}:{view.get('name')}"
+                offenders[key] = unlabelled
+    assert not offenders, (
+        "these ordered columns have no displayName, so they render their raw "
+        f"property name: {offenders}")
+
+
 # --- first-run layout -------------------------------------------------------
 
 def _left_sidebar_tabs() -> dict:

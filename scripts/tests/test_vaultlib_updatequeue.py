@@ -49,11 +49,12 @@ def write_project(root: Path, slug: str, *, status="active",
 
 
 def write_meeting(root: Path, stem: str, *, date_value="2026-06-10T10:00",
-                  review_status="confirmed", projects=(), attendees=()) -> None:
+                  review_status="confirmed", projects=(), attendees=(),
+                  type_value="meeting") -> None:
     proj = ", ".join(projects)
     att = ", ".join(attendees)
     (root / "20-meetings" / f"{stem}.md").write_text("\n".join([
-        "---", f"date: {date_value}", "type: meeting",
+        "---", f"date: {date_value}", f"type: {type_value}",
         f"review_status: {review_status}",
         f"projects: [{proj}]", f"attendees: [{att}]", "---", "", "- x", "",
     ]), encoding="utf-8")
@@ -270,3 +271,59 @@ def test_fixture_vault_is_a_fixed_point_of_update_queue(tmp_path):
     assert result["projectsNeedingUpdate"] == []
     assert result["warnings"] == []
     assert result["metricsWritten"] == {"projects": 4, "people": 10}
+
+
+def test_a_note_updates_project_state_but_is_not_counted_as_a_meeting(tmp_path):
+    """Both halves in one test on purpose: a refactor that satisfies one and
+    drops the other is exactly the silent regression this guards.
+
+    A forwarded email carrying project context must reach project-state
+    synthesis and decision capture — that is why captures route here at all.
+    It must not inflate meetings-7d, which feeds Projects.base: counting an
+    email as a meeting is the quiet kind of falsehood the vault's third
+    golden rule forbids.
+    """
+    root = make_vault(tmp_path)
+    write_person(root, "priya-nathan")
+    write_project(root, "yard-automation", last_updated="2026-06-01")
+    write_meeting(root, "10-06-26-capture", type_value="note",
+                  date_value="2026-06-10T09:00",
+                  projects=["yard-automation"], attendees=["priya-nathan"])
+
+    result = updatequeue.run(root, "2026-06-12", "exec-morgan")
+
+    index = (root / "30-projects" / "yard-automation" / "index.md").read_text(
+        encoding="utf-8")
+    assert "meetings-7d: 0" in index
+    assert "meetings-30d: 0" in index
+    assert "key-people: []" in index
+
+    person = (root / "50-people" / "priya-nathan.md").read_text(
+        encoding="utf-8")
+    assert "meetings-7d: 0" in person
+    assert "meetings-30d: 0" in person
+
+    queued = [entry["slug"] for entry in result["projectsNeedingUpdate"]]
+    assert queued == ["yard-automation"]
+    assert result["projectsNeedingUpdate"][0]["newFiles"] == [
+        "20-meetings/10-06-26-capture.md"]
+
+
+def test_a_meeting_alongside_a_note_counts_once(tmp_path):
+    """The filter must remove notes, not everything."""
+    root = make_vault(tmp_path)
+    write_person(root, "priya-nathan")
+    write_project(root, "yard-automation", last_updated="2026-06-01")
+    write_meeting(root, "10-06-26-capture", type_value="note",
+                  date_value="2026-06-10T09:00",
+                  projects=["yard-automation"], attendees=["priya-nathan"])
+    write_meeting(root, "10-06-26-steerco", type_value="steerco",
+                  date_value="2026-06-10T14:00",
+                  projects=["yard-automation"], attendees=["priya-nathan"])
+
+    updatequeue.run(root, "2026-06-12", "exec-morgan")
+
+    index = (root / "30-projects" / "yard-automation" / "index.md").read_text(
+        encoding="utf-8")
+    assert "meetings-7d: 1" in index
+    assert "key-people: [priya-nathan]" in index

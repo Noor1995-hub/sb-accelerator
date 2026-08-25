@@ -213,6 +213,15 @@ def build_parser() -> argparse.ArgumentParser:
              "not flipped")
     _add_vault_argument(sync_rec)
 
+    sync_archive = sync_sub.add_parser(
+        "archive",
+        help="move a processed or parked inbox file to 90-archive/inbox/")
+    _add_vault_argument(sync_archive)
+    sync_archive.add_argument(
+        "--path", required=True,
+        help="vault-relative path of the inbox file, e.g. 10-inbox/notes.txt")
+    sync_archive.add_argument("--today", help="ISO date; defaults to today")
+
     sync_queue = sync_sub.add_parser(
         "update-queue",
         help="write meeting metrics and list projects needing state synthesis")
@@ -327,6 +336,9 @@ def _dispatch(args: argparse.Namespace) -> int:
             return _ok(syncjob.skip(root, args.recording_id))
         if args.action == "reconcile-reviews":
             return _ok(syncjob.reconcile_reviews(root))
+        if args.action == "archive":
+            return _ok(syncjob.archive(root, args.path,
+                                       vault.today_iso(args.today)))
         if args.action == "update-queue":
             return _ok(updatequeue.run(root, vault.today_iso(args.today),
                                        args.executive))

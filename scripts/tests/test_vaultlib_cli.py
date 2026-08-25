@@ -412,3 +412,36 @@ def test_config_verify_account_mismatch_is_ok_false_free(capsys, tmp_path):
         "match": False, "reason": "account-mismatch", "values_checked": 1,
     }
     assert "someone.else" not in json.dumps(payload)
+
+
+def test_sync_archive_moves_the_file_and_reports_both_paths(capsys, tmp_path):
+    root = make_vault(tmp_path)
+    (root / "10-inbox" / "notes.txt").write_text("x", encoding="utf-8")
+
+    code, payload = run(capsys, [
+        "sync", "archive", "--vault", str(root),
+        "--path", "10-inbox/notes.txt", "--today", "2026-08-25",
+    ])
+
+    assert code == 0
+    assert payload["ok"] is True
+    assert payload["result"] == {
+        "from": "10-inbox/notes.txt",
+        "to": "90-archive/inbox/2026-08/notes.txt",
+    }
+    assert not (root / "10-inbox" / "notes.txt").exists()
+    assert (root / "90-archive" / "inbox" / "2026-08" / "notes.txt").is_file()
+
+
+def test_sync_archive_surfaces_a_bad_path_as_a_failure_envelope(capsys, tmp_path):
+    """A refusal is a well-formed envelope with a hint, not a traceback —
+    skills read this output."""
+    root = make_vault(tmp_path)
+    code, payload = run(capsys, [
+        "sync", "archive", "--vault", str(root), "--path", "20-meetings/x.md",
+    ])
+
+    assert code == 1
+    assert payload["ok"] is False
+    assert "directly inside" in payload["error"]
+    assert payload["hint"] == "Fix the named id or argument and retry."

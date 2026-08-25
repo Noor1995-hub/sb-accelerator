@@ -15,6 +15,17 @@ delivers them.
 
 ## Unreleased
 
+- **The inbox empties itself, and context that isn't a meeting is captured
+  honestly.** Files you drop in `10-inbox/` now move to `90-archive/inbox/`
+  once they've been handled, so what's left in the folder is exactly what's
+  still outstanding — you can answer "what hasn't been processed?" by
+  looking, without running anything. And an item that carries context but
+  isn't a meeting — a forwarded email, a voice memo — is now written as a
+  capture (`type: note`) instead of being filed as a meeting that never
+  happened. It shows up in the same review queue, feeds the same project
+  updates, and no longer inflates your meeting counts. Anything that isn't a
+  capture at all, like a report or a deck, is parked with the reason given
+  rather than forced into a note. (#55)
 - **The decision queue is now something you can work.** `Decisions.base` opens
   on **Needs review**, and that view carries the ✓ Reviewed checkbox — so a
   decision captured overnight gets validated where you read it, in one click.
