@@ -430,12 +430,19 @@ does not pass them against an unrendered block. The hazard the entry above
 warns about belongs to a trusted-but-uninitialised profile, not to this.
 
 **The rule.** For a question about core rendering — a callout, a snippet,
-marker visibility, markdown structure — a plugin-free vault on a private
-`--home` is a legitimate way to get an answer without queueing behind another
-session. For anything touching `.base` views, Dataview or the navigator, you
-need the shared profile and its accepted trust, so wait for it. Either way,
-state in the report which plugins were absent rather than implying full
-fidelity.
+marker visibility, markdown structure, **or a `.base` view** — a plugin-free
+vault on a private `--home` is a legitimate way to get an answer without
+queueing behind another session. Only Dataview and the navigator need the
+shared profile and its accepted trust. Either way, state in the report which
+plugins were absent rather than implying full fidelity.
+
+`.base` belongs on the first list, not the second: **Bases is a core plugin**,
+enabled by `"bases": true` in `template/.obsidian/core-plugins.json`, and it
+appears in neither `community-plugins.json` nor `scripts/plugin-pins.json`.
+Restricted Mode gates community plugins, so it never gated Bases. The first
+version of this entry put `.base` on the wrong side — an inference from "the
+tour's base captures came from the plugin-complete vault", never measured,
+which is precisely the mistake the next entry is about.
 
 ## 2026-08-25 — "no template surfaces touched" does not mean "skip the visual tier"
 
@@ -457,12 +464,48 @@ Preview — the view the exec types in. It does still match, verified live
 (`markerLines: 4`, `markerLinesHidden: true`), but that was a measurement, not
 a deduction.
 
-**Why the shipped test could not catch it.** `test_evening_sync_markers_are_hidden_in_live_preview`
-runs against whichever fixture daily note the tour picks, and those fixtures
-are deliberately left *unstamped* — stamping one would break
-`test_fresh_fixture_is_exactly_what_daily_note_write_renders`, which compares
-the fixture byte-for-byte against a no-window render. So the assertion exists,
-passes, and never sees the form that could break.
+**Why the shipped test does not catch it.** `test_evening_sync_markers_are_hidden_in_live_preview`
+runs against the daily note the tour picks, and `surfaces()` takes the **first**
+sorted `60-daily-notes/*.md` containing `evening-sync` and then breaks — which
+in the demo vault is `2026-06-01.md`, not the packed `2026-06-15.md`. That
+fixture ships unstamped, so the assertion exists, passes, and never sees the
+stamped form.
+
+**And that gap is cheap to close** — the first version of this entry said
+otherwise, wrongly. It claimed stamping a fixture would break
+`test_fresh_fixture_is_exactly_what_daily_note_write_renders`; that test pins
+`2026-06-15.md`, not the captured `2026-06-01.md`, and nothing in the suite
+pins `2026-06-01.md` byte-for-byte. A placeholder attribute
+(`inputs=0000000000000000`) parses under the marker grammar and would put the
+stamped shape in front of the CSS assertion.
+
+A placeholder is also the *right* value, rather than merely a convenient one. A
+real digest is a hash over the fixture vault, so committing one bakes in a
+value that every later fixture edit falsifies — churn in the diff, and a
+committed number that means nothing to a reader. It is not a hazard at runtime:
+the skip fires only on a stamp that **matches** the freshly computed
+fingerprint, so a stale stamp fails the equality, falls through to the
+regeneration branch, and gets restamped. Measured, not reasoned:
+
+```text
+write 1  (fresh note)                     inputs=1f5e8f3933f59593  skipped=False
+write 2  (unchanged inputs, stamp matches)                         skipped=True   changed=False
+write 3  (stamp tampered to a stale value)                         skipped=False  changed=True
+```
+
+The dangerous stamp is the *matching* one, which is why `daily-note write`
+**strips** the attribute when it rewrites a recap with no `recap_window` rather
+than leaving it: a stamp left standing over prose whose inputs nobody verified
+could later match and skip.
+
+The lesson inside the lesson: three errors went into these two entries — `.base`
+on the wrong side of the rule, the wrong test named, and the skip condition
+stated backwards — and all three were deductions presented as findings, inside
+an entry whose own rule is that a measurement is not a deduction. Each was
+caught by the automated review on the PR, not by me. Before writing a mechanism
+into a lessons entry, check the file, check the test name, and if the claim is
+about behaviour, **run it** — the three-line script above took under a minute
+and would have caught the third error before it shipped.
 
 **The rule.** Ask what the change makes appear in a note, not only which files
 it edits. A diff confined to `plugin/lib/` can still alter what template CSS
