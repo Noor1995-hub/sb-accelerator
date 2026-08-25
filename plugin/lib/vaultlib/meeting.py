@@ -278,9 +278,12 @@ def _resolve_target(root: Path, stem: str, payload: dict):
         status = None   # unreadable counts as not-confirmed: suffix, don't touch
 
     if status == "confirmed":
+        # An ordinary needs-review note: the conflicts-with edge below is the
+        # clobber-risk signal, and reconcile_reviews refuses to fold a tick
+        # while it is present.
         sibling = _first_free(folder, stem + "-v{n}")
         conflict = {"kind": "confirmed-target", "conflicts_with": existing.stem}
-        return sibling, "needs-attention", existing.stem, conflict
+        return sibling, "needs-review", existing.stem, conflict
 
     suffixed = _first_free(folder, stem + "-{n}")
     conflict = {"kind": "stem-collision", "suffixed_from": existing.stem}

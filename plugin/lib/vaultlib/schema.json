@@ -108,8 +108,7 @@
         ],
         "review_status": [
           "needs-review",
-          "confirmed",
-          "needs-attention"
+          "confirmed"
         ],
         "source": [
           "teams",

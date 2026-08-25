@@ -132,6 +132,32 @@ def test_review_flip_over_an_obsidian_rewritten_meeting(tmp_path):
     assert data["projects"] == ["alpha", "beta"]
 
 
+def test_conflict_guard_over_an_obsidian_rewritten_meeting(tmp_path):
+    """The clobber guard must survive the rewrite too: conflicts-with's
+    quoted-wikilink shape is exactly what obsidianize strips, and the guard's
+    truthiness read must still see the edge afterward."""
+    root = make_vault(tmp_path)
+    write_person(root, "ana-fields")
+    note = root / "20-meetings" / "m1.md"
+    write_meeting(root, "m1", date_value="2026-06-10T10:00",
+                  review_status="needs-review",
+                  projects=("alpha", "beta"), attendees=("ana-fields",))
+    text = note.read_text(encoding="utf-8")
+    note.write_text(
+        text.replace(
+            "---\n",
+            '---\nreviewed: true\nconflicts-with: "[[some-stem]]"\n', 1),
+        encoding="utf-8")
+    obsidianize(note)
+
+    result = syncjob.reconcile_reviews(root)
+
+    assert result["conflict_ticks"] == ["20-meetings/m1.md"]
+    assert result["flipped"] == []
+    data = parses_everywhere(note)
+    assert data["review_status"] == "needs-review"
+
+
 def test_supersession_over_an_obsidian_rewritten_prior(tmp_path):
     root = make_vault(tmp_path)
     slug = "alpha"

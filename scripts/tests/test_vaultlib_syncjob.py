@@ -94,14 +94,22 @@ def test_skip_is_idempotent(tmp_path):
     assert skip_file.read_text(encoding="utf-8").count("plaud:x1") == 1
 
 
-def write_triaged_meeting(root, stem, review_status, reviewed):
-    text = "\n".join([
+def write_triaged_meeting(root, stem, review_status, reviewed,
+                          conflicts_with=None):
+    """`conflicts_with=None` omits the key; a stem writes the quoted wikilink;
+    `""` writes the key with no value — the shape Obsidian leaves behind when
+    a human clears the field to say the duplicate is resolved."""
+    lines = [
         "---", "date: 2026-08-20T10:00", "type: meeting",
         'calendar-subject: "X"', f"review_status: {review_status}",
         f"reviewed: {'true' if reviewed else 'false'}", "archived: false",
-        "---", "", "## Key Takeaways", "- x", "",
-    ])
-    (root / "20-meetings" / f"{stem}.md").write_text(text, encoding="utf-8")
+    ]
+    if conflicts_with is not None:
+        value = f'"[[{conflicts_with}]]"' if conflicts_with else ""
+        lines.append(f"conflicts-with: {value}".rstrip())
+    lines += ["---", "", "## Key Takeaways", "- x", ""]
+    (root / "20-meetings" / f"{stem}.md").write_text(
+        "\n".join(lines), encoding="utf-8")
 
 
 def test_reconcile_flips_only_reviewed_needs_review(tmp_path):
@@ -109,17 +117,34 @@ def test_reconcile_flips_only_reviewed_needs_review(tmp_path):
     write_triaged_meeting(root, "a-ticked", "needs-review", True)
     write_triaged_meeting(root, "b-unticked", "needs-review", False)
     write_triaged_meeting(root, "c-confirmed", "confirmed", True)
-    write_triaged_meeting(root, "d-attention", "needs-attention", True)
+    # The clobber-risk case: a -v2 sibling the CLI wrote rather than overwrite
+    # a confirmed note. Ticked, but the duplicate is unresolved.
+    write_triaged_meeting(root, "d-duplicate", "needs-review", True,
+                          conflicts_with="c-confirmed")
 
     result = syncjob.reconcile_reviews(root)
     assert result["flipped"] == ["20-meetings/a-ticked.md"]
-    assert result["needs_attention_ticks"] == ["20-meetings/d-attention.md"]
+    assert result["conflict_ticks"] == ["20-meetings/d-duplicate.md"]
 
     text = (root / "20-meetings" / "a-ticked.md").read_text(encoding="utf-8")
     assert "review_status: confirmed" in text
     assert "reviewed: true" in text          # the tick itself is never touched
     untouched = (root / "20-meetings" / "b-unticked.md").read_text(encoding="utf-8")
     assert "review_status: needs-review" in untouched
+    still_flagged = (root / "20-meetings" / "d-duplicate.md").read_text(encoding="utf-8")
+    assert "review_status: needs-review" in still_flagged
+
+
+def test_clearing_the_conflict_edge_lets_the_tick_fold(tmp_path):
+    """The escape hatch: emptying conflicts-with is how a human says the
+    duplicate is merged or deleted, and the next run confirms normally."""
+    root = make_vault(tmp_path)
+    write_triaged_meeting(root, "resolved", "needs-review", True,
+                          conflicts_with="")
+
+    result = syncjob.reconcile_reviews(root)
+    assert result["flipped"] == ["20-meetings/resolved.md"]
+    assert result["conflict_ticks"] == []
 
 
 def test_reconcile_preserves_every_other_byte(tmp_path):
@@ -140,3 +165,32 @@ def test_reconcile_is_idempotent_and_tolerates_broken_files(tmp_path):
     second = syncjob.reconcile_reviews(root)
     assert second["flipped"] == []
     assert any("broken.md" in w for w in second["warnings"])
+
+
+def test_ticked_legacy_status_warns_instead_of_falling_out_silently(tmp_path):
+    """A vault from before the needs-attention retirement may still hold a
+    ticked note carrying the retired status plus its conflicts-with edge. It
+    must not be flipped, must not be reported as a conflict tick (it was never
+    in that queue), and must produce exactly one warning naming the file."""
+    root = make_vault(tmp_path)
+    write_triaged_meeting(root, "legacy-duplicate", "needs-attention", True,
+                          conflicts_with="c-confirmed")
+
+    result = syncjob.reconcile_reviews(root)
+
+    assert result["flipped"] == []
+    assert result["conflict_ticks"] == []
+    matching = [w for w in result["warnings"] if "legacy-duplicate.md" in w]
+    assert len(matching) == 1
+    assert "needs-attention" in matching[0]
+
+
+def test_ticked_confirmed_note_never_warns(tmp_path):
+    """The cry-wolf guard: a ticked confirmed note is the normal steady state
+    and must stay silent, not warn on every run."""
+    root = make_vault(tmp_path)
+    write_triaged_meeting(root, "c-confirmed", "confirmed", True)
+
+    result = syncjob.reconcile_reviews(root)
+
+    assert result["warnings"] == []

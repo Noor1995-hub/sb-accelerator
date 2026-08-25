@@ -10,3 +10,9 @@ Pending migration (structure-version 2 candidate): decision notes — drop
 the reviewed key mandatory). Also: add `99-workflow-config/config.json`
 (template default, then fill timezone/executive/adapters from the vault's
 prose context — #54 moved machine decisions out of prose).
+Also: rewrite `review_status: needs-attention` → `needs-review` on existing
+meeting notes (v0.5.1 retired the status; those notes already carry the
+`conflicts-with` edge that now carries the clobber-risk signal, so nothing
+else has to be written). Until it runs, those notes are absent from the
+Triage view and a review tick on one cannot fold, so they stay invisible to
+the queue.

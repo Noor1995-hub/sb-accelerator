@@ -208,7 +208,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     sync_rec = sync_sub.add_parser(
         "reconcile-reviews",
-        help="flip review_status needs-review -> confirmed where reviewed is ticked")
+        help="flip review_status needs-review -> confirmed where reviewed is "
+             "ticked; a note still carrying conflicts-with is reported, "
+             "not flipped")
     _add_vault_argument(sync_rec)
 
     sync_queue = sync_sub.add_parser(

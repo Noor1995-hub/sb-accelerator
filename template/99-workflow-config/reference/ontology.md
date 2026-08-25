@@ -35,7 +35,7 @@ optional: [attendee-emails, organizer, location, recurring, start-time,
            confidence, confidence-reasons, reviewed, archived]
 enums:
   type: [meeting, "1:1", steerco, workshop, brainstorm, status-update]
-  review_status: [needs-review, confirmed, needs-attention]
+  review_status: [needs-review, confirmed]
   source: [teams, recorder, manual, email]
   confidence: [high, medium, low]
 confidence_reasons:
@@ -73,9 +73,13 @@ confidence_reasons:
   (N ≥ 1). `calendar-tool-unavailable` means the calendar was never
   searched; `no-calendar-match` means it was searched and held nothing.
   These are different facts — never collapse them.
-- `conflicts-with` (`[[meeting]]`, quoted) appears only on a
-  `needs-attention` sibling written because its target would have
-  overwritten a `confirmed` meeting.
+- `conflicts-with` (`[[meeting]]`, quoted) appears only on a `-v{n}` sibling
+  written because its target would have overwritten a `confirmed` meeting. It
+  is the clobber-risk signal: while it is present, `sync reconcile-reviews`
+  reports a `reviewed` tick on that note instead of confirming it, because one
+  meeting now has two notes and a human has to decide which survives. Clearing
+  or deleting the field says the duplicate is resolved, and the next run folds
+  the tick normally.
 - Example: `20-meetings/05-05-26-quarterly-portfolio-review.md`
 
 ### Project — `30-projects/{slug}/index.md` · Base: `Projects.base`
@@ -145,8 +149,13 @@ enums:
 - `reviewed` is the triage marker: `true` when a human validated the note as it
   was written, `false` when it was captured unattended. It is in
   `keys_present`, so the key always exists — `Decisions.base`'s **Needs review**
-  view filters on `reviewed == false`, and a missing key would make that view
-  silently incomplete. Same one-click convention as Meeting's `reviewed`.
+  view filters on `reviewed != true`, and a missing key would make that view
+  silently incomplete. Same one-click convention as Meeting's `reviewed`, and
+  that view carries the checkbox, so the queue is worked where it is read.
+- **There is no second status behind the tick.** Nothing gates on a decision's
+  review state the way project metrics gate on a meeting's `review_status`, so
+  ticking the box *is* the confirmation and no sync step folds it further. The
+  asymmetry with Meeting is deliberate, not a missing feature.
 - `source` names a note in `20-meetings/`. A decision drawn from an inbox
   transcript, a pasted paragraph or dictation carries no `source`; its
   provenance goes in the **Why** text.

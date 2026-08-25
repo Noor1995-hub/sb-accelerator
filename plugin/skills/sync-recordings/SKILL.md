@@ -103,8 +103,13 @@ it runs in both modes:
 python3 "$VAULTLIB" sync reconcile-reviews --vault "$VAULT"
 ```
 
-Report `flipped` in the summary; surface any `needs_attention_ticks` for a
-human — those are never auto-confirmed.
+Report `flipped` in the summary; surface any `conflict_ticks` for a human — a
+note that still carries a `conflicts-with` edge is a duplicate nobody has
+resolved yet, so a tick on it is never auto-confirmed. Say so in words, and say
+what settles it: merge or delete one of the two notes, then clear the
+`⚠ Duplicate of` field in Obsidian, and the next run confirms the tick. Also
+surface any `warnings` — a note whose review status predates this release
+needs the pending vault migration before its tick can fold.
 
 **Inbox:**
 
@@ -278,11 +283,12 @@ Payload rules the CLI enforces (so get them right the first time):
   ledger. For inbox files it is the `recording_id` from `sync scan`; for
   Plaud it comes from `plaud reassemble`.
 
-Read the result: a `conflict` of kind `confirmed-target` means the CLI wrote
-a `-v2` sibling marked `needs-attention` instead of touching a confirmed
-note — report it, it surfaces in triage. `stem-collision` means a `-2`
-suffix. An `error` about an already-synced id means dedup was bypassed —
-stop and say so.
+Read the result: a `conflict` of kind `confirmed-target` means the CLI wrote a
+`-v2` sibling carrying a `conflicts-with` edge instead of touching a confirmed
+note — report it as a possible duplicate; it shows in triage under
+`⚠ Duplicate of`. `stem-collision` means a `-2` suffix and nothing was at
+risk. An `error` about an already-synced id means dedup was bypassed — stop and
+say so.
 
 ### 7. Summarize — from disk, not from memory
 
@@ -293,11 +299,12 @@ Count what exists, not what you intended (a lab run once reported
 ## Sync Complete
 **Processed:** {N} → `20-meetings/` ({list the stems})
 **New people:** {N} created in `50-people/`
-**Reviewed ticks folded:** {N} confirmed
-**Needs attention:** {N} (would have overwritten confirmed notes)
+**Meetings you ticked as reviewed:** {N} now confirmed
+**Possible duplicates:** {N} ({list the stems}) — kept as separate notes; each would have overwritten a meeting you already confirmed
 **Skipped / errors:** {N} (will retry next run)
-**Adapters:** inbox ok · plaud ok | REFUSED (account-mismatch | no-account-hint) | disabled | unavailable · m365 disabled | not yet supported
+**Adapters:** inbox ok · plaud ok | REFUSED — signed in as a different account (account-mismatch) | REFUSED — no account bound to this vault yet (no-account-hint) | disabled | unavailable · m365 disabled | not yet supported
 **Calendar enrichment:** ok | UNAVAILABLE
+**Warnings:** {verbatim} | none
 ```
 
 ## Scratch hygiene

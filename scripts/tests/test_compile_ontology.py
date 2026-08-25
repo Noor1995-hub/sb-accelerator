@@ -80,3 +80,11 @@ def test_carried_keys_are_exactly_what_the_runtime_validator_reads():
         "required", "optional", "enums", "keys_present", "body_sections",
         "confidence_reasons",
     }
+
+
+def test_review_status_retired_needs_attention():
+    """#58: `needs-attention` was a busdev-era status. The clobber-risk signal
+    it used to carry now lives on the `conflicts-with` edge, which is a field
+    rather than a status — so the enum is two values, and stays two."""
+    meeting = co.compile_schema()["objects"]["meeting"]
+    assert meeting["enums"]["review_status"] == ["needs-review", "confirmed"]

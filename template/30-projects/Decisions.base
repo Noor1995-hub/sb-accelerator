@@ -16,23 +16,10 @@ properties:
   note.status:
     displayName: Status
   note.reviewed:
-    displayName: Reviewed
+    displayName: ✓ Reviewed
   note.supersedes:
     displayName: Supersedes
 views:
-  - type: table
-    name: Active
-    filters:
-      and:
-        - status == "active"
-    order:
-      - formula.open
-      - summary
-      - project
-      - date
-    sort:
-      - property: date
-        direction: DESC
   - type: table
     name: Needs review
     filters:
@@ -43,8 +30,22 @@ views:
       - summary
       - project
       - date
+      - reviewed
       - status
       - supersedes
+    sort:
+      - property: date
+        direction: DESC
+  - type: table
+    name: Active
+    filters:
+      and:
+        - status == "active"
+    order:
+      - formula.open
+      - summary
+      - project
+      - date
     sort:
       - property: date
         direction: DESC

@@ -141,7 +141,9 @@ def test_refuses_when_recording_id_already_in_ledger(tmp_path):
         meeting.write(root, payload(title="different title entirely"))
 
 
-def test_confirmed_target_gets_needs_attention_sibling(tmp_path):
+def test_confirmed_target_gets_a_flagged_sibling(tmp_path):
+    """The sibling is an ordinary needs-review note; the conflicts-with edge
+    is what marks it as a duplicate that must not be auto-confirmed."""
     root = make_vault(tmp_path)
     first = meeting.write(root, payload())
     # A human confirms it via triage.
@@ -153,7 +155,7 @@ def test_confirmed_target_gets_needs_attention_sibling(tmp_path):
     dup = payload(**{"source-recording-id": "inbox:ffff2a41d8e07b56"})
     result = meeting.write(root, dup)
     assert result["stem"] == "20-05-26-vendor-strategy-brainstorm-v2"
-    assert result["review_status"] == "needs-attention"
+    assert result["review_status"] == "needs-review"
     assert result["conflict"] == {
         "kind": "confirmed-target",
         "conflicts_with": "20-05-26-vendor-strategy-brainstorm",

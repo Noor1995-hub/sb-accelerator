@@ -155,3 +155,27 @@ def test_no_skill_reads_machine_decisions_from_prose(path):
     text = path.read_text(encoding="utf-8")
     assert "identity.md" not in text, f"{path.parent.name} reads prose config"
     assert "tools-and-systems" not in text, f"{path.parent.name} reads prose config"
+
+
+# #58 (F5, F6): a summary line is read by the exec and the EA, so it may not
+# quote a frontmatter value, a result key, or a retired status at them. The
+# retired-status check covers the whole file, not just the summary block.
+RETIRED_OR_OPAQUE = (
+    "needs-attention",
+    "needs_attention_ticks",
+    "Reviewed ticks folded",
+    "reviewed: false)",
+)
+
+
+@pytest.mark.parametrize("name", ["sync-recordings", "evening-sync"])
+def test_sync_summaries_speak_plainly(name):
+    text = read_skill(name)
+    for token in RETIRED_OR_OPAQUE:
+        assert token not in text, (
+            f"{name}: {token!r} is a field name or a retired status — say it "
+            f"in words the exec can read"
+        )
+    assert "**Meetings you ticked as reviewed:**" in text, (
+        f"{name}: the fold result needs a plain-speech summary line"
+    )

@@ -15,6 +15,18 @@ delivers them.
 
 ## Unreleased
 
+- **The decision queue is now something you can work.** `Decisions.base` opens
+  on **Needs review**, and that view carries the ✓ Reviewed checkbox — so a
+  decision captured overnight gets validated where you read it, in one click.
+  A duplicate capture now says what it is: when the sync keeps a recording as
+  a separate note rather than overwrite a meeting you had already confirmed,
+  Meetings triage flags it under **⚠ Duplicate of**, and clearing that field is
+  how you tell the next run the duplicate is settled. The old
+  "needs-attention" status is gone — a vault set up before this release may
+  still hold a few meeting notes carrying it, and those stay out of the
+  triage queue until the pending vault migration runs, so check for them at
+  the next visit. Sync and evening summaries read as sentences instead of
+  field names. (#58)
 - **Connectors are now bound to the vault, and refuse to sync anyone else's
   account.** Each vault carries a deployment config
   (`99-workflow-config/config.json`) naming its timezone, its executive, and

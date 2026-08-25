@@ -615,8 +615,9 @@ def test_conflict_sibling_fixture_exercises_conflicts_with():
         assert match.group(1) in stems, (
             f"{path}: conflicts-with target {match.group(1)!r} is not a fixture"
         )
-        assert fm["review_status"] == "needs-attention", (
-            f"{path}: conflicts-with appears only on needs-attention siblings"
+        assert fm["review_status"] != "confirmed", (
+            f"{path}: a note carrying conflicts-with is an unresolved "
+            f"duplicate — it cannot be confirmed while the edge stands"
         )
     assert carriers, "expected at least one conflicts-with fixture"
 

@@ -137,12 +137,16 @@ def dedup(root: Path, ids: List[str]) -> dict:
 
 def reconcile_reviews(root: Path) -> dict:
     """Fold triage ticks back into review_status: reviewed true flips
-    needs-review -> confirmed. One-way and narrow: a tick on a
-    needs-attention note is surfaced for a human, never auto-confirmed, and
-    `archived` is never read by any pipeline.
+    needs-review -> confirmed. One-way and narrow: a tick on a note that still
+    carries a `conflicts-with` edge is surfaced for a human, never
+    auto-confirmed — that edge means the note is a duplicate the CLI kept
+    rather than overwrite a confirmed meeting, and confirming it silently would
+    bless two notes for one meeting. Clearing the edge is how a human says the
+    duplicate is resolved; the next run folds the tick. `archived` is never
+    read by any pipeline.
     """
     flipped: List[str] = []
-    attention: List[str] = []
+    conflict_ticks: List[str] = []
     warnings: List[str] = []
     meetings = root / MEETINGS_DIR
     for path in sorted(meetings.glob("*.md")) if meetings.is_dir() else []:
@@ -156,10 +160,16 @@ def reconcile_reviews(root: Path) -> dict:
         if data.get("reviewed") is not True:
             continue
         status = data.get("review_status")
-        if status == "needs-attention":
-            attention.append(rel)
-            continue
         if status != "needs-review":
+            if status != "confirmed":
+                warnings.append(
+                    f"{rel}: review_status {status!r} is not a current value "
+                    "— this note predates the needs-attention retirement and "
+                    "needs the pending migration before its review tick can fold"
+                )
+            continue
+        if data.get("conflicts-with"):
+            conflict_ticks.append(rel)
             continue
         try:
             updated = markdown.replace_scalar_field(
@@ -169,5 +179,5 @@ def reconcile_reviews(root: Path) -> dict:
             continue
         vault.atomic_write(path, updated)
         flipped.append(rel)
-    return {"flipped": flipped, "needs_attention_ticks": attention,
+    return {"flipped": flipped, "conflict_ticks": conflict_ticks,
             "warnings": warnings}

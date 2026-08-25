@@ -179,7 +179,7 @@ Compose the recap from: the recap window's meetings (everything in
 `20-meetings/` dated within `recap_from`..`recap_to` — takeaway one-liners,
 entities, themes when there are ≥2 meetings), decisions written in stage 4,
 harvest jottings worth carrying forward, and watch items (conflicts,
-needs-attention flags, self-check warnings). Respect the language and depth
+unresolved duplicates, self-check warnings). Respect the language and depth
 preferences in `99-workflow-config/context/preferences-and-constraints.md`.
 Open items live on projects — link them, never duplicate a task list.
 $SCRATCH below is your session scratch directory — payloads never land in the vault.
@@ -219,10 +219,11 @@ reported "Processed: 0" after writing a meeting correctly):
 ```
 ## Evening Sync Complete
 **Synced:** {N} recordings → `20-meetings/` ({stems})
-**Reviewed ticks folded:** {N} confirmed
+**Meetings you ticked as reviewed:** {N} now confirmed
+**Possible duplicates:** {N} ({list the stems}) — kept as separate notes; each would have overwritten a meeting you already confirmed
 **Metrics refreshed:** {P} projects · {Q} people
-**Projects updated:** {N} ({slugs}) — {M} decisions written (reviewed: false), {K} candidates skipped
-**Tomorrow's note:** `60-daily-notes/{date}.md` ({DayName}) — {N} meetings prepped | calendar unavailable | calendar REFUSED (account-mismatch | no-account-hint) | m365 disabled
+**Projects updated:** {N} ({slugs}) — {M} decisions captured for review, {K} candidates skipped
+**Tomorrow's note:** `60-daily-notes/{date}.md` ({DayName}) — {N} meetings prepped | calendar unavailable | calendar REFUSED — signed in as a different account (account-mismatch) | calendar REFUSED — no account bound to this vault yet (no-account-hint) | m365 disabled
 **Warnings:** {verbatim, including SELF-CHECK lines} | none
 ```
 

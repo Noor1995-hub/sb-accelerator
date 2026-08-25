@@ -83,9 +83,10 @@ EXPECTED = [
     # Each exclusion path stays represented: 20-04 is reviewed-but-not-yet-
     # reconciled (reviewed: true holds it out of Triage until reconcile-reviews
     # flips it to confirmed), 05-06 is archived, and the five `confirmed`
-    # meetings fail the review_status or. The -v2 collision sibling is
-    # needs-attention, unreviewed, unarchived — it stays in Triage alongside
-    # the unreviewed intro call.
+    # meetings fail the review_status term. The -v2 collision sibling is an
+    # ordinary needs-review note carrying a conflicts-with edge — it stays in
+    # Triage alongside the unreviewed intro call, flagged by its ⚠ Duplicate
+    # of column rather than by a status of its own.
     ("20-meetings/Meetings.base", "Triage", {
         MEETINGS.format("02-03-26-nordbridge-intro-call"),
         MEETINGS.format("12-06-26-jordan-1on1-v2"),
@@ -155,3 +156,46 @@ def test_template_only_vault_has_no_object_rows(tmp_path):
             assert basesim.view_rows(base, fresh_corpus, view) == set(), (
                 f"{base_path} view {view!r} shows rows in a --fresh vault"
             )
+
+
+# The view a human lands on when they open a .base file is the first view in
+# the file. Triage-first posture, and a row-set test cannot see a reordering.
+DEFAULT_VIEWS = [
+    ("30-projects/Decisions.base", "Needs review"),
+    ("20-meetings/Meetings.base", "Triage"),
+]
+
+
+@pytest.mark.parametrize("base_path,expected", DEFAULT_VIEWS,
+                         ids=[b.split("/")[-1] for b, _ in DEFAULT_VIEWS])
+def test_first_view_is_the_review_queue(vault, base_path, expected):
+    names = basesim.view_names(basesim.load_base(vault / base_path))
+    assert names[0] == expected, (
+        f"{base_path} opens on {names[0]!r} — Obsidian shows the first view, "
+        f"and triage comes first"
+    )
+
+
+# (base file, view, property) — a control the human must reach to work the
+# queue. A filter that hides ticked rows is a dead end without the checkbox.
+REQUIRED_COLUMNS = [
+    ("30-projects/Decisions.base", "Needs review", "reviewed"),
+    ("20-meetings/Meetings.base", "Triage", "reviewed"),
+    # The clobber-risk signal, relocated off review_status in #58: triage has
+    # to show which capture is a duplicate of a confirmed note.
+    ("20-meetings/Meetings.base", "Triage", "conflicts-with"),
+]
+
+
+@pytest.mark.parametrize("base_path,view,prop", REQUIRED_COLUMNS,
+                         ids=[f"{b.split('/')[-1]}:{v}:{p}"
+                              for b, v, p in REQUIRED_COLUMNS])
+def test_view_exposes_the_column(vault, base_path, view, prop):
+    base = basesim.load_base(vault / base_path)
+    matched = next((v for v in base["views"] if v.get("name") == view), None)
+    assert matched is not None, f"{base_path} has no view named {view!r}"
+    order = matched.get("order") or []
+    assert prop in order, (
+        f"{base_path} view {view!r} omits {prop!r} from order: — the property "
+        f"is not shown, so it cannot be edited"
+    )

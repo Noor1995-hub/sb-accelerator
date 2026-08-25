@@ -108,26 +108,27 @@ def test_file_ext_excludes_non_markdown():
 
 # --- combinators ---------------------------------------------------------
 
-def test_or_inside_and_matches_meetings_triage_shape():
+def test_or_inside_and():
+    """`or:` is a Bases combinator basesim must evaluate. No shipped view uses
+    one since #58 collapsed the Meetings Triage filter, so this keeps the
+    evaluator covered against the next view that needs it."""
     corpus = {
-        "in-needs-review.md": {"review_status": "needs-review", "reviewed": False, "archived": False},
-        "in-needs-attention.md": {"review_status": "needs-attention", "reviewed": False, "archived": False},
-        "out-confirmed.md": {"review_status": "confirmed", "reviewed": False, "archived": False},
-        "out-reviewed.md": {"review_status": "needs-review", "reviewed": True, "archived": False},
-        "out-archived.md": {"review_status": "needs-attention", "reviewed": False, "archived": True},
+        "in-active.md": {"status": "active", "archived": False},
+        "in-paused.md": {"status": "paused", "archived": False},
+        "out-completed.md": {"status": "completed", "archived": False},
+        "out-archived.md": {"status": "active", "archived": True},
     }
     got = rows(
         None,
         corpus,
         view_filters={
             "and": [
-                {"or": ['review_status == "needs-review"', 'review_status == "needs-attention"']},
-                "reviewed != true",
+                {"or": ['status == "active"', 'status == "paused"']},
                 "archived != true",
             ]
         },
     )
-    assert got == {"in-needs-review.md", "in-needs-attention.md"}
+    assert got == {"in-active.md", "in-paused.md"}
 
 
 def test_base_level_and_view_level_filters_are_anded():
