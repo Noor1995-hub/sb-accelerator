@@ -899,6 +899,9 @@ def _fingerprint_inputs(root: Path, start: date, end: date) -> List[Tuple[str, P
     notes = root / DAILY_NOTES_DIR
     for path in sorted(notes.glob("*.md")) if notes.is_dir() else []:
         noted = _iso_prefix_date(path.stem)
+        # The stem must be the date and nothing else: an editor's
+        # `2026-06-12-backup.md` is not that day's note, and hashing it would
+        # invalidate every recap fingerprint for the window.
         if noted is not None and path.stem == noted.isoformat() and start <= noted <= end:
             found.append((f"{DAILY_NOTES_DIR}/{path.name}", path))
     projects = root / vault.PROJECTS_DIR
@@ -1602,10 +1605,17 @@ def test_evening_sync_payload_example_carries_the_recap_window():
 
 
 def test_evening_sync_mandates_wikilinks_for_looked_up_names():
-    text = _evening_sync().lower()
-    assert "wikilink" in text and "never" in text, (
+    # Anchored on the mandate sentence itself, not on the word "wikilink":
+    # that already appears in stage 4, and "never" appears 19 times, so the
+    # loose form of this assertion passes before the mandate is written.
+    text = _evening_sync()
+    assert "never a name you recalled" in text, (
         "decision 19: a plain-prose name cannot be validated by anything, so "
-        "the skill has to require the linked form"
+        "the skill has to require the linked form in stage 6"
+    )
+    assert "refuses a link that resolves to nothing" in text, (
+        "the skill has to say what the CLI does about it, or a model reads "
+        "the mandate as advice"
     )
 
 
