@@ -59,9 +59,11 @@ ship as files, by design).
 
 If you created the vault without the flag, either re-create it with
 `--with-plugins`, run `python scripts/provision_plugins.py /tmp/sb-test-vault`
-and reopen the vault, or install by hand per `template/README.md` (Dataview,
-Minimal Theme Settings, Style Settings, Notebook Navigator + the Minimal
-theme via Settings → Appearance).
+and reopen the vault, or install by hand — Dataview, Minimal Theme Settings,
+Style Settings, Notebook Navigator, plus the Minimal theme via Settings →
+Appearance. The authoritative list is the vault's own
+`.obsidian/community-plugins.json`; `playbooks/provisioning-runbook.md` §2
+covers the same fallback on a client machine.
 
 ### 3. Verify what the vault renders
 

@@ -15,7 +15,7 @@ Engineering conventions and the bootstrap rationale:
 | `plugin/` | Claude Code plugin: skills, hooks, agents. Ships to clients via `sb-dist`. |
 | `template/` | Vault skeleton: folders, `.obsidian/`, `.base` views, CLAUDE.md + context-portfolio slots. Instantiated once per client. |
 | `migrations/` | Versioned structure migrations, consumed by `/upgrade-vault`. |
-| `playbooks/` | Onboarding interview, pre-flight checklist, hypercare, EA training. Never ships. |
+| `playbooks/` | Onboarding interview, pre-flight checklist, provisioning runbook, hypercare, EA training. Never ships. |
 | `docs/` | Architecture, backlog model, local setup, builder onboarding. |
 | `registry.yaml` | Client deployment registry (v1: file; later Airtable). |
 

@@ -19,6 +19,26 @@ a release when clients should get it (quarterly, around tune-ups). Structure
 migrations are consultant-run via `/upgrade-vault`; a plugin/vault
 structure-version mismatch check makes skills degrade gracefully until migrated.
 
+The vault's own marker is `template/structure-version` — a plain integer,
+bumped only by a migration under `migrations/`, read by `/upgrade-vault`.
+
+## The vault's `claude/` directory
+
+Obsidian hides dot-folders, so the vault keeps Claude Code's home as a visible
+`claude/` directory with `.claude` symlinked to it: Claude Code reads
+`.claude/`, the exec browses the same files as `claude/`. The symlink is
+created at provisioning — `make_test_vault.py` does it for test vaults,
+`playbooks/provisioning-runbook.md` §3 covers client machines — and is
+deliberately not a checked-in file, since symlinks survive neither naive
+copies nor Windows checkouts without symlink privileges.
+
+`claude/skills/` holds vault-local skills (per-deployment customisations) and
+they load **only in Claude Code**. Cowork does not read skills from a
+connected folder at all; it loads them from installed plugins and the user's
+own skill store. That is why the product's core skills ship in `plugin/`
+rather than in the template — a platform constraint, not a preference.
+Anything placed in `claude/skills/` is invisible to Cowork.
+
 ## CI
 
 Three required checks on every PR (see `.github/workflows/ci.yml`):
