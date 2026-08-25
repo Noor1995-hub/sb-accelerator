@@ -241,3 +241,114 @@ reached for `python -m pytest`, plain `git show HEAD:<path>`, and
 `git log <base>..<head>` (which needs no fetch, since `fetch-depth: 0`
 already has the history). Keep them as insurance, but they were not what
 was blocking.
+
+## 2026-08-25 — piping `obsidian_probe.py tour` truncates it, and the skip hides that
+
+**What went wrong.** The visual pass for #68 ran
+`python3 scripts/obsidian_probe.py tour | tail -3` — the obvious thing to do
+with a command that prints one line per surface and a summary at the end. The
+tour stopped partway (6 of 17 surfaces on one run, 12 on the next), so it never
+reached the line that writes `summary.json`. Then
+`python -m pytest scripts/tests -q -m obsidian` reported **8 skipped**, not 8
+failures, because `test_obsidian_render.py`'s module-scoped `tour` fixture skips
+when `summary.json` is absent. Skips scroll past as green. The run read as
+"visual verification done" while nothing had been verified — a silent false
+pass, which is the one outcome this harness exists to prevent.
+
+The mechanism is not pinned down: `tail` reads to EOF, so this is not a plain
+SIGPIPE. But it reproduced across runs and stopped the moment the pipe became a
+redirect.
+
+**Why the skip cannot save you.** It is deliberate and correct — it is what
+CI's Ubuntu runners see — but it cannot tell "no Obsidian on this machine" from
+"the tour you just ran died". A broken capture and an unattempted one look
+identical.
+
+**The rule.** Never pipe `tour`. Redirect, then read the file:
+
+```bash
+python3 scripts/obsidian_probe.py tour > /tmp/tour.log 2>&1; tail -3 /tmp/tour.log
+```
+
+And check the capture before trusting the pytest result: the tour's own last
+line must read `17 surfaces -> …`, and `summary.json` must exist. A green
+`-m obsidian` run showing `8 skipped` is not evidence; only `8 passed` is.
+
+A truncated tour also leaves the instance wedged — the next `tour` dies with
+`The CLI is unable to find Obsidian`. See the wedged-instance entry below.
+
+## 2026-08-25 — Dataview is not initialised on a vault's very first open
+
+**What went wrong.** The first `tour` after
+`make_test_vault.py test-vaults/<name> --with-plugins` reported
+`dataviewTables: 0, dataviewErrors: 0` on *every* note surface, and
+`test_project_indexes_render_dataview_tables` failed. Nothing was wrong with
+the vault: a `down` / `up` / `tour` cycle against the same, already-opened
+vault rendered 2 tables and the test passed.
+
+**The tell.** Zero tables *and* zero errors is the signature of "the plugin
+never ran", not of a broken query — a Dataview block that fails renders
+`.dataview-error`, which the tour counts separately. Tables with zero errors is
+a pass; zero of both is a capture problem, and chasing it as a rendering bug
+wastes the session.
+
+**Why.** On a vault's first open the app is still settling community plugins —
+trust, plugin load, Dataview's own index build — and the tour drives surfaces
+faster than that finishes. The fixed `PROBE_VAULT_ID` means the Restricted Mode
+dialog is usually not *shown* again, but inheriting the trust is not the same as
+having the plugin loaded and indexed.
+
+**The rule.** A first-open capture is not a trustworthy baseline. Build the
+vault, `up`, then `down` / `up` / `tour` and capture on the second open. Cheap,
+and it removes a whole class of phantom failure.
+
+## 2026-08-25 — `--width`/`--height` are global options, not `up` options
+
+**What went wrong.** Two things, in order.
+
+`obsidian_probe.py up --vault test-vaults/<name> --height 2400` fails with
+`unrecognized arguments: --height 2400`. Both options live on the top-level
+parser, not on `up` or `tour`, so they have to precede the subcommand:
+
+```bash
+python3 scripts/obsidian_probe.py --height 2400 --width 1500 \
+    up --vault test-vaults/<name>
+```
+
+Placed correctly, that brought the instance up — `up` printed
+`probe instance driving <path>` — and then every subsequent CDP call failed
+with `The CLI is unable to find Obsidian`. Reverting to the default 1920×1200
+fixed it immediately.
+
+**The rule.** Leave the geometry alone. The default is pinned for a reason —
+Bases virtualises columns by width, so captures are only reproducible at a known
+width — and on this machine a non-default size appears to break the instance
+outright rather than merely change the frame. If you ever do need another size,
+confirm a CDP call answers before trusting the instance — `up` applied the
+resize and reported success, and the instance was still dead.
+
+## 2026-08-25 — a wedged probe instance is the normal failure mode
+
+Roughly one tour in three during the #68 pass died mid-run with one of:
+
+```text
+unparseable CDP reply for …
+TypeError: Cannot read properties of undefined (reading 'selectView')
+The CLI is unable to find Obsidian
+```
+
+All three are transient, and none of them meant anything was wrong with the
+vault. The fix was the same every time: `down`, then `up`, then `tour` again.
+The `selectView` one is the Bases view switcher reaching for a controller on a
+leaf that is not yet the view it expected — a timing loss, not a broken `.base`.
+
+**The rule.** Budget for retries, and treat a failed tour as a failed tour
+rather than as a finding: get one clean end-to-end run before concluding a
+surface is broken. The converse also holds — do not paper over a *reproducible*
+failure with retries. If the same surface dies at the same point three times,
+that is a bug.
+
+These four entries are about the probe. Traps about what the vault renders —
+column virtualisation, occluded windows returning stale frames, non-pristine
+vaults poisoning the row cross-check — live in `docs/visual-verification.md`
+under "Traps worth knowing".
