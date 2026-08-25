@@ -32,6 +32,7 @@ Must stay Python 3.10-clean: CI runs this suite on the runtime floor.
 from __future__ import annotations
 
 import argparse
+import base64
 import json
 import os
 import shutil
@@ -77,12 +78,12 @@ TEST_VAULT_DIR = "test-vaults"
 # 1600px it renders 7 — so any width-dependent assertion has to know its width.
 WINDOW_W, WINDOW_H = 1920, 1200
 
-# Keep the probe window painting while it sits behind the user's windows.
-# Chromium throttles and eventually stops compositing a window it believes is
-# occluded, which is what makes dev:screenshot hand back a stale frame; the
-# alternative was raising the window before all 17 captures, which makes the
-# machine unusable during a tour. Disabling occlusion detection buys freshness
-# without stealing focus.
+# Keep the probe window painting while it sits cloaked (cloak_window) or
+# buried. Chromium throttles and eventually stops compositing a window it
+# believes is occluded, which is what makes captures hand back a stale frame;
+# the alternative was raising the window before all 17 captures, which makes
+# the machine unusable during a tour. Disabling occlusion detection buys
+# freshness without the window ever being seen.
 BACKGROUND_FLAGS = (
     "--disable-backgrounding-occluded-windows",
     "--disable-renderer-backgrounding",
@@ -384,30 +385,59 @@ def surfaces(vault: Path) -> list:
 # ----------------------------------------------------------------- driving the app
 
 def focus_window(**kw) -> None:
-    """Raise and focus the probe window. Opt-in via --foreground.
+    """Un-cloak, raise and focus the probe window. Opt-in via --foreground.
 
-    Kept as the fallback if BACKGROUND_FLAGS ever stop working: an Electron
-    window Chromium believes is occluded stops repainting, and dev:screenshot
-    then hands back the last painted frame. That produced a screenshot of an
-    empty "New tab" while the app genuinely had a Bases view active —
-    confidently wrong evidence, worse than none. With the flags set, freshness
-    no longer needs the window in front, so a tour stops fighting the user for
-    their screen.
+    Kept as the fallback if cloaked capture ever stops working: a window
+    Chromium stops compositing hands back the last painted frame, and that
+    once produced a screenshot of an empty "New tab" while the app genuinely
+    had a Bases view active — confidently wrong evidence, worse than none.
     """
-    eval_js("window.focus(); "
-            "try{require('electron').remote.getCurrentWindow().show()}catch(e){}; "
-            "'ok'", **kw)
+    eval_js("try{require('electron').remote.BrowserWindow.getAllWindows()"
+            ".forEach(w=>{w.setOpacity(1);w.setIgnoreMouseEvents(false);w.show()})}catch(e){};"
+            "window.focus(); 'ok'", **kw)
 
 
-def send_to_back(**kw) -> None:
-    """Drop the probe window behind whatever the user is doing.
+def cloak_window(**kw) -> None:
+    """Make the probe window invisible where it stands: opacity 0, clicks
+    pass through, keyboard focus surrendered. The user sees and feels
+    nothing, while Chromium still treats the window as a plain visible
+    window and keeps compositing it — so captures stay fresh.
 
-    Electron activates a window on creation, so `up` surfaces it once and there
-    is no way around that. This puts it straight back; nothing in a tour raises
-    it again.
+    Every simpler shape failed, each verified live before landing here:
+    - blur() drops key focus but macOS never reorders a window on blur, so
+      the probe stayed top-of-stack covering the display (the original
+      complaint).
+    - hide() stops compositing regardless of BACKGROUND_FLAGS: captures of
+      a window hidden since boot time out at 20s ("wedged"), and captures
+      of a window hidden after painting return byte-identical stale frames
+      for every surface. app.dock.hide() wedges captures the same way.
+    - setPosition() off-screen gets clamped back onto a display — Electron
+      re-anchors the window at (0, menubar) and it covers the screen again.
+
+    All windows, not getCurrentWindow(): a probe profile that restored more
+    than one vault window would otherwise leave one visible.
     """
-    eval_js("try{const w=require('electron').remote.getCurrentWindow();"
-            "w.setAlwaysOnTop(false); w.blur();}catch(e){}; 'ok'", **kw)
+    eval_js("try{require('electron').remote.BrowserWindow.getAllWindows()"
+            ".forEach(w=>{w.setOpacity(0);w.setIgnoreMouseEvents(true);w.blur()})}catch(e){};"
+            " 'ok'", **kw)
+
+
+def capture_png(path, **kw) -> None:
+    """Capture the current frame over CDP rather than `dev:screenshot`.
+
+    Two reasons, both observed: dev:screenshot focuses the app on every
+    capture — a 17-surface tour is 17 focus steals — and it cannot capture
+    a window that is not composited normally (hidden: 20s timeout per
+    frame). Page.captureScreenshot does neither: no focus change, and
+    under the opacity-0 cloak it returns fresh, fully rendered frames.
+    """
+    out = cli(["dev:cdp", "method=Page.captureScreenshot",
+               'params={"format":"png"}'], timeout=30, **kw)
+    try:
+        data = json.loads(out)["data"]
+    except (ValueError, KeyError) as exc:
+        raise ProbeError(f"unparseable CDP screenshot reply: {out[:200]}") from exc
+    Path(path).write_bytes(base64.b64decode(data))
 
 
 def set_window_size(width: int = WINDOW_W, height: int = WINDOW_H, **kw) -> None:
@@ -621,7 +651,10 @@ def cmd_up(args) -> int:
     wait_ready(home=home)
     base = guard(home=home)
     set_window_size(args.width, args.height, home=home)
-    focus_window(home=home) if FOREGROUND else send_to_back(home=home)
+    if FOREGROUND:
+        focus_window(home=home)
+    else:
+        cloak_window(home=home)
     print(f"probe instance driving {base}")
     return 0
 
@@ -629,6 +662,11 @@ def cmd_up(args) -> int:
 def cmd_tour(args) -> int:
     kw = _instance_kw(args)
     vault = guard(**kw)
+    # Re-cloak in case the window was left showing — a trust dialog just
+    # accepted, or a previous --foreground run. Never for --shared: that is
+    # the user's own window.
+    if not args.shared and not FOREGROUND:
+        cloak_window(**kw)
     out = Path(args.out)
     if out.exists():
         shutil.rmtree(out)
@@ -648,7 +686,7 @@ def cmd_tour(args) -> int:
     for s in surfaces(vault):
         open_surface(s, **kw)
         png = out / f"{s['key']}.png"
-        cli(["dev:screenshot", f"path={png}"], **kw)
+        capture_png(png, **kw)
         payload = {"surface": s, "dom": capture_dom(s, **kw)}
         if s["kind"] == "base":
             payload["queryRows"] = query_base(s, **kw)
@@ -694,8 +732,10 @@ def build_parser() -> argparse.ArgumentParser:
                    help="drive your own Obsidian instead of an isolated one "
                         "(the guard still applies)")
     p.add_argument("--foreground", action="store_true",
-                   help="raise the probe window before each capture (default is "
-                        "background; use this only if captures come back stale)")
+                   help="keep the probe window visible and raise it before each "
+                        "capture (default hides the window entirely once the "
+                        "instance is ready; use this only if captures come back "
+                        "stale)")
     p.add_argument("--width", type=int, default=WINDOW_W)
     p.add_argument("--height", type=int, default=WINDOW_H)
     sub = p.add_subparsers(dest="cmd", required=True)

@@ -78,9 +78,16 @@ python scripts/obsidian_probe.py down
 
 `up` launches a **second Obsidian instance** with its own profile, so your own
 session is untouched — no screenshots of your workspace, no navigation moving
-your cursor. Electron activates a window on creation, so `up` surfaces the probe
-once and there is no way around that; it is sent straight back and nothing in a
-tour raises it again. Two flags do the isolation, and both are required:
+your cursor. Electron puts a window on screen the moment it creates one and no
+launch flag prevents that (`open -gj` propagates the environment but Electron
+ignores the hidden-launch hint and activates anyway) — so the probe window is
+visible for the few seconds the instance takes to boot, and `up` then
+**cloaks it where it stands**: opacity 0, clicks passing through, focus
+surrendered. You see and feel nothing until `down` quits it (a second Dock
+icon does remain). The cloak is the fourth attempt, and the only shape that
+keeps captures fresh — see the trap below for why blur, `hide()` and
+off-screen positioning all fail. Two flags do the isolation, and both are
+required:
 
 - `--user-data-dir=<probe>/userdata` defeats Electron's single-instance lock.
   Overriding `HOME` alone does **not**: the second launch hands off to the
@@ -175,15 +182,34 @@ delete it.
 
   The first fix was to call `window.focus()` before each capture, which works
   and is unusable: 17 surfaces means the window jumps in front of you 17 times.
-  The probe now launches with `--disable-backgrounding-occluded-windows`,
+  The probe launches with `--disable-backgrounding-occluded-windows`,
   `--disable-renderer-backgrounding` and
-  `--disable-features=CalculateNativeWinOcclusion`, so the window keeps
-  painting behind your work and captures stay fresh without being raised.
-  Verified: a full 17-surface tour run with the probe buried behind another app
-  produced 17 distinct frames, no duplicates, and never took focus.
+  `--disable-features=CalculateNativeWinOcclusion` so an unfocused, buried or
+  cloaked window keeps painting — but the flags only help while Chromium
+  still considers the window *visible*. Every way of taking it off the
+  screen "properly" breaks capture, each verified live:
 
-  `--foreground` restores the old raise-before-capture behaviour. It is the
-  fallback if captures ever come back identical to each other.
+  - `BrowserWindow.hide()` stops compositing outright: hidden since boot,
+    every capture times out at 20s and the instance reads as wedged (CDP
+    still answers); hidden after painting, every surface returns the same
+    byte-identical stale frame. `app.dock.hide()` wedges captures the same
+    way via its activation-policy flip.
+  - `setPosition()` off-screen gets clamped back — Electron re-anchors the
+    window at (0, menubar) and it covers the display again.
+  - `setOpacity(0)` is the one that works: the window is still a plain
+    visible window to Chromium, so frames stay fresh, while the OS renders
+    it perfectly transparent and `setIgnoreMouseEvents(true)` lets clicks
+    fall through to whatever is behind it.
+
+  Capture itself goes through CDP `Page.captureScreenshot`, not
+  `dev:screenshot` — the CLI's own screenshot focuses the app on **every
+  capture** (17 focus steals per tour) and cannot capture a hidden window.
+  The CDP route changes focus for nothing and returns fresh frames under
+  the cloak; verified by capturing three different Bases views cloaked and
+  reading back three distinct, fully rendered PNGs.
+
+  `--foreground` restores the old visible, raise-before-capture behaviour. It
+  is the fallback if captures ever come back identical to each other.
 - **Bases virtualises columns by width.** An 8-column view renders 5 headers at
   1024px and 7 at 1600px. The probe pins the window to 1920×1200 so captures
   are reproducible; a width-dependent assertion has to know its width.
