@@ -295,36 +295,26 @@ def _fingerprint_inputs(root: Path, start: date, end: date) -> List[Tuple[str, P
     return found
 
 
-def recap_fingerprint(root: Path, window: dict) -> str:
-    """A content hash of the recap's inputs — 16 hex, as `syncjob.content_id`.
-
-    Computed here, never accepted from a caller: a caller-supplied hash is
-    a caller-supplied fact, and the whole point is that this one is not.
-    The window bounds are part of the digest, so widening the window
-    invalidates even when no file changed.
-    """
-    start, end = window["from"], window["to"]
-    lines = [f"window\t{start.isoformat()}\t{end.isoformat()}"]
-    for relpath, path in sorted(_fingerprint_inputs(root, start, end)):
-        lines.append(f"{relpath}\t{hashlib.sha256(path.read_bytes()).hexdigest()}")
-    digest = hashlib.sha256("\n".join(lines).encode("utf-8")).hexdigest()
-    return digest[:_DIGEST_LENGTH]
-
-
 def _plural(count: int, noun: str) -> str:
     return f"{count} {noun}" if count == 1 else f"{count} {noun}s"
 
 
-def _catchup_banner(window: Optional[dict]) -> Optional[str]:
+def _catchup_banner(root: Path, window: Optional[dict]) -> Optional[str]:
     """The exec-facing statement of decisions 15-17, or None on a normal run.
 
     Rendered here rather than composed by the caller: the count is
     arithmetic and the no-back-fill rule is a promise the CLI keeps, so
     neither is left to a model to remember.
+
+    The count comes from `dates.missed_runs`, which asks the vault whether
+    each run left a note behind, not from the window's width — a Saturday
+    run on a healthy vault has a two-day window and zero missed runs, and
+    this banner is the artifact that would otherwise state the opposite to
+    the executive.
     """
     if window is None:
         return None
-    missed = dates.business_days(window["from"], window["to"])
+    missed = dates.missed_runs(root, window["from"], window["to"])
     if missed <= 0:
         return None
     lines = [
@@ -345,8 +335,36 @@ def _catchup_banner(window: Optional[dict]) -> Optional[str]:
     return "\n".join(lines)
 
 
-def _recap_body(data: dict) -> str:
-    banner = _catchup_banner(data["recap_window"])
+def recap_fingerprint(root: Path, window: dict) -> str:
+    """A content hash of the recap's inputs — 16 hex, as `syncjob.content_id`.
+
+    Computed here, never accepted from a caller: a caller-supplied hash is
+    a caller-supplied fact, and the whole point is that this one is not.
+
+    The first line is the *rendered banner*, hashed — not the raw window
+    bounds. The digest has to cover exactly what determines the region's
+    machine-generated content, which is the banner plus the input files.
+    Hashing the bounds instead made a Saturday re-run over an untouched
+    vault look changed (`08-21..08-21` vs `08-21..08-22`) and regenerate a
+    recap the exec had already read, and it left `detailed_from` — which
+    does change the rendered banner — out of the digest entirely.
+
+    Dropping the bounds is safe: if they move enough to change what the
+    recap is built from, the input *file set* moves with them. If they move
+    without changing either the banner or the file set, the rendered region
+    is byte-identical and skipping it is the right answer.
+    """
+    start, end = window["from"], window["to"]
+    banner = _catchup_banner(root, window) or ""
+    lines = [f"banner\t{hashlib.sha256(banner.encode('utf-8')).hexdigest()}"]
+    for relpath, path in sorted(_fingerprint_inputs(root, start, end)):
+        lines.append(f"{relpath}\t{hashlib.sha256(path.read_bytes()).hexdigest()}")
+    digest = hashlib.sha256("\n".join(lines).encode("utf-8")).hexdigest()
+    return digest[:_DIGEST_LENGTH]
+
+
+def _recap_body(root: Path, data: dict) -> str:
+    banner = _catchup_banner(root, data["recap_window"])
     return f"{banner}\n\n{data['recap']}" if banner else data["recap"]
 
 
@@ -369,12 +387,12 @@ def _heading(meeting: dict) -> str:
     return heading
 
 
-def _render(data: dict, fingerprint: Optional[str]) -> str:
+def _render(root: Path, data: dict, fingerprint: Optional[str]) -> str:
     date_iso = data["date"]
     attrs = {"inputs": fingerprint} if fingerprint else None
     parts = ["---", f"date: {date_iso}", "type: daily-note", "---", "",
              f"# {date_iso} · {_day_name(date_iso)}", "",
-             "## Recap", _region("recap", _recap_body(data), attrs), "",
+             "## Recap", _region("recap", _recap_body(root, data), attrs), "",
              "## Meetings", ""]
     if data["meetings"]:
         chunks = []
@@ -464,7 +482,7 @@ def _prep_headings(lines: List[str], regions: List[dict]) -> List[Optional[str]]
     return headings
 
 
-def _merge(text: str, data: dict,
+def _merge(root: Path, text: str, data: dict,
            fingerprint: Optional[str]) -> Tuple[str, int, bool]:
     lines = text.split("\n")
     regions = _find_regions(lines)
@@ -515,7 +533,8 @@ def _merge(text: str, data: dict,
     if not recap_skipped:
         attrs = {"inputs": fingerprint} if fingerprint else None
         replacements[recap["begin"]] = (
-            recap, _recap_body(data), _marker_line("recap", "begin", attrs))
+            recap, _recap_body(root, data),
+            _marker_line("recap", "begin", attrs))
     for region, content in zip(preps, prep_contents):
         replacements[region["begin"]] = (region, content, None)
     out: List[str] = []
@@ -540,13 +559,14 @@ def write(root: Path, payload) -> dict:
     path = root / DAILY_NOTES_DIR / f"{data['date']}.md"
     if path.is_file():
         original = path.read_text(encoding="utf-8")
-        merged, replaced, recap_skipped = _merge(original, data, fingerprint)
+        merged, replaced, recap_skipped = _merge(
+            root, original, data, fingerprint)
         changed = merged != original
         if changed:
             vault.atomic_write(path, merged)
         created = False
     else:
-        merged = _render(data, fingerprint)
+        merged = _render(root, data, fingerprint)
         replaced = 1 + (len(data["meetings"]) or 1)
         changed, created, recap_skipped = True, True, False
         vault.atomic_write(path, merged)

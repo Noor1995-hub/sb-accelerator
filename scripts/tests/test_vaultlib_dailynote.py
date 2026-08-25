@@ -844,9 +844,13 @@ def test_banner_renders_through_the_merge_path_too(tmp_path):
     goes through _render (the note does not exist yet); the meeting note
     inside the window is then edited so the fingerprint changes, and the
     second write goes through _merge with the recap actually regenerated
-    (not skipped) — the banner must still be there afterward."""
+    (not skipped) — the banner must still be there afterward.
+
+    The window starts Wed 2026-06-10 so that one run really is missing:
+    nbd(Wed 06-10) = Thu 06-11 is not on disk, while nbd(Thu 06-11) = Fri
+    06-12 is (the vault's jottings note), so the count is 1."""
     root = make_windowed_vault(tmp_path)
-    window = {"from": "2026-06-11", "to": "2026-06-12"}
+    window = {"from": "2026-06-10", "to": "2026-06-12"}
     dailynote.write(root, windowed_payload(recap_window=dict(window)))
     (root / "20-meetings" / "12-06-26-weekly-status.md").write_text(
         "---\ndate: 2026-06-12T09:00\ntype: status-update\n---\n\n"
@@ -859,6 +863,93 @@ def test_banner_renders_through_the_merge_path_too(tmp_path):
     text = (root / "60-daily-notes" / "2026-06-15.md").read_text(encoding="utf-8")
     assert "> [!warning] Catch-up note" in text
     assert "1 business day without an evening run" in text
+
+
+def make_weekend_vault(tmp_path: Path) -> Path:
+    """The Finding-1 repro as the write path sees it.
+
+    A vault whose Friday 2026-08-21 has one meeting and one note with
+    jottings. Friday's run writes 2026-08-24.md — and so does a Saturday or
+    Sunday run, because the next business day is the same Monday.
+    """
+    root = make_vault(tmp_path)
+    (root / "20-meetings").mkdir()
+    (root / "20-meetings" / "21-08-26-weekly-status.md").write_text(
+        "---\ndate: 2026-08-21T09:00\ntype: status-update\n---\n\n"
+        "## Key Takeaways\n- Scoring criteria signed off.\n", encoding="utf-8")
+    (root / "60-daily-notes" / "2026-08-21.md").write_text(
+        "---\ndate: 2026-08-21\ntype: daily-note\n---\n\n"
+        "## End of day\n- Chase the TCO comparison.\n", encoding="utf-8")
+    return root
+
+
+def weekend_payload(**overrides) -> dict:
+    base = payload(date="2026-08-24")
+    base.update(overrides)
+    return base
+
+
+def test_a_weekend_rerun_over_an_unchanged_vault_leaves_the_note_alone(tmp_path):
+    """Finding 1 end to end. Friday's run writes Monday's note; the Saturday
+    and Sunday runs see a window that has widened (08-21..08-22, then
+    ..08-23) but not one changed input file. Hashing the raw bounds made both
+    of those look changed and regenerated a recap the exec had already read,
+    with LLM variance — two nights in seven."""
+    root = make_weekend_vault(tmp_path)
+    path = root / "60-daily-notes" / "2026-08-24.md"
+    friday = dailynote.write(root, weekend_payload(
+        recap_window={"from": "2026-08-21", "to": "2026-08-21"}))
+    assert friday["created"] is True
+    before = path.read_bytes()
+    assert b"Catch-up note" not in before
+
+    for last_day in ("2026-08-22", "2026-08-23"):
+        result = dailynote.write(root, weekend_payload(
+            recap=("> [!info] At a glance\n"
+                   f"> a differently worded recap on {last_day}"),
+            recap_window={"from": "2026-08-21", "to": last_day}))
+        assert result["recap_skipped"] is True, last_day
+        assert result["changed"] is False, last_day
+        assert result["recap_inputs"] == friday["recap_inputs"], last_day
+        assert path.read_bytes() == before, last_day
+    # And the banner never appears on a weekend run over a healthy vault:
+    # nbd(Fri 08-21) is this very note, so no run was missed.
+    assert "Catch-up note" not in path.read_text(encoding="utf-8")
+
+
+def test_a_missed_friday_still_banners_on_the_monday_run(tmp_path):
+    """The other half of the same rule: the count follows the vault. Monday's
+    note is absent, so Friday's run really did not happen, and the Monday
+    run — writing Tuesday's note — says so."""
+    root = make_weekend_vault(tmp_path)
+    dailynote.write(root, weekend_payload(
+        date="2026-08-25",
+        recap_window={"from": "2026-08-21", "to": "2026-08-24"}))
+    text = (root / "60-daily-notes" / "2026-08-25.md").read_text(encoding="utf-8")
+    assert "> [!warning] Catch-up note" in text
+    assert "1 business day without an evening run" in text
+
+
+def test_changing_only_detailed_from_changes_the_digest(tmp_path):
+    """`detailed_from` changes the rendered banner, so it has to change the
+    digest. Under the old recipe it did not — a run that moved only its
+    detail bound kept a stamp describing a banner the note no longer had."""
+    root = make_windowed_vault(tmp_path)
+    wide = {"from": "2026-06-15", "to": "2026-08-21"}
+    first = dailynote.write(root, windowed_payload(
+        date="2026-08-24", recap_window=dict(wide)))
+    capped = dailynote.write(root, windowed_payload(
+        date="2026-08-24",
+        recap_window=dict(wide, detailed_from="2026-08-17")))
+    assert capped["recap_skipped"] is False
+    assert capped["recap_inputs"] != first["recap_inputs"]
+    text = (root / "60-daily-notes" / "2026-08-24.md").read_text(encoding="utf-8")
+    assert "Detailed from 2026-08-17" in text
+    # Re-running the capped window is a no-op, as it must be.
+    assert dailynote.write(root, windowed_payload(
+        date="2026-08-24",
+        recap_window=dict(wide, detailed_from="2026-08-17"),
+    ))["recap_skipped"] is True
 
 
 def test_a_recap_link_to_no_vault_object_is_refused(tmp_path):

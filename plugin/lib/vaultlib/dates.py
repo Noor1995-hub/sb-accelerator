@@ -123,14 +123,13 @@ _NEXT_BUSINESS_DAYS = {4: 3, 5: 2, 6: 1}
 def business_days(start: date, end: date) -> int:
     """Mon-Fri days in the half-open interval [start, end).
 
-    Half-open on purpose: with start = the last daily note's date and
-    end = today, the count is exactly the number of evening runs that did
-    not happen. A note dated `start` on disk proves the run on the evening
-    before it completed, so `start` itself is not a missed day.
-
-    No holiday calendar: a public holiday counts as missed, which is
-    literally true ("no run happened") and is the honest reading rather
-    than a silent one.
+    Calendar arithmetic and nothing more: it says how many business days a
+    span contains, not how many evening runs happened during it. That
+    distinction is the fix for the weekend false-catch-up — `missed_runs`
+    below answers the "did the run happen" question, by looking at disk.
+    This function is still the right one for the span of window a recap did
+    not detail (`business_days_not_detailed`), which is a length, not a
+    count of failures.
     """
     if end <= start:
         return 0
@@ -142,6 +141,66 @@ def business_days(start: date, end: date) -> int:
         if (start + timedelta(days=offset)).weekday() < 5:
             count += 1
     return count
+
+
+def next_business_day(day: date) -> date:
+    """The first Mon-Fri strictly after `day`. Sat and Sun both roll to Mon."""
+    return day + timedelta(days=_NEXT_BUSINESS_DAYS.get(day.weekday(), 1))
+
+
+def _daily_note_dates(root: Path) -> set:
+    """Every date that has a daily note on disk, future-dated ones included.
+
+    One glob, one filter: `plan` narrows this to `<= today` for "the last
+    daily note", while `missed_runs` needs the unnarrowed set. Two globs
+    with two slightly different filters is how two answers drift apart.
+    """
+    notes_dir = root / DAILY_NOTES_DIR
+    found = set()
+    for path in sorted(notes_dir.glob("*.md")) if notes_dir.is_dir() else []:
+        if not vault.ISO_DATE_RE.match(path.stem):
+            continue
+        try:
+            found.add(datetime.strptime(path.stem, "%Y-%m-%d").date())
+        except ValueError:
+            continue
+    return found
+
+
+def missed_runs(root: Path, recap_from: date, recap_to: date) -> int:
+    """Business days in [recap_from, recap_to) whose evening run never ran.
+
+    A run on business day `D` writes the note for `next_business_day(D)`, so
+    that run happened **iff** a daily note dated `next_business_day(D)` is on
+    disk. Existence is checked against every ISO-named note in the vault,
+    **future-dated ones included** — on a Saturday the proof that Friday's
+    run completed is next Monday's note, which is precisely the note `plan`
+    excludes when it looks for "the last daily note".
+
+    That exclusion is what the previous version got wrong. It counted every
+    business day in the window as missed, on the reasoning that a note dated
+    `recap_from` proves the previous evening's run completed. True only when
+    today is a business day: on a Saturday the newest note on or before today
+    is Friday's, which proves *Thursday's* run — so a perfectly healthy vault
+    reported a missed run twice every weekend, and the note said so.
+
+    No holiday calendar: a public holiday counts as missed, which is
+    literally true ("no run happened") and is the honest reading rather than
+    a silent one.
+    """
+    if recap_to <= recap_from:
+        return 0
+    # The disk is read once, before the walk: the loop is over calendar days
+    # in the recap window (a two-month gap is ~60 set lookups), never over
+    # the filesystem.
+    on_disk = _daily_note_dates(root)
+    missed = 0
+    cursor = recap_from
+    while cursor < recap_to:
+        if cursor.weekday() < 5 and next_business_day(cursor) not in on_disk:
+            missed += 1
+        cursor += timedelta(days=1)
+    return missed
 
 
 def _walk_back_business_days(end: date, count: int) -> date:
@@ -212,10 +271,11 @@ def plan(root: Path, today: Optional[str] = None, *,
     written by an earlier run today) is not "the last daily note".
 
     A gap is reported, not inferred (decision 15): business_days_missed is
-    the count of business days in [recap_from, recap_to), which is exactly
-    the set of evening runs that did not happen. Above catchup_threshold,
-    recap_detail_from bounds how far back the caller should recap in detail
-    (decision 17) — the caller does no arithmetic, only prose.
+    the number of business days in [recap_from, recap_to) whose run left no
+    note behind — see `missed_runs`, which checks disk rather than trusting
+    the window's width. Above catchup_threshold, recap_detail_from bounds how
+    far back the caller should recap in detail (decision 17) — the caller
+    does no arithmetic, only prose.
     """
     if today is not None:
         today_date = _parse_date(today, "today")
@@ -235,23 +295,16 @@ def plan(root: Path, today: Optional[str] = None, *,
         raise DatesError(
             f"catchup-threshold {catchup_threshold} must be >= 0")
 
-    notes_dir = root / DAILY_NOTES_DIR
-    existing = []
-    for path in sorted(notes_dir.glob("*.md")) if notes_dir.is_dir() else []:
-        if not vault.ISO_DATE_RE.match(path.stem):
-            continue
-        try:
-            noted = datetime.strptime(path.stem, "%Y-%m-%d").date()
-        except ValueError:
-            continue
-        if noted <= today_date:
-            existing.append(noted)
+    # A note dated in the future is not "the last daily note" — but it is
+    # still evidence that a run happened, which is why `missed_runs` reads
+    # the unnarrowed set.
+    existing = [noted for noted in _daily_note_dates(root)
+                if noted <= today_date]
     last = max(existing) if existing else None
 
-    nxt = today_date + timedelta(
-        days=_NEXT_BUSINESS_DAYS.get(today_date.weekday(), 1))
+    nxt = next_business_day(today_date)
     recap_from = last or today_date
-    missed = business_days(recap_from, today_date)
+    missed = missed_runs(root, recap_from, today_date)
     over_threshold = missed > catchup_threshold
     detail_from = (max(recap_from,
                        _walk_back_business_days(today_date, catchup_threshold))

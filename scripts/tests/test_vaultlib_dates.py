@@ -249,6 +249,106 @@ def test_business_days_over_a_weekend_only_span_is_zero():
     assert dates.business_days(date(2026, 6, 13), date(2026, 6, 15)) == 0
 
 
+def make_repro_vault(tmp_path):
+    """The final-review repro: a healthy vault whose Friday run completed.
+
+    Notes for Wed 08-19, Thu 08-20, Fri 08-21 and Mon 08-24. Monday's note is
+    the artifact Friday evening's run produced — it is the proof that the run
+    happened, and it is future-dated on any of Friday, Saturday or Sunday.
+    """
+    root = make_vault(tmp_path)
+    for iso in ("2026-08-19", "2026-08-20", "2026-08-21", "2026-08-24"):
+        note(root, iso)
+    return root
+
+
+def test_missed_runs_counts_a_run_by_the_note_it_left_behind(tmp_path):
+    root = make_repro_vault(tmp_path)
+    # Fri 08-21's run wrote Mon 08-24, so nothing in [08-21, 08-22) is missed
+    # — even though 08-24 is dated after the day being asked about.
+    assert dates.missed_runs(root, date(2026, 8, 21), date(2026, 8, 22)) == 0
+    # Delete the note that run wrote and the same interval is one missed run.
+    (root / "60-daily-notes" / "2026-08-24.md").unlink()
+    assert dates.missed_runs(root, date(2026, 8, 21), date(2026, 8, 22)) == 1
+
+
+def test_missed_runs_of_an_empty_or_reversed_interval_is_zero(tmp_path):
+    root = make_repro_vault(tmp_path)
+    assert dates.missed_runs(root, date(2026, 8, 21), date(2026, 8, 21)) == 0
+    assert dates.missed_runs(root, date(2026, 8, 24), date(2026, 8, 21)) == 0
+
+
+def test_missed_runs_ignores_weekend_days_inside_the_interval(tmp_path):
+    # No run is expected on a Saturday or a Sunday, so a weekend-only span
+    # can never be a missed run however empty the vault is.
+    root = make_vault(tmp_path)
+    assert dates.missed_runs(root, date(2026, 8, 22), date(2026, 8, 24)) == 0
+
+
+def test_next_business_day_rolls_the_weekend_to_monday():
+    assert dates.next_business_day(date(2026, 8, 20)) == date(2026, 8, 21)
+    assert dates.next_business_day(date(2026, 8, 21)) == date(2026, 8, 24)
+    assert dates.next_business_day(date(2026, 8, 22)) == date(2026, 8, 24)
+    assert dates.next_business_day(date(2026, 8, 23)) == date(2026, 8, 24)
+
+
+@pytest.mark.parametrize("today,day_name,recap_from", [
+    ("2026-08-21", "Friday", "2026-08-21"),
+    ("2026-08-22", "Saturday", "2026-08-21"),
+    ("2026-08-23", "Sunday", "2026-08-21"),
+    ("2026-08-24", "Monday", "2026-08-24"),
+])
+def test_plan_never_reports_a_catchup_on_a_healthy_vault(tmp_path, today,
+                                                        day_name, recap_from):
+    """The Finding-1 repro, all four days. A nightly unattended run reaches
+    the weekend two nights in seven, and the old count called both of them a
+    catch-up — a false factual claim in the note whose purpose is to stop the
+    tool making silent claims about missed days."""
+    root = make_repro_vault(tmp_path)
+    result = dates.plan(root, today)
+    assert result["today_day_name"] == day_name
+    # recap_from is not what changed: a future-dated note is still not "the
+    # last daily note", so the window genuinely widens over the weekend.
+    assert result["recap_from"] == recap_from
+    assert result["recap_to"] == today
+    assert result["business_days_missed"] == 0
+    assert result["is_catchup"] is False
+    assert result["over_threshold"] is False
+    assert result["business_days_not_detailed"] == 0
+
+
+def test_plan_on_a_saturday_widens_the_window_without_inventing_a_gap(tmp_path):
+    """Where the false catch-up came from: the window really is two days
+    wide on a Saturday, and the old count was simply that width."""
+    root = make_repro_vault(tmp_path)
+    result = dates.plan(root, "2026-08-22")
+    assert (result["recap_from"], result["recap_to"]) == ("2026-08-21",
+                                                          "2026-08-22")
+    assert dates.business_days(date(2026, 8, 21), date(2026, 8, 22)) == 1
+    assert result["business_days_missed"] == 0
+
+
+def test_plan_counts_the_friday_run_that_left_no_note(tmp_path):
+    # Same vault, minus the note Friday's run would have written: now the
+    # Monday run legitimately reports one missed evening.
+    root = make_repro_vault(tmp_path)
+    (root / "60-daily-notes" / "2026-08-24.md").unlink()
+    result = dates.plan(root, "2026-08-24")
+    assert result["recap_from"] == "2026-08-21"
+    assert result["business_days_missed"] == 1
+    assert result["is_catchup"] is True
+
+
+def test_plan_on_a_saturday_after_a_missed_friday_still_reports_it(tmp_path):
+    # The count follows the vault, not the calendar: a genuinely missed
+    # Friday is still reported on the Saturday run.
+    root = make_repro_vault(tmp_path)
+    (root / "60-daily-notes" / "2026-08-24.md").unlink()
+    result = dates.plan(root, "2026-08-22")
+    assert result["business_days_missed"] == 1
+    assert result["is_catchup"] is True
+
+
 def test_plan_on_a_healthy_run_reports_no_catchup(tmp_path):
     root = make_vault(tmp_path)
     note(root, "2026-06-15")
