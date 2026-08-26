@@ -166,10 +166,10 @@ else:
   write a note by hand if a stage fails. A failed stage is reported, not
   worked around.
 
-<!-- #82/B4: when model pinning lands, the composed prompt pins the sync
-     subagents to a cheaper model here. Until then the scheduled run inherits
-     whatever the machine's session model is, which is the current cost
-     behaviour and is worth saying out loud to the consultant. -->
+**Do not add anything about models.** `/evening-sync` and `/sync-recordings`
+already pin their own subagents, precisely because they were built to run
+unattended every evening on someone else's bill. A prompt that re-specifies
+that is a second copy of a decision made in two other files.
 
 Then create or update it, with a `description` that carries the schedule in
 plain words ("evening run — writes tomorrow's note, weekdays 18:47") so the
