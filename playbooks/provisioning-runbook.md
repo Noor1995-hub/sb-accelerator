@@ -9,7 +9,8 @@ repo checked out.
 
 Do the whole sequence on the exec's machine, then repeat steps 1–5 on the
 assistant's. There is no shortcut: Obsidian Sync moves the vault's *content*
-between machines, not its plugin binaries or its symlink.
+between machines, not its plugin binaries or its symlink. Steps 6–7 happen
+once, after both machines are provisioned.
 
 ## 1. Instantiate the vault
 
@@ -23,6 +24,13 @@ Sync's version history and the client's own backups cover recovery, and a
 Check that `.obsidian/` arrived. A copy that silently skipped it produces a
 vault that opens with none of the layout, none of the tables, and no obvious
 reason why — the single most common provisioning mistake.
+
+**Note for the data-flow one-pager:** once `/setup-my-brain` binds the exec's
+accounts, `99-workflow-config/config.json` holds their connector identifier
+(email or account id) as the binding hint — deliberately non-secret, since
+it is what a later `config verify-account` check compares the signed-in
+account against. If whoever owns information security wants it named, that
+is the one line to give them.
 
 ## 2. Provision the Obsidian plugins and theme
 
@@ -69,24 +77,62 @@ exec's machine and the assistant's.
 
 ## 4. Set the Obsidian Sync exclusions
 
-Exclude two paths from sync:
+Exclude three paths from sync:
 
 | Path | Why |
 |---|---|
 | `95-private/` | The exec-private folder. The assistant must never see it, and sync is how it would leak. |
 | `_heavy-assets/` | Generated binaries. Excluded for size, not secrecy. |
+| `99-workflow-config/snapshots/` | The full-vault zips `/upgrade-vault` takes before each migration run. Excluded for size and because a snapshot is only ever needed for restore on the machine that made it — there is nothing for the second machine to gain from carrying it. |
+
+All three are account/device-level Obsidian Sync settings, configured on
+each machine at provisioning — none of this ships as files, and
+`template/.obsidian` carries no sync configuration to skip that step.
 
 ## 5. Connect Obsidian Sync, then verify the exclusions again
 
 Sign in and connect Sync on this machine.
 
-Then re-check both exclusions **on this machine specifically**. Sync
+Then re-check all three exclusions **on this machine specifically**. Sync
 exclusions are a per-device setting, not a vault setting — setting them on the
 exec's machine does nothing for the assistant's. Getting this wrong on the
 second machine is how `95-private/` ends up shared, and nothing in the vault
 will tell you it happened.
 
-## 6. Hand over
+## 6. Create the feedback channel
+
+One-time, not per-machine: the token file lands inside the vault and reaches
+the assistant's machine the same way everything else does, over Sync.
+
+1. Create a delaware-owned `sb-client-<slug>` GitHub repo for this client.
+   `/report-feedback` and `/health-check` only ever open issues on it; feedback
+   never lands on a repo shared across clients.
+2. Mint a token scoped **fine-grained**, **`issues: read` + `issues: write` on
+   that repo only — **no `contents` scope**. This is the leak blast-radius
+   control: the token file lives inside the vault, readable by anything with
+   vault access, so the worst case of a leak has to stay "someone can file or
+   read issues on this client's own feedback repo" — a `contents` scope would
+   turn the same leak into read or write access to a repo's actual files, which
+   is a materially worse failure than the one this channel is meant to allow.
+3. Place the token, and nothing else, at
+   `99-workflow-config/secrets/feedback-token` in the instantiated vault — one
+   line, no surrounding commentary.
+4. Point the vault at the repo:
+
+   ```bash
+   python3 <plugin-path>/lib/vaultlib/cli.py config write --vault <vault> \
+     --field feedback.repo --value <owner>/sb-client-<slug>
+   ```
+
+5. Rotate the token at any tune-up — swap the file's contents; the repo name
+   in `config.json` doesn't change, so there is nothing to re-run `config
+   write` for.
+6. Vault snapshots (`99-workflow-config/snapshots/`) are full-vault zips, so
+   they include the token file too — treat a snapshot copied off the machine
+   as carrying a live credential, and rotate the token if one ever leaves the
+   machine.
+
+## 7. Hand over
 
 Open the vault and leave the exec on **`Start here`** — their own orientation
 note, written for them. Do not walk them through this runbook; none of it is

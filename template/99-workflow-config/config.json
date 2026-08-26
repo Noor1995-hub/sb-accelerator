@@ -12,7 +12,8 @@
     "signed up with may never appear in its whoami at all. A connector whose",
     "signed-in account does not match its hint is refused before any content",
     "is listed. Binding a vault to an account is a conscious act: write the",
-    "hint here, explicitly."
+    "hint here, explicitly.",
+    "feedback.repo: the delaware-created sb-client-<slug> GitHub repo (owner/name) that /report-feedback files issues on; null until provisioning sets it."
   ],
   "config-version": 1,
   "timezone": null,
@@ -21,5 +22,6 @@
     "inbox": {"enabled": true},
     "plaud": {"enabled": false, "account_hint": null},
     "m365": {"enabled": false, "account_hint": null}
-  }
+  },
+  "feedback": {"repo": null}
 }

@@ -7,7 +7,7 @@ import json
 
 import pytest
 
-from vaultlib import cli, syncjob
+from vaultlib import cli, migrate, syncjob
 
 from test_vaultlib_vault import make_vault
 
@@ -31,6 +31,35 @@ def test_identity_show_reports_an_empty_portfolio_without_failing(capsys, tmp_pa
     code, payload = run(capsys, ["identity", "show", "--vault", str(root)])
     assert code == 0
     assert payload["result"]["identity"] is None
+
+
+def test_context_write_then_read_round_trips_through_the_cli(
+    capsys, tmp_path, monkeypatch
+):
+    import io
+    from test_vaultlib_vault import _write_context
+
+    root = make_vault(tmp_path)
+    _write_context(root, "role-and-responsibilities")
+    monkeypatch.setattr("sys.stdin", io.StringIO("Owns commercial strategy."))
+    write_code, write_payload = run(capsys, [
+        "context", "write", "--vault", str(root),
+        "--file", "role-and-responsibilities", "--content", "-",
+    ])
+    assert write_code == 0
+    assert write_payload["result"] == {
+        "file": "99-workflow-config/context/role-and-responsibilities.md",
+        "replaced": False,
+    }
+    read_code, read_payload = run(capsys, [
+        "context", "read", "--vault", str(root),
+        "--file", "role-and-responsibilities",
+    ])
+    assert read_code == 0
+    assert read_payload["result"] == {
+        "file": "role-and-responsibilities",
+        "content": "Owns commercial strategy.",
+    }
 
 
 def test_person_ensure_returns_the_created_note(capsys, tmp_path):
@@ -414,6 +443,30 @@ def test_config_verify_account_mismatch_is_ok_false_free(capsys, tmp_path):
     assert "someone.else" not in json.dumps(payload)
 
 
+def test_config_write_sets_a_field_through_the_cli(capsys, tmp_path):
+    root = make_vault(tmp_path)
+    write_vault_config(root)
+    code, payload = run(capsys, [
+        "config", "write", "--vault", str(root),
+        "--field", "timezone", "--value", "Europe/Brussels",
+    ])
+    assert code == 0
+    assert payload["ok"] is True
+    assert payload["result"]["config"]["timezone"] == "Europe/Brussels"
+
+
+def test_config_write_display_name_hint_is_a_structured_error(capsys, tmp_path):
+    root = make_vault(tmp_path)
+    write_vault_config(root)
+    code, payload = run(capsys, [
+        "config", "write", "--vault", str(root),
+        "--field", "adapters.plaud.account_hint", "--value", "Morgan",
+    ])
+    assert code == 1
+    assert payload["ok"] is False
+    assert "display name" in payload["error"]
+
+
 def test_sync_archive_moves_the_file_and_reports_both_paths(capsys, tmp_path):
     root = make_vault(tmp_path)
     (root / "10-inbox" / "notes.txt").write_text("x", encoding="utf-8")
@@ -572,3 +625,184 @@ def test_sync_collide_through_the_cli_reports_matches(capsys, tmp_path):
     assert code == 0
     assert len(payload["result"]["matches"]) == 1
     assert payload["result"]["matches"][0]["source-recording-id"] == "plaud:abc123"
+
+
+def test_feedback_lint_returns_ok_true_for_a_clean_draft(capsys, tmp_path, monkeypatch):
+    import io
+
+    from test_vaultlib_config import valid_config, write_config
+
+    root = make_vault(tmp_path)
+    write_config(root, valid_config())
+    (root / "structure-version").write_text("1\n", encoding="utf-8")
+    monkeypatch.setattr(
+        "sys.stdin", io.StringIO("Expected one thing, got another. 3 meetings."))
+
+    code, payload = run(capsys, [
+        "feedback", "lint", "--vault", str(root), "--body-file", "-",
+    ])
+
+    assert code == 0
+    assert payload["result"]["ok"] is True
+
+
+def test_feedback_send_without_repo_configured_is_refused(capsys, tmp_path, monkeypatch):
+    import io
+
+    from test_vaultlib_config import valid_config, write_config
+
+    root = make_vault(tmp_path)
+    write_config(root, valid_config())          # feedback.repo defaults to null
+    (root / "structure-version").write_text("1\n", encoding="utf-8")
+    monkeypatch.setattr("sys.stdin", io.StringIO("clean generic body"))
+
+    code, payload = run(capsys, [
+        "feedback", "send", "--vault", str(root),
+        "--title", "x", "--body-file", "-",
+    ])
+
+    assert code == 1
+    assert payload["ok"] is False
+    assert "feedback.repo" in payload["error"]
+
+
+def test_migrate_status_returns_pending_through_the_cli(
+        capsys, tmp_path, monkeypatch):
+    from test_vaultlib_migrate import write_migration
+
+    mdir = tmp_path / "migrations"
+    mdir.mkdir()
+    monkeypatch.setattr(migrate, "MIGRATIONS_DIR", mdir)
+    write_migration(mdir, 1, "first", 2, "m1")
+
+    root = make_vault(tmp_path)
+    (root / "structure-version").write_text("1\n", encoding="utf-8")
+
+    code, payload = run(capsys, ["migrate", "status", "--vault", str(root)])
+
+    assert code == 0
+    assert payload["ok"] is True
+    assert payload["result"]["structure_version"] == 1
+    assert [p["slug"] for p in payload["result"]["pending"]] == ["first"]
+
+
+def test_migrate_run_applies_and_reports_through_the_cli(
+        capsys, tmp_path, monkeypatch):
+    from test_vaultlib_migrate import write_migration
+
+    mdir = tmp_path / "migrations"
+    mdir.mkdir()
+    monkeypatch.setattr(migrate, "MIGRATIONS_DIR", mdir)
+    write_migration(mdir, 1, "first", 2, "m1")
+
+    root = make_vault(tmp_path)
+    (root / "structure-version").write_text("1\n", encoding="utf-8")
+
+    code, payload = run(capsys, [
+        "migrate", "run", "--vault", str(root),
+        "--today", "2026-08-25", "--stamp", "2026-08-25-101500",
+    ])
+
+    assert code == 0
+    assert payload["result"]["structure_version"] == 2
+    assert [a["slug"] for a in payload["result"]["applied"]] == ["first"]
+    assert payload["result"]["snapshot"] == \
+        "99-workflow-config/snapshots/vault-2026-08-25-101500.zip"
+
+
+def test_migrate_run_failure_is_a_structured_error_not_a_traceback(
+        capsys, tmp_path, monkeypatch):
+    from test_vaultlib_migrate import write_migration
+
+    mdir = tmp_path / "migrations"
+    mdir.mkdir()
+    monkeypatch.setattr(migrate, "MIGRATIONS_DIR", mdir)
+    write_migration(mdir, 1, "boom", 2, "m1", fail_apply=True)
+
+    root = make_vault(tmp_path)
+    (root / "structure-version").write_text("1\n", encoding="utf-8")
+
+    code, payload = run(capsys, [
+        "migrate", "run", "--vault", str(root),
+        "--today", "2026-08-25", "--stamp", "2026-08-25-101500",
+    ])
+
+    assert code == 1
+    assert payload["ok"] is False
+    assert "Restore from the named snapshot" in payload["hint"]
+
+
+def test_migrate_run_hint_names_the_files_a_human_must_fix(
+        capsys, tmp_path, monkeypatch):
+    """apply names the notes it refused to touch; verify then stops the chain.
+    The hint is the only place a consultant sees that list — it used to die
+    with the apply report."""
+    from test_vaultlib_migrate import write_migration
+
+    mdir = tmp_path / "migrations"
+    mdir.mkdir()
+    monkeypatch.setattr(migrate, "MIGRATIONS_DIR", mdir)
+    write_migration(mdir, 1, "strict", 2, "m1", fail_verify=True,
+                    needs_human=["30-projects/a/decisions/x.md: remove tags "
+                                 "by hand"])
+
+    root = make_vault(tmp_path)
+    (root / "structure-version").write_text("1\n", encoding="utf-8")
+
+    code, payload = run(capsys, [
+        "migrate", "run", "--vault", str(root),
+        "--today", "2026-08-25", "--stamp", "2026-08-25-101500",
+    ])
+
+    assert code == 1
+    assert "30-projects/a/decisions/x.md: remove tags by hand" in payload["hint"]
+
+
+def test_health_report_returns_content_free_counts_through_the_cli(
+        capsys, tmp_path):
+    from test_vaultlib_health import TODAY, seeded_vault
+
+    root = seeded_vault(tmp_path)
+
+    code, payload = run(capsys, [
+        "health", "report", "--vault", str(root), "--today", TODAY,
+    ])
+
+    assert code == 0
+    assert payload["result"]["meetings"]["in_window"] == 3
+    assert payload["result"]["decisions"] == {
+        "active": 1, "superseded": 1, "withdrawn": 0, "unknown": 0}
+    assert "written" not in payload["result"]
+
+
+def test_health_report_write_creates_the_dated_file_and_reports_its_path(
+        capsys, tmp_path):
+    from test_vaultlib_health import TODAY, seeded_vault
+
+    root = seeded_vault(tmp_path)
+
+    code, payload = run(capsys, [
+        "health", "report", "--vault", str(root), "--today", TODAY, "--write",
+    ])
+
+    assert code == 0
+    written = payload["result"]["written"]
+    assert written == "99-workflow-config/health-reports/2026-08-25.md"
+    assert (root / written).is_file()
+    assert "northwind" not in (root / written).read_text(encoding="utf-8").lower()
+
+
+def test_health_report_rejects_a_bad_window_as_a_structured_error(
+        capsys, tmp_path):
+    from test_vaultlib_health import TODAY, seeded_vault
+
+    root = seeded_vault(tmp_path)
+
+    code, payload = run(capsys, [
+        "health", "report", "--vault", str(root), "--today", TODAY,
+        "--window", "not-a-number",
+    ])
+
+    assert code == 1
+    assert payload["ok"] is False
+    assert "--window" in payload["error"]

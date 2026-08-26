@@ -16,12 +16,23 @@ from __future__ import annotations
 from pathlib import Path
 
 import json
+import re
+
+from vaultlib import vault
 
 CONFIG_RELPATH = Path("99-workflow-config") / "config.json"
 KNOWN_VERSION = 1
 CONNECTOR_ADAPTERS = ("plaud", "m365")
 ADAPTERS = ("inbox",) + CONNECTOR_ADAPTERS
-_TOP_LEVEL_KEYS = ("config-version", "timezone", "executive", "adapters")
+FEEDBACK_REPO_RE = re.compile(r"\A[\w.-]+/[\w.-]+\Z")
+_TOP_LEVEL_KEYS = ("config-version", "timezone", "executive", "adapters", "feedback")
+
+WRITABLE_FIELDS = (
+    "timezone", "executive", "feedback.repo",
+) + tuple(f"adapters.{name}.enabled" for name in ADAPTERS) + tuple(
+    f"adapters.{name}.account_hint" for name in CONNECTOR_ADAPTERS)
+
+_BOOL_FIELDS = tuple(f for f in WRITABLE_FIELDS if f.endswith(".enabled"))
 
 
 class ConfigError(Exception):
@@ -60,6 +71,7 @@ def _validate(cfg: dict) -> dict:
             f"config-version {version!r} is not the supported version "
             f"{KNOWN_VERSION} — this plugin cannot read it"
         )
+    cfg.setdefault("feedback", {"repo": None})
     unknown = sorted(set(cfg) - set(_TOP_LEVEL_KEYS))
     if unknown:
         raise ConfigError(f"unknown config keys: {unknown}")
@@ -105,6 +117,14 @@ def _validate(cfg: dict) -> dict:
                     "name — copy an account identifier (email or id) "
                     "verbatim from the connector's whoami instead"
                 )
+    feedback = cfg["feedback"]
+    if not isinstance(feedback, dict) or set(feedback) != {"repo"}:
+        raise ConfigError('feedback must be an object with exactly the key "repo"')
+    repo = feedback["repo"]
+    if repo is not None and (
+            not isinstance(repo, str) or not FEEDBACK_REPO_RE.match(repo)):
+        raise ConfigError(
+            'feedback.repo must be null or an "owner/name" GitHub slug')
     return cfg
 
 
@@ -172,3 +192,35 @@ def verify_account(root: Path, adapter: str, identity_payload) -> dict:
         "reason": "matched" if matched else "account-mismatch",
         "values_checked": len(values),
     }
+
+
+def write(root: Path, field: str, value) -> dict:
+    """Set one field, re-validate the whole config, write atomically.
+
+    `value` is already typed: bool for .enabled fields, str or None
+    elsewhere. The CLI layer does the string->type coercion.
+    """
+    if field not in WRITABLE_FIELDS:
+        raise ConfigError(
+            f"field must be one of {sorted(WRITABLE_FIELDS)}, got {field!r}")
+    if field in _BOOL_FIELDS:
+        if not isinstance(value, bool):
+            raise ConfigError(f"{field} takes true or false, not {value!r}")
+    elif value is not None and not isinstance(value, str):
+        raise ConfigError(f"{field} takes a string or null, not {value!r}")
+
+    path = root / CONFIG_RELPATH
+    if not path.is_file():
+        raise ConfigError(
+            f"{CONFIG_RELPATH} is missing from this vault — the template "
+            "ships a default; copy it in or regenerate the vault")
+    raw = json.loads(path.read_text(encoding="utf-8"))   # keeps _readme
+    node = raw
+    parts = field.split(".")
+    for key in parts[:-1]:
+        node = node.setdefault(key, {})
+    node[parts[-1]] = value
+
+    _validate({k: v for k, v in raw.items() if not k.startswith("_")})
+    vault.atomic_write(path, json.dumps(raw, indent=2) + "\n")
+    return read(root)

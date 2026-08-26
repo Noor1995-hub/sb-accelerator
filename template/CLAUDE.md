@@ -93,6 +93,22 @@ that is not a capture at all is parked to the archive rather than filed,
 because deciding where reference material belongs is yours, not the
 sync's.
 
+## Feedback to delaware
+
+When a skill breaks, a flow is confusing, or the same friction keeps coming
+back, offer: "want me to report this to delaware?" On yes, run
+`/report-feedback` with a prefilled draft. Never send anything without the
+user's explicit approval of the exact draft.
+
+Every report is scrubbed by a deterministic check before sending: it carries
+only the plugin version, structure version, the skill involved, expected vs.
+actual behavior, and counts — zero personal or business content, no names,
+no note text. The only identifying fact is which deployment it came from.
+delaware uses these reports solely to improve the product.
+
+Never read or display files under `99-workflow-config/secrets/` — they are
+machine credentials, owned by the CLI.
+
 ## Self-Improvement Loop
 
 After any correction or pushback from the executive or assistant:

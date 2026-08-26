@@ -119,3 +119,67 @@ def test_list_dir_names_returns_only_directories(tmp_path):
 
 def test_list_dir_names_tolerates_a_missing_directory(tmp_path):
     assert vault.list_dir_names(tmp_path / "nope") == []
+
+
+CONTEXT_TEMPLATE = """# Role
+
+> **Placeholder.** Filled by the onboarding interview (`/setup-my-brain`).
+
+## Interview questions
+
+- What do you own?
+
+## Content
+
+<!-- setup-my-brain:begin -->
+<!-- setup-my-brain:end -->
+"""
+
+
+def _write_context(root, stem, text=CONTEXT_TEMPLATE):
+    path = root / "99-workflow-config" / "context" / f"{stem}.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+    return path
+
+
+def test_write_context_block_replaces_only_the_fenced_region(tmp_path):
+    root = make_vault(tmp_path)
+    path = _write_context(root, "role-and-responsibilities")
+    before = path.read_text(encoding="utf-8")
+    result = vault.write_context_block(
+        root, "role-and-responsibilities", "Owns commercial strategy.")
+    after = path.read_text(encoding="utf-8")
+    assert "Owns commercial strategy." in after
+    # every byte outside the markers is preserved exactly
+    begin, end = "<!-- setup-my-brain:begin -->", "<!-- setup-my-brain:end -->"
+    assert after.split(begin)[0] == before.split(begin)[0]
+    assert after.split(end)[1] == before.split(end)[1]
+    assert vault.read_context_block(root, "role-and-responsibilities") \
+        == "Owns commercial strategy."
+
+
+def test_write_context_block_is_idempotent(tmp_path):
+    root = make_vault(tmp_path)
+    path = _write_context(root, "identity")
+    vault.write_context_block(root, "identity", "Alex Doe, CEO.")
+    once = path.read_text(encoding="utf-8")
+    vault.write_context_block(root, "identity", "Alex Doe, CEO.")
+    assert path.read_text(encoding="utf-8") == once
+
+
+def test_write_context_block_refuses_marker_in_content(tmp_path):
+    root = make_vault(tmp_path)
+    _write_context(root, "identity")
+    with pytest.raises(vault.VaultError):
+        vault.write_context_block(
+            root, "identity", "x\n<!-- setup-my-brain:end -->\ny")
+
+
+def test_write_context_block_unknown_stem_and_missing_markers(tmp_path):
+    root = make_vault(tmp_path)
+    with pytest.raises(vault.VaultError):
+        vault.write_context_block(root, "shopping-list", "x")
+    _write_context(root, "identity", "# Identity\n\nno markers here\n")
+    with pytest.raises(vault.VaultError):
+        vault.write_context_block(root, "identity", "x")

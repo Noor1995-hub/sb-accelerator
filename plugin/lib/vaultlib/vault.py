@@ -6,6 +6,7 @@ mount point, not a path shape anything can infer.
 from __future__ import annotations
 
 import datetime as _datetime
+import json
 import os
 import re
 import tempfile
@@ -15,6 +16,10 @@ from typing import List, Optional
 IDENTITY_RELPATH = Path("99-workflow-config") / "context" / "identity.md"
 _BEGIN = "<!-- setup-my-brain:begin -->"
 _END = "<!-- setup-my-brain:end -->"
+
+CONTEXT_DIR = Path("99-workflow-config") / "context"
+CONTEXT_FILES = ("identity", "role-and-responsibilities", "communication-style",
+                 "preferences-and-constraints", "tools-and-systems")
 
 # The folder taxonomy and the ISO-date shape live here, in the one module
 # every other one already imports, so a rename is a single edit rather than a
@@ -77,22 +82,62 @@ def atomic_write(path: Path, text: str) -> None:
         raise
 
 
+def _context_path(root: Path, stem: str) -> Path:
+    if stem not in CONTEXT_FILES:
+        raise VaultError(
+            f"context file must be one of {sorted(CONTEXT_FILES)}, got {stem!r}")
+    path = root / CONTEXT_DIR / f"{stem}.md"
+    if not path.is_file():
+        raise VaultError(
+            f"{(CONTEXT_DIR / (stem + '.md')).as_posix()} is missing from this vault")
+    return path
+
+
+def read_context_block(root: Path, stem: str) -> Optional[str]:
+    """Return the content between one context file's setup-my-brain markers.
+
+    Extraction only. Deciding what belongs in the block is judgment, and
+    stays with the model.
+    """
+    text = _context_path(root, stem).read_text(encoding="utf-8")
+    start, end = text.find(_BEGIN), text.find(_END)
+    if start == -1 or end == -1 or end <= start:
+        return None
+    block = text[start + len(_BEGIN):end].strip()
+    return block or None
+
+
+def write_context_block(root: Path, stem: str, content: str) -> dict:
+    """Replace one context file's setup-my-brain block, byte-exact outside it."""
+    if _BEGIN in content or _END in content:
+        raise VaultError(
+            "content must not contain the setup-my-brain markers — the CLI "
+            "owns them")
+    path = _context_path(root, stem)
+    text = path.read_text(encoding="utf-8")
+    start, end = text.find(_BEGIN), text.find(_END)
+    if start == -1 or end == -1 or end <= start:
+        raise VaultError(
+            f"{path.name} has no intact setup-my-brain marker pair — restore "
+            "it from the template before writing")
+    replaced = bool(text[start + len(_BEGIN):end].strip())
+    new = (text[:start + len(_BEGIN)] + "\n" + content.strip() + "\n"
+           + text[end:])
+    atomic_write(path, new)
+    return {"file": (CONTEXT_DIR / f"{stem}.md").as_posix(),
+            "replaced": replaced}
+
+
 def read_identity_block(root: Path) -> Optional[str]:
     """Return the content between identity.md's setup-my-brain markers.
 
     Extraction only. Deciding *which* words in it are the executive's name is
     judgment, and stays with the model.
     """
-    path = root / IDENTITY_RELPATH
-    if not path.is_file():
+    try:
+        return read_context_block(root, "identity")
+    except VaultError:
         return None
-    text = path.read_text(encoding="utf-8")
-    start = text.find(_BEGIN)
-    end = text.find(_END)
-    if start == -1 or end == -1 or end <= start:
-        return None
-    block = text[start + len(_BEGIN):end].strip()
-    return block or None
 
 
 def today_iso(explicit: Optional[str] = None) -> str:
@@ -108,3 +153,25 @@ def list_dir_names(path: Path) -> List[str]:
     if not path.is_dir():
         return []
     return sorted(entry.name for entry in path.iterdir() if entry.is_dir())
+
+
+def plugin_version() -> str:
+    """The shipped plugin version, for stamping feedback reports.
+
+    Never raises: a broken or missing plugin.json must not stop feedback
+    from being sent — it just loses its version stamp.
+    """
+    path = Path(__file__).resolve().parents[2] / ".claude-plugin" / "plugin.json"
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return str(data["version"])
+    except (OSError, ValueError, KeyError, TypeError):
+        return "unknown"
+
+
+def structure_version(root: Path) -> str:
+    """The vault-root structure-version marker, stripped."""
+    path = root / "structure-version"
+    if not path.is_file():
+        raise VaultError(f"{path.name} is missing from this vault")
+    return path.read_text(encoding="utf-8").strip()

@@ -1,0 +1,27 @@
+{
+  "_readme": [
+    "Machine-read deployment config — owned by the CLI and /setup-my-brain.",
+    "Edit as text (never via Obsidian's property panel; this is not frontmatter).",
+    "timezone: the executive's IANA timezone name, e.g. Europe/Brussels.",
+    "executive: the executive's person slug in 50-people/, the join key for metrics.",
+    "account_hint: an identifier of the connector account that IS this vault's",
+    "account, copied VERBATIM from the connector's whoami (Plaud",
+    "get_current_user: the id or email field; Microsoft 365 get_me: mail or",
+    "userPrincipalName). Never a display name — and note that Apple/Google",
+    "sign-ins often give the connector a synthetic address, so the email you",
+    "signed up with may never appear in its whoami at all. A connector whose",
+    "signed-in account does not match its hint is refused before any content",
+    "is listed. Binding a vault to an account is a conscious act: write the",
+    "hint here, explicitly.",
+    "feedback.repo: the delaware-created sb-client-<slug> GitHub repo (owner/name) that /report-feedback files issues on; null until provisioning sets it."
+  ],
+  "config-version": 1,
+  "timezone": null,
+  "executive": null,
+  "adapters": {
+    "inbox": {"enabled": true},
+    "plaud": {"enabled": false, "account_hint": null},
+    "m365": {"enabled": false, "account_hint": null}
+  },
+  "feedback": {"repo": null}
+}

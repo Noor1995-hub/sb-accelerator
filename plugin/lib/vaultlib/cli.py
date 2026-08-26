@@ -31,7 +31,7 @@ if __package__ in (None, ""):
     # the skills invoke it.
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from vaultlib import config, dailynote, dates, decision, entity, m365, meeting, person, plaud, project, schema, syncjob, updatequeue, vault  # noqa: E402
+from vaultlib import config, dailynote, dates, decision, entity, feedback, health, m365, meeting, migrate, person, plaud, project, schema, syncjob, updatequeue, vault  # noqa: E402
 
 
 def _emit(payload: dict) -> None:
@@ -65,6 +65,20 @@ def build_parser() -> argparse.ArgumentParser:
         "show", help="print identity.md's setup-my-brain content block")
     _add_vault_argument(identity_show)
 
+    context = top.add_parser("context", help="context portfolio marker blocks")
+    context_sub = context.add_subparsers(dest="action", required=True)
+    context_read = context_sub.add_parser("read", help="print one file's block")
+    _add_vault_argument(context_read)
+    context_read.add_argument("--file", required=True,
+                              choices=sorted(vault.CONTEXT_FILES))
+    context_write = context_sub.add_parser(
+        "write", help="replace one file's setup-my-brain block")
+    _add_vault_argument(context_write)
+    context_write.add_argument("--file", required=True,
+                               choices=sorted(vault.CONTEXT_FILES))
+    context_write.add_argument("--content", required=True,
+                               help="path to a text file, or - to read stdin")
+
     config_group = top.add_parser(
         "config", help="deployment config — the machine-read half of 99-workflow-config")
     config_sub = config_group.add_subparsers(dest="action", required=True)
@@ -81,6 +95,15 @@ def build_parser() -> argparse.ArgumentParser:
     config_verify.add_argument(
         "--identity", required=True,
         help="path to the raw whoami JSON the connector returned (or - for stdin)")
+    config_write = config_sub.add_parser(
+        "write", help="set one config field; the whole file re-validates first")
+    _add_vault_argument(config_write)
+    config_write.add_argument(
+        "--field", required=True, choices=sorted(config.WRITABLE_FIELDS))
+    value_group = config_write.add_mutually_exclusive_group(required=True)
+    value_group.add_argument("--value", help="the new value (true/false for .enabled)")
+    value_group.add_argument("--null", action="store_true",
+                             help="unset the field (nullable fields only)")
 
     dates_group = top.add_parser("dates", help="date and timezone arithmetic")
     dates_sub = dates_group.add_subparsers(dest="action", required=True)
@@ -300,6 +323,21 @@ def build_parser() -> argparse.ArgumentParser:
     m365_re.add_argument("--timezone", help="IANA timezone name")
     m365_re.add_argument("--utc-offset", dest="utc_offset")
 
+    feedback_group = top.add_parser(
+        "feedback", help="scrub-linted product feedback, sent as a GitHub issue")
+    feedback_sub = feedback_group.add_subparsers(dest="action", required=True)
+    feedback_lint = feedback_sub.add_parser(
+        "lint", help="run the deterministic scrub check against a draft")
+    _add_vault_argument(feedback_lint)
+    feedback_lint.add_argument("--body-file", dest="body_file", required=True,
+                               help="path to the draft text, or - to read stdin")
+    feedback_send = feedback_sub.add_parser(
+        "send", help="lint, stamp with deployment info, and file a GitHub issue")
+    _add_vault_argument(feedback_send)
+    feedback_send.add_argument("--title", required=True)
+    feedback_send.add_argument("--body-file", dest="body_file", required=True,
+                               help="path to the draft text, or - to read stdin")
+
     daily = top.add_parser("daily-note",
                            help="daily notes: region write and harvest read")
     daily_sub = daily.add_subparsers(dest="action", required=True)
@@ -312,6 +350,35 @@ def build_parser() -> argparse.ArgumentParser:
         "read", help="parse a daily note into regions and human jottings")
     _add_vault_argument(daily_read)
     daily_read.add_argument("--date", required=True, help="ISO date of the note")
+
+    migrate_group = top.add_parser(
+        "migrate", help="vault structure migrations: snapshot, apply, verify")
+    migrate_sub = migrate_group.add_subparsers(dest="action", required=True)
+    migrate_status = migrate_sub.add_parser(
+        "status", help="pending migrations and the current/expected version")
+    _add_vault_argument(migrate_status)
+    migrate_run = migrate_sub.add_parser(
+        "run", help="snapshot then apply+verify every pending migration in order")
+    _add_vault_argument(migrate_run)
+    migrate_run.add_argument("--today", help="ISO date; defaults to today")
+    migrate_run.add_argument(
+        "--stamp", help="snapshot timestamp override (tests)")
+
+    health_group = top.add_parser(
+        "health", help="content-free vault health metrics (read-only)")
+    health_sub = health_group.add_subparsers(dest="action", required=True)
+    health_report = health_sub.add_parser(
+        "report", help="counts/rates/ages over a lookback window; never a "
+                       "title, name, or filename")
+    _add_vault_argument(health_report)
+    health_report.add_argument("--today", help="ISO date; defaults to today")
+    # No type=int here: an out-of-range or non-numeric value is a HealthError
+    # raised from health.report(), not an argparse SystemExit.
+    health_report.add_argument(
+        "--window", help="lookback window in days (default 28)")
+    health_report.add_argument(
+        "--write", action="store_true",
+        help="also render to 99-workflow-config/health-reports/{today}.md")
 
     return parser
 
@@ -328,9 +395,27 @@ def _dispatch(args: argparse.Namespace) -> int:
                               catchup_threshold=args.catchup_threshold))
     if args.group == "identity":
         return _ok({"identity": vault.read_identity_block(root)})
+    if args.group == "context":
+        if args.action == "read":
+            return _ok({"file": args.file,
+                        "content": vault.read_context_block(root, args.file)})
+        content = (sys.stdin.read() if args.content == "-"
+                   else Path(args.content).read_text(encoding="utf-8"))
+        return _ok(vault.write_context_block(root, args.file, content))
     if args.group == "config":
         if args.action == "read":
             return _ok(config.read(root))
+        if args.action == "write":
+            if args.null:
+                value = None
+            elif args.field.endswith(".enabled"):
+                if args.value not in ("true", "false"):
+                    raise config.ConfigError(
+                        f"{args.field} takes --value true or false")
+                value = args.value == "true"
+            else:
+                value = args.value
+            return _ok(config.write(root, args.field, value))
         payload = (json.load(sys.stdin) if args.identity == "-"
                    else json.loads(Path(args.identity).read_text(encoding="utf-8")))
         return _ok(config.verify_account(root, args.adapter, payload))
@@ -415,12 +500,29 @@ def _dispatch(args: argparse.Namespace) -> int:
         return _ok(m365.reassemble(
             args.event, args.transcript, args.out,
             timezone=args.timezone, utc_offset=args.utc_offset))
+    if args.group == "feedback":
+        body_text = (sys.stdin.read() if args.body_file == "-"
+                    else Path(args.body_file).read_text(encoding="utf-8"))
+        if args.action == "lint":
+            return _ok(feedback.lint(root, body_text))
+        return _ok(feedback.send(root, args.title, body_text))
     if args.group == "daily-note":
         if args.action == "write":
             payload = (json.load(sys.stdin) if args.note == "-"
                        else json.loads(Path(args.note).read_text(encoding="utf-8")))
             return _ok(dailynote.write(root, payload))
         return _ok(dailynote.read(root, args.date))
+    if args.group == "migrate":
+        if args.action == "status":
+            return _ok(migrate.status(root))
+        return _ok(migrate.run(root, vault.today_iso(args.today),
+                               stamp=args.stamp))
+    if args.group == "health":
+        window = args.window if args.window is not None else health.DEFAULT_WINDOW_DAYS
+        data = health.report(root, vault.today_iso(args.today), window=window)
+        if args.write:
+            data["written"] = health.write_report(root, data)
+        return _ok(data)
     raise AssertionError(f"unhandled group {args.group!r}")
 
 
@@ -479,6 +581,21 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         return _fail(str(exc), "Fix the named argument and retry.")
     except dailynote.DailyNoteError as exc:
         return _fail(str(exc), "Fix the named payload field or note state and retry.")
+    except feedback.FeedbackError as exc:
+        return _fail(str(exc), "Fix the named constraint; nothing was sent.")
+    except health.HealthError as exc:
+        return _fail(str(exc), "Fix --today or --window and retry.")
+    except migrate.MigrateError as exc:
+        # The per-file list rides the hint rather than a fourth envelope key:
+        # `hint` is already "what to do", and these files are the whole of it.
+        # Without this the consultant got a verify message and no idea which
+        # notes to repair — the list apply built died with the report.
+        hint = ("Restore from the named snapshot if needed; fix the cause; "
+                "re-run.")
+        if getattr(exc, "needs_human", None):
+            hint += (" These files need a human first: "
+                     + "; ".join(exc.needs_human))
+        return _fail(str(exc), hint)
     except json.JSONDecodeError as exc:
         return _fail(f"payload is not valid JSON: {exc}",
                      "Pass a JSON object in a file, or - to read stdin.")

@@ -22,6 +22,20 @@ delivers them.
   calendar invitation itself. A meeting without a transcript is simply
   reported, and when the recorder already captured the same conversation,
   the sync flags the pair for you instead of writing the meeting twice. (#80)
+- **`/setup-my-brain` — the Session-1 interview now exists.** One guided
+  conversation fills your context, binds your accounts with an on-screen
+  yes before anything connects, seeds your first entities, projects and
+  people, and ends with tomorrow's note already on screen. (#81)
+- **`/upgrade-vault` — the tune-up upgrade now protects itself.** It
+  snapshots the vault before it changes anything, verifies the result
+  after, and logs what ran. Anything that drops content along the way is
+  announced before it happens, never discovered after. (#81)
+- **`/health-check` — a numbers-only health report the EA can run.** Meeting
+  volume, daily-note coverage, what's gone stale — no names, no content —
+  and only with your explicit approval, share it with delaware. (#81)
+- **`/report-feedback` — report a broken or clumsy flow to delaware.** A
+  deterministic check guarantees the report carries no names or content,
+  and nothing sends without your approval of the exact text. (#81)
 - **Tomorrow's note tells you when it is catching up.** After missed evenings —
   a holiday, travel, a laptop that stayed shut — the recap used to quietly cover
   the whole gap and look like any other day. It now opens by naming the window

@@ -260,3 +260,92 @@ def test_verify_account_empty_payload_is_an_error_not_a_mismatch(tmp_path):
     root = bound_vault(tmp_path)
     with pytest.raises(config.ConfigError, match="no text"):
         config.verify_account(root, "plaud", {"id": 42, "ok": True})
+
+
+def test_read_defaults_absent_feedback_to_null_repo(tmp_path):
+    # Deployed vaults predate the feedback key; absence must not fail.
+    root = make_vault(tmp_path)
+    write_config(root, valid_config())          # no "feedback" key at all
+    result = config.read(root)
+    assert result["config"]["feedback"] == {"repo": None}
+    assert "feedback.repo" not in result["missing"]  # optional feature, never "missing"
+
+
+def test_read_accepts_configured_feedback_repo(tmp_path):
+    root = make_vault(tmp_path)
+    write_config(root, valid_config(feedback={"repo": "delaware-org/sb-client-acme"}))
+    assert config.read(root)["config"]["feedback"]["repo"] == "delaware-org/sb-client-acme"
+
+
+@pytest.mark.parametrize("bad", [
+    {"repo": "not-a-slug"},          # no owner/ part
+    {"repo": ""},                     # empty string
+    {"repo": "a/b/c"},                # too many parts
+    {"repo": None, "extra": 1},       # unknown key
+    "delaware-org/sb-client-acme",    # not an object
+])
+def test_read_rejects_malformed_feedback(tmp_path, bad):
+    root = make_vault(tmp_path)
+    write_config(root, valid_config(feedback=bad))
+    with pytest.raises(config.ConfigError):
+        config.read(root)
+
+
+def test_write_sets_field_and_preserves_readme(tmp_path):
+    root = make_vault(tmp_path)
+    cfg = valid_config(timezone=None)
+    cfg["_readme"] = ["keep me"]
+    write_config(root, cfg)
+    result = config.write(root, "timezone", "Europe/Brussels")
+    assert result["config"]["timezone"] == "Europe/Brussels"
+    raw = json.loads((root / "99-workflow-config" / "config.json")
+                     .read_text(encoding="utf-8"))
+    assert raw["_readme"] == ["keep me"]          # commentary survives
+    assert raw["timezone"] == "Europe/Brussels"
+
+
+def test_write_rejects_display_name_hint(tmp_path):
+    root = make_vault(tmp_path)
+    write_config(root, valid_config())
+    with pytest.raises(config.ConfigError):
+        config.write(root, "adapters.plaud.account_hint", "Morgan")
+    # and the file is untouched
+    assert config.read(root)["config"]["adapters"]["plaud"]["account_hint"] \
+        == "morgan@example.com"
+
+
+def test_write_null_unsets_nullable_field(tmp_path):
+    root = make_vault(tmp_path)
+    write_config(root, valid_config())
+    result = config.write(root, "adapters.plaud.account_hint", None)
+    assert result["config"]["adapters"]["plaud"]["account_hint"] is None
+
+
+def test_write_enabled_requires_bool(tmp_path):
+    root = make_vault(tmp_path)
+    write_config(root, valid_config())
+    result = config.write(root, "adapters.m365.enabled", True)
+    assert result["config"]["adapters"]["m365"]["enabled"] is True
+    with pytest.raises(config.ConfigError):
+        config.write(root, "adapters.m365.enabled", None)
+
+
+def test_write_unknown_field_refused(tmp_path):
+    root = make_vault(tmp_path)
+    write_config(root, valid_config())
+    with pytest.raises(config.ConfigError):
+        config.write(root, "adapters.plaud.nickname", "x")
+
+
+def test_write_feedback_repo(tmp_path):
+    root = make_vault(tmp_path)
+    write_config(root, valid_config())
+    result = config.write(root, "feedback.repo", "delaware-org/sb-client-acme")
+    assert result["config"]["feedback"]["repo"] == "delaware-org/sb-client-acme"
+
+
+def test_write_rejects_malformed_feedback_repo(tmp_path):
+    root = make_vault(tmp_path)
+    write_config(root, valid_config())
+    with pytest.raises(config.ConfigError):
+        config.write(root, "feedback.repo", "not-a-slug")

@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from vaultlib import cli
+from vaultlib import cli, feedback
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SKILLS_DIR = REPO_ROOT / "plugin" / "skills"
@@ -37,20 +37,28 @@ def known_subcommands() -> set:
     return pairs
 
 
+NET_NEW = {"report-feedback", "health-check", "upgrade-vault", "setup-my-brain"}
+
+
 def test_expected_skills_exist():
     # Each skill task appends its own name here as it lands, so this test is
     # always satisfiable by the task that touches it.
     names = {path.parent.name for path in SKILL_FILES}
     assert {"new-project", "update-entity", "log-decision",
-            "sync-recordings", "evening-sync"} <= names
+            "sync-recordings", "evening-sync", "report-feedback",
+            "health-check", "upgrade-vault", "setup-my-brain"} <= names
 
 
 @pytest.mark.parametrize("path", SKILL_FILES, ids=lambda p: p.parent.name)
 def test_skill_records_provenance(path):
     head = path.read_text(encoding="utf-8").split("---")[1]
-    assert "upstreamed-from: busdev@" in head, (
-        f"{path.parent.name}: ported skills record upstreamed-from in frontmatter"
-    )
+    if path.parent.name in NET_NEW:
+        assert "origin: net-new" in head, (
+            f"{path.parent.name}: net-new skills declare origin: net-new")
+        assert "upstreamed-from" not in head
+    else:
+        assert "upstreamed-from: busdev@" in head, (
+            f"{path.parent.name}: ported skills record upstreamed-from")
 
 
 @pytest.mark.parametrize("path", SKILL_FILES, ids=lambda p: p.parent.name)
@@ -152,10 +160,39 @@ def test_new_project_resolves_owner_from_config():
 def test_no_skill_reads_machine_decisions_from_prose(path):
     """#54 acceptance: timezone, exec slug, and adapter enablement come from
     config.json. The prose context files carry style and narrative only, so
-    no skill may name the two files that used to hold machine decisions."""
+    no skill may name the two files that used to hold machine decisions.
+
+    `setup-my-brain` is exempt from the `tools-and-systems` half only, because
+    it is the *writer* of the portfolio: the interview walks all five context
+    stems by name and writes each through `context write`. Naming a file you
+    fill is not reading config out of it. The `identity.md` half still binds
+    every skill — nothing has any business reading the exec's name or timezone
+    out of that file — and the invariant that actually matters for the writer
+    is checked below, on the machine fields themselves.
+    """
     text = path.read_text(encoding="utf-8")
     assert "identity.md" not in text, f"{path.parent.name} reads prose config"
-    assert "tools-and-systems" not in text, f"{path.parent.name} reads prose config"
+    if path.parent.name != "setup-my-brain":
+        assert "tools-and-systems" not in text, (
+            f"{path.parent.name} reads prose config")
+
+
+def test_setup_my_brain_writes_machine_decisions_through_config():
+    """The other half of the rule above: the one skill allowed to name the
+    prose files must still route timezone, the executive slug, adapter
+    enablement and the account hints through `config write`, never into a
+    context block — and must run the binding gate on what it wrote, which is
+    the entire point of #54's ceremony."""
+    text = read_skill("setup-my-brain")
+    for field in ("--field executive", "--field timezone",
+                  "--field adapters.plaud.enabled",
+                  "--field adapters.m365.enabled",
+                  "--field adapters.plaud.account_hint",
+                  "--field adapters.m365.account_hint"):
+        assert f"config write --vault \"$VAULT\" {field}" in text, (
+            f"setup-my-brain must set {field} through config write")
+    assert "config verify-account --vault \"$VAULT\" --adapter plaud" in text
+    assert "config verify-account --vault \"$VAULT\" --adapter m365" in text
 
 
 # #58 (F5, F6): a summary line is read by the exec and the EA, so it may not
@@ -195,6 +232,45 @@ def test_sync_recordings_sweeps_the_inbox():
     text = (SKILLS_DIR / "sync-recordings" / "SKILL.md").read_text(encoding="utf-8")
     assert "sync archive" in text, "the sweep the README promises is missing"
     assert "90-archive/inbox/" in text
+
+
+def extract_disclosure_blockquote(text: str) -> str:
+    """Pull the `> `-quoted disclosure paragraph out of a skill body.
+
+    Robust to reflowing (line breaks inside the blockquote are unwrapped and
+    whitespace is collapsed) but not to a wording change — the joined result
+    is compared for exact equality against `feedback.DISCLOSURE`, the single
+    source of truth the CLI stamps into every posted issue.
+    """
+    lines = text.splitlines()
+    start = None
+    marker = "What this report contains and how it is used"
+    for i, line in enumerate(lines):
+        if line.lstrip().startswith(">") and marker in line:
+            start = i
+            break
+    assert start is not None, "disclosure blockquote not found"
+    collected = []
+    for line in lines[start:]:
+        stripped = line.lstrip()
+        if not stripped.startswith(">"):
+            break
+        collected.append(stripped[1:].strip())
+    joined = " ".join(collected)
+    return re.sub(r"\s+", " ", joined).strip()
+
+
+@pytest.mark.parametrize("name", ["report-feedback", "health-check"])
+def test_disclosure_blockquote_matches_feedback_disclosure(name):
+    """M1: the disclosure shown at every share nudge must be the exact text
+    `feedback.send` stamps into the posted issue body — a skill that drifts
+    from it would promise the exec one thing and deliver another."""
+    text = read_skill(name)
+    extracted = extract_disclosure_blockquote(text)
+    assert extracted == feedback.DISCLOSURE, (
+        f"{name}: rendered disclosure does not match feedback.DISCLOSURE "
+        "word-for-word"
+    )
 
 
 def test_sync_recordings_no_longer_asks_the_user_to_archive_by_hand():

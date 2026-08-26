@@ -8,14 +8,22 @@ client's vault and read by the executive.
 
 The moment anything exists in it (the template-extraction issue), the template
 must carry its markers: CLAUDE.md (vault instructions), structure-version
-(consumed by /upgrade-vault), and 99-workflow-config/config.json in the safe
-shipping state (identity values null, connector adapters disabled, unbound).
+(consumed by /upgrade-vault, and pinned here to the latest migration's target),
+and 99-workflow-config/config.json in the safe shipping state (identity values
+null, connector adapters disabled, unbound).
 
 Exit 0 with no output on success; print problems and exit 1 otherwise.
 """
 import json
 import sys
 from pathlib import Path
+
+# The structure-version a freshly instantiated vault ships at: the
+# TARGET_VERSION of the last migration in plugin/migrations/. Hardcoded rather
+# than read from the migration chain, because the two drifting apart is exactly
+# what this check is for — importing the chain would make the assertion agree
+# with whatever the chain says and catch nothing. Bump both together.
+EXPECTED_STRUCTURE_VERSION = "2"
 
 
 def main(root: Path) -> list[str]:
@@ -28,9 +36,48 @@ def main(root: Path) -> list[str]:
     problems = []
     if not (template / "CLAUDE.md").is_file():
         problems.append("populated template/ is missing CLAUDE.md")
-    if not (template / "structure-version").is_file():
-        problems.append("populated template/ is missing the structure-version marker")
+    problems.extend(check_structure_version(template))
     problems.extend(check_config(template))
+    problems.extend(check_feedback_contract(template))
+    return problems
+
+
+def check_structure_version(template: Path) -> list[str]:
+    """The marker must exist and name the latest migration's target version.
+
+    A migration that lands without this bump ships every new vault at the old
+    version, so /upgrade-vault opens by proposing a migration with nothing to
+    do — and nothing else in the repo notices, because the migration's own
+    tests build their vaults by hand.
+    """
+    path = template / "structure-version"
+    if not path.is_file():
+        return ["populated template/ is missing the structure-version marker"]
+    found = path.read_text(encoding="utf-8").strip()
+    if found != EXPECTED_STRUCTURE_VERSION:
+        return [f"template/structure-version is {found!r}, expected "
+                f"{EXPECTED_STRUCTURE_VERSION!r} — the latest migration in "
+                f"plugin/migrations/ targets that version"]
+    return []
+
+
+def check_feedback_contract(template: Path) -> list[str]:
+    """The feedback disclosure and secrets rule must ship in the vault
+    CLAUDE.md, and the secrets folder it points to must exist — Tasks 10/11/14
+    SKILL.mds rely on this contract being present."""
+    problems = []
+    if not (template / "99-workflow-config" / "secrets" / "README.md").is_file():
+        problems.append("template is missing 99-workflow-config/secrets/README.md")
+    claude_md_path = template / "CLAUDE.md"
+    if not claude_md_path.is_file():
+        return problems  # already reported by the CLAUDE.md marker check
+    claude_md = claude_md_path.read_text(encoding="utf-8")
+    for phrase in ("solely to improve the product", "explicit approval",
+                   "99-workflow-config/secrets"):
+        if phrase not in claude_md:
+            problems.append(
+                f"template CLAUDE.md is missing the feedback-contract phrase "
+                f"{phrase!r}")
     return problems
 
 
@@ -66,6 +113,8 @@ def check_config(template: Path) -> list[str]:
             problems.append(
                 f"template config.json must ship adapters.{name} disabled with a null account_hint"
             )
+    if cfg.get("feedback") != {"repo": None}:
+        problems.append('template config.json must ship feedback as {"repo": null}')
     return problems
 
 

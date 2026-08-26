@@ -12,6 +12,7 @@ MINIMAL_DATA = TEMPLATE / ".obsidian" / "plugins" / "obsidian-minimal-settings" 
 APPEARANCE = TEMPLATE / ".obsidian" / "appearance.json"
 SNIPPET = TEMPLATE / ".obsidian" / "snippets" / "sb-accelerator.css"
 WORKSPACE = TEMPLATE / ".obsidian" / "workspace.json"
+CONFIG = TEMPLATE / "99-workflow-config" / "config.json"
 
 EXPECTED_SHORTCUTS = [
     # The orientation note pins first: a fresh vault otherwise opens to an empty
@@ -200,6 +201,16 @@ def test_orientation_note_has_no_duplicate_h1():
     """show-inline-title is on, so a leading H1 renders the title twice."""
     body = (TEMPLATE / "Start here.md").read_text(encoding="utf-8").split("---", 2)[-1]
     assert not body.lstrip().startswith("# "), "drop the H1; the inline title covers it"
+
+
+# --- deployment config.json --------------------------------------------------
+
+def test_shipped_config_carries_null_feedback_repo():
+    """The feedback key is optional-but-validated (config.py); the shipped
+    default must still carry it explicitly so a fresh vault's config.json
+    documents the shape rather than relying on the read-side default."""
+    cfg = json.loads(CONFIG.read_text(encoding="utf-8"))
+    assert cfg["feedback"] == {"repo": None}
 
 
 def test_base_groupby_uses_the_object_form():
