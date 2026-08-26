@@ -28,7 +28,7 @@ browses. Claude is the working interface to everything in here.
 | `30-projects/{slug}/` | Projects and initiatives — `index.md` hub + `decisions/` log |
 | `40-entities/{slug}/` | Dossiers on organizations you work with — `dossier.md` per entity |
 | `50-people/` | People you work with — one note per person |
-| `60-daily-notes/` | Daily canvas; morning and evening briefs land here |
+| `60-daily-notes/` | Daily canvas; each day's note is written the evening before |
 | `70-resources/` | Guides, source material, attachments |
 | `80-thoughts-ideas/` | Idea seeds and drafts |
 | `90-archive/` | Completed and historical items |

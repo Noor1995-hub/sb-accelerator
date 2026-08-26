@@ -37,6 +37,14 @@ delivers them.
   written the evening before but read the next morning, and it used to speak
   from the wrong day. It now reads correctly on the morning you open it.
   (#87)
+- **`Start here` now describes the vault you actually have.** The orientation
+  note named a morning command that does not exist — the evening run writes
+  tomorrow's note, so there is nothing to type in the morning — and it never
+  mentioned the things you can ask for: syncing recordings, logging a decision,
+  starting a project, updating a dossier, or reporting a broken flow to
+  delaware. All of that is in the note now, with the plain-language phrasing
+  beside each command, and it says plainly what the feedback channel does and
+  does not send. (#89)
 - **Teams meetings now sync themselves.** With the Microsoft 365 connector
   bound to the vault, /sync-recordings finds the past week's Teams meetings
   on your calendar, pulls their transcripts, and writes the same meeting

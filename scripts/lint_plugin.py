@@ -1,13 +1,19 @@
 #!/usr/bin/env python3
 """Skill frontmatter lint + clean-room scan for plugin/, template/, and fixtures/.
 
-Two jobs:
+Three jobs:
 1. Every plugin/skills/*/SKILL.md has YAML frontmatter with name (matching its
    directory), description, and user_invocable: true.
 2. No denylisted term (scripts/cleanroom-denylist.txt, case-insensitive
    substrings) appears in any text file under plugin/, template/, or
    fixtures/ — the clean-room rule from CLAUDE.md. plugin/ and template/
    ship to clients; fixtures/ never ships but must stay just as clean.
+3. No prose in those same trees names a slash command that is not a shipped
+   skill. `/morning-brief` outlived the skill it named in
+   template/Start here.md (#84): the skill was removed on purpose — tomorrow's
+   note *is* the morning brief — and nothing tied the orientation note to the
+   shipped skill list. The exec's first act on day one was to type the one
+   command that note put in bold and get nothing back.
 
 Exemption: for the "busdev" term only, the matched `upstreamed-from:\\s*busdev@`
 span (case-insensitive) is stripped from the line before checking — the
@@ -18,6 +24,7 @@ bare "busdev" anywhere else (including filenames).
 
 Exit 0 with no output on success; print problems and exit 1 otherwise.
 """
+import json
 import re
 import sys
 from pathlib import Path
@@ -25,6 +32,25 @@ from pathlib import Path
 import yaml
 
 PROVENANCE_RE = re.compile(r"upstreamed-from:\s*busdev@", re.IGNORECASE)
+
+# A slash command as this repo's prose writes it: backtick, slash, name,
+# backtick. Both anchors carry weight, and the CLOSING one is the whole
+# false-positive defence — `/Users/exec/vault` and `70-resources/attachments`
+# have another segment after the name, so paths never match and no exclusion
+# list is needed. Digits are IN the class: a future `/sync-m365` must be
+# checked, not silently exempted (the same hazard test_skill_contracts.py
+# warns about on CLI invocations). The first character is a letter, so a
+# backticked folder written with a leading slash is not read as a command.
+SLASH_COMMAND_RE = re.compile(r"`/([a-z][a-z0-9]*(?:-[a-z0-9]+)*)`")
+
+# config.json's _readme is prose inside JSON strings, where the backtick
+# convention does not apply — its references are bare. So: require at least one
+# hyphen, and forbid a preceding word char / slash / dot / backtick and a
+# following word char / hyphen / slash. That triple guard is what rejects
+# `Europe/Brussels`, `50-people/`, `(owner/name)` and any multi-segment path.
+BARE_COMMAND_RE = re.compile(r"(?<![\w/`.])/([a-z][a-z0-9]*(?:-[a-z0-9]+)+)(?![\w/-])")
+
+SHIPPED_TREES = ("plugin", "template", "fixtures")
 
 
 def load_denylist(root: Path) -> list[str]:
@@ -48,6 +74,20 @@ def parse_frontmatter(text: str) -> dict | None:
     except yaml.YAMLError:
         return None
     return data if isinstance(data, dict) else None
+
+
+def shipped_skills(root: Path) -> set[str]:
+    """Skill names as Claude Code discovers them: directory names under
+    plugin/skills that hold a SKILL.md.
+
+    plugin.json carries no skill list, so the filesystem IS the manifest.
+    Kept separate from lint_skills(), which needs the directories *without* a
+    SKILL.md so it can report them."""
+    skills_dir = root / "plugin" / "skills"
+    if not skills_dir.is_dir():
+        return set()
+    return {d.name for d in skills_dir.iterdir()
+            if d.is_dir() and (d / "SKILL.md").is_file()}
 
 
 def lint_skills(root: Path) -> list[str]:
@@ -76,7 +116,7 @@ def lint_skills(root: Path) -> list[str]:
 
 def scan_cleanroom(root: Path, terms: list[str]) -> list[str]:
     problems = []
-    for tree in ("plugin", "template", "fixtures"):
+    for tree in SHIPPED_TREES:
         base = root / tree
         if not base.is_dir():
             continue
@@ -109,8 +149,87 @@ def scan_cleanroom(root: Path, terms: list[str]) -> list[str]:
     return problems
 
 
+def scan_skill_references(root: Path, shipped: set[str]) -> list[str]:
+    """No prose that ships may name a slash command that is not a shipped skill.
+
+    Covers plugin/ as well as template/ and fixtures/: a SKILL.md pointing at a
+    deleted sibling skill is the same defect one step further from the exec.
+    Directories named .obsidian are skipped — machine config, not prose.
+
+    Known boundaries, all deliberate:
+
+    - An un-backticked reference in markdown is invisible. Dropping the
+      backtick anchor would start matching filesystem paths, and every
+      reference in these trees observes the convention.
+    - docs/, playbooks/, CHANGELOG.md and the repo-root CLAUDE.md are out of
+      scope. They legitimately name `/visual-check`, `/process-upstream` and
+      `/tmp`, and CHANGELOG entries must stay free to name retired commands.
+    - With no skill inventory at all the check returns nothing rather than
+      flagging every reference, so the linter still works on a partial tree.
+      That hole is closed by test_skill_contracts.py::test_expected_skills_exist,
+      which asserts the nine names against the real repo in every pytest job.
+    """
+    if not shipped:
+        return []
+    inventory = ", ".join(sorted(shipped))
+    problems = []
+    for tree in SHIPPED_TREES:
+        base = root / tree
+        if not base.is_dir():
+            continue
+        for path in sorted(base.rglob("*")):
+            if not path.is_file():
+                continue
+            # Relative to root, not path.parts: a checkout that happens to sit
+            # inside a directory named .obsidian would otherwise skip the lot.
+            rel = path.relative_to(root)
+            if ".obsidian" in rel.parts:
+                continue
+            try:
+                text = path.read_text(encoding="utf-8")
+            except (UnicodeDecodeError, ValueError):
+                continue
+            for i, line in enumerate(text.splitlines(), 1):
+                for name in SLASH_COMMAND_RE.findall(line):
+                    if name not in shipped:
+                        problems.append(
+                            f"{rel}:{i}: names /{name}, which is not a shipped "
+                            f"skill — shipped skills: {inventory}")
+            if path.name == "config.json":
+                problems.extend(_scan_config_readme(text, rel, shipped, inventory))
+    return problems
+
+
+def _scan_config_readme(text: str, rel: Path, shipped: set[str],
+                        inventory: str) -> list[str]:
+    """The vault config's _readme is the one prose surface where the backtick
+    convention does not apply, so it gets the bare form. Scanned per value
+    rather than per line: the value index is the actionable anchor, and parsing
+    keeps the loose regex away from the rest of the file."""
+    try:
+        cfg = json.loads(text)
+    except json.JSONDecodeError:
+        return []  # validate_template.py owns reporting an unparseable config
+    if not isinstance(cfg, dict):
+        return []
+    readme = cfg.get("_readme")
+    values = readme if isinstance(readme, list) else [readme]
+    problems = []
+    for idx, value in enumerate(values):
+        if not isinstance(value, str):
+            continue
+        for name in BARE_COMMAND_RE.findall(value):
+            if name not in shipped:
+                problems.append(
+                    f"{rel} (_readme[{idx}]): names /{name}, which is not a "
+                    f"shipped skill — shipped skills: {inventory}")
+    return problems
+
+
 def main(root: Path) -> list[str]:
-    return lint_skills(root) + scan_cleanroom(root, load_denylist(root))
+    return (lint_skills(root)
+            + scan_cleanroom(root, load_denylist(root))
+            + scan_skill_references(root, shipped_skills(root)))
 
 
 if __name__ == "__main__":
