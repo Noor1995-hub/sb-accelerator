@@ -517,3 +517,53 @@ These seven entries are about the probe. Traps about what the vault renders —
 column virtualisation, occluded windows returning stale frames, non-pristine
 vaults poisoning the row cross-check — live in `docs/visual-verification.md`
 under "Traps worth knowing".
+
+## 2026-08-26 — an MCP tool grew pagination and the skill kept calling it once
+
+**What went wrong.** `/sync-recordings` fetched a Plaud transcript with one
+`mcp__plaud__get_transcript` call and passed the result to `plaud reassemble`.
+At some point the tool became paginated: it now answers `limit` utterances at
+a time (50 by default) with `total`, `offset` and `next_cursor`. Verified live
+while fixing issue #82 — a 32-minute meeting reports `total: 142`. So the
+skill was writing meeting notes from the first 50 utterances of every long
+recording, and `duration_min` (computed from the last segment's `end_time`)
+reported roughly a third of the meeting's real length.
+
+Nothing failed. The 50 segments were well-formed, `_render_transcript` took
+its normal dict branch, the blob rendered, the note was written and the
+recording was marked synced in the ledger — so it never retried. The only
+symptom was meeting notes that felt thin, which reads as a weak transcript.
+
+**Why it bites here specifically.** A skill's contract with an MCP tool is
+prose in a `SKILL.md`; nothing versions it and no test exercises it, because
+the tool is not in the repo. Our own CLI is fully covered — `plaud.py` had 20
+tests — and every one of them fed it a payload *we* wrote. The tests agreed
+with the code and both were describing a response shape the connector no
+longer sent alone.
+
+**The rule.** When a skill hands an external tool's raw output to the CLI, the
+CLI must be able to tell whether it got all of it, and must refuse rather than
+render a partial. `plaud reassemble` now takes one path per page, orders them
+by each page's own `offset`, and checks the accumulated count against the
+page's `total` — a missing page is an error naming both numbers. Where the
+payload carries no such self-description, say so in the skill and treat the
+absence as the risk it is. And when a fix touches an MCP call, spend one live
+call reading the envelope before trusting the shape written down last time.
+
+## 2026-08-26 — three regexes for one timestamp, agreeing with nobody
+
+**What went wrong.** `plaud.reassemble` and `m365.reassemble` returned
+`recorded_local` as `%Y-%m-%d %H:%M:%S`. Both consumers rejected it:
+`meeting.write` matches `\A\d{4}-\d{2}-\d{2}(T\d{2}:\d{2})?\Z` and
+`sync collide` matches `\A\d{4}-\d{2}-\d{2}T\d{2}:\d{2}\Z`. Every recording in
+the first live Session 1 cost a rejection round trip, and `SKILL.md` papered
+over it with an instruction to "swap the space for `T`, drop the seconds" —
+an agent-side transformation of a value the CLI had just produced.
+
+**The rule.** A value one CLI subcommand emits for another to consume is an
+internal interface: assert it against the *consumer's* real validator, not
+against a string literal. The test that now guards this imports
+`meeting._DATETIME_RE` and `syncjob._COLLIDE_START_RE` and matches the live
+output against both, so the three cannot drift apart again. A skill
+instruction that reformats one CLI's output for another CLI is the smell —
+fix the producer instead.
