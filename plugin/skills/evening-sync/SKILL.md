@@ -120,9 +120,9 @@ lines — into the final summary verbatim.
 ## Stage 4 — Project-state updates
 
 If the queue is empty, record "no projects to update" and skip to stage 6.
-Otherwise, per queued project, dispatch a subagent (up to 3 in parallel) with
-the queue entry, the harvest jottings that mention the project, today's date,
-and these instructions:
+Otherwise, per queued project, dispatch a subagent (up to 3 in parallel,
+each with `model: sonnet`) with the queue entry, the harvest jottings that
+mention the project, today's date, and these instructions:
 
 1. Read the `newFiles` meetings end-to-end — Key Takeaways, Debrief, Action
    Items.
@@ -149,6 +149,14 @@ python3 "$VAULTLIB" project touch --vault "$VAULT" --slug <slug> --date <today> 
 5. Return a fenced JSON block: `{"slug", "indexUpdated": bool,
    "decisionsWritten": [stems], "decisionsSkipped": N, "notes"}`. A subagent
    that fails or returns no block becomes a warning, not a retry.
+
+Pin the model rather than letting it inherit. This pipeline is built to run
+unattended every evening, and a subagent spawned with no `model` runs at
+whatever the session costs — a scheduled run started from an expensive
+session quietly bills every project at that rate. The work is bounded: read
+the named meetings, rewrite five bullets and an open-items list, apply the
+material-decision test. `/sync-recordings`'s own fan-out in stage 3 pins the
+same way.
 
 Projects with only `needs-review` meetings never reach the queue — do not
 "help" one by confirming meetings yourself.
@@ -200,6 +208,18 @@ stage 4, harvest jottings worth carrying forward, and watch items
 (conflicts, unresolved duplicates, self-check warnings). Respect the
 language and depth preferences in
 `99-workflow-config/context/preferences-and-constraints.md`.
+
+**Write from the note's date, not from the day you are running.** The note is
+dated `next_business_day` and it is read on that morning, so every relative
+word resolves against *that* day. The meetings you are recapping happened on
+`today` — from the note's vantage that is **yesterday**, and "today" is the
+day being prepped. **"Tomorrow" never belongs in a recap at all**: from
+inside the note it means the day *after* the note, which is not a day this
+run knows anything about. Safest is to skip relative words and use the day
+names `dates plan` already handed you (`today_day_name`, `next_day_name`) or
+the ISO date — those cannot point at the wrong day. This is the one error a
+reader always catches, because they are reading it on the day it is wrong
+about.
 
 **A flat list of meetings is not a recap.** Required shape, in order:
 
@@ -265,8 +285,11 @@ window's meetings, jottings and decisions and stamps the digest on the recap
 marker. A re-run over an unchanged input set comes back with
 `recap_skipped: true` and leaves the recap byte-identical — that is success,
 not a failure to write. Omitting `recap_window` silently forfeits both the
-guard and the catch-up banner, so always pass it. Carry any `warnings` from
-the result into stage 7 verbatim.
+guard and the catch-up banner, so always pass it. That applies to a
+*correction* too: if you have to rewrite a recap you already wrote this run,
+re-run `daily-note write` with `recap_window` again. A rewrite without it
+strips the stamp, and the next evening regenerates a recap the exec has
+already read. Carry any `warnings` from the result into stage 7 verbatim.
 
 ## Stage 7 — Verify against disk, then summarize
 

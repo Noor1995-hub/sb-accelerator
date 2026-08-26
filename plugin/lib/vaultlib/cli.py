@@ -299,7 +299,10 @@ def build_parser() -> argparse.ArgumentParser:
     plaud_re = plaud_sub.add_parser(
         "reassemble", help="render raw MCP JSON into one capture-bundle blob")
     plaud_re.add_argument("--meta", required=True)
-    plaud_re.add_argument("--transcript", required=True)
+    plaud_re.add_argument("--transcript", required=True, nargs="+",
+                          metavar="PAGE",
+                          help="transcript JSON; one path per get_transcript "
+                               "page, in any order")
     plaud_re.add_argument("--note")
     plaud_re.add_argument("--out", required=True,
                           help="scratch directory for the blob (never the vault)")

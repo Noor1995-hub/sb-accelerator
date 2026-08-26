@@ -192,7 +192,11 @@ def reassemble(event_path: str, transcript_path: str, out_dir: str, *,
     derived = derive_id(event)
     start_utc = _event_start(event)
     local, _ = dates.utc_to_local(start_utc, timezone, utc_offset)
-    recorded_local = local.strftime("%Y-%m-%d %H:%M:%S")
+    # Both consumers of this value parse it verbatim — `meeting write`
+    # (date) and `sync collide` (--start) — and neither accepts seconds
+    # or a space separator. Widening the format here costs every
+    # recording a rejection round trip.
+    recorded_local = local.strftime("%Y-%m-%dT%H:%M")
 
     entries = []
     for entry in transcripts:

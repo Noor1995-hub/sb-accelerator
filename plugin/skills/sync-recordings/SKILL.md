@@ -199,21 +199,44 @@ python3 "$VAULTLIB" sync dedup --vault "$VAULT" --ids "$SCRATCH/ids.json"
 Only `new` ids proceed. For each: `mcp__plaud__get_transcript` (required — on
 a transient error retry up to 3×, then skip this recording this run; it
 retries next run by construction) and `mcp__plaud__get_note` (optional
-enrichment — on failure proceed without). Write each raw result to scratch,
-then normalize:
+enrichment — on failure proceed without). Write each raw result to scratch.
+
+**`get_transcript` is paginated, and one page is not the meeting.** It
+answers `limit` utterances at a time — 50 by default — and reports `total`,
+`offset` and a `next_cursor`. A half-hour meeting runs to well over a hundred
+utterances, so a single call is a fraction of the conversation, and the
+duration derived from it is the same fraction of the meeting. Call again with
+the returned `cursor` until `next_cursor` comes back **null** (the last page
+carries the key with a null value, it does not omit it), and write **every**
+page to its own scratch file (`rec_42.transcript.01.json`, `.02.json`, …).
+`plaud reassemble` counts what you pass against `total` and refuses an
+incomplete set — a missed page is an error you see, not a short note nobody
+notices.
+
+**If a page is too large for the tool result**, the harness spills it to a
+file under `~/.claude/projects/…/tool-results/`. Do not go near that path:
+anything under `~/.claude` trips the harness's sensitive-file prompt, which
+lands in front of the user mid-run and reads as the product asking for their
+secrets. Never `cp`, `cat` or `mv` a tool-result overflow file — halve
+`limit` and re-fetch from the same `cursor` instead.
+
+Then normalize — one path per page, in any order (the CLI orders them by each
+page's own `offset`, so scratch filenames carry no meaning):
 
 ```bash
 python3 "$VAULTLIB" plaud reassemble \
   --meta "$SCRATCH/rec_42.meta.json" \
-  --transcript "$SCRATCH/rec_42.transcript.json" \
+  --transcript "$SCRATCH"/rec_42.transcript.*.json \
   --note "$SCRATCH/rec_42.note.json" \
   --out "$SCRATCH" --timezone <config.timezone>
 ```
 
 The result names the blob file and carries `recording_id`, `duration_min`,
-and `recorded_local`. On a Plaud **401**: report it and stop this adapter —
-never retry auth in a loop; re-authentication is interactive and belongs to
-the user.
+and `recorded_local` — an ISO `YYYY-MM-DDTHH:MM` stamp that `meeting write`
+(`date`) and `sync collide` (`--start`) both take **verbatim**, with no
+reformatting. On a Plaud **401**: report it and stop this adapter — never
+retry auth in a loop; re-authentication is interactive and belongs to the
+user.
 
 The executive's timezone is `timezone` from `config read` — pass the IANA
 name. If it is in `missing`, the plaud and m365 adapters and calendar
@@ -260,8 +283,8 @@ and `recorded_local`, like `plaud reassemble`.
 **Then check for a cross-adapter duplicate before anything is written.**
 The ledger keys on exact ids, so it cannot see that a Plaud recording and a
 Teams transcript are the same conversation captured twice. The window check
-can — derive `--start` from `recorded_local` (swap the space for `T`, drop
-the seconds):
+can — `recorded_local` is already the form `--start` wants, so pass it
+straight through:
 
 ```bash
 python3 "$VAULTLIB" sync collide --vault "$VAULT" \
@@ -417,6 +440,13 @@ Extraction is structured work — takeaways, debrief, action items **from the
 transcript**; enrichment summaries are supporting context only, never the
 source of record.
 
+**Spawn each with `model: sonnet`.** A subagent inherits the session's model
+unless you say otherwise, so a nightly run started from an expensive session
+extracts every recording at that price. This work is bounded — one blob in,
+one payload out, against a contract that is already written down — and it
+does not need the session model. The cost shows up on the client's bill, so
+being deliberate about it is part of the product.
+
 ```bash
 cat > "$SCRATCH/rec_42.payload.json" <<'JSON'
 {
@@ -445,7 +475,14 @@ python3 "$VAULTLIB" meeting write --vault "$VAULT" --note "$SCRATCH/rec_42.paylo
 Payload rules the CLI enforces (so get them right the first time):
 
 - `title` is a short kebab-able label — the filename becomes
-  `{DD-MM-YY}-{title-slug}.md`. `date` is ISO, the recording's local start.
+  `{DD-MM-YY}-{title-slug}.md`. `date` is ISO, the recording's local start —
+  for a Plaud or Teams recording that is `recorded_local` unchanged.
+- `type` is a closed enum and nothing else is accepted: **`meeting` · `1:1` ·
+  `steerco` · `workshop` · `brainstorm` · `status-update` · `note`**. A plain
+  conversation is `meeting`; there is no `call`, no `review`, no `sync`. When
+  none of the others clearly fits, `meeting` is the right answer.
+- `source` is a closed enum too: **`teams` · `recorder` · `manual` ·
+  `email`** — the channel the item arrived by, not the tool that made it.
 - `attendees`/`projects`/`entities` are slugs and must resolve (person notes,
   project folders, `40-entities/<slug>/dossier.md`). `attendees` must be
   non-empty — except on a `type: note` capture, which may pass `[]` when the

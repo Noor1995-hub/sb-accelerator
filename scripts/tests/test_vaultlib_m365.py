@@ -115,7 +115,7 @@ def test_reassemble_renders_unattributed_cues_without_invented_speakers(tmp_path
                              str(tmp_path), utc_offset="+02:00")
     blob = (tmp_path / f"{result['recording_id'].split(':')[1]}.blob.md").read_text(
         encoding="utf-8")
-    assert blob.startswith("Kennismaking & sync AI\n\n> Recorded: 2026-08-25 16:00:00\n\n#Transcript\n")
+    assert blob.startswith("Kennismaking & sync AI\n\n> Recorded: 2026-08-25T16:00\n\n#Transcript\n")
     assert "Goeiemiddag.\nAlles goed?" in blob
     assert "Speaker" not in blob
     assert result["has_enrichment"] is False
@@ -225,7 +225,7 @@ def test_transcript_metadata_span_is_the_second_fallback(tmp_path):
                                         {"transcripts": [zero_cue]}),
                              str(tmp_path), utc_offset="+02:00")
     assert result["duration_min"] == 64  # 14:01:19 -> 15:05:01
-    assert result["recorded_local"] == "2026-08-25 16:00:00"
+    assert result["recorded_local"] == "2026-08-25T16:00"
 
 
 def test_recorded_local_comes_from_the_event_start_not_the_transcript(tmp_path):
@@ -239,7 +239,7 @@ def test_recorded_local_comes_from_the_event_start_not_the_transcript(tmp_path):
     result = m365.reassemble(write_json(tmp_path, "e.json", EVENT),
                              write_json(tmp_path, "t.json", TRANSCRIPT),
                              str(tmp_path), timezone="Europe/Brussels")
-    assert result["recorded_local"] == "2026-08-25 16:00:00"
+    assert result["recorded_local"] == "2026-08-25T16:00"
 
 
 def test_reassemble_id_matches_derive_id_for_the_same_event(tmp_path):

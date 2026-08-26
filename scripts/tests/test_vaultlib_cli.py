@@ -4,6 +4,7 @@ Skills read this output, so the envelope shape is part of the interface and
 changing it silently breaks every SKILL.md.
 """
 import json
+import pathlib
 
 import pytest
 
@@ -581,7 +582,64 @@ def test_m365_reassemble_through_the_cli(capsys, tmp_path):
     assert code == 0
     assert payload["ok"] is True
     assert payload["result"]["recording_id"].startswith("m365:")
-    assert payload["result"]["recorded_local"] == "2026-08-25 16:00:00"
+    assert payload["result"]["recorded_local"] == "2026-08-25T16:00"
+
+
+def test_plaud_reassemble_takes_every_page_of_a_paginated_transcript(
+    capsys, tmp_path
+):
+    """`--transcript` is nargs="+": get_transcript answers 50 utterances at a
+    time, so the scratch files the skill writes are pages, not one file."""
+    meta = tmp_path / "meta.json"
+    meta.write_text(json.dumps({"id": "rec_42", "name": "Vendor strategy",
+                                "start_at": "2026-05-20T09:03:00",
+                                "duration": 240000}), encoding="utf-8")
+    pages = []
+    for offset, content in ((0, "first half"), (1, "second half")):
+        page = tmp_path / f"page_{offset}.json"
+        page.write_text(json.dumps({
+            "total": 2, "offset": offset, "returned": 1,
+            "segments": [{"speaker": "Speaker 1", "content": content,
+                          "end_time": (offset + 1) * 120000}],
+        }), encoding="utf-8")
+        pages.append(str(page))
+
+    code, payload = run(capsys, [
+        "plaud", "reassemble", "--meta", str(meta),
+        "--transcript", *pages, "--out", str(tmp_path / "scratch"),
+        "--utc-offset", "+02:00",
+    ])
+
+    assert code == 0
+    assert payload["result"]["recorded_local"] == "2026-05-20T11:03"
+    assert payload["result"]["duration_min"] == 4
+    blob = pathlib.Path(payload["result"]["blob_path"]).read_text(
+        encoding="utf-8")
+    assert "first half" in blob and "second half" in blob
+
+
+def test_a_truncated_plaud_transcript_is_a_structured_failure(capsys, tmp_path):
+    """The silent-truncation guard, seen from the skill's side: one page of a
+    142-utterance meeting is an error with a hint, not a short blob."""
+    meta = tmp_path / "meta.json"
+    meta.write_text(json.dumps({"id": "rec_42", "name": "Vendor strategy",
+                                "start_at": "2026-05-20T09:03:00",
+                                "duration": 240000}), encoding="utf-8")
+    page = tmp_path / "page.json"
+    page.write_text(json.dumps({
+        "total": 142, "offset": 0, "returned": 1, "next_cursor": "eyJvIjoxfQ",
+        "segments": [{"speaker": "Speaker 1", "content": "one of many",
+                      "end_time": 4320}],
+    }), encoding="utf-8")
+
+    code, payload = run(capsys, [
+        "plaud", "reassemble", "--meta", str(meta), "--transcript", str(page),
+        "--out", str(tmp_path / "scratch"), "--utc-offset", "+02:00",
+    ])
+
+    assert code == 1
+    assert payload["ok"] is False
+    assert "1 of 142 utterances" in payload["error"]
 
 
 def test_an_m365_error_is_a_structured_failure_not_a_traceback(capsys, tmp_path):
