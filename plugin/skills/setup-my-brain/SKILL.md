@@ -249,46 +249,23 @@ Then keep them apart as they talk, and carry both lists forward. Phase 3b
 opens with these named back, not with a blank question — the exec should never
 have to describe their own portfolio twice.
 
-### File 3 — the optional sent-mail read
+### File 3 — ask the questions, and take a note of one answer
 
 Nobody can describe how they write. They can describe how they *want* to
 sound, which is a different and less useful thing, and it is why this file
 takes three minutes and produces the thinnest block in the set.
 
-If the Microsoft 365 connector is available (`outlook_email_search`), offer
-one alternative, **once, and as a question with a real no in it**:
+The file's first question offers a way out of that: reading a sample of their
+own sent mail and drafting the block from how they actually write. **Ask it,
+and record the answer — but do not read anything yet.** Their mail account has
+not been connected at this point in the session, and nothing in this plugin
+reads a mailbox before it knows whose mailbox it is. Say that, in one line:
+*"If you'd like that, I'll come back to it in a few minutes, once your
+Microsoft account is connected."*
 
-> *There's a shortcut here if you want it: I can read a sample of mail you've
-> sent, and draft this from how you actually write rather than how you'd
-> describe it. Your own sent mail only, nothing incoming, nothing stored — I
-> read it, draft, show you, and delete. Want to try that, or would you rather
-> just tell me?*
-
-On an explicit yes, and only then:
-
-1. Search their **own sent mail**, a recent sample, and write the raw result
-   to `$SCRATCH/sentmail.sample.json` with the Write tool — never echo a large
-   payload through Bash.
-2. Draft the `communication-style` block from it: length, register, how they
-   open and close, bullets versus prose, the words they actually use.
-3. **Delete the sample immediately** — before the read-back, not at the end of
-   the session:
-
-   ```bash
-   rm -f "$SCRATCH"/sentmail.sample.json
-   ```
-
-4. Read the draft back like any other block. Expect corrections: a draft built
-   from mail to their board is not how they write to their team, and that
-   correction is itself the most valuable line in the file.
-
-On no, on a missing connector, or on a search that returns nothing usable:
-ask the file's questions the ordinary way and say which it was. A declined
-offer is a normal outcome and needs no commentary.
-
-**The mail is engagement data.** It never lands in the vault, it never appears
-in a summary, and the only thing that survives the read is the block they
-approved.
+Then ask the rest of the file's questions and write the block as usual. It is
+a complete, valid block on its own; the sent-mail pass in phase 2 revises it
+if they said yes and the connection goes through.
 
 ## Phase 2 — connecting the accounts
 
@@ -392,6 +369,45 @@ mismatch unwinds the same way as Plaud's, with `adapters.m365`: `enabled` back
 to `false`, `account_hint` back to `--null`. This connection is what phases
 3b, 3c and 4 read the calendar through, so say out loud that it just became
 live.
+
+#### The sent-mail read, if they asked for it in file 3
+
+**Only here, and only on all four of these**: they said yes in file 3,
+`adapters.m365.enabled` is true, `outlook_email_search` exists, and
+`verify-account` returned `match: true` on the line above. That last one is
+the whole point of doing this after the connection instead of during the
+interview — until it passes, the signed-in mailbox may belong to the
+consultant or to a previous engagement, and a writing style abstracted from a
+stranger's prose is not something a read-back can catch. `plugin/CLAUDE.md`
+states the rule this obeys: only `match: true` may proceed to listing content,
+and a mailbox search is listing content.
+
+1. Search their **own sent mail**, a recent sample, and write the raw result
+   to `$SCRATCH/sentmail.sample.json` with the Write tool — never echo a large
+   payload through Bash.
+2. Draft a revised `communication-style` block from it: length, register, how
+   they open and close, bullets versus prose, the words they actually use.
+3. **Delete the sample immediately** — before the read-back, not at the end of
+   the session:
+
+   ```bash
+   rm -f "$SCRATCH"/sentmail.sample.json
+   ```
+
+4. Read the draft back like any other block, alongside what they told you in
+   file 3, and write it with `context write --file communication-style` only
+   once they approve. Expect corrections: a draft built from mail to their
+   board is not how they write to their team, and that correction is itself
+   the most valuable line in the file.
+
+If any of the four conditions fails — they declined, the connection did not
+happen, the tool is absent, the search returns nothing usable — the block
+written in file 3 stands and is perfectly good. Say which it was, in one line,
+and move on. A declined offer needs no commentary.
+
+**The mail is engagement data.** It never lands in the vault, it never appears
+in a summary, and the only thing that survives the read is the block they
+approved.
 
 ### When a connector is unavailable or declined
 
@@ -625,9 +641,9 @@ valid vault.
 
 | Missing | File 3 | 3b projects | 3c people | Phase 4 | Phase 4b |
 |---|---|---|---|---|---|
-| **m365** | no sent-mail offer — questions only | interview mentions only | interview-mentioned names only | note is written; it carries the no-meetings line | unaffected |
+| **m365** | offer recorded, never acted on — the file-3 block stands | interview mentions only | interview-mentioned names only | note is written; it carries the no-meetings line | unaffected |
 | **Plaud** | unaffected | unaffected | unaffected | unaffected — `/sync-recordings` still runs its inbox adapter over `10-inbox/` | unaffected |
-| **both** | questions only | interview mentions only | interview-mentioned names only | note is written from the interview and the seeding alone | unaffected |
+| **both** | offer recorded, never acted on — the file-3 block stands | interview mentions only | interview-mentioned names only | note is written from the interview and the seeding alone | unaffected |
 | **scheduler** | unaffected | unaffected | unaffected | unaffected | routine is handed off in writing, never implied |
 
 With no connectors at all the vault is complete and usable: the portfolio is
@@ -643,9 +659,10 @@ connection step back up exactly where this session left it.
    skill created.
 2. **Pending migrations stop the session.** Interviewing into a stale
    structure is not a smaller problem than rescheduling the session.
-3. **Nobody types an email address.** Every account hint is copied verbatim
-   from a whoami payload, and `config verify-account` must return
-   `match: true` before an adapter counts as connected.
+3. **Nobody types an email address, and nothing is read before the account is
+   proven.** Every account hint is copied verbatim from a whoami payload, and
+   `config verify-account` must return `match: true` before any content is
+   listed through that adapter — calendar, recordings or mail alike.
 4. **A whoami payload — or a mail sample — is deleted the moment it has been
    used**, not at the end of the session.
 5. **Entities come from the executive, never from the calendar.**

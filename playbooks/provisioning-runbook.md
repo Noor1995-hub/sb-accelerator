@@ -146,7 +146,7 @@ Record the deployment in `registry.yaml` before you leave.
 Provisioning does not schedule anything. **Session 1 does**, at its close:
 `/setup-my-brain` phase 4b invokes `/schedule-daily-loop`, which asks the exec
 what time they want tomorrow prepared and creates a Claude scheduled task on
-that machine. Nothing here needs doing on setup day — but three things about
+that machine. Nothing here needs doing on setup day — but four things about
 it are yours to know before you are asked, because you will be:
 
 1. **It runs where it was created.** The task is machine-local. If the evening

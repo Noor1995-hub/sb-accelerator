@@ -36,7 +36,7 @@ The JSON envelope and interpreter resolution are documented in the plugin's
 Before promising anything, look for it:
 
 ```
-ToolSearch: select:mcp__scheduled-tasks__list_scheduled_tasks,mcp__scheduled-tasks__create_scheduled_task,mcp__scheduled-tasks__update_scheduled_task
+ToolSearch: select:mcp__scheduled-tasks__list_scheduled_tasks,mcp__scheduled-tasks__create_scheduled_task,mcp__scheduled-tasks__update_scheduled_task,mcp__scheduled-tasks__delete_scheduled_task
 ```
 
 Found: continue. **Not found: go straight to "When there is no scheduler"**
