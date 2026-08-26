@@ -10,7 +10,8 @@ repo checked out.
 Do the whole sequence on the exec's machine, then repeat steps 1–5 on the
 assistant's. There is no shortcut: Obsidian Sync moves the vault's *content*
 between machines, not its plugin binaries or its symlink. Steps 6–7 happen
-once, after both machines are provisioned.
+once, after both machines are provisioned. Step 8 is not a step at all — it is
+what Session 1 does about scheduling, and what you should know before it does.
 
 ## 1. Instantiate the vault
 
@@ -139,3 +140,36 @@ note, written for them. Do not walk them through this runbook; none of it is
 theirs.
 
 Record the deployment in `registry.yaml` before you leave.
+
+## 8. The standing evening run — know what Session 1 will do
+
+Provisioning does not schedule anything. **Session 1 does**, at its close:
+`/setup-my-brain` phase 4b invokes `/schedule-daily-loop`, which asks the exec
+what time they want tomorrow prepared and creates a Claude scheduled task on
+that machine. Nothing here needs doing on setup day — but three things about
+it are yours to know before you are asked, because you will be:
+
+1. **It runs where it was created.** The task is machine-local. If the evening
+   run is meant to happen on the assistant's machine rather than the exec's,
+   it has to be created there, from a session that can see the vault — Session
+   1 scheduling it on the exec's laptop does not put it on the EA's.
+2. **The machine has to be awake with Claude open.** A task due while the app
+   is closed fires at next launch instead. `/evening-sync` recovers on its own
+   (the recap window widens and the note says so), but there is no version of
+   this that runs on a closed laptop. The vault is a local folder, so a
+   cloud-scheduled run has nothing to read.
+3. **Its first run happens with the exec in the room, on purpose.** Tool
+   permissions are granted per task, during a run — so a routine that has
+   never been started by hand stops at a permission prompt the first night it
+   tries to reach Plaud or Microsoft 365, unattended, with nobody watching.
+   `/schedule-daily-loop` starts it once for exactly this reason. If you are
+   ever setting one of these up outside Session 1, do the same.
+4. **Say it in those terms, not as a promise.** "Your note is prepared each
+   evening the laptop is on" is true and survives contact with a week of
+   travel. "Your note arrives every evening" does not, and it is the first
+   thing the exec will notice is false.
+
+If the scheduler is unavailable on the client's machine, `/schedule-daily-loop`
+hands the job over in writing instead — what, where, who, by when. Make sure
+the "who" is you or the EA by name before you leave, and put it in the
+registry note for the deployment.
