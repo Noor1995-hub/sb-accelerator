@@ -15,6 +15,28 @@ delivers them.
 
 ## Unreleased
 
+- **Long recordings are no longer cut short.** The recorder connector hands
+  over a transcript in pages, and the sync was only ever reading the first
+  one — so a half-hour meeting became a note written from its first ten
+  minutes, with the length to match. It now reads every page, and refuses to
+  write a note at all if one is missing rather than writing a thin one. If
+  you have meetings that felt oddly shallow, they are worth a second look.
+  (#87)
+- **Recordings sync on the first attempt.** Two mismatches inside the
+  pipeline made every recording fail once and retry: a timestamp the writer
+  would not accept, and a meeting type the sync had to guess at. Both are
+  fixed, and the first sync of an evening is noticeably quicker for it. (#87)
+- **No more permission pop-up mid-sync.** A large transcript could make the
+  sync ask for access to a system folder — alarming, and never necessary.
+  It no longer goes near that folder. (#87)
+- **The evening run costs less.** The helpers that read your recordings and
+  update your projects now run on a smaller model. Same output, materially
+  cheaper per evening — which matters most for the runs you schedule and
+  never watch. (#87)
+- **Tomorrow's note says "tomorrow" about the right day.** The recap is
+  written the evening before but read the next morning, and it used to speak
+  from the wrong day. It now reads correctly on the morning you open it.
+  (#87)
 - **Teams meetings now sync themselves.** With the Microsoft 365 connector
   bound to the vault, /sync-recordings finds the past week's Teams meetings
   on your calendar, pulls their transcripts, and writes the same meeting
