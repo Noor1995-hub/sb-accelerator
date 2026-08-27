@@ -5,17 +5,22 @@ type: note
 Your second brain. Five things to know, then you can close this note.
 
 > [!tip] The one habit that matters
-> Run **`/evening-sync`** at the end of the day. Everything else in here
-> follows from it.
+> There isn't one. The evening run happens on its own, at the time you chose
+> when your vault was set up. **`/evening-sync`** is there for the evenings
+> you want it early, or the mornings your laptop was shut.
 
 ## The daily loop
 
-Everything runs off your daily note in `60-daily-notes`, and one command
-drives it: **`/evening-sync`**, at the end of the day. It writes *tomorrow's*
-note — a recap of today, then a prepared section for each meeting on
-tomorrow's calendar, with who's coming and what happened last time. There is
-no morning command to run: tomorrow's note is already waiting when you open
-the vault.
+Everything runs off your daily note in `60-daily-notes`, and one thing drives
+it: the evening run. It writes *tomorrow's* note — a recap of today, then a
+prepared section for each meeting on tomorrow's calendar, with who's coming
+and what happened last time. There is no morning command to run: tomorrow's
+note is already waiting when you open the vault.
+
+It runs by itself each working evening, as long as this machine is awake with
+Claude open. If it was shut at the time, the run happens the next time Claude
+opens and the note says so. To write tomorrow's note right now instead, run
+**`/evening-sync`**.
 
 Each note has three parts. **Recap** is written for you. **Meetings** is one
 heading per meeting. **End of day** is yours. Jot whatever you like under any
