@@ -6,10 +6,12 @@ Who the executive is, in their own words. Read by every skill that writes on the
 
 ## Interview questions
 
+- What company do you work for, and what does it do?
 - What is your full name, and what do people actually call you?
-- What is your role title and company?
-- Which languages do you work in, and which do you prefer for briefs?
-- What is your time zone and typical working window?
+- What is your role, and how long have you been in it?
+- What did you do before this — the background that shapes how you read things?
+- Which languages do you work in, and which do you want your evening note written in?
+- Where are you based, and what does a normal working day look like — start, end, the hours that are actually yours?
 
 ## Content
 

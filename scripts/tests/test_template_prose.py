@@ -32,8 +32,17 @@ SLASH_RE = re.compile(r"`/([a-z][a-z0-9]*(?:-[a-z0-9]+)*)`")
 CONSULTANT_LED = {"setup-my-brain", "upgrade-vault"}
 
 # Safe to run unaccompanied by the exec or their EA.
+#
+# schedule-daily-loop is here despite being invoked by consultant-led
+# setup-my-brain, because being invoked by one is not the same as being one.
+# Neither rationale above applies: it is not lossy (a wrong time is fixed by
+# re-running it) and it is not a two-hour interview. The EA re-running it is a
+# designed-for case rather than a tolerated one — the routine has to be created
+# on the machine that will run it, so an EA who takes the evening run over has
+# no other way to move it.
 SELF_SERVE = {"evening-sync", "health-check", "sync-recordings", "log-decision",
-              "new-project", "update-entity", "report-feedback"}
+              "new-project", "update-entity", "report-feedback",
+              "schedule-daily-loop"}
 
 # The vault's only egress path is `feedback send`, so the skills that invoke it
 # are the skills that can transmit. Derived below rather than trusted here.

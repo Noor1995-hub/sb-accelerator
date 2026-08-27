@@ -37,7 +37,8 @@ def known_subcommands() -> set:
     return pairs
 
 
-NET_NEW = {"report-feedback", "health-check", "upgrade-vault", "setup-my-brain"}
+NET_NEW = {"report-feedback", "health-check", "upgrade-vault", "setup-my-brain",
+           "schedule-daily-loop"}
 
 
 def test_expected_skills_exist():
@@ -46,7 +47,8 @@ def test_expected_skills_exist():
     names = {path.parent.name for path in SKILL_FILES}
     assert {"new-project", "update-entity", "log-decision",
             "sync-recordings", "evening-sync", "report-feedback",
-            "health-check", "upgrade-vault", "setup-my-brain"} <= names
+            "health-check", "upgrade-vault", "setup-my-brain",
+            "schedule-daily-loop"} <= names
 
 
 @pytest.mark.parametrize("path", SKILL_FILES, ids=lambda p: p.parent.name)

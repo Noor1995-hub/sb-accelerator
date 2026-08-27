@@ -15,6 +15,23 @@ delivers them.
 
 ## Unreleased
 
+- **Your evening note now has a time.** Session 1 ends by setting up the
+  standing evening run itself — you pick the hour, and the vault prepares
+  tomorrow from then on, every working evening the machine is on and Claude
+  is open. If it cannot be scheduled on the spot, you are told so plainly,
+  along with who is setting it up and by when — instead of being promised a
+  routine that was never created. `/schedule-daily-loop` moves it, or stops
+  it, whenever the answer changes. (#83)
+- **The Session-1 interview explains itself.** Every term is introduced the
+  first time it is used, the questions start with your company rather than
+  your job title, and the ones that were unanswerable or alarming are gone.
+  Connectors are now offered the way you would think about them — *"shall I
+  pull in your recordings and Teams meetings?"* — before any machinery
+  appears. Optionally, and only if you say yes, it can read a sample of your
+  own sent mail and draft your writing style from how you actually write
+  rather than how you would describe it; the sample is deleted the moment the
+  draft is on screen. The session now closes with what your vault can do and
+  what to go and look at, not with a list of what was written. (#83)
 - **Long recordings are no longer cut short.** The recorder connector hands
   over a transcript in pages, and the sync was only ever reading the first
   one — so a half-hour meeting became a note written from its first ten
