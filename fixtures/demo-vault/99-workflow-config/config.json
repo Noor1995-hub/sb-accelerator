@@ -1,0 +1,21 @@
+{
+  "_readme": [
+    "Demo-vault overlay of the template's config.json. The template ships",
+    "unonboarded (timezone and executive null) because a fresh vault must not",
+    "claim an owner it does not have. The demo vault is different: its context",
+    "portfolio already names Morgan Ellery as the executive, so leaving the",
+    "machine config null made every pipeline skill halt at its config gate on a",
+    "vault that otherwise looks fully populated.",
+    "Connectors stay disabled — the demo vault binds to no real account, and",
+    "account_hint must never be invented."
+  ],
+  "config-version": 1,
+  "timezone": "Europe/Brussels",
+  "executive": "morgan-ellery",
+  "adapters": {
+    "inbox": {"enabled": true},
+    "plaud": {"enabled": false, "account_hint": null},
+    "m365": {"enabled": false, "account_hint": null}
+  },
+  "feedback": {"repo": null}
+}
