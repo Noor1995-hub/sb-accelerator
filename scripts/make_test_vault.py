@@ -23,6 +23,13 @@ from pathlib import Path
 def provision_into(vault: Path) -> tuple[list[str], list[str]]:
     """Install the pinned Obsidian plugins + theme into the new vault.
     Kept as a thin module-level seam so tests monkeypatch it (no network)."""
+    # provision_plugins.py lives at plugin/lib/ (it ships with the plugin),
+    # not next to this script — put it on sys.path before importing. Tests
+    # get this for free from conftest.py; a direct `python3
+    # scripts/make_test_vault.py` invocation does not.
+    lib_dir = str(Path(__file__).resolve().parents[1] / "plugin" / "lib")
+    if lib_dir not in sys.path:
+        sys.path.insert(0, lib_dir)
     from provision_plugins import PINS_PATH, load_pins, provision
 
     return provision(vault, load_pins(PINS_PATH))
