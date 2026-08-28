@@ -22,7 +22,7 @@ delivers them.
   human-verified after the first update. The banner now survives every
   content write; clearing it is a separate, explicit step. Setting or fixing
   a field on an entity that already exists — its owner, most often — also no
-  longer silently does nothing: it applies the change and says so. (#97)
+  longer silently does nothing: it applies the change and says so. (#100)
 - **Your evening note now has a time.** Session 1 ends by setting up the
   standing evening run itself — you pick the hour, and the vault prepares
   tomorrow from then on, every working evening the machine is on and Claude
