@@ -217,8 +217,10 @@ notices.
 file under `~/.claude/projects/…/tool-results/`. Do not go near that path:
 anything under `~/.claude` trips the harness's sensitive-file prompt, which
 lands in front of the user mid-run and reads as the product asking for their
-secrets. Never `cp`, `cat` or `mv` a tool-result overflow file — halve
-`limit` and re-fetch from the same `cursor` instead.
+secrets. Never `cp`, `cat`, `mv` — or `rm` — a tool-result overflow file:
+deleting one is just as much a touch as copying it, and cleaning up that
+directory is the harness's job, not this skill's. Halve `limit` and re-fetch
+from the same `cursor` instead.
 
 Then normalize — one path per page, in any order (the CLI orders them by each
 page's own `offset`, so scratch filenames carry no meaning):
@@ -553,9 +555,12 @@ cares about. Count it from disk like everything else in this step.
 Raw connector JSON — whoami payloads, `list_files` listings, transcripts —
 is engagement data that must not outlive the run. It lands only in the
 session scratch directory, never the vault. At the end of the run, success
-or refusal, delete the raw connector files this run wrote:
+or refusal, delete the raw connector files this run wrote.
 The names below are the ones this contract instructs; if you wrote any
-other raw connector file, delete it too.
+other raw connector file **inside `$SCRATCH`**, delete it too. Cleanup never
+leaves `$SCRATCH`: a tool-result overflow file under `~/.claude` is not
+yours to delete — it is the harness's own housekeeping, and an `rm` on it
+trips the same sensitive-file prompt as reading it would.
 
 ```bash
 rm -f "$SCRATCH"/plaud.whoami.json "$SCRATCH"/m365.whoami.json "$SCRATCH"/rec_*.json "$SCRATCH"/plaud.list.json "$SCRATCH"/m365_*.json "$SCRATCH"/*.blob.md "$SCRATCH"/ids.json
