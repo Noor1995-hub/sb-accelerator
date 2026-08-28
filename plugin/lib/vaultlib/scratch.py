@@ -21,7 +21,8 @@ from pathlib import Path
 from typing import Dict, List
 
 # Keep this list and the skills' "Scratch hygiene" prose in lockstep —
-# see sync-recordings/SKILL.md and evening-sync/SKILL.md.
+# see sync-recordings/SKILL.md, evening-sync/SKILL.md and
+# setup-my-brain/SKILL.md.
 SWEEP_PATTERNS = (
     "plaud.whoami.json",
     "m365.whoami.json",
@@ -32,6 +33,13 @@ SWEEP_PATTERNS = (
     "ids.json",
     "*.payload.json",
     "decision.json",
+    # Session-1 onboarding (/setup-my-brain): a sent-mail sample, raw
+    # calendar reads, and drafted context blocks. A block file is written
+    # only when it is about to be consumed by `context write` — the sweep
+    # takes anything matching, so nothing in-flight may sit in $SCRATCH.
+    "sentmail.sample.json",
+    "calendar.*.json",
+    "*.block.md",
 )
 
 

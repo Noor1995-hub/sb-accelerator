@@ -66,6 +66,23 @@ connector payloads land there, never in the vault. The JSON envelope and
 interpreter resolution are documented in the plugin's `CLAUDE.md`. Read `ok`
 on every call; on failure surface `error` and `hint`.
 
+Scratch cleanup is one mechanism, the same one the sync routines use:
+
+```bash
+python3 "$VAULTLIB" scratch sweep --dir "$SCRATCH"
+```
+
+It deletes a fixed, built-in pattern list directly inside `--dir`, never
+recursing, and it is the only deletion this skill performs. Every scratch
+name this skill tells you to write matches one of its patterns —
+`plaud.whoami.json`, `m365.whoami.json`, `sentmail.sample.json`,
+`calendar.*.json`, `*.block.md` — so use those exact names, and give any
+other raw file you write a name matching a pattern too (`m365_*.json`,
+`*.payload.json`). Two consequences: one sweep call always catches
+everything the session wrote, and a sweep takes *everything* matching, not
+one file — so a draft still on its way into the vault must never be sitting
+in `$SCRATCH` when one runs.
+
 ## Usage
 
 ```
@@ -345,11 +362,11 @@ python3 "$VAULTLIB" config write --vault "$VAULT" --field adapters.plaud.account
 ```
 
 That is the declined path from the subsection below, reached late — say so out
-loud, and say what the vault does without this connector. Then **delete the
+loud, and say what the vault does without this connector. Then **sweep the
 payload immediately**:
 
 ```bash
-rm -f "$SCRATCH/plaud.whoami.json"
+python3 "$VAULTLIB" scratch sweep --dir "$SCRATCH"
 ```
 
 Immediately means before the next question, not at the end of the session.
@@ -366,12 +383,12 @@ python3 "$VAULTLIB" config verify-account --vault "$VAULT" --adapter m365 --iden
 ```
 
 ```bash
-rm -f "$SCRATCH/m365.whoami.json"
+python3 "$VAULTLIB" scratch sweep --dir "$SCRATCH"
 ```
 
-Read `match` before you delete — the payload is the only place the correct
+Read `match` before you sweep — the payload is the only place the correct
 hint exists, and on a mismatch you re-copy from it rather than retyping.
-Delete once the connection is settled, whichever way it went. An unresolved
+Sweep once the connection is settled, whichever way it went. An unresolved
 mismatch unwinds the same way as Plaud's, with `adapters.m365`: `enabled` back
 to `false`, `account_hint` back to `--null`. This connection is what phases
 3b, 3c and 4 read the calendar through, so say out loud that it just became
@@ -394,18 +411,22 @@ and a mailbox search is listing content.
    payload through Bash.
 2. Draft a revised `communication-style` block from it: length, register, how
    they open and close, bullets versus prose, the words they actually use.
-3. **Delete the sample immediately** — before the read-back, not at the end of
+   Keep this draft in the conversation — do not write it to `$SCRATCH` yet.
+   The sweep on the next step takes `*.block.md` too, and an in-flight draft
+   must not be sitting there when it runs.
+3. **Sweep the sample immediately** — before the read-back, not at the end of
    the session:
 
    ```bash
-   rm -f "$SCRATCH"/sentmail.sample.json
+   python3 "$VAULTLIB" scratch sweep --dir "$SCRATCH"
    ```
 
 4. Read the draft back like any other block, alongside what they told you in
-   file 3, and write it with `context write --file communication-style` only
-   once they approve. Expect corrections: a draft built from mail to their
-   board is not how they write to their team, and that correction is itself
-   the most valuable line in the file.
+   file 3. Only once they approve, write it to
+   `$SCRATCH/communication-style.block.md` and land it with
+   `context write --file communication-style`. Expect corrections: a draft
+   built from mail to their board is not how they write to their team, and
+   that correction is itself the most valuable line in the file.
 
 If any of the four conditions fails — they declined, the connection did not
 happen, the tool is absent, the search returns nothing usable — the block
@@ -606,16 +627,18 @@ Nothing persists from this run except what the executive confirmed into the
 vault; everything else was working material.
 
 Delete every scratch file this session wrote — whoami payloads and any mail
-sample (already deleted at the point of use, but check), calendar results, and
+sample (already swept at the point of use, but check), calendar results, and
 the draft blocks:
 
 ```bash
-rm -f "$SCRATCH"/plaud.whoami.json "$SCRATCH"/m365.whoami.json \
-      "$SCRATCH"/sentmail.sample.json "$SCRATCH"/calendar.*.json "$SCRATCH"/*.block.md
+python3 "$VAULTLIB" scratch sweep --dir "$SCRATCH"
 ```
 
-If you wrote any other raw connector file under a name not listed here, delete
-that too.
+One call is the whole cleanup, because every scratch name this skill writes
+matches the sweep's built-in pattern list — that contract is stated up top,
+under Requirements. If a raw connector file somehow got a name outside the
+list, that is the naming bug to notice here; rename it to match a pattern
+and sweep again.
 
 ### Then close from their side of the table
 
