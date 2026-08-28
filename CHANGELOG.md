@@ -15,6 +15,13 @@ delivers them.
 
 ## Unreleased
 
+- **You no longer maintain the entity on each meeting — it follows the
+  project.** Once a meeting is assigned a project, its `entities` field is
+  set automatically from that project's organization and kept that way; you
+  only set it by hand for a meeting that has no project yet but is still
+  about an entity, like an early prospect call. If a project gets
+  re-triaged onto a meeting later, the evening sync now catches up any
+  meeting whose entity had gone stale and fixes it quietly. (#102)
 - **A dossier's "unvalidated" banner now only clears when someone actually
   reviews it.** Recording a fact into a client or partner dossier used to
   quietly remove the banner as a side effect of the write — so a dossier

@@ -13,7 +13,7 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Optional
 
-from . import markdown, naming, schema, syncjob, vault
+from . import markdown, naming, project, schema, syncjob, vault
 
 MEETINGS_DIR = vault.MEETINGS_DIR
 
@@ -69,15 +69,7 @@ def _require_slug_list(payload: dict, key: str, *, allow_empty: bool) -> list:
     return [str(v) for v in values]
 
 
-def _require_joins(root: Path, attendees: list, projects: list,
-                   people: list, entities: list) -> None:
-    for slug in projects:
-        if not (root / vault.PROJECTS_DIR / slug / "index.md").is_file():
-            raise MeetingError(
-                f"projects entry {slug!r} matches no project at "
-                f"30-projects/{slug}/index.md — create it with /new-project, "
-                "or leave projects empty for triage to catch"
-            )
+def _require_entity_dossiers(root: Path, entities: list) -> None:
     for slug in entities:
         # The entity dossier's Meeting Log is a Dataview query over this
         # field. A slug with no dossier joins to nothing and fails silently:
@@ -88,6 +80,18 @@ def _require_joins(root: Path, attendees: list, projects: list,
                 f"40-entities/{slug}/dossier.md — the entity's Meeting Log "
                 "joins on this slug, so a typo silently empties it"
             )
+
+
+def _require_joins(root: Path, attendees: list, projects: list,
+                   people: list, entities: list) -> None:
+    for slug in projects:
+        if not (root / vault.PROJECTS_DIR / slug / "index.md").is_file():
+            raise MeetingError(
+                f"projects entry {slug!r} matches no project at "
+                f"30-projects/{slug}/index.md — create it with /new-project, "
+                "or leave projects empty for triage to catch"
+            )
+    _require_entity_dossiers(root, entities)
     for slug in dict.fromkeys(attendees + people):
         if not (root / vault.PEOPLE_DIR / f"{slug}.md").is_file():
             raise MeetingError(
@@ -189,7 +193,7 @@ def _render_body(payload: dict) -> str:
 
 
 def _frontmatter(payload: dict, review_status: str,
-                 conflicts_with: Optional[str]) -> dict:
+                 conflicts_with: Optional[str], entities: list) -> dict:
     data = {
         "date": payload["date"],
         "type": payload["type"],
@@ -206,8 +210,8 @@ def _frontmatter(payload: dict, review_status: str,
     # Omitted rather than written empty: an entity dossier is the only reader,
     # and `entities: []` on a meeting with no entity counterparty is noise in
     # the properties panel of every note that has one.
-    if payload.get("entities"):
-        data["entities"] = payload["entities"]
+    if entities:
+        data["entities"] = entities
     data.update({
         "review_status": review_status,
         "reviewed": False,
@@ -237,8 +241,32 @@ def write(root: Path, payload: dict) -> dict:
         payload, "attendees", allow_empty=(payload["type"] == "note"))
     projects = _require_slug_list(payload, "projects", allow_empty=True)
     people = _require_slug_list(payload, "people", allow_empty=True)
-    entities = _require_slug_list(payload, "entities", allow_empty=True)
+
+    # entities is machine-owned once a meeting has a project: derived from
+    # each project's `entity:` field so it can never drift from projects[]
+    # at write time (the evening fold repairs drift introduced later by
+    # retriage). A payload that passes entities anyway is refused here,
+    # before the skill layer has a chance to build one — manual entities
+    # only make sense on a project-less meeting.
+    if projects and payload.get("entities") is not None:
+        raise MeetingError(
+            "entities is derived from projects[] once a meeting has a "
+            "project — drop the entities key from the payload and let "
+            "write() derive it from each project's `entity:` field; pass "
+            "entities yourself only for a project-less meeting (leave "
+            "projects empty)"
+        )
+    entities = [] if projects else _require_slug_list(
+        payload, "entities", allow_empty=True)
+
     _require_joins(root, attendees, projects, people, entities)
+
+    if projects:
+        try:
+            entities = project.derive_entities(root, projects)
+        except project.ProjectError as exc:
+            raise MeetingError(str(exc)) from exc
+        _require_entity_dossiers(root, entities)
 
     prefix = _date_prefix(payload["date"])
     title_slug = naming.slugify(str(payload["title"]))
@@ -248,7 +276,7 @@ def write(root: Path, payload: dict) -> dict:
     stem, review_status, conflicts_with, conflict = _resolve_target(
         root, stem, payload)
 
-    frontmatter = _frontmatter(payload, review_status, conflicts_with)
+    frontmatter = _frontmatter(payload, review_status, conflicts_with, entities)
     problems = schema.validate("meeting", frontmatter)
     if problems:
         raise MeetingError(

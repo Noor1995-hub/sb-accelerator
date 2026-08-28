@@ -64,16 +64,26 @@ confidence_reasons:
   record, a `business-unit` entity has no external meetings at all, and every
   meeting *with* an entity is also about it, so the narrower reading only
   loses rows. Omitted entirely when no entity is in scope.
+- **Ownership: machine-derived once a project is assigned, hand-set only on
+  a project-less meeting.** Whenever `projects[]` is non-empty, `entities[]`
+  is computed — never typed — from each project's `entity:` field (deduped
+  across every project the meeting carries) at write time; passing `entities`
+  yourself alongside a non-empty `projects[]` is refused. A project-less
+  meeting that is still about an entity (an intro call with a prospect that
+  has no project yet) is the one case you set `entities[]` by hand.
 - **Why the field exists at all**, given that `projects[]` already implies it
   (each project names its `entity`): Dataview cannot follow that second hop.
   A query filtering `20-meetings` sees only what the meeting notes themselves
   say, and a note naming its projects does not name the organizations behind
   them. With `entities[]`, an entity dossier joins directly —
   `WHERE econtains(entities, this.slug)`, the same shape a project index
-  already uses for `projects`. Two consequences worth knowing: a meeting with
-  an empty `projects[]` still reaches its dossier (an intro call with a
-  prospect that has no project yet), and re-triaging `projects[]` does not
-  update `entities[]`, so a re-routed meeting needs both edited.
+  already uses for `projects`. A meeting with an empty `projects[]` still
+  reaches its dossier this way, provided `entities[]` was set by hand.
+- **Drift and its repair.** A project reassigned by hand during triage
+  *after* the meeting was written no longer updates `entities[]` on its
+  own — the evening sync's fold stage re-derives `entities[]` from
+  `projects[]` on every meeting each run and repairs any note left stale, so
+  drift is transient rather than permanent, but it is not instantaneous.
 - The `1:1` type value must stay **quoted** in frontmatter and in the block
   above — unquoted YAML parses `1:1` as the integer 61.
 - `source` is the capture channel: `teams` (platform transcript), `recorder`
@@ -394,6 +404,7 @@ A day in the life of a daily note:
 
 - `Meeting —projects[]→ Project`
 - `Meeting —attendees[]→ Person`
+- `Meeting —entities[]→ Entity`
 - `Project —entity→ Entity`
 - `Decision —project→ Project`
 - `Decision —source→ Meeting`

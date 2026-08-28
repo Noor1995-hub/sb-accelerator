@@ -319,3 +319,59 @@ def test_cli_touch_refusal_is_still_one_json_object(tmp_path):
     assert payload["ok"] is False
     assert "/new-project" in payload["error"]
     assert payload["hint"]
+
+
+# --- derive_entities: shared by meeting.write and syncjob.rederive_entities ---
+
+
+def test_derive_entities_single_project(tmp_path):
+    root = vault_with_entity(tmp_path)
+    project.scaffold(root, **BASE)
+    assert project.derive_entities(root, ["yard-automation-program"]) == \
+        ["meridian-freight-holdings"]
+
+
+def test_derive_entities_dedupes_multiple_projects_same_entity(tmp_path):
+    root = vault_with_entity(tmp_path)
+    project.scaffold(root, **BASE)
+    project.scaffold(root, **dict(BASE, name="Yard Automation Program 2"))
+    result = project.derive_entities(
+        root, ["yard-automation-program", "yard-automation-program-2"])
+    assert result == ["meridian-freight-holdings"]
+
+
+def test_derive_entities_preserves_first_occurrence_order(tmp_path):
+    root = vault_with_entity(tmp_path)
+    dossier = root / "40-entities" / "northwind-holdings" / "dossier.md"
+    dossier.parent.mkdir(parents=True)
+    dossier.write_text(
+        '---\ntype: entity\nentity-name: "N"\nslug: northwind-holdings\n'
+        "status: active\n---\n", encoding="utf-8")
+    project.scaffold(root, **BASE)
+    project.scaffold(root, **dict(
+        BASE, name="Northwind Rollout", entity="northwind-holdings"))
+    result = project.derive_entities(
+        root, ["northwind-rollout", "yard-automation-program"])
+    assert result == ["northwind-holdings", "meridian-freight-holdings"]
+
+
+def test_derive_entities_refuses_when_a_project_has_no_entity_field(tmp_path):
+    root = vault_with_entity(tmp_path)
+    project.scaffold(root, **BASE)
+    fieldless = root / "30-projects" / "fieldless" / "index.md"
+    fieldless.parent.mkdir(parents=True)
+    fieldless.write_text("---\ntype: project\nslug: fieldless\n---\n",
+                         encoding="utf-8")
+    with pytest.raises(project.ProjectError, match="fieldless"):
+        project.derive_entities(root, ["yard-automation-program", "fieldless"])
+
+
+def test_derive_entities_refuses_when_a_project_index_is_missing(tmp_path):
+    root = vault_with_entity(tmp_path)
+    with pytest.raises(project.ProjectError, match="no-such-project"):
+        project.derive_entities(root, ["no-such-project"])
+
+
+def test_derive_entities_empty_input_returns_empty_list(tmp_path):
+    root = vault_with_entity(tmp_path)
+    assert project.derive_entities(root, []) == []
