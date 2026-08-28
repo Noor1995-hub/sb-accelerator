@@ -264,7 +264,7 @@ point.
 
 ### Entity — `40-entities/{slug}/dossier.md` · Base: `Entities.base`
 
-An entity is any organization the executive maintains a working relationship
+An entity is any organization the vault owner maintains a working relationship
 with: a client, a business unit, a partner, a supplier.
 
 ```yaml
@@ -388,7 +388,7 @@ body_sections: [Recap, Meetings, End of day]
   under each meeting heading, `## End of day`, anything else. The evening
   harvest reads jottings as input; nothing ever edits or routes them in v1.
 - A note is never deleted or rewritten by a later day's run. Times are the
-  executive's local timezone.
+  vault owner's local timezone.
 
 A day in the life of a daily note:
 

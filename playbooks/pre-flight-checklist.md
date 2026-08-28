@@ -18,8 +18,8 @@ Platform requirements verified against Anthropic's documentation on
 - [ ] **A named Claude administrator** who can connect a plugin marketplace
       and set installation preferences. Without one, delivery falls back to
       each user installing by hand.
-- [ ] Seats for the exec **and** the assistant. The assistant runs the
-      operational surface; an exec-only seat means exec-as-operator.
+- [ ] Seats for the vault owner **and** the assistant. The assistant runs the
+      operational surface; an owner-only seat means owner-as-operator.
 
 ## 2. Device capability — qualifying
 
@@ -101,8 +101,8 @@ the questions to settle before you get that far.
 ## 6. People and trust boundary
 
 - [ ] **Assistant scope conversation held.** The assistant sees everything
-      outside `95-private/`. Name what that includes out loud, with the exec,
-      before any content lands.
+      outside `95-private/`. Name what that includes out loud, with the vault
+      owner, before any content lands.
 - [ ] Data-flow one-pager signed off by whoever owns information security.
 - [ ] Feedback repo `sb-client-<slug>` created; client can raise issues into
       it via `/report-feedback`.
@@ -117,6 +117,6 @@ When an item above fails, the honest fallback rather than a silent downgrade:
 | No Cowork (VDI, no admin rights) | No operational surface. Claude Code on a permitted machine, or decline the engagement. |
 | No Team/Enterprise | No org-managed plugin. Per-user install by hand; drift is now your problem. |
 | No client GitHub access | ZIP upload path; quarterly updates become a manual handover. |
-| No assistant seat | Exec-as-operator. Materially worse; say so before selling it. |
+| No assistant seat | Owner-as-operator. Materially worse; say so before selling it. |
 | No recording consent | Capture narrows to Teams transcripts, forwarded mail, and typed input. |
 | No Obsidian permitted | Vault still works through Cowork and Chat; the browse tier is gone. |

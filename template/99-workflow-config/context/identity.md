@@ -5,7 +5,7 @@
 
 ## Purpose
 
-Who the executive is, in their own words. Read by every skill that writes on their behalf or addresses them; keep it short and factual.
+Who the vault owner is, in their own words. Read by every skill that writes on their behalf or addresses them; keep it short and factual.
 
 ## Interview questions
 

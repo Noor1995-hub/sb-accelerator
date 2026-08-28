@@ -5,7 +5,7 @@ drift repair is parked toward /health-check; v1 surfaces drift as warnings
 only) and minus allowedTags (decision tags were dropped in P1a).
 
 Only review_status: confirmed meetings count — triage is the quality gate.
-Attendees are person slugs here, so metrics join on slug, and the executive
+Attendees are person slugs here, so metrics join on slug, and the vault owner
 is excluded from key-people by slug — never by display name, which is why the
 lab's name-prefix filter could not have ported.
 
@@ -126,16 +126,16 @@ def self_check(confirmed: List[dict], queued_slugs: Set[str],
     return warnings
 
 
-def run(root: Path, today: str, executive: str) -> dict:
-    exec_slug = str(executive or "").strip()
+def run(root: Path, today: str, owner: str) -> dict:
+    owner_slug = str(owner or "").strip()
     try:
-        naming.validate_slug(exec_slug)
+        naming.validate_slug(owner_slug)
     except ValueError as exc:
-        raise UpdateQueueError(f"--executive {executive!r}: {exc}") from exc
-    if not (root / PEOPLE_DIR / f"{exec_slug}.md").is_file():
+        raise UpdateQueueError(f"--owner {owner!r}: {exc}") from exc
+    if not (root / PEOPLE_DIR / f"{owner_slug}.md").is_file():
         raise UpdateQueueError(
-            f"--executive {exec_slug!r} has no person note at "
-            f"{PEOPLE_DIR}/{exec_slug}.md — the executive is excluded from "
+            f"--owner {owner_slug!r} has no person note at "
+            f"{PEOPLE_DIR}/{owner_slug}.md — the vault owner is excluded from "
             "key-people by slug, so a mistyped slug silently poisons the metric"
         )
     if not vault.ISO_DATE_RE.match(str(today or "").strip()):
@@ -181,7 +181,7 @@ def run(root: Path, today: str, executive: str) -> dict:
         for meeting in countable_for_project:
             if meeting["date"] > d90:
                 for attendee in meeting["attendees"]:
-                    if attendee != exec_slug:
+                    if attendee != owner_slug:
                         counts[attendee] = counts.get(attendee, 0) + 1
         key_people = [s for s, _ in sorted(counts.items(),
                                            key=lambda kv: (-kv[1], kv[0]))
@@ -246,7 +246,7 @@ def run(root: Path, today: str, executive: str) -> dict:
                                active_last_updated))
     return {
         "today": today_date.isoformat(),
-        "executive": exec_slug,
+        "owner": owner_slug,
         "meetingsIndexed": len(meetings),
         "confirmedMeetings": len(confirmed),
         "projectsNeedingUpdate": queue,

@@ -893,8 +893,8 @@ def test_a_weekend_rerun_over_an_unchanged_vault_leaves_the_note_alone(tmp_path)
     """Finding 1 end to end. Friday's run writes Monday's note; the Saturday
     and Sunday runs see a window that has widened (08-21..08-22, then
     ..08-23) but not one changed input file. Hashing the raw bounds made both
-    of those look changed and regenerated a recap the exec had already read,
-    with LLM variance — two nights in seven."""
+    of those look changed and regenerated a recap the vault owner had already
+    read, with LLM variance — two nights in seven."""
     root = make_weekend_vault(tmp_path)
     path = root / "60-daily-notes" / "2026-08-24.md"
     friday = dailynote.write(root, weekend_payload(

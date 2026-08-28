@@ -439,7 +439,7 @@ def write_vault_config(root, extra=None):
     cfg = {
         "config-version": 1,
         "timezone": "Europe/Brussels",
-        "executive": "morgan-ellery",
+        "owner": "morgan-ellery",
         "adapters": {
             "inbox": {"enabled": True},
             "plaud": {"enabled": True, "account_hint": "morgan@example.com"},
@@ -457,7 +457,7 @@ def test_config_read_returns_config_and_missing(capsys, tmp_path):
     write_vault_config(root, extra={"timezone": None})
     code, payload = run(capsys, ["config", "read", "--vault", str(root)])
     assert code == 0
-    assert payload["result"]["config"]["executive"] == "morgan-ellery"
+    assert payload["result"]["config"]["owner"] == "morgan-ellery"
     assert payload["result"]["missing"] == ["timezone"]
 
 

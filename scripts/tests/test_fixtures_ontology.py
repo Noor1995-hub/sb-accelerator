@@ -322,14 +322,14 @@ def test_project_indexes_scope_their_decisions_query_to_themselves():
 
 
 def test_no_fixture_hardcodes_a_person_name_in_a_query():
-    # The upstream Related Meetings query filtered the executive out by
+    # The upstream Related Meetings query filtered the vault owner out by
     # display name. Nothing generated here may reintroduce that.
     for path in iter_fixture_files(SCHEMAS["project"]["glob"]):
         text = path.read_text(encoding="utf-8")
         assert "a !=" not in text, f"{path}: attendee self-filter reintroduced"
 
 
-def test_exec_person_note_exists_and_is_referenced_as_an_owner():
+def test_owner_person_note_exists_and_is_referenced_as_an_owner():
     people = {parse_frontmatter(p)["slug"]
               for p in iter_fixture_files(SCHEMAS["person"]["glob"])}
     owners = {parse_frontmatter(p)["owner"]
@@ -531,7 +531,7 @@ def test_meeting_confidence_reasons_conform():
 
 # --- Meeting fixtures model the sync pipeline's real output shape ---
 
-EXEC_SLUG = "morgan-ellery"   # the demo vault's executive (P1a person fixture)
+OWNER_SLUG = "morgan-ellery"   # the demo vault's owner (P1a person fixture)
 
 
 def test_meeting_source_enum_fully_covered():
@@ -558,11 +558,11 @@ def test_confidence_ratings_fully_covered():
     assert seen == expected, f"missing confidence coverage: {expected - seen}"
 
 
-def test_executive_attends_every_meeting():
+def test_owner_attends_every_meeting():
     for path in iter_fixture_files(SCHEMAS["meeting"]["glob"]):
         attendees = parse_frontmatter(path).get("attendees") or []
-        assert EXEC_SLUG in attendees, (
-            f"{path}: the executive is in the room in their own vault"
+        assert OWNER_SLUG in attendees, (
+            f"{path}: the vault owner is in the room in their own vault"
         )
 
 

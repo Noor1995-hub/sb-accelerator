@@ -9,7 +9,7 @@ origin: net-new
 
 Turns a moment of friction — a skill that broke, a flow that confused, an
 idea for something better — into a clean report delaware can act on,
-without ever putting the executive's actual work in transit. The CLI's
+without ever putting the vault owner's actual work in transit. The CLI's
 scrub lint is the technical backstop; this skill's job is to draft as if
 that backstop did not exist.
 

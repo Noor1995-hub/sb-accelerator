@@ -1,6 +1,6 @@
 """UTC window computation for calendar queries.
 
-The executive's timezone is prose in the context portfolio; the model reads
+The vault owner's timezone is prose in the context portfolio; the model reads
 it and passes an IANA name (or, where the host has no tz database, an
 explicit offset). Nothing here hardcodes a region — the lab's CET/CEST
 arithmetic deliberately did not port.
@@ -231,7 +231,7 @@ def _parse_date(text, label: str) -> date:
 
 def utc_to_local(utc_dt: datetime, timezone: Optional[str],
                  utc_offset: Optional[str]) -> Tuple[datetime, str]:
-    """A naive UTC datetime rendered in the executive's local time.
+    """A naive UTC datetime rendered in the vault owner's local time.
 
     The zoneinfo path converts properly (attach UTC, astimezone) rather than
     asking what offset is in force at the UTC value read as wall time — those

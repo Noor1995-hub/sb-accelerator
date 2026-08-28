@@ -5,7 +5,7 @@
 
 ## Purpose
 
-What the executive owns and is accountable for. Read by briefing and processing skills to judge relevance — what deserves attention versus noise.
+What the vault owner owns and is accountable for. Read by briefing and processing skills to judge relevance — what deserves attention versus noise.
 
 ## Interview questions
 

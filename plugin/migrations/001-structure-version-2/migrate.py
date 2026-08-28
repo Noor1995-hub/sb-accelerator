@@ -10,7 +10,7 @@ The transformation list, quoted from the repo's `migrations/README.md`:
     `tags`, add `reviewed: true` to existing notes (v0.2.0 removed tags and
     made the reviewed key mandatory). Also: add
     `99-workflow-config/config.json` (template default, then fill
-    timezone/executive/adapters from the vault's prose context — #54 moved
+    timezone/owner/adapters from the vault's prose context — #54 moved
     machine decisions out of prose). Also: rewrite
     `review_status: needs-attention` → `needs-review` on existing meeting
     notes (v0.5.1 retired the status; those notes already carry the
@@ -175,8 +175,8 @@ def _frontmatter(text: str):
     - `"ok"` — parsed; `data` is the mapping.
     - `"absent"` — no opening fence on line 1. Not a vault object: it cannot
       carry `tags` or a `review_status`, so there is nothing here to migrate
-      and nothing to verify. A scratch file the exec dropped in a content
-      folder must not block the chain.
+      and nothing to verify. A scratch file the vault owner dropped in a
+      content folder must not block the chain.
     - `"broken"` — an opening fence is there but no frontmatter block can be
       read from it: the closing fence is missing, or the block will not
       parse. That *is* a vault object, and a broken one; it is named for a
@@ -245,7 +245,7 @@ TAGS_HINT = ("tags list shape not handled deterministically — remove tags by "
 def _step_config(root: Path, needs_human: list) -> dict:
     """Missing → write the template default verbatim. Present → untouched:
     a deployed vault's config carries the engagement's own timezone,
-    executive slug and account hints, and overwriting it would unbind the
+    owner slug and account hints, and overwriting it would unbind the
     connectors."""
     path = root / CONFIG_RELPATH
     if path.is_file():
@@ -399,7 +399,7 @@ def _step_readmes(root: Path, needs_human: list) -> dict:
     """`10-inbox/README.md` describes semantics that changed — the folder is
     the pending set now, not a staleness signal — and `90-archive/README.md`
     did not exist before the sync started moving files there. Both are
-    plugin-authored prose with nothing of the exec's in them, so an
+    plugin-authored prose with nothing of the vault owner's in them, so an
     unconditional overwrite is both correct and the idempotent form."""
     written = []
     for relpath, asset in ((INBOX_README_RELPATH, "10-inbox-README.md"),
@@ -417,7 +417,7 @@ def _step_readmes(root: Path, needs_human: list) -> dict:
 
 def _step_claude_md(root: Path, needs_human: list) -> dict:
     """Replace the section in place, between its own heading and the next
-    `## ` — the rest of the file may hold the exec's own edits. No section
+    `## ` — the rest of the file may hold the vault owner's own edits. No section
     means the file's shape is not the one this rule was written against, so
     it is appended rather than guessed at, and a human is asked to place it."""
     path = root / CLAUDE_RELPATH
@@ -989,7 +989,7 @@ def verify(root: Path) -> dict:
 def _first_prose_line(asset: str) -> str:
     """The asset's first non-heading, non-blank line — enough to tell the
     refreshed section from the one it replaced without pinning the whole
-    body, which the exec may reasonably have edited around."""
+    body, which the vault owner may reasonably have edited around."""
     for line in asset.split("\n"):
         stripped = line.strip()
         if stripped and not stripped.startswith("#"):

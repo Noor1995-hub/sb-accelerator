@@ -83,7 +83,7 @@ def test_related_meetings_dataview_matches_on_this_slug(tmp_path):
 
 
 def test_no_attendee_self_filter_is_emitted(tmp_path):
-    # The upstream query filtered the executive out by display name. That
+    # The upstream query filtered the vault owner out by display name. That
     # cannot ship (clean-room) and would not work anyway: attendees are slugs.
     root = vault_with_entity(tmp_path)
     result = project.scaffold(root, **BASE)
@@ -199,7 +199,7 @@ def make_touch_vault(tmp_path):
     (folder / "index.md").write_text("\n".join([
         "---", "type: project", 'project-name: "Alpha"', "slug: alpha",
         "status: active", "project-type: initiative", "entity: acme",
-        "owner: exec-morgan", "created: 2026-01-01",
+        "owner: owner-morgan", "created: 2026-01-01",
         "last-updated: 2026-06-01", "---", "",
         "> [!summary]+ **Now**", "> - Stage — running", "",
         "## Decisions", "", "## Open Items", "", "## Related Meetings", "",

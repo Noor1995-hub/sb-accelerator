@@ -160,7 +160,7 @@ def test_new_project_resolves_owner_from_config():
 
 @pytest.mark.parametrize("path", SKILL_FILES, ids=lambda p: p.parent.name)
 def test_no_skill_reads_machine_decisions_from_prose(path):
-    """#54 acceptance: timezone, exec slug, and adapter enablement come from
+    """#54 acceptance: timezone, owner slug, and adapter enablement come from
     config.json. The prose context files carry style and narrative only, so
     no skill may name the two files that used to hold machine decisions.
 
@@ -168,9 +168,9 @@ def test_no_skill_reads_machine_decisions_from_prose(path):
     it is the *writer* of the portfolio: the interview walks all five context
     stems by name and writes each through `context write`. Naming a file you
     fill is not reading config out of it. The `identity.md` half still binds
-    every skill — nothing has any business reading the exec's name or timezone
-    out of that file — and the invariant that actually matters for the writer
-    is checked below, on the machine fields themselves.
+    every skill — nothing has any business reading the vault owner's name or
+    timezone out of that file — and the invariant that actually matters for
+    the writer is checked below, on the machine fields themselves.
     """
     text = path.read_text(encoding="utf-8")
     assert "identity.md" not in text, f"{path.parent.name} reads prose config"
@@ -181,12 +181,12 @@ def test_no_skill_reads_machine_decisions_from_prose(path):
 
 def test_setup_my_brain_writes_machine_decisions_through_config():
     """The other half of the rule above: the one skill allowed to name the
-    prose files must still route timezone, the executive slug, adapter
+    prose files must still route timezone, the owner slug, adapter
     enablement and the account hints through `config write`, never into a
     context block — and must run the binding gate on what it wrote, which is
     the entire point of #54's ceremony."""
     text = read_skill("setup-my-brain")
-    for field in ("--field executive", "--field timezone",
+    for field in ("--field owner", "--field timezone",
                   "--field adapters.plaud.enabled",
                   "--field adapters.m365.enabled",
                   "--field adapters.plaud.account_hint",
@@ -197,7 +197,7 @@ def test_setup_my_brain_writes_machine_decisions_through_config():
     assert "config verify-account --vault \"$VAULT\" --adapter m365" in text
 
 
-# #58 (F5, F6): a summary line is read by the exec and the EA, so it may not
+# #58 (F5, F6): a summary line is read by the vault owner and the EA, so it may not
 # quote a frontmatter value, a result key, or a retired status at them. The
 # retired-status check covers the whole file, not just the summary block.
 RETIRED_OR_OPAQUE = (
@@ -214,7 +214,7 @@ def test_sync_summaries_speak_plainly(name):
     for token in RETIRED_OR_OPAQUE:
         assert token not in text, (
             f"{name}: {token!r} is a field name or a retired status — say it "
-            f"in words the exec can read"
+            f"in words the vault owner can read"
         )
     assert "**Meetings you ticked as reviewed:**" in text, (
         f"{name}: the fold result needs a plain-speech summary line"
@@ -266,7 +266,7 @@ def extract_disclosure_blockquote(text: str) -> str:
 def test_disclosure_blockquote_matches_feedback_disclosure(name):
     """M1: the disclosure shown at every share nudge must be the exact text
     `feedback.send` stamps into the posted issue body — a skill that drifts
-    from it would promise the exec one thing and deliver another."""
+    from it would promise the vault owner one thing and deliver another."""
     text = read_skill(name)
     extracted = extract_disclosure_blockquote(text)
     assert extracted == feedback.DISCLOSURE, (
@@ -307,7 +307,7 @@ def _normalized(text: str) -> str:
 
 
 def test_evening_sync_states_the_no_back_fill_rule():
-    # Decision 16: one catch-up note covers the window; the exec is told so.
+    # Decision 16: one catch-up note covers the window; the vault owner is told so.
     text = _evening_sync().lower()
     assert "back-fill" in text, (
         "the no-back-fill decision was real but unstated, which is the "
@@ -352,7 +352,7 @@ def test_evening_sync_mandates_wikilinks_for_looked_up_names():
 
 def test_evening_sync_recovers_from_a_link_refusal_rather_than_ending_the_run():
     # `_check_links` raises before a byte is written, so a stage-6 refusal
-    # leaves tomorrow with no note — found by the exec next morning, and
+    # leaves tomorrow with no note — found by the vault owner next morning, and
     # flatly against both the failure-isolated stage promise and rule 7
     # ("a refused calendar still writes the note"). The CLI cannot fix this
     # for itself: only the caller knows which link to drop or rename. So the

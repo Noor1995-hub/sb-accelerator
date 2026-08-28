@@ -244,7 +244,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="find meeting notes whose time window overlaps a candidate recording")
     _add_vault_argument(sync_collide)
     sync_collide.add_argument("--start", required=True,
-                              help="exec-local start, YYYY-MM-DDTHH:MM")
+                              help="owner-local start, YYYY-MM-DDTHH:MM")
     sync_collide.add_argument("--duration-min", dest="duration_min",
                               required=True, type=int,
                               help="candidate recording length in minutes")
@@ -294,8 +294,8 @@ def build_parser() -> argparse.ArgumentParser:
         "update-queue",
         help="write meeting metrics and list projects needing state synthesis")
     _add_vault_argument(sync_queue)
-    sync_queue.add_argument("--executive", required=True,
-                            help="the executive's person slug (excluded from key-people)")
+    sync_queue.add_argument("--owner", required=True,
+                            help="the vault owner's person slug (excluded from key-people)")
     sync_queue.add_argument("--today", help="ISO date; defaults to today")
 
     sync_rederive = sync_sub.add_parser(
@@ -530,7 +530,7 @@ def _dispatch(args: argparse.Namespace) -> int:
                                     args.reason, vault.today_iso(args.today)))
         if args.action == "update-queue":
             return _ok(updatequeue.run(root, vault.today_iso(args.today),
-                                       args.executive))
+                                       args.owner))
         if args.action == "rederive-entities":
             return _ok(syncjob.rederive_entities(root))
     if args.group == "meeting":

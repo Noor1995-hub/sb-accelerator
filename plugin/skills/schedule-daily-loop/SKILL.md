@@ -60,13 +60,13 @@ answer.
 python3 "$VAULTLIB" config read --vault "$VAULT"
 ```
 
-If `timezone` or `executive` is in `missing`, stop here and say which one.
+If `timezone` or `owner` is in `missing`, stop here and say which one.
 `/evening-sync` refuses to run without them, so scheduling it would create a
 task whose every firing writes an alert and nothing else — a routine that
 looks alive in the task list and is dead in the vault. Fill them (Session 1
 does, in phase 1) and come back.
 
-Keep two values from the result: `timezone`, and `executive` — the person slug
+Keep two values from the result: `timezone`, and `owner` — the person slug
 that names the task.
 
 ## Step 2 — what is already scheduled
@@ -79,8 +79,8 @@ The task ids this skill owns are:
 
 | Task | id |
 |---|---|
-| Evening run | `second-brain-evening-<executive-slug>` |
-| Morning recordings sync (optional) | `second-brain-morning-sync-<executive-slug>` |
+| Evening run | `second-brain-evening-<owner-slug>` |
+| Morning recordings sync (optional) | `second-brain-morning-sync-<owner-slug>` |
 
 The slug is in the id because task ids are global to the machine while a vault
 is not: an assistant who supports two people, or a consultant's own laptop,
@@ -225,7 +225,7 @@ Do not skip this, and do not leave it for the client to discover.
 reaches for the Plaud or Microsoft 365 connector for the first time stops at a
 permission prompt — in an unattended run, with nobody watching, that is a
 routine that silently does nothing on the night it matters most. Starting the
-task manually once, with the exec present, grants those approvals and stores
+task manually once, with the vault owner present, grants those approvals and stores
 them on the task, and every automatic run afterwards has them.
 
 **This covers MCP connectors, and it also covers Bash.** `/evening-sync` and
@@ -244,7 +244,7 @@ No other Bash prefix should ever be needed on the unattended path — if a run
 stops at a prompt for anything else, that is the design bug the prompt-safe
 contract exists to catch (see the two skills' own "Scratch hygiene" and
 `scratch sweep` sections), not a permission gap to widen with a broader
-allowlist. Starting the task manually once, with the exec present, is what
+allowlist. Starting the task manually once, with the vault owner present, is what
 grants this set; nothing needs listing by hand.
 
 So: start the task once from the scheduler, watch it through, and confirm it

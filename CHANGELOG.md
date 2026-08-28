@@ -1,12 +1,12 @@
 # Changelog
 
 **Client-visible change only** — what the plugin, a skill, the vault template, or a migration
-does differently for the exec and their EA. Internal work (CI, validators, fixtures, delaware-side
+does differently for the vault owner and their EA. Internal work (CI, validators, fixtures, delaware-side
 docs and tooling, repo plumbing) is deliberately absent: git history and the PR list already are
 that record, in more detail and without drift.
 
 Written for the consultant preparing a quarterly tune-up. Every line should be something you
-would say out loud to the exec, or something that changes what you do at the visit. This file
+would say out loud to the vault owner, or something that changes what you do at the visit. This file
 ships to `sb-dist` with each release, so the client can read it — they cannot read this repo.
 
 Entries accumulate under `Unreleased`. At release, that block becomes a
@@ -15,6 +15,13 @@ delivers them.
 
 ## Unreleased
 
+- **The product's word for the person the vault serves is now "vault owner."**
+  "Exec"/"executive" is gone from the skills, template, and prose — the first
+  customers are executives, but not every vault owner will be one. The config
+  key and CLI flag also renamed: `executive` → `owner`, `--executive` →
+  `--owner`. No migration ships with this change; any existing test vault's
+  `99-workflow-config/config.json` needs its `executive` key renamed to
+  `owner` by hand. (#104)
 - **You no longer maintain the entity on each meeting — it follows the
   project.** Once a meeting is assigned a project, its `entities` field is
   set automatically from that project's organization and kept that way; you
@@ -178,7 +185,7 @@ delivers them.
 
 - **Connectors are now bound to the vault, and refuse to sync anyone else's
   account.** Each vault carries a deployment config
-  (`99-workflow-config/config.json`) naming its timezone, its executive, and
+  (`99-workflow-config/config.json`) naming its timezone, its vault owner, and
   which capture channels are on. A connector (Plaud, Microsoft 365) only
   lists content after the signed-in account matches the account written in
   the config — a mismatch is refused outright, and an unattended run raises

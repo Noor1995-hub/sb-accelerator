@@ -70,7 +70,7 @@ EXPECTED = [
         NORDBRIDGE_DECISIONS.format("2026-06-12-phase-1-site-nomination-deferred"),
     }),
     # The unattended-capture queue: three decisions written by the pipeline
-    # and not yet validated by the exec/EA. The absence-tolerant
+    # and not yet validated by the vault owner/EA. The absence-tolerant
     # `reviewed != true` filter would also catch pre-0.2.0 notes that carry
     # no reviewed key at all.
     ("30-projects/Decisions.base", "Needs review", {

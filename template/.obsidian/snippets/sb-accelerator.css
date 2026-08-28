@@ -5,8 +5,8 @@
    `<!-- evening-sync:recap:begin -->` and friends are a CLI contract: the
    `daily-note write` command owns them, refuses them inside payloads, and
    merges regions by them. So the syntax cannot change for a cosmetic win — but
-   the exec should never see them either, and Reading view hides them while
-   Live Preview does not, which is exactly where they jot.
+   the vault owner should never see them either, and Reading view hides them
+   while Live Preview does not, which is exactly where they jot.
 
    CSS cannot match on text content, so this targets the shape instead: a line
    whose only content is an HTML comment. Verified against Obsidian 1.13's DOM

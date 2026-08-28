@@ -300,7 +300,7 @@ def _plural(count: int, noun: str) -> str:
 
 
 def _catchup_banner(root: Path, window: Optional[dict]) -> Optional[str]:
-    """The exec-facing statement of decisions 15-17, or None on a normal run.
+    """The owner-facing statement of decisions 15-17, or None on a normal run.
 
     Rendered here rather than composed by the caller: the count is
     arithmetic and the no-back-fill rule is a promise the CLI keeps, so
@@ -310,7 +310,7 @@ def _catchup_banner(root: Path, window: Optional[dict]) -> Optional[str]:
     each run left a note behind, not from the window's width — a Saturday
     run on a healthy vault has a two-day window and zero missed runs, and
     this banner is the artifact that would otherwise state the opposite to
-    the executive.
+    the vault owner.
     """
     if window is None:
         return None
@@ -346,7 +346,7 @@ def recap_fingerprint(root: Path, window: dict) -> str:
     machine-generated content, which is the banner plus the input files.
     Hashing the bounds instead made a Saturday re-run over an untouched
     vault look changed (`08-21..08-21` vs `08-21..08-22`) and regenerate a
-    recap the exec had already read, and it left `detailed_from` — which
+    recap the vault owner had already read, and it left `detailed_from` — which
     does change the rendered banner — out of the digest entirely.
 
     Dropping the bounds is safe: if they move enough to change what the

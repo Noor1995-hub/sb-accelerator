@@ -2,8 +2,8 @@
   "_readme": [
     "Machine-read deployment config — owned by the CLI and /setup-my-brain.",
     "Edit as text (never via Obsidian's property panel; this is not frontmatter).",
-    "timezone: the executive's IANA timezone name, e.g. Europe/Brussels.",
-    "executive: the executive's person slug in 50-people/, the join key for metrics.",
+    "timezone: the vault owner's IANA timezone name, e.g. Europe/Brussels.",
+    "owner: the vault owner's person slug in 50-people/, the join key for metrics.",
     "account_hint: an identifier of the connector account that IS this vault's",
     "account, copied VERBATIM from the connector's whoami (Plaud",
     "get_current_user: the id or email field; Microsoft 365 get_me: mail or",
@@ -17,7 +17,7 @@
   ],
   "config-version": 1,
   "timezone": null,
-  "executive": null,
+  "owner": null,
   "adapters": {
     "inbox": {"enabled": true},
     "plaud": {"enabled": false, "account_hint": null},

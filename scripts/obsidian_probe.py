@@ -373,7 +373,8 @@ def surfaces(vault: Path) -> list:
     add_note("30-projects/*/index.md", "project", "preview", limit=2)
     add_note("40-entities/*/dossier.md", "entity", "preview")
     # The daily note goes in Live Preview specifically: that is where the
-    # <!-- evening-sync:* --> markers show and where the exec actually types.
+    # <!-- evening-sync:* --> markers show and where the vault owner actually
+    # types.
     for p in sorted(vault.glob("60-daily-notes/*.md")):
         if "evening-sync" in p.read_text(errors="ignore"):
             found.append({"key": f"daily-{p.stem}-livepreview", "kind": "note",

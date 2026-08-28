@@ -5,10 +5,10 @@ a command that does not exist). These cover the other direction, and the
 question a name-existence check structurally cannot see: audience.
 
 `Start here.md` is the handover. playbooks/provisioning-runbook.md tells the
-consultant to open the vault, leave the exec on that note, and step back — no
-script, no walkthrough. So it must still name the command the daily loop runs
-on, and must never hand the executive one that only a delaware consultant
-should run.
+consultant to open the vault, leave the vault owner on that note, and step
+back — no script, no walkthrough. So it must still name the command the daily
+loop runs on, and must never hand the vault owner one that only a delaware
+consultant should run.
 """
 import re
 from pathlib import Path
@@ -25,13 +25,13 @@ START_HERE = TEMPLATE / "Start here.md"
 SLASH_RE = re.compile(r"`/([a-z][a-z0-9]*(?:-[a-z0-9]+)*)`")
 
 # Consultant-led: delaware runs it, at a visit, with the vault on screen.
-# upgrade-vault can be lossy ("not something to hand the executive or their EA
-# to run alone") and setup-my-brain is a once-ever two-hour interview run by
-# the consultant and the exec together. Neither belongs in a note whose whole
-# audience is the exec and their EA.
+# upgrade-vault can be lossy ("not something to hand the vault owner or their
+# EA to run alone") and setup-my-brain is a once-ever two-hour interview run
+# by the consultant and the vault owner together. Neither belongs in a note
+# whose whole audience is the vault owner and their EA.
 CONSULTANT_LED = {"setup-my-brain", "upgrade-vault"}
 
-# Safe to run unaccompanied by the exec or their EA.
+# Safe to run unaccompanied by the vault owner or their EA.
 #
 # schedule-daily-loop is here despite being invoked by consultant-led
 # setup-my-brain, because being invoked by one is not the same as being one.
@@ -62,22 +62,22 @@ def test_every_shipped_skill_is_classified_by_audience():
     """Exact equality, not the `<=` used elsewhere in this suite. That pattern
     is right where each task appends its own name; it is wrong here, because
     the point is that a new skill cannot ship without someone deciding whether
-    the exec is allowed to run it. Under `<=` a consultant-only skill lands
-    unclassified and then leaks into Start here with nothing objecting."""
+    the vault owner is allowed to run it. Under `<=` a consultant-only skill
+    lands unclassified and then leaks into Start here with nothing objecting."""
     assert not (CONSULTANT_LED & SELF_SERVE), "a skill has one audience"
     assert CONSULTANT_LED | SELF_SERVE == shipped_skills(REPO_ROOT), (
         "a new, renamed or retired skill must leave every name here in exactly "
         "one audience bucket")
 
 
-def test_start_here_names_only_commands_the_exec_can_run_alone():
+def test_start_here_names_only_commands_the_owner_can_run_alone():
     """#84's regression in audience terms rather than existence terms:
     /morning-brief is in neither bucket, so it fails here too — and silencing
     that by adding it to SELF_SERVE fails the partition test above, because no
     such skill ships. The two interlock; neither can be quieted on its own."""
     handed_over = named_in(START_HERE)
     assert handed_over <= SELF_SERVE, (
-        f"Start here.md hands the executive {sorted(handed_over - SELF_SERVE)} "
+        f"Start here.md hands the vault owner {sorted(handed_over - SELF_SERVE)} "
         "— consultant-led or non-existent commands do not belong in the "
         "orientation note")
 
@@ -85,8 +85,8 @@ def test_start_here_names_only_commands_the_exec_can_run_alone():
 def test_start_here_names_the_command_the_daily_loop_runs_on():
     assert MUST_NAME <= named_in(START_HERE), (
         f"Start here.md must name {sorted(MUST_NAME)}: the daily loop is the "
-        "first thing the note exists to explain, and the exec has nowhere else "
-        "that tells them the command")
+        "first thing the note exists to explain, and the vault owner has "
+        "nowhere else that tells them the command")
 
 
 def test_the_shipped_trees_name_no_command_that_does_not_exist():
@@ -160,4 +160,4 @@ def test_the_egress_callout_names_every_command_that_can_transmit():
     assert TRANSMITS_TO_DELAWARE <= named, (
         f"the egress callout omits {sorted(TRANSMITS_TO_DELAWARE - named)} — "
         "every command that can send data out has to be named where the note "
-        "tells the exec what leaves the vault")
+        "tells the vault owner what leaves the vault")

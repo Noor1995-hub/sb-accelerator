@@ -4,10 +4,10 @@ Setup day, on the client's machines. delaware-side material; never ships.
 
 Work through `pre-flight-checklist.md` first — every item there is either
 qualifying or a precondition for a step below. This runbook assumes it came
-back green and you are now sitting at the exec's machine with the accelerator
-repo checked out.
+back green and you are now sitting at the vault owner's machine with the
+accelerator repo checked out.
 
-Do the whole sequence on the exec's machine, then repeat steps 1–5 on the
+Do the whole sequence on the vault owner's machine, then repeat steps 1–5 on the
 assistant's. There is no shortcut: Obsidian Sync moves the vault's *content*
 between machines, not its plugin binaries or its symlink. Steps 6–7 happen
 once, after both machines are provisioned. Step 8 is not a step at all — it is
@@ -26,8 +26,8 @@ Check that `.obsidian/` arrived. A copy that silently skipped it produces a
 vault that opens with none of the layout, none of the tables, and no obvious
 reason why — the single most common provisioning mistake.
 
-**Note for the data-flow one-pager:** once `/setup-my-brain` binds the exec's
-accounts, `99-workflow-config/config.json` holds their connector identifier
+**Note for the data-flow one-pager:** once `/setup-my-brain` binds the vault
+owner's accounts, `99-workflow-config/config.json` holds their connector identifier
 (email or account id) as the binding hint — deliberately non-secret, since
 it is what a later `config verify-account` check compares the signed-in
 account against. If whoever owns information security wants it named, that
@@ -57,7 +57,7 @@ Notebook Navigator — plus the **Minimal** theme via Settings → Appearance.
 
 Obsidian hides dot-folders, so the vault keeps Claude Code's home as a visible
 `claude/` directory and points `.claude` at it. Claude Code reads `.claude/`;
-the exec browses the same files as `claude/`.
+the vault owner browses the same files as `claude/`.
 
 In the vault root:
 
@@ -74,7 +74,7 @@ copies, and they do not survive Windows checkouts without symlink privileges.
 If it cannot be created on a given machine, point Claude Code at the `claude/`
 directory directly. The vault still works; only the dot-path convenience is
 lost. Say so out loud rather than leaving it as a silent difference between the
-exec's machine and the assistant's.
+vault owner's machine and the assistant's.
 
 ## 4. Set the Obsidian Sync exclusions
 
@@ -82,7 +82,7 @@ Exclude three paths from sync:
 
 | Path | Why |
 |---|---|
-| `95-private/` | The exec-private folder. The assistant must never see it, and sync is how it would leak. |
+| `95-private/` | The owner-private folder. The assistant must never see it, and sync is how it would leak. |
 | `_heavy-assets/` | Generated binaries. Excluded for size, not secrecy. |
 | `99-workflow-config/snapshots/` | The full-vault zips `/upgrade-vault` takes before each migration run. Excluded for size and because a snapshot is only ever needed for restore on the machine that made it — there is nothing for the second machine to gain from carrying it. |
 
@@ -96,7 +96,7 @@ Sign in and connect Sync on this machine.
 
 Then re-check all three exclusions **on this machine specifically**. Sync
 exclusions are a per-device setting, not a vault setting — setting them on the
-exec's machine does nothing for the assistant's. Getting this wrong on the
+vault owner's machine does nothing for the assistant's. Getting this wrong on the
 second machine is how `95-private/` ends up shared, and nothing in the vault
 will tell you it happened.
 
@@ -135,30 +135,31 @@ the assistant's machine the same way everything else does, over Sync.
 
 ## 7. Hand over
 
-Open the vault and leave the exec on **`Start here`** — their own orientation
-note, written for them. Do not walk them through this runbook; none of it is
-theirs.
+Open the vault and leave the vault owner on **`Start here`** — their own
+orientation note, written for them. Do not walk them through this runbook;
+none of it is theirs.
 
 Record the deployment in `registry.yaml` before you leave.
 
 ## 8. The standing evening run — know what Session 1 will do
 
 Provisioning does not schedule anything. **Session 1 does**, at its close:
-`/setup-my-brain` phase 4b invokes `/schedule-daily-loop`, which asks the exec
-what time they want tomorrow prepared and creates a Claude scheduled task on
+`/setup-my-brain` phase 4b invokes `/schedule-daily-loop`, which asks the vault
+owner what time they want tomorrow prepared and creates a Claude scheduled task on
 that machine. Nothing here needs doing on setup day — but four things about
 it are yours to know before you are asked, because you will be:
 
 1. **It runs where it was created.** The task is machine-local. If the evening
-   run is meant to happen on the assistant's machine rather than the exec's,
-   it has to be created there, from a session that can see the vault — Session
-   1 scheduling it on the exec's laptop does not put it on the EA's.
+   run is meant to happen on the assistant's machine rather than the vault
+   owner's, it has to be created there, from a session that can see the vault
+   — Session 1 scheduling it on the vault owner's laptop does not put it on
+   the EA's.
 2. **The machine has to be awake with Claude open.** A task due while the app
    is closed fires at next launch instead. `/evening-sync` recovers on its own
    (the recap window widens and the note says so), but there is no version of
    this that runs on a closed laptop. The vault is a local folder, so a
    cloud-scheduled run has nothing to read.
-3. **Its first run happens with the exec in the room, on purpose.** Tool
+3. **Its first run happens with the vault owner in the room, on purpose.** Tool
    permissions are granted per task, during a run — so a routine that has
    never been started by hand stops at a permission prompt the first night it
    tries to reach Plaud or Microsoft 365, unattended, with nobody watching.
@@ -177,7 +178,7 @@ it are yours to know before you are asked, because you will be:
 4. **Say it in those terms, not as a promise.** "Your note is prepared each
    evening the laptop is on" is true and survives contact with a week of
    travel. "Your note arrives every evening" does not, and it is the first
-   thing the exec will notice is false.
+   thing the vault owner will notice is false.
 
 If the scheduler is unavailable on the client's machine, `/schedule-daily-loop`
 hands the job over in writing instead — what, where, who, by when. Make sure

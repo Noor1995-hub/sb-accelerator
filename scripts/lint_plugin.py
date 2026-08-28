@@ -12,8 +12,8 @@ Three jobs:
    skill. `/morning-brief` outlived the skill it named in
    template/Start here.md (#84): the skill was removed on purpose — tomorrow's
    note *is* the morning brief — and nothing tied the orientation note to the
-   shipped skill list. The exec's first act on day one was to type the one
-   command that note put in bold and get nothing back.
+   shipped skill list. The vault owner's first act on day one was to type the
+   one command that note put in bold and get nothing back.
 
 Exemption: for the "busdev" term only, the matched `upstreamed-from:\\s*busdev@`
 span (case-insensitive) is stripped from the line before checking — the
@@ -35,7 +35,7 @@ PROVENANCE_RE = re.compile(r"upstreamed-from:\s*busdev@", re.IGNORECASE)
 
 # A slash command as this repo's prose writes it: backtick, slash, name,
 # backtick. Both anchors carry weight, and the CLOSING one is the whole
-# false-positive defence — `/Users/exec/vault` and `70-resources/attachments`
+# false-positive defence — `/Users/owner/vault` and `70-resources/attachments`
 # have another segment after the name, so paths never match and no exclusion
 # list is needed. Digits are IN the class: a future `/sync-m365` must be
 # checked, not silently exempted (the same hazard test_skill_contracts.py
@@ -153,7 +153,8 @@ def scan_skill_references(root: Path, shipped: set[str]) -> list[str]:
     """No prose that ships may name a slash command that is not a shipped skill.
 
     Covers plugin/ as well as template/ and fixtures/: a SKILL.md pointing at a
-    deleted sibling skill is the same defect one step further from the exec.
+    deleted sibling skill is the same defect one step further from the vault
+    owner.
     Directories named .obsidian are skipped — machine config, not prose.
 
     Known boundaries, all deliberate:

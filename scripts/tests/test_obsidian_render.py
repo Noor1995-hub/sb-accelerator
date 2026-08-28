@@ -210,7 +210,7 @@ def test_entity_dossiers_render_their_meeting_log_table(note_surfaces):
 
 def test_evening_sync_markers_are_hidden_in_live_preview(note_surfaces):
     """#60 item 3. The markers are a CLI contract so the syntax stays; a CSS
-    snippet hides them in the one view where the exec actually types."""
+    snippet hides them in the one view where the vault owner actually types."""
     dailies = {k: v for k, v in note_surfaces.items() if k.startswith("daily-")}
     if not dailies:
         pytest.skip("tour captured no daily note with evening-sync markers")

@@ -49,7 +49,7 @@ python3 "$VAULTLIB" config read --vault "$VAULT"
 python3 "$VAULTLIB" dates plan --vault "$VAULT" --timezone <config.timezone>
 ```
 
-If `timezone` or `executive` is in `missing`, the pipeline cannot run
+If `timezone` or `owner` is in `missing`, the pipeline cannot run
 deterministically: stop, and say which key to fill in
 `99-workflow-config/config.json` (interactive), or write the alert as the
 run's only output (unattended).
@@ -80,7 +80,7 @@ Detail the window from `recap_detail_from` onward and let
 Every number above is read, never computed. If you find yourself counting
 days, you are re-introducing the bug `dates plan` exists to prevent.
 
-The executive's **person slug** is `executive` from the config — a slug,
+The vault owner's **person slug** is `owner` from the config — a slug,
 used as-is. Stage 3 needs it.
 
 ## Stage 2 — Harvest (read-only)
@@ -120,7 +120,7 @@ left untouched, not silently skipped) into the final summary.
 **Refresh:**
 
 ```bash
-python3 "$VAULTLIB" sync update-queue --vault "$VAULT" --today <today> --executive <exec-slug>
+python3 "$VAULTLIB" sync update-queue --vault "$VAULT" --today <today> --owner <owner-slug>
 ```
 
 This writes `meetings-7d` / `meetings-30d` / `key-people` on active projects
@@ -219,7 +219,7 @@ search easily runs tens of thousands of characters, and it is read once (to
 filter and sort) then never needed again; keeping it in context past that
 point is pure waste that every later turn in the run pays for again. Read it
 back from the file to filter out all-day and cancelled events; sort by start
-time; render times in the executive's local timezone. For each event, build
+time; render times in the vault owner's local timezone. For each event, build
 one prep line — **Attendees:** names · **Last meeting:** date + one-liner ·
 **Context:** one line from the entity dossier and the project's Now callout.
 The lookups: match attendee email domains and subject keywords against
@@ -306,7 +306,7 @@ no longer matches the payload (the calendar moved, or the user retyped the
 heading). Report it and leave the note alone (it may hold human jottings); do
 not delete it to force a rewrite.
 
-**A refused link must not cost the exec their note.** The link check runs
+**A refused link must not cost the vault owner their note.** The link check runs
 before anything is written, so a refusal here means tomorrow has no note at
 all — discovered next morning, which is the failure rule 7 already forbids
 for a refused calendar. The error is precise enough to act on: an
@@ -323,7 +323,7 @@ not a failure to write. Omitting `recap_window` silently forfeits both the
 guard and the catch-up banner, so always pass it. That applies to a
 *correction* too: if you have to rewrite a recap you already wrote this run,
 re-run `daily-note write` with `recap_window` again. A rewrite without it
-strips the stamp, and the next evening regenerates a recap the exec has
+strips the stamp, and the next evening regenerates a recap the vault owner has
 already read. Carry any `warnings` from the result into stage 7 verbatim.
 
 ## Stage 7 — Verify against disk, then summarize
@@ -404,7 +404,7 @@ python3 "$VAULTLIB" runlog append --vault "$VAULT" --routine evening-sync \
 7. **Calendar unavailable, refused, or disabled still writes the note** —
    with the explicit line naming which, never a silent empty section.
 8. **Verify against disk before claiming success.**
-9. **Machine decisions come from `config read`** — timezone, executive
+9. **Machine decisions come from `config read`** — timezone, owner
    slug, adapter enablement. Prose context files carry style and narrative,
    never these.
 10. **Catch-up state is reported, never inferred, and never back-filled.**

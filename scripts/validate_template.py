@@ -4,7 +4,7 @@
 While template/ is empty, that's the valid bootstrap state. The template
 ships no README of its own — builder-facing instantiation documentation lives
 in playbooks/ and docs/, because everything under template/ is copied into the
-client's vault and read by the executive.
+client's vault and read by the vault owner.
 
 The moment anything exists in it (the template-extraction issue), the template
 must carry its markers: CLAUDE.md (vault instructions), structure-version
@@ -99,7 +99,7 @@ def check_config(template: Path) -> list[str]:
         problems.append("template config.json must carry a _readme explaining the file")
     if cfg.get("config-version") != 1:
         problems.append("template config.json must declare config-version 1")
-    for key in ("timezone", "executive"):
+    for key in ("timezone", "owner"):
         if key not in cfg or cfg[key] is not None:
             problems.append(f"template config.json must ship {key} as null")
     adapters = cfg.get("adapters")

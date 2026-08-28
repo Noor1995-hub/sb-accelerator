@@ -71,10 +71,10 @@ def test_g4_repro_update_queue_over_an_obsidian_rewritten_index(tmp_path):
     write_person(root, "ana-fields")
     index = write_project(root, "alpha", last_updated="2026-06-01")
     write_meeting(root, "m1", date_value="2026-06-10T10:00",
-                  projects=("alpha",), attendees=("ana-fields", "exec-morgan"))
+                  projects=("alpha",), attendees=("ana-fields", "owner-morgan"))
     obsidianize(index)
 
-    result = updatequeue.run(root, today="2026-06-12", executive="exec-morgan")
+    result = updatequeue.run(root, today="2026-06-12", owner="owner-morgan")
 
     assert result["warnings"] == []
     data = parses_everywhere(index)
@@ -95,13 +95,13 @@ def test_update_queue_repairs_the_corrupted_in_the_wild_shape(tmp_path):
                              "key-people: [stale-slug]\n  - stale-slug")
     index.write_text(corrupted, encoding="utf-8")
     write_meeting(root, "m1", date_value="2026-06-10T10:00",
-                  projects=("alpha",), attendees=("ana-fields", "exec-morgan"))
+                  projects=("alpha",), attendees=("ana-fields", "owner-morgan"))
 
     # The corrupted file cannot be *read* (updatequeue skips it with a
     # warning), so repair needs the field rewritten — which is exactly what
     # replacing the whole node does once the file is readable again. Assert
     # the warning carries the actionable hint.
-    result = updatequeue.run(root, today="2026-06-12", executive="exec-morgan")
+    result = updatequeue.run(root, today="2026-06-12", owner="owner-morgan")
     assert any("orphaned block-list continuation" in warning
                for warning in result["warnings"])
     # ...and that a direct field write over the corrupted text repairs it.
@@ -238,7 +238,7 @@ def test_pyyaml_reads_the_dates_meetings_and_lists_correctly(tmp_path):
     write_meeting(root, "m1", date_value="2026-06-10T10:00",
                   projects=("alpha",), attendees=("ana-fields",))
     obsidianize(index)
-    updatequeue.run(root, today="2026-06-12", executive="exec-morgan")
+    updatequeue.run(root, today="2026-06-12", owner="owner-morgan")
 
     parsed = yaml.safe_load(
         index.read_text(encoding="utf-8").split("---\n")[1])

@@ -8,15 +8,15 @@ origin: net-new
 # Upgrade Vault
 
 Vault structure migrations ship inside the plugin and ride the marketplace
-update channel — a new plugin version can require a structure the exec's
-vault does not have yet. This skill is the only sanctioned way to move a
+update channel — a new plugin version can require a structure the vault
+does not have yet. This skill is the only sanctioned way to move a
 vault forward: snapshot, apply, verify, log, one migration at a time, never
 unattended.
 
 ## Audience
 
 **Consultant-run, at a tune-up, after `claude plugin update`.** This is not
-something to hand the executive or their EA to run alone — a migration can
+something to hand the vault owner or their EA to run alone — a migration can
 be lossy, and reading the plan and giving the explicit go-ahead is the
 consultant's job at that visit. Run it once right after the plugin update,
 before touching anything else that visit.
@@ -132,14 +132,14 @@ Then walk the consultant through the restore by hand:
 path of its own — the CLI stopped the chain and named the way back
 precisely so a human decides when and whether to use it, not so an agent
 unzips it unattended on top of a vault that might still have uncommitted
-exec edits sitting outside the snapshot's scope.
+edits from the vault owner sitting outside the snapshot's scope.
 
 ## 5. After a successful run — fill in what migration 001 left null
 
 Migration 001 writes `99-workflow-config/config.json` from the template
 default on a vault that had none. A vault provisioned before the config
 existed ends the run with a config file, but a *default* one — timezone,
-executive, and connector account hints all `null` until someone fills
+owner, and connector account hints all `null` until someone fills
 them in. Check for that at the same visit rather than leaving it for a
 separate one:
 
@@ -148,7 +148,7 @@ python3 "$VAULTLIB" config read --vault "$VAULT"
 ```
 
 On a config left at the template default, `missing` is exactly
-`["executive", "timezone"]` — an `account_hint` only joins the list once its
+`["owner", "timezone"]` — an `account_hint` only joins the list once its
 adapter is `enabled`, so unbound connectors show up as `enabled: false` in
 `config` and never in `missing`. Walk the consultant through resolving every
 entry that is there, plus any connector this deployment is meant to use,
@@ -166,7 +166,7 @@ the visit that just ran the migration that created it.
 
 ## 6. Close out
 
-Recommend the exec (or EA) restart Obsidian once the visit's changes are
+Recommend the vault owner (or EA) restart Obsidian once the visit's changes are
 in — a migration can rewrite the vault's ontology, config, or note bodies,
 and a running Obsidian instance may still be holding stale copies of files
 this run just replaced.
@@ -182,6 +182,6 @@ this run just replaced.
 3. **Never attempt to restore a snapshot automatically.** Name it, then
    walk through the manual close-unzip-reopen sequence — restoring is
    always a human decision made with Obsidian closed.
-4. **Never run this against a vault the exec or EA is actively using.**
+4. **Never run this against a vault the owner or EA is actively using.**
    This is a consultant-run, attended operation at a tune-up, not a
    background task.

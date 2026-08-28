@@ -131,8 +131,8 @@ def write_context_block(root: Path, stem: str, content: str) -> dict:
 def read_identity_block(root: Path) -> Optional[str]:
     """Return the content between identity.md's setup-my-brain markers.
 
-    Extraction only. Deciding *which* words in it are the executive's name is
-    judgment, and stays with the model.
+    Extraction only. Deciding *which* words in it are the vault owner's name
+    is judgment, and stays with the model.
     """
     try:
         return read_context_block(root, "identity")

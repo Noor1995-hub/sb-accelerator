@@ -100,13 +100,13 @@ If the user skips, omit the flags — the index falls back to placeholders.
 ### 3. Resolve the owner
 
 The owner is a person slug, and it must resolve to a real person note.
-Default to the executive:
+Default to the vault owner:
 
 ```bash
 python3 "$VAULTLIB" config read --vault "$VAULT"
 ```
 
-`executive` in the result is the executive's person slug — use it as
+`owner` in the result is the vault owner's person slug — use it as
 `--owner` directly. If it is in `missing`, ask the user who owns this
 project (never guess), then make sure the note exists:
 

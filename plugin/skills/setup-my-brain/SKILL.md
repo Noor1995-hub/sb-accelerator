@@ -1,6 +1,6 @@
 ---
 name: setup-my-brain
-description: The Session-1 onboarding interview — fills the context portfolio, connects the accounts the vault syncs from, seeds entities/projects/people, and ends with the executive's first daily note and a scheduled evening run. Triggers when the user invokes /setup-my-brain.
+description: The Session-1 onboarding interview — fills the context portfolio, connects the accounts the vault syncs from, seeds entities/projects/people, and ends with the vault owner's first daily note and a scheduled evening run. Triggers when the user invokes /setup-my-brain.
 user_invocable: true
 origin: net-new
 ---
@@ -8,8 +8,8 @@ origin: net-new
 # Set Up My Brain
 
 Session 1 of the onboarding journey, run **live**: the delaware consultant and
-the executive together, roughly two hours, vault open on screen. By the end
-the vault knows who the executive is, which connector accounts belong to this
+the vault owner together, roughly two hours, vault open on screen. By the end
+the vault knows who its owner is, which connector accounts belong to this
 engagement, what they work on and with whom — it has written them tomorrow's
 daily note while they watch, and that note has a standing time it arrives.
 
@@ -21,7 +21,7 @@ around by creating folders by hand.
 
 ## Tone — this is an interview, not a form
 
-The executive is watching every prompt. Four things carry the session:
+The vault owner is watching every prompt. Four things carry the session:
 
 - **Conversational, one topic at a time.** Ask a question, listen, follow the
   thread it opens. Never paste a whole question list and wait.
@@ -47,7 +47,7 @@ obvious answer is a statement, and an open question about their own work
 should stay open.
 
 Silence and thinking time are fine. Filling them with a polished paragraph the
-exec did not say is not.
+owner did not say is not.
 
 ## Requirements
 
@@ -107,7 +107,7 @@ python3 "$VAULTLIB" config read --vault "$VAULT"
   `playbooks/provisioning-runbook.md`. Do not offer to write the missing
   files.
 - **`ok: true`** — carry `config` and `missing` forward. On a fresh vault
-  `missing` is exactly `["executive", "timezone"]`; that is the honest state,
+  `missing` is exactly `["owner", "timezone"]`; that is the honest state,
   not an error. An account hint only joins the list once its adapter is
   enabled, so both connectors being unbound shows up as `enabled: false` in
   `config`, never in `missing` — phase 2 reads the adapter entries, not this
@@ -119,13 +119,13 @@ python3 "$VAULTLIB" migrate status --vault "$VAULT"
 
 If `pending` is non-empty, **stop** and hand off to `/upgrade-vault`. Say why
 in one line: interviewing into a stale structure writes today's answers into
-a shape the plugin is about to migrate, and the exec's first impression
+a shape the plugin is about to migrate, and the vault owner's first impression
 should not be a repair job. Come back to `/setup-my-brain` once the upgrade
 is done — nothing is lost, nothing has been asked yet.
 
 ### Fresh run or re-run
 
-A config whose `timezone` and `executive` are null is a **fresh run**: work
+A config whose `timezone` and `owner` are null is a **fresh run**: work
 straight through the phases below.
 
 Anything already filled means **re-run mode** — a tune-up, a second session,
@@ -148,8 +148,8 @@ silently.
 folder rather than touching a project that has been accumulating decisions and
 meeting links since the last session. That refusal is a no-op outcome, not a
 failure — acknowledge it in one line ("that one's already there"), do not
-retry it under a different name, and move on. Skipping a phase the exec is
-happy with is the normal case; say what you skipped in the closing summary.
+retry it under a different name, and move on. Skipping a phase the vault owner
+is happy with is the normal case; say what you skipped in the closing summary.
 
 ## Phase 1 — the interview
 
@@ -199,7 +199,7 @@ deployment without a plugin release. For each file, in order:
 
 1. **Read `99-workflow-config/context/<stem>.md`** with the Read tool and take
    its `## Interview questions` bullets as your script. Ask them one at a
-   time, conversationally, following what the exec opens up. Skip a question
+   time, conversationally, following what the vault owner opens up. Skip a question
    they have already answered under an earlier file rather than asking twice.
 2. In re-run mode, show what is there first:
 
@@ -228,7 +228,7 @@ Asking "what areas do you own?" cold, to someone who has just spent five
 minutes describing their remit, teaches them that nothing they say is being
 listened to.
 
-### Immediately after the first file: the executive's own record
+### Immediately after the first file: the vault owner's own record
 
 The first file establishes their full name and their working day. Turn both
 into machine facts before moving on to the second file:
@@ -238,15 +238,15 @@ python3 "$VAULTLIB" person ensure --vault "$VAULT" --name "Alex Rivera"
 ```
 
 Take `slug` from the result — never slugify the name yourself — and record it
-as the join key every later skill uses for "the executive":
+as the join key every later skill uses for "the vault owner":
 
 ```bash
-python3 "$VAULTLIB" config write --vault "$VAULT" --field executive --value alex-rivera
+python3 "$VAULTLIB" config write --vault "$VAULT" --field owner --value alex-rivera
 ```
 
 Then the timezone. **Propose, then confirm** — from what they just said about
 where they sit and when they work, offer the IANA name ("You're in Brussels,
-so `Europe/Brussels`?") rather than asking an executive to produce a
+so `Europe/Brussels`?") rather than asking the vault owner to produce a
 timezone identifier:
 
 ```bash
@@ -270,8 +270,8 @@ Say the distinction once, in their language, the first time it comes up:
 > tender, the new depot. I want both, but I'll keep them apart.*
 
 Then keep them apart as they talk, and carry both lists forward. Phase 3b
-opens with these named back, not with a blank question — the exec should never
-have to describe their own portfolio twice.
+opens with these named back, not with a blank question — the vault owner should
+never have to describe their own portfolio twice.
 
 ### File 3 — ask the questions, and take a note of one answer
 
@@ -307,24 +307,24 @@ the script for that).
 *Then*, for each one they chose, check whether that connector is actually
 live in this session. If it is, confirm the account with them and connect it.
 If it is not, explain what has to be switched on and by whom, and move on
-without treating it as a failure. Same outcome as before; the exec is asked
-what they want before being shown machinery.
+without treating it as a failure. Same outcome as before; the vault owner is
+asked what they want before being shown machinery.
 
 **Connecting is per-vault, and that is the point.** A connector signs in at
 the *user* level; tying the signed-in account to *this* vault is why a laptop
 holding two engagements never syncs one into the other. Worth one sentence to
-the consultant; worth none to the exec unless they ask.
+the consultant; worth none to the vault owner unless they ask.
 
 **The rule, and it has no exceptions: never ask anyone to type an email
 address.** Apple and Google sign-ins often give a connector a synthetic
-address, so the address the exec knows may never appear in the payload at
+address, so the address the vault owner knows may never appear in the payload at
 all — and a display name is rejected by the CLI outright. The hint is copied
 **verbatim from the whoami payload**, character for character, or the
 connection does not happen.
 
 ### Plaud
 
-With the exec signed in, call `mcp__plaud__get_current_user`. Write the raw
+With the vault owner signed in, call `mcp__plaud__get_current_user`. Write the raw
 JSON to `$SCRATCH/plaud.whoami.json` with the Write tool — never echo a large
 payload through Bash.
 
@@ -354,7 +354,7 @@ never "fix" it by loosening the hint.
 **If the mismatch cannot be resolved in this session, put the adapter back the
 way you found it before moving on** — an adapter left `enabled: true` behind a
 hint that matches nothing is refused by every later sync and evening run, and
-the exec loses their calendar prep without ever being told why:
+the vault owner loses their calendar prep without ever being told why:
 
 ```bash
 python3 "$VAULTLIB" config write --vault "$VAULT" --field adapters.plaud.enabled --value false
@@ -439,7 +439,7 @@ approved.
 
 ### When a connector is unavailable or declined
 
-Missing tool, failed sign-in, or an exec who would rather not connect it
+Missing tool, failed sign-in, or a vault owner who would rather not connect it
 today: **skip it with an explicit line**, leave `enabled` false, and say what
 still works without it. Never enable an adapter you could not verify, and
 never present a skipped connector as merely "not set up yet" without saying
@@ -492,9 +492,9 @@ regulator earlier — is that one you'd want a page on?"), but keep the list to
 groups that matter to their work, not every logo they have met.
 
 **Entities are never derived from the calendar.** A recurring invite is not
-evidence that an organization matters to this executive; only they can say
+evidence that an organization matters to this vault owner; only they can say
 that, and a calendar-scraped list of vendors is exactly the kind of noise that
-makes an exec stop trusting the vault in week two.
+makes an owner stop trusting the vault in week two.
 
 For each confirmed entity:
 
@@ -505,7 +505,7 @@ python3 "$VAULTLIB" entity ensure --vault "$VAULT" --slug meridian-freight-holdi
 
 `--type` is one of `client`, `business-unit`, `partner`, `supplier`, `other` —
 an AskUserQuestion where it is not obvious from what they said. `--status
-active` for the ones they work with today; `--owner` is the executive slug
+active` for the ones they work with today; `--owner` is the vault owner's slug
 from phase 1.
 
 ### 3b — Projects, suggested prudently
@@ -514,8 +514,8 @@ Open with **their own words from file 2**: the responsibilities and the
 in-flight things they already described, read back as two short lists. Add,
 when m365 is connected, the recurring subjects on their calendar over the next
 and last two weeks (`outlook_calendar_search`, with the query window computed
-deterministically by `dates window` rather than by hand). Then let the exec
-cut.
+deterministically by `dates window` rather than by hand). Then let the vault
+owner cut.
 
 The distinction from file 2 is what decides `--type`:
 
@@ -527,7 +527,7 @@ The distinction from file 2 is what decides `--type`:
 
 Keeping those apart is what stops a vault filling with dead one-week folders.
 
-**Aim for three or four.** More is worse: an exec who watches ten thin project
+**Aim for three or four.** More is worse: an owner who watches ten thin project
 folders appear learns that the vault is a filing cabinet they now have to
 maintain. The reassurance was already given up front; if they hesitate, repeat
 the specific half — `/new-project` adds one in under a minute.
@@ -540,17 +540,17 @@ python3 "$VAULTLIB" project scaffold --vault "$VAULT" --name "Yard Automation Pr
 ```
 
 `--entity` is required and joins to 3a: an internal area of responsibility
-links to the exec's **own organization** entity — or to the business unit it
-sits in — which is exactly why those had to be created in 3a. Optional
+links to the vault owner's **own organization** entity — or to the business
+unit it sits in — which is exactly why those had to be created in 3a. Optional
 `--stage`, `--contacts` and `--source` each take one line and are worth
-passing when the exec has just said something that fits.
+passing when the vault owner has just said something that fits.
 
 ### 3c — People, one list from both sources
 
 When m365 is connected, pull attendees from the ±2-week calendar window and
-merge them with the names the exec mentioned during the interview into **one
-confirm/reject list**. One list, not two passes — the exec should not be asked
-about the same person twice with different framing, and the merged list is
+merge them with the names the vault owner mentioned during the interview into
+**one confirm/reject list**. One list, not two passes — the vault owner should
+not be asked about the same person twice with different framing, and the merged list is
 also how you catch that the person they described as "my chief of staff" is
 the same name that appears in every Monday invite.
 
@@ -564,7 +564,7 @@ python3 "$VAULTLIB" person ensure --vault "$VAULT" --name "Priya Nathan"
 
 Reading the calendar out loud tends to produce observations the interview did
 not — a standing forum nobody mentioned, a rhythm ("you're in back-to-back
-externals every Thursday"). **If the exec agrees the observation is real**,
+externals every Thursday"). **If the vault owner agrees the observation is real**,
 fold it into the relevant block and re-run `context write` for that file;
 those two are usually `role-and-responsibilities` and
 `preferences-and-constraints`. If they do not agree, drop it. A pattern in a
@@ -577,7 +577,7 @@ The close, and the moment the vault stops being a folder structure.
 
 **Invoke the `/evening-sync` skill now, in this session** — follow
 `${CLAUDE_PLUGIN_ROOT}/skills/evening-sync/SKILL.md` in interactive mode. It
-reads the config you just filled (timezone, executive slug, the m365
+reads the config you just filled (timezone, owner slug, the m365
 connection) and writes **tomorrow's** daily note: a prep section per real
 calendar meeting, naming the entities, projects and people seeded twenty
 minutes earlier. It is a pipeline run, not a CLI call — do not assemble a note
@@ -603,7 +603,7 @@ they want their evenings prepared, creates the scheduled task, starts it once
 by hand, and states the condition the routine depends on. Do not compose a
 schedule by hand here and do not reimplement its steps.
 
-Budget a few minutes for it, and keep the exec in the room: that first manual
+Budget a few minutes for it, and keep the vault owner in the room: that first manual
 run is what grants the routine permission to reach their connectors, and it is
 the only chance they get to watch it work before they are asked to trust it.
 
@@ -623,7 +623,7 @@ What must not happen is a session that ends implying a routine nobody created.
 ### Sweep first
 
 **Raw connector JSON is engagement data.** It must not outlive the session.
-Nothing persists from this run except what the executive confirmed into the
+Nothing persists from this run except what the vault owner confirmed into the
 vault; everything else was working material.
 
 Delete every scratch file this session wrote — whoami payloads and any mail
@@ -662,7 +662,7 @@ Close with, in this order:
 
 Then, and only then, **one line of counts for the consultant's own record** —
 files filled, connectors live, entities/projects/people seeded. One line, at
-the end, clearly the operator's footnote rather than the exec's summary.
+the end, clearly the operator's footnote rather than the vault owner's summary.
 
 ## Degradation
 
@@ -695,14 +695,14 @@ connection step back up exactly where this session left it.
    listed through that adapter — calendar, recordings or mail alike.
 4. **A whoami payload — or a mail sample — is deleted the moment it has been
    used**, not at the end of the session.
-5. **Entities come from the executive, never from the calendar.**
+5. **Entities come from the vault owner, never from the calendar.**
 6. **Every block is read back and approved before it is written**, including
    one drafted from their own sent mail.
 7. **Every write goes through the CLI.** Context blocks, config fields,
    people, entities and projects each have their subcommand; nothing here
    edits a vault file directly.
 8. **Prefer fewer, confirmed objects to more, inferred ones.** Three projects
-   the exec named beat ten the calendar suggested, and `/new-project`,
+   the vault owner named beat ten the calendar suggested, and `/new-project`,
    `/update-entity` and the next session all exist.
 9. **The evening run is scheduled or explicitly handed off.** The session
    never ends describing a routine that does not exist.

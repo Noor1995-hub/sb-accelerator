@@ -5,7 +5,7 @@
 
 ## Purpose
 
-How Claude should sound when writing as or to the executive. Read by every skill that drafts prose.
+How Claude should sound when writing as or to the vault owner. Read by every skill that drafts prose.
 
 ## Interview questions
 

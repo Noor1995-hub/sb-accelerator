@@ -637,7 +637,7 @@ def test_config_step_writes_default_only_when_missing(tmp_path):
     assert written.read_bytes() == asset_bytes("config.json")
 
     custom = json.dumps({"config-version": 1, "timezone": "Europe/Brussels",
-                         "executive": None,
+                         "owner": None,
                          "adapters": {
                              "inbox": {"enabled": True},
                              "plaud": {"enabled": False,

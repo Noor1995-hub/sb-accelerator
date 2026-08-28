@@ -16,7 +16,7 @@ CONFIG = TEMPLATE / "99-workflow-config" / "config.json"
 
 EXPECTED_SHORTCUTS = [
     # The orientation note pins first: a fresh vault otherwise opens to an empty
-    # "New tab" with nothing telling the exec how any of it works (#60 item 6).
+    # "New tab" with nothing telling the vault owner how any of it works (#60 item 6).
     ("note", "Start here.md"),
     ("note", "20-meetings/Meetings.base"),
     ("note", "30-projects/Projects.base"),

@@ -23,7 +23,7 @@ def valid_config(**overrides) -> dict:
     cfg = {
         "config-version": 1,
         "timezone": "Europe/Brussels",
-        "executive": "morgan-ellery",
+        "owner": "morgan-ellery",
         "adapters": {
             "inbox": {"enabled": True},
             "plaud": {"enabled": True, "account_hint": "morgan@example.com"},
@@ -39,7 +39,7 @@ def test_read_returns_config_and_empty_missing_when_complete(tmp_path):
     write_config(root, valid_config())
     result = config.read(root)
     assert result["config"]["timezone"] == "Europe/Brussels"
-    assert result["config"]["executive"] == "morgan-ellery"
+    assert result["config"]["owner"] == "morgan-ellery"
     assert result["missing"] == []
 
 
@@ -54,9 +54,9 @@ def test_read_ignores_underscore_keys(tmp_path):
 
 def test_read_reports_nulls_as_missing_not_errors(tmp_path):
     root = make_vault(tmp_path)
-    write_config(root, valid_config(timezone=None, executive=None))
+    write_config(root, valid_config(timezone=None, owner=None))
     result = config.read(root)
-    assert result["missing"] == ["executive", "timezone"]
+    assert result["missing"] == ["owner", "timezone"]
 
 
 def test_read_reports_missing_hint_only_for_enabled_connectors(tmp_path):
@@ -106,9 +106,9 @@ def test_read_fails_on_unknown_top_level_key(tmp_path):
 def test_read_fails_on_missing_top_level_key(tmp_path):
     root = make_vault(tmp_path)
     cfg = valid_config()
-    del cfg["executive"]
+    del cfg["owner"]
     write_config(root, cfg)
-    with pytest.raises(config.ConfigError, match="executive"):
+    with pytest.raises(config.ConfigError, match="owner"):
         config.read(root)
 
 

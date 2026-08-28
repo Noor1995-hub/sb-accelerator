@@ -1,7 +1,7 @@
 # Plugin internals
 
 Instructions for working *on* this plugin. Not shipped guidance for the
-executive — that lives in the vault's own `CLAUDE.md`. Excluded from the
+vault owner — that lives in the vault's own `CLAUDE.md`. Excluded from the
 version-bump requirement (see the repo's root `CLAUDE.md`).
 
 ## Where writes happen
@@ -59,10 +59,10 @@ required with no default. Parking is two writes that must not come apart —
 the file leaves `10-inbox/`, its content hash joins the never-propose-again
 list — and neither is legible later without the reason. The earlier shape
 (`sync skip` then `sync archive`) let both happen with nothing recorded, so
-the exec found a bare file in `90-archive/inbox/` and a bare hash in the skip
-list with no way to tell a deliberate call from a mistake. `sync skip` keeps
-an *optional* `--reason` for adapter ids (`plaud:`, `m365:`), which have no
-inbox file to move.
+the vault owner found a bare file in `90-archive/inbox/` and a bare hash in
+the skip list with no way to tell a deliberate call from a mistake. `sync
+skip` keeps an *optional* `--reason` for adapter ids (`plaud:`, `m365:`),
+which have no inbox file to move.
 
 The reason is written in two places on purpose, because the readers differ:
 `skipped-recordings.txt` answers "what has this vault suppressed, and why?",
@@ -98,7 +98,7 @@ call instead.
 
 ## Deployment config is CLI-owned JSON
 
-Machine decisions — adapter enablement, timezone, the executive's person
+Machine decisions — adapter enablement, timezone, the vault owner's person
 slug, connector account binding — live in `99-workflow-config/config.json`,
 read via `config read`. It is deliberately JSON and deliberately not
 frontmatter: nothing about it should be editable from Obsidian's property
@@ -192,14 +192,14 @@ the daily notes holding its jottings, and any decision notes written inside
 it. The banner enters as its rendered text, not as the raw window bounds: a
 Saturday run over an untouched vault has a wider window than Friday's but
 the same banner and the same files, and hashing the bounds made that look
-like a change and regenerated a recap the exec had already read. Hashing
+like a change and regenerated a recap the vault owner had already read. Hashing
 the rendered banner also brings `detailed_from` inside the digest, which
 the bounds did not cover. `daily-note write` recomputes it whenever the
 payload carries `recap_window`, and when it matches the stamp already on the
 note the recap region is skipped outright: bytes untouched,
 `recap_skipped: true`, prep regions still merged. That is what stops a
-re-run replacing a recap the exec already read with a differently-worded,
-occasionally worse one.
+re-run replacing a recap the vault owner already read with a
+differently-worded, occasionally worse one.
 
 What the stamp does **not** cover is project indexes, and the recap does
 read from them (project pulse comes from each project's `Now` callout). The
@@ -247,8 +247,8 @@ sync" is a reference, not a claim about what something is called.
 This is the same boundary lesson as the two above it. There, a caller that
 re-sends what it read corrupts the value; here, a caller that writes a name
 it *remembers* instead of one it looked up publishes a plausible fiction
-into the exec's daily note. An unreadable dossier is a warning rather than a
-refusal: one mangled file must not cost the exec their note.
+into the vault owner's daily note. An unreadable dossier is a warning rather
+than a refusal: one mangled file must not cost the vault owner their note.
 
 ## After changing the ontology
 

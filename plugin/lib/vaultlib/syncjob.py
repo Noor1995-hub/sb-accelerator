@@ -324,7 +324,7 @@ def collide(root: Path, start_local: str, duration_min: int) -> dict:
     start_text = str(start_local or "").strip()
     if not _COLLIDE_START_RE.match(start_text):
         raise SyncError(
-            "--start must be YYYY-MM-DDTHH:MM in the executive's local time")
+            "--start must be YYYY-MM-DDTHH:MM in the vault owner's local time")
     if not isinstance(duration_min, int) or isinstance(duration_min, bool) \
             or duration_min < 0:
         raise SyncError(f"--duration-min {duration_min!r} must be an int >= 0")

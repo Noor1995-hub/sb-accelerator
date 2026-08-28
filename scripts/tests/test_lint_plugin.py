@@ -176,9 +176,9 @@ def a_skill(root: Path, *names: str) -> None:
 
 def test_prose_naming_an_unshipped_command_fails(tmp_path):
     """#84: /morning-brief survived the deletion of the skill it named. The
-    consultant's handover is to open the vault and leave the exec on
-    Start here, so the exec's first act is to type the command that note
-    bolds — and get nothing back."""
+    consultant's handover is to open the vault and leave the vault owner on
+    Start here, so the vault owner's first act is to type the command that
+    note bolds — and get nothing back."""
     root = make_repo(tmp_path)
     a_skill(root, "evening-sync")
     write_prose(root, "template/Start here.md",
@@ -208,7 +208,7 @@ def test_every_prose_file_is_scanned_not_just_the_orientation_note(tmp_path):
 
 def test_a_skill_naming_a_deleted_sibling_fails(tmp_path):
     """Scanning plugin/ too: a skill that hands off to a skill that no longer
-    exists is the same defect, one step further from the exec."""
+    exists is the same defect, one step further from the vault owner."""
     root = make_repo(tmp_path)
     a_skill(root, "evening-sync")
     write_prose(root, "plugin/skills/evening-sync/reference.md",
@@ -224,7 +224,7 @@ def test_backticked_paths_are_not_read_as_commands(tmp_path):
     root = make_repo(tmp_path)
     a_skill(root, "evening-sync")
     write_prose(root, "template/Start here.md",
-                "Your vault lives at `/Users/exec/second-brain`.",
+                "Your vault lives at `/Users/owner/second-brain`.",
                 "Attachments go in `70-resources/attachments`.",
                 "Config is `/99-workflow-config/config.json`.")
     assert main(root) == []
@@ -259,8 +259,8 @@ def test_config_slash_bearing_values_are_not_read_as_commands(tmp_path):
     root = make_repo(tmp_path)
     a_skill(root, "evening-sync")
     write_prose(root, "template/99-workflow-config/config.json", json.dumps({"_readme": [
-        "timezone: the executive's IANA timezone name, e.g. Europe/Brussels.",
-        "executive: the person slug in 50-people/, the join key for metrics.",
+        "timezone: the vault owner's IANA timezone name, e.g. Europe/Brussels.",
+        "owner: the person slug in 50-people/, the join key for metrics.",
         "feedback.repo: the sb-client-<slug> GitHub repo (owner/name).",
         "Never read 99-workflow-config/secrets — the CLI owns them.",
     ]}))

@@ -1,6 +1,6 @@
 """dates.window: deterministic UTC windows for calendar queries.
 
-The lab hardcoded Brussels CET/CEST; the product takes the executive's
+The lab hardcoded Brussels CET/CEST; the product takes the vault owner's
 timezone (or an explicit offset) as an argument. Offset-based tests run on
 every platform; the zoneinfo path is skipped where the host has no tz
 database (Windows CI without the tzdata package).

@@ -53,7 +53,7 @@ def shipping_config() -> dict:
         "_readme": ["machine-read deployment config"],
         "config-version": 1,
         "timezone": None,
-        "executive": None,
+        "owner": None,
         "adapters": {
             "inbox": {"enabled": True},
             "plaud": {"enabled": False, "account_hint": None},

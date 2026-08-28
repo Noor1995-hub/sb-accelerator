@@ -1,6 +1,6 @@
 """Deployment config: the machine-read half of 99-workflow-config.
 
-Machine decisions — adapter enablement, timezone, executive slug, connector
+Machine decisions — adapter enablement, timezone, owner slug, connector
 account binding — live in config.json, a CLI-owned JSON file. Deliberately
 not markdown frontmatter: this file must never be editable from Obsidian's
 property panel. Style and narrative stay prose in context/*.md; this module
@@ -25,10 +25,10 @@ KNOWN_VERSION = 1
 CONNECTOR_ADAPTERS = ("plaud", "m365")
 ADAPTERS = ("inbox",) + CONNECTOR_ADAPTERS
 FEEDBACK_REPO_RE = re.compile(r"\A[\w.-]+/[\w.-]+\Z")
-_TOP_LEVEL_KEYS = ("config-version", "timezone", "executive", "adapters", "feedback")
+_TOP_LEVEL_KEYS = ("config-version", "timezone", "owner", "adapters", "feedback")
 
 WRITABLE_FIELDS = (
-    "timezone", "executive", "feedback.repo",
+    "timezone", "owner", "feedback.repo",
 ) + tuple(f"adapters.{name}.enabled" for name in ADAPTERS) + tuple(
     f"adapters.{name}.account_hint" for name in CONNECTOR_ADAPTERS)
 
@@ -79,7 +79,7 @@ def _validate(cfg: dict) -> dict:
     if absent:
         raise ConfigError(f"config keys missing entirely: {absent}")
     _require_optional_string(cfg, "timezone")
-    _require_optional_string(cfg, "executive")
+    _require_optional_string(cfg, "owner")
     adapters = cfg["adapters"]
     if not isinstance(adapters, dict) or set(adapters) != set(ADAPTERS):
         raise ConfigError(
@@ -131,7 +131,7 @@ def _validate(cfg: dict) -> dict:
 def read(root: Path) -> dict:
     """Validated config plus the completeness report skills act on."""
     cfg = _validate(_load(root))
-    missing = [key for key in ("executive", "timezone") if cfg[key] is None]
+    missing = [key for key in ("owner", "timezone") if cfg[key] is None]
     for name in CONNECTOR_ADAPTERS:
         entry = cfg["adapters"][name]
         if entry["enabled"] and entry["account_hint"] is None:

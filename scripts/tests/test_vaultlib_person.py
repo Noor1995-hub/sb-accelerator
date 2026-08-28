@@ -1,5 +1,5 @@
-"""Person notes. The executive's own note is created here, because a project
-owner that joins to nothing is a hole in the relationship graph."""
+"""Person notes. The vault owner's own note is created here, because a
+project owner that joins to nothing is a hole in the relationship graph."""
 import pytest
 
 from vaultlib import markdown as md

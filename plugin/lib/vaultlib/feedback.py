@@ -87,8 +87,8 @@ def _blocklist(root: Path) -> list:
         if subject:
             terms.append(("meeting", str(subject)))
     cfg = config.read(root)["config"]
-    if cfg["executive"]:
-        terms.append(("executive", cfg["executive"]))
+    if cfg["owner"]:
+        terms.append(("owner", cfg["owner"]))
     for name in config.CONNECTOR_ADAPTERS:
         hint = cfg["adapters"][name]["account_hint"]
         if hint:

@@ -110,7 +110,7 @@ own EMU tenant, so this did not arise; for a client org it does. Options:
 add their admin as a read-only outside collaborator on `sb-dist`, or give the
 client their own private mirror we push releases into. Decide at provisioning
 and record it in `registry.yaml`. Do not assume the client has usable GitHub
-access at all — many exec/EA environments do not.
+access at all — many owner/EA environments do not.
 
 **On the per-client read token** the design spec describes: that model works
 on path B below, where `credentialKind: credentialHelper` can supply a
@@ -177,7 +177,7 @@ configuration value.
 
 An admin can upload plugin ZIPs directly (50 MB each, up to 100 plugins per
 marketplace) under Organization settings → Plugins. No git, no HTTPS host, no
-MDM. Perfectly viable for a single-exec engagement, and the honest fallback
+MDM. Perfectly viable for a single-owner engagement, and the honest fallback
 when a client's IT will not connect anything to a delaware repository.
 
 ## The release train, concretely

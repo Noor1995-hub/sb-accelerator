@@ -246,13 +246,13 @@ reformatting. On a Plaud **401**: report it and stop this adapter — never
 retry auth in a loop; re-authentication is interactive and belongs to the
 user.
 
-The executive's timezone is `timezone` from `config read` — pass the IANA
+The vault owner's timezone is `timezone` from `config read` — pass the IANA
 name. If it is in `missing`, the plaud and m365 adapters and calendar
 enrichment cannot run: skip them with an explicit line. If the host cannot
 resolve timezone names, the error's hint says to pass `--utc-offset` instead.
 
 **Microsoft 365** (when enabled, available, and account-verified): Teams
-transcribes meetings on the exec's calendar, and the calendar event is the
+transcribes meetings on the vault owner's calendar, and the calendar event is the
 key to its own transcript. Search the trailing **7 local days**
 (`outlook_calendar_search`, query `*`, `utc_from`/`utc_to` from
 `dates window`), drop cancelled and all-day events, and keep online
@@ -390,7 +390,7 @@ clearly identified in the transcript, ensure the note exists:
 python3 "$VAULTLIB" person ensure --vault "$VAULT" --name "<Full Name>"
 ```
 
-Use the returned slugs. The executive attends their own meetings — include
+Use the returned slugs. The vault owner attends their own meetings — include
 them. Names only guessed from transcript audio are unreliable: leave them
 out of `attendees` and mention them in the debrief instead.
 
@@ -578,7 +578,7 @@ Count what exists, not what you intended (a lab run once reported
 
 `Inbox swept` counts every file moved this run — processed meetings,
 captures and parks alike, plus anything already synced — and reports the
-pending remainder — that remainder is the number the executive actually
+pending remainder — that remainder is the number the vault owner actually
 cares about. Count it from disk like everything else in this step.
 
 ## Scratch hygiene

@@ -1,8 +1,9 @@
 # Second Brain Accelerator
 
 Product monorepo for the **Second Brain Accelerator**: a personal AI operating
-system for client executives (exec + EA), deployed by delaware consultants
-inside AI transformation engagements and maintained as a versioned product.
+system for a client executive and their EA — the vault owner and their
+assistant — deployed by delaware consultants inside AI transformation
+engagements and maintained as a versioned product.
 
 Full product design: `docs/superpowers/specs/2026-08-22-second-brain-accelerator-design.md`.
 Engineering conventions and the bootstrap rationale:
