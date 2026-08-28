@@ -49,4 +49,4 @@ def append(root: Path, routine: str, outcome: str) -> Dict[str, str]:
     line = f"{stamp}\t{routine}\t{collapsed}\n"
     with log_path.open("a", encoding="utf-8") as handle:
         handle.write(line)
-    return {"path": str(log_path.relative_to(root)), "line": line.rstrip("\n")}
+    return {"path": log_path.relative_to(root).as_posix(), "line": line.rstrip("\n")}
