@@ -924,3 +924,50 @@ def test_health_report_rejects_a_bad_window_as_a_structured_error(
     assert code == 1
     assert payload["ok"] is False
     assert "--window" in payload["error"]
+
+
+def test_scratch_sweep_returns_the_standard_envelope(capsys, tmp_path):
+    scratch_dir = tmp_path / "scratch"
+    scratch_dir.mkdir()
+    (scratch_dir / "ids.json").write_text("[]", encoding="utf-8")
+    (scratch_dir / "notes.txt").write_text("keep", encoding="utf-8")
+
+    code, payload = run(capsys, ["scratch", "sweep", "--dir", str(scratch_dir)])
+
+    assert code == 0
+    assert payload["ok"] is True
+    assert payload["result"]["deleted"] == ["ids.json"]
+    assert (scratch_dir / "notes.txt").is_file()
+
+
+def test_scratch_sweep_on_a_missing_dir_is_a_structured_error(capsys, tmp_path):
+    code, payload = run(capsys, [
+        "scratch", "sweep", "--dir", str(tmp_path / "nope"),
+    ])
+    assert code == 1
+    assert payload["ok"] is False
+    assert "does not exist" in payload["error"]
+
+
+def test_runlog_append_writes_to_the_vault_and_returns_the_line(capsys, tmp_path):
+    root = make_vault(tmp_path)
+    code, payload = run(capsys, [
+        "runlog", "append", "--vault", str(root),
+        "--routine", "evening-sync", "--outcome", "nothing to do",
+    ])
+    assert code == 0
+    assert payload["ok"] is True
+    assert payload["result"]["path"] == "99-workflow-config/logs/routine-runs.log"
+    log_path = root / "99-workflow-config" / "logs" / "routine-runs.log"
+    assert "nothing to do" in log_path.read_text(encoding="utf-8")
+
+
+def test_runlog_append_rejects_a_bad_routine_name(capsys, tmp_path):
+    root = make_vault(tmp_path)
+    code, payload = run(capsys, [
+        "runlog", "append", "--vault", str(root),
+        "--routine", "Not Kebab", "--outcome", "did a thing",
+    ])
+    assert code == 1
+    assert payload["ok"] is False
+    assert "routine" in payload["error"]

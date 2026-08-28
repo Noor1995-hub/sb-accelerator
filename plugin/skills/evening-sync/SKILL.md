@@ -158,6 +158,16 @@ the named meetings, rewrite five bullets and an open-items list, apply the
 material-decision test. `/sync-recordings`'s own fan-out in stage 3 pins the
 same way.
 
+**Never poll a batch with no-op Bash.** A live cost analysis of this pipeline
+found 362 of 423 requests in one run were idle `Bash(true)` / `sleep` /
+`echo waiting` polls babysitting a background subagent batch, re-reading the
+full session context on every idle turn — most of that run's bill. Spawn the
+"up to 3 in parallel" batch as **blocking** subagent calls, or spawn them one
+at a time: a blocking call returns exactly when the subagent finishes, so
+there is nothing to poll for and nothing gained by trying. Never spawn in
+the background and loop checking on it. This applies to stage 3's fan-out
+too (`/sync-recordings` step 6 carries the same rule).
+
 Projects with only `needs-review` meetings never reach the queue — do not
 "help" one by confirming meetings yourself.
 
@@ -176,8 +186,13 @@ python3 "$VAULTLIB" config verify-account --vault "$VAULT" \
 Only `match: true` pulls events. A refusal (`account-mismatch`,
 `no-account-hint`) or a disabled adapter takes the calendar-unavailable
 path below, and the summary names the cause — a signed-in account from the
-wrong engagement must never prep this vault's meetings. Delete the whoami
-scratch file immediately on a refusal, and in any case before the run ends.
+wrong engagement must never prep this vault's meetings. Run the sweep
+immediately on a refusal, and in any case before the run ends:
+
+```bash
+python3 "$VAULTLIB" scratch sweep --dir "$SCRATCH"
+```
+
 When the gate passes, pull `next_business_day`'s events; compute the query
 window deterministically:
 
@@ -185,15 +200,22 @@ window deterministically:
 python3 "$VAULTLIB" dates window --start <next_business_day> --timezone <tz> --hours 0
 ```
 
-Filter out all-day and cancelled events; sort by start time; render times in
-the executive's local timezone. For each event, build one prep line —
-**Attendees:** names · **Last meeting:** date + one-liner · **Context:** one
-line from the entity dossier and the project's Now callout. The lookups:
-match attendee email domains and subject keywords against `40-entities/*/`
-and active projects in `30-projects/*/index.md` (same signals, same order,
-as `/sync-recordings` step 3); read the matched dossier and the most recent
-meeting note for that entity or project. No match → no entity suffix and a
-prep line from the event alone.
+**Write the raw `outlook_calendar_search` result to `$SCRATCH/m365_calendar.json`
+with the Write tool — never hold it in the main context.** A day's calendar
+search easily runs tens of thousands of characters, and it is read once (to
+filter and sort) then never needed again; keeping it in context past that
+point is pure waste that every later turn in the run pays for again. Read it
+back from the file to filter out all-day and cancelled events; sort by start
+time; render times in the executive's local timezone. For each event, build
+one prep line — **Attendees:** names · **Last meeting:** date + one-liner ·
+**Context:** one line from the entity dossier and the project's Now callout.
+The lookups: match attendee email domains and subject keywords against
+`40-entities/*/` and active projects in `30-projects/*/index.md` (same
+signals, same order, as `/sync-recordings` step 3); read the matched dossier
+and the most recent meeting note for that entity or project. No match → no
+entity suffix and a prep line from the event alone. `m365_calendar.json`
+matches the `m365_*.json` sweep pattern, so the end-of-run sweep above
+clears it with everything else.
 
 Calendar tool missing or erroring → `meetings: []` with
 `meetings_note: "*Calendar unavailable — meetings could not be prepped.*"`.
@@ -316,6 +338,15 @@ reported "Processed: 0" after writing a meeting correctly):
 
 A non-empty warnings block means investigate before tomorrow's run.
 
+**Scratch hygiene, one last time.** Stage 3's `/sync-recordings` run already
+swept its own scratch files at its own end; this run may also have written
+`m365.whoami.json` and `m365_calendar.json` in stage 5. Sweep once more
+before the run ends, whether or not stage 5 ran:
+
+```bash
+python3 "$VAULTLIB" scratch sweep --dir "$SCRATCH"
+```
+
 ## Unattended mode
 
 `--unattended` is what a scheduled run passes. Non-negotiable:
@@ -332,6 +363,18 @@ A non-empty warnings block means investigate before tomorrow's run.
    window and `business_days_missed` in the Warnings block so a human
    reviews the note before relying on it. A two-month mega-recap composed
    unattended is the "wrong-doing" rule 3 is about.
+5. **The run ends with exactly one run-log line, always** — including the
+   "nothing happened" shape (no recordings, empty queue, calendar
+   unavailable). This is the very last action of the run, after the summary
+   above and the scratch sweep:
+
+```bash
+python3 "$VAULTLIB" runlog append --vault "$VAULT" --routine evening-sync \
+  --outcome "<one line: e.g. 'wrote 60-daily-notes/2026-08-29.md, 2 recordings synced, 1 decision logged' or 'wrote note, nothing else to do'>"
+```
+
+   It lands in `99-workflow-config/logs/routine-runs.log` — the one place a
+   human looks after the fact, whether or not they open the note itself.
 
 ## Rules
 

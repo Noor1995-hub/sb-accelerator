@@ -23,6 +23,15 @@ delivers them.
   content write; clearing it is a separate, explicit step. Setting or fixing
   a field on an entity that already exists — its owner, most often — also no
   longer silently does nothing: it applies the change and says so. (#100)
+- **Evening and morning syncs no longer go silent.** The one step every
+  unattended run always hits — clearing session scratch files — used to be
+  able to stall the whole run for close to an hour waiting on a permission
+  prompt with nobody there to answer it; it now runs through the vault's own
+  tooling instead of a raw shell command, so one approval at setup covers
+  the routine end to end. Every run, including a quiet night with nothing to
+  sync, now leaves one line in a log you can check without opening the
+  vault, and the nightly run no longer burns idle time — and budget —
+  polling while it waits on its own subagents. (#101)
 - **Your evening note now has a time.** Session 1 ends by setting up the
   standing evening run itself — you pick the hour, and the vault prepares
   tomorrow from then on, every working evening the machine is on and Claude

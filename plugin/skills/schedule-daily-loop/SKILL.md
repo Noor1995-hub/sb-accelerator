@@ -160,7 +160,10 @@ else:
   either a plain completion (naming the note it wrote) or a line that starts
   with a word a human can grep for. The scheduler notifies on completion; that
   notification is worth reading only if the last line says what actually
-  happened.
+  happened. Both skills also write this same outcome to
+  `99-workflow-config/logs/routine-runs.log` on their own (see Step 6) — the
+  final line here is for the scheduler's own notification, the log line is
+  for a human who checks later without opening either.
 - **What not to do** — never ask a question (the mode already says so, but the
   prompt is read by an agent that will otherwise try to be helpful), and never
   write a note by hand if a stage fails. A failed stage is reported, not
@@ -170,6 +173,24 @@ else:
 already pin their own subagents, precisely because they were built to run
 unattended every evening on someone else's bill. A prompt that re-specifies
 that is a second copy of a decision made in two other files.
+
+**Never hardcode a specific plugin version into the prompt.** A stored
+prompt that names a literal version segment
+(`~/.claude/plugins/cache/<marketplace>/second-brain/0.8.0/lib/vaultlib/cli.py`)
+freezes the routine on that version forever — every later `/upgrade-vault`
+or plugin update ships fixes the scheduled run silently never gets, with no
+error and no skip line to notice it by. The prompt above never names
+`cli.py` at all: it says `/evening-sync --unattended` and lets that skill
+invocation resolve `${CLAUDE_PLUGIN_ROOT}` itself, which always points at
+whatever version is current. That is why the skill-invocation instruction
+above (not a raw CLI call) is the whole prompt body for the pipeline step —
+resolving the interpreter is the prompt's job; resolving the plugin version
+is the skill's. If a future prompt ever has to reach the CLI directly rather
+than through a skill invocation, it must resolve the path at run start
+(`${CLAUDE_PLUGIN_ROOT}` if the environment sets it for scheduled runs;
+otherwise glob the plugin's install directory for the newest version folder
+and use that) — never write a path a human typed once into a task that
+outlives every version it names.
 
 Then create or update it, with a `description` that carries the schedule in
 plain words ("evening run — writes tomorrow's note, weekdays 18:47") so the
@@ -206,6 +227,25 @@ permission prompt — in an unattended run, with nobody watching, that is a
 routine that silently does nothing on the night it matters most. Starting the
 task manually once, with the exec present, grants those approvals and stores
 them on the task, and every automatic run afterwards has them.
+
+**This covers MCP connectors, and it also covers Bash.** `/evening-sync` and
+`/sync-recordings` are built so every Bash call on their `--unattended` path
+is one of exactly two shapes — a call through the vaultlib CLI, or a write
+scoped to `$SCRATCH` — precisely so that one narrow allowlist, granted once,
+covers the whole routine. The Bash prefixes this run needs pre-approved are:
+
+| Prefix | Covers |
+|---|---|
+| `python3 "${CLAUDE_PLUGIN_ROOT}/lib/vaultlib/cli.py" *` | every deterministic vault write, `scratch sweep`, and `runlog append` |
+| `cat > "$SCRATCH/"*` | building a payload file before a CLI call |
+| `printf * > "$SCRATCH/"*` | writing a small id list before a CLI call |
+
+No other Bash prefix should ever be needed on the unattended path — if a run
+stops at a prompt for anything else, that is the design bug the prompt-safe
+contract exists to catch (see the two skills' own "Scratch hygiene" and
+`scratch sweep` sections), not a permission gap to widen with a broader
+allowlist. Starting the task manually once, with the exec present, is what
+grants this set; nothing needs listing by hand.
 
 So: start the task once from the scheduler, watch it through, and confirm it
 wrote what it should. It is also the only chance anyone gets to see the
