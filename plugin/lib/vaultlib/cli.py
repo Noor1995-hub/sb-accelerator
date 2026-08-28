@@ -31,7 +31,7 @@ if __package__ in (None, ""):
     # the skills invoke it.
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from vaultlib import config, dailynote, dates, decision, entity, feedback, health, m365, meeting, migrate, person, plaud, project, schema, syncjob, updatequeue, vault  # noqa: E402
+from vaultlib import config, dailynote, dates, decision, entity, feedback, health, m365, meeting, migrate, person, plaud, project, runlog, scratch, schema, syncjob, updatequeue, vault  # noqa: E402
 
 
 def _emit(payload: dict) -> None:
@@ -379,6 +379,28 @@ def build_parser() -> argparse.ArgumentParser:
     migrate_run.add_argument(
         "--stamp", help="snapshot timestamp override (tests)")
 
+    scratch_group = top.add_parser(
+        "scratch", help="scratch-directory hygiene for unattended runs")
+    scratch_sub = scratch_group.add_subparsers(dest="action", required=True)
+    scratch_sweep = scratch_sub.add_parser(
+        "sweep", help="delete the built-in pattern list from --dir, and only --dir")
+    scratch_sweep.add_argument(
+        "--dir", required=True,
+        help="the session scratch directory to sweep — never the vault")
+
+    runlog_group = top.add_parser(
+        "runlog", help="append-only one-line-per-run log for unattended routines")
+    runlog_sub = runlog_group.add_subparsers(dest="action", required=True)
+    runlog_append = runlog_sub.add_parser(
+        "append", help="append one outcome line to 99-workflow-config/logs/routine-runs.log")
+    _add_vault_argument(runlog_append)
+    runlog_append.add_argument(
+        "--routine", required=True,
+        help="routine name, kebab-case, e.g. evening-sync or sync-recordings")
+    runlog_append.add_argument(
+        "--outcome", required=True,
+        help="one line describing what happened, including a no-op run")
+
     health_group = top.add_parser(
         "health", help="content-free vault health metrics (read-only)")
     health_sub = health_group.add_subparsers(dest="action", required=True)
@@ -535,6 +557,10 @@ def _dispatch(args: argparse.Namespace) -> int:
             return _ok(migrate.status(root))
         return _ok(migrate.run(root, vault.today_iso(args.today),
                                stamp=args.stamp))
+    if args.group == "scratch":
+        return _ok(scratch.sweep(args.dir))
+    if args.group == "runlog":
+        return _ok(runlog.append(root, args.routine, args.outcome))
     if args.group == "health":
         window = args.window if args.window is not None else health.DEFAULT_WINDOW_DAYS
         data = health.report(root, vault.today_iso(args.today), window=window)
@@ -601,6 +627,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         return _fail(str(exc), "Fix the named payload field or note state and retry.")
     except feedback.FeedbackError as exc:
         return _fail(str(exc), "Fix the named constraint; nothing was sent.")
+    except scratch.ScratchError as exc:
+        return _fail(str(exc), "Check --dir points at the session scratch "
+                     "directory and retry.")
+    except runlog.RunLogError as exc:
+        return _fail(str(exc), "Fix --routine or --outcome and retry.")
     except health.HealthError as exc:
         return _fail(str(exc), "Fix --today or --window and retry.")
     except migrate.MigrateError as exc:

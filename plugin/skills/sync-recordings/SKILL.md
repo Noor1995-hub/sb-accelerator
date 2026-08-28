@@ -74,7 +74,13 @@ python3 "$VAULTLIB" config verify-account --vault "$VAULT" \
 
 3. Only `match: true` proceeds. On `match: false` the adapter is **refused,
    in both modes** — nothing is listed, nothing is synced. Delete the whoami
-   scratch file immediately. Interactively, tell the user the `reason` and
+   scratch file immediately:
+
+```bash
+python3 "$VAULTLIB" scratch sweep --dir "$SCRATCH"
+```
+
+   Interactively, tell the user the `reason` and
    that binding the account means writing its identifier into
    `adapters.<name>.account_hint` in `99-workflow-config/config.json` — a
    conscious act, not something you do for them. Quote the signed-in
@@ -449,6 +455,23 @@ one payload out, against a contract that is already written down — and it
 does not need the session model. The cost shows up on the client's bill, so
 being deliberate about it is part of the product.
 
+**Never poll a batch with no-op Bash.** A live cost analysis of the evening
+pipeline found 362 of 423 requests in one run were idle `Bash(true)` /
+`sleep` / `echo waiting` polls babysitting a background subagent batch — each
+poll re-reads the entire session context, and that alone was most of that
+run's bill. A **blocking** subagent spawn already returns when the subagent
+finishes; there is nothing to wait for and nothing to poll. Spawn each small
+batch (up to ~4, per above) as blocking calls, or spawn them sequentially
+one at a time — either way, the loop resumes exactly when a batch completes,
+because that is what a blocking call does. Never spawn in the background and
+then loop checking on it.
+
+**Each subagent returns one line, not its payload.** The blob or transcript
+content goes to the subagent; the orchestrator gets back the fenced payload
+JSON for `meeting write` plus a one-line outcome — never the raw transcript
+or blob text echoed back into the main context. That is what keeps this
+step's context cost flat as the number of recordings grows.
+
 ```bash
 cat > "$SCRATCH/rec_42.payload.json" <<'JSON'
 {
@@ -555,20 +578,31 @@ cares about. Count it from disk like everything else in this step.
 Raw connector JSON — whoami payloads, `list_files` listings, transcripts —
 is engagement data that must not outlive the run. It lands only in the
 session scratch directory, never the vault. At the end of the run, success
-or refusal, delete the raw connector files this run wrote.
-The names below are the ones this contract instructs; if you wrote any
-other raw connector file **inside `$SCRATCH`**, delete it too. Cleanup never
-leaves `$SCRATCH`: a tool-result overflow file under `~/.claude` is not
-yours to delete — it is the harness's own housekeeping, and an `rm` on it
-trips the same sensitive-file prompt as reading it would.
+or refusal, sweep it:
 
 ```bash
-rm -f "$SCRATCH"/plaud.whoami.json "$SCRATCH"/m365.whoami.json "$SCRATCH"/rec_*.json "$SCRATCH"/plaud.list.json "$SCRATCH"/m365_*.json "$SCRATCH"/*.blob.md "$SCRATCH"/ids.json
+python3 "$VAULTLIB" scratch sweep --dir "$SCRATCH"
 ```
 
-On an account-mismatch refusal, delete the whoami payload immediately —
-before writing the summary. (The gate runs before listing, so on a refusal
-no listing ever reaches disk.)
+`scratch sweep` is stdlib-only and deletes a fixed, built-in pattern list
+(`plaud.whoami.json`, `m365.whoami.json`, `rec_*.json`, `plaud.list.json`,
+`m365_*.json`, `*.blob.md`, `ids.json`, `*.payload.json`, `decision.json`)
+directly inside `--dir`, never recursing — this is the whole reason it
+exists rather than `rm -f`. **Every scratch file this contract names you
+write already matches one of those patterns; name any other raw connector
+file to match one too** (`m365_events.json` fits `m365_*.json`,
+`rec_42.blob.md` fits `*.blob.md`), so one sweep call always catches
+everything this run wrote, and it is the only deletion this skill ever
+performs. This is *why* every scratch write above uses those exact
+filenames rather than something more descriptive. Cleanup never leaves
+`$SCRATCH`: a tool-result overflow file under `~/.claude` is not yours to
+delete — it is the harness's own housekeeping, and an `rm` on it trips the
+same sensitive-file prompt as reading it would. `scratch sweep` cannot
+reach it either; it only ever looks inside the directory it is given.
+
+On an account-mismatch refusal, run the sweep immediately — before writing
+the summary. (The gate runs before listing, so on a refusal no listing ever
+reaches disk.)
 
 ## Unattended mode
 
@@ -587,6 +621,20 @@ rules, not negotiable:
 3. **A refused account binding is an alert, not a fallback.** The summary
    carries the refuse-and-alert line; the adapter synced nothing, and no
    judgment call overrides the gate.
+4. **The run ends with exactly one run-log line, always.** `--unattended`
+   exiting 0 having done nothing is a silent failure a human has no reason to
+   go looking for — including the "nothing to do" case (inbox empty, no new
+   recordings on any enabled adapter). The very last action of an unattended
+   run, after the summary above, is:
+
+```bash
+python3 "$VAULTLIB" runlog append --vault "$VAULT" --routine sync-recordings \
+  --outcome "<one line: e.g. '3 processed, 1 parked, 0 pending' or 'nothing to do: inbox empty, no new recordings'>"
+```
+
+   Write it whether the run succeeded, refused an adapter, or found nothing —
+   it is the one place a human looks after the fact, in
+   `99-workflow-config/logs/routine-runs.log`.
 
 ## Rules
 

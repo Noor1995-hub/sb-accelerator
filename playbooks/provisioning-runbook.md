@@ -162,8 +162,18 @@ it are yours to know before you are asked, because you will be:
    permissions are granted per task, during a run — so a routine that has
    never been started by hand stops at a permission prompt the first night it
    tries to reach Plaud or Microsoft 365, unattended, with nobody watching.
+   This covers Bash too, not just connectors: `/evening-sync` and
+   `/sync-recordings` are built so every Bash call on the unattended path is
+   either `python3 "${CLAUDE_PLUGIN_ROOT}/lib/vaultlib/cli.py" ...` (every
+   deterministic write, plus the scratch-hygiene sweep and the run-log line)
+   or a plain `$SCRATCH`-scoped write (`cat > "$SCRATCH/..."`, `printf ... >
+   "$SCRATCH/..."`) — so the one manual run grants a single narrow allowlist
+   that covers the whole routine, connectors and Bash alike.
    `/schedule-daily-loop` starts it once for exactly this reason. If you are
-   ever setting one of these up outside Session 1, do the same.
+   ever setting one of these up outside Session 1, do the same, and if that
+   first run stops at a prompt for anything outside those two Bash shapes,
+   treat it as a product bug to report, not a permission gap to paper over
+   with a broader grant.
 4. **Say it in those terms, not as a promise.** "Your note is prepared each
    evening the laptop is on" is true and survives contact with a week of
    travel. "Your note arrives every evening" does not, and it is the first
