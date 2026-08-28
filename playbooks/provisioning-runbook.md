@@ -4,8 +4,13 @@ Setup day, on the client's machines. delaware-side material; never ships.
 
 Work through `pre-flight-checklist.md` first — every item there is either
 qualifying or a precondition for a step below. This runbook assumes it came
-back green and you are now sitting at the vault owner's machine with the
-accelerator repo checked out.
+back green and you are now sitting at the vault owner's machine with Claude
+Code or Cowork open and the plugin installed. Steps 1–3 run through the
+`/provision-vault` skill — no accelerator repo checkout needed, since the
+vault template and the provisioning scripts ship inside the plugin itself
+(#86). A repo checkout is still a valid fallback (below each step), for a
+machine where the plugin cache is unavailable or you are recovering from a
+broken install.
 
 Do the whole sequence on the vault owner's machine, then repeat steps 1–5 on the
 assistant's. There is no shortcut: Obsidian Sync moves the vault's *content*
@@ -15,16 +20,26 @@ what Session 1 does about scheduling, and what you should know before it does.
 
 ## 1. Instantiate the vault
 
-Copy the contents of `plugin/template/` — **including the hidden `.obsidian/`
-directory** — into the vault location you agreed with the client.
+**Primary: run `/provision-vault`.** From Claude Code or Cowork with the
+plugin installed, its step 1 runs
 
-Do not initialise git in the vault. The vault has no git by design; Obsidian
-Sync's version history and the client's own backups cover recovery, and a
-`.git` directory inside a synced folder causes more problems than it solves.
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/lib/instantiate_vault.py" <vault>
+```
 
-Check that `.obsidian/` arrived. A copy that silently skipped it produces a
-vault that opens with none of the layout, none of the tables, and no obvious
-reason why — the single most common provisioning mistake.
+which copies `plugin/template/` — **including the hidden `.obsidian/`
+directory** — from the plugin's own cache into the vault location you agreed
+with the client. No repo checkout involved. It refuses to touch a target
+that already has files in it, and it verifies afterward that `.obsidian/`
+arrived and `structure-version` reads `2` before reporting success — the
+single most common provisioning mistake used to be a copy that silently
+skipped the dotfile and opened with none of the layout or tables and no
+obvious reason why; this is now checked by the tool that does the copy,
+not by a human remembering to look.
+
+Never initialise git in the vault. It has no git by design; Obsidian Sync's
+version history and the client's own backups cover recovery, and a `.git`
+directory inside a synced folder causes more problems than it solves.
 
 **Note for the data-flow one-pager:** once `/setup-my-brain` binds the vault
 owner's accounts, `99-workflow-config/config.json` holds their connector identifier
@@ -33,31 +48,51 @@ it is what a later `config verify-account` check compares the signed-in
 account against. If whoever owns information security wants it named, that
 is the one line to give them.
 
+### Fallback: instantiate by hand
+
+If the plugin cache is unavailable on this machine, or you are recovering
+from a broken install, copy the contents of `plugin/template/` — from an
+accelerator repo checkout, **including the hidden `.obsidian/` directory** —
+into the vault location you agreed with the client, and check that
+`.obsidian/` arrived yourself.
+
 ## 2. Provision the Obsidian plugins and theme
 
-From the accelerator repo:
+**Primary: `/provision-vault`'s step 2** runs, from the plugin's own cache —
+no repo checkout, same as step 1:
 
 ```bash
-python plugin/lib/provision_plugins.py <vault>
+python3 "${CLAUDE_PLUGIN_ROOT}/lib/provision_plugins.py" <vault>
 ```
 
-That installs the pinned, checksum-verified releases listed in
-`plugin/lib/plugin-pins.json` into the vault's `.obsidian/plugins/` and
+That installs the pinned, checksum-verified releases listed in the plugin's
+own `lib/plugin-pins.json` into the vault's `.obsidian/plugins/` and
 `.obsidian/themes/Minimal/`. The vault's first open then needs only the one
 **"trust author and enable plugins"** click — turning off Restricted Mode is
 the one step that can never ship as files.
 
-**If the client machine has no repo checkout**, install by hand from within
-Obsidian. The list the vault expects is in its own
-`.obsidian/community-plugins.json`, so you do not need this runbook in front
-of you to recover it: Dataview, Minimal Theme Settings, Style Settings,
-Notebook Navigator — plus the **Minimal** theme via Settings → Appearance.
+### Fallback: no plugin cache, or install fully by hand
+
+If you have an accelerator repo checkout but no plugin installed, run the
+same script directly: `python plugin/lib/provision_plugins.py <vault>`.
+
+If neither is available, install by hand from within Obsidian. The list the
+vault expects is in its own `.obsidian/community-plugins.json`, so you do
+not need this runbook in front of you to recover it: Dataview, Minimal
+Theme Settings, Style Settings, Notebook Navigator — plus the **Minimal**
+theme via Settings → Appearance.
 
 ## 3. Create the `.claude → claude` symlink
 
 Obsidian hides dot-folders, so the vault keeps Claude Code's home as a visible
 `claude/` directory and points `.claude` at it. Claude Code reads `.claude/`;
 the vault owner browses the same files as `claude/`.
+
+**Primary:** `/provision-vault`'s step 1 already attempted this as part of
+instantiation and reports the outcome — `"created"`, or `"failed — <reason>"`
+if this machine refused it. Confirm which one it reported before moving on.
+
+### Fallback: create it (or recover from a reported failure) by hand
 
 In the vault root:
 
@@ -118,12 +153,16 @@ the assistant's machine the same way everything else does, over Sync.
 3. Place the token, and nothing else, at
    `99-workflow-config/secrets/feedback-token` in the instantiated vault — one
    line, no surrounding commentary.
-4. Point the vault at the repo:
+4. Point the vault at the repo. `/provision-vault`'s step 4 does this once
+   the token file above is in place — it verifies the file exists and is
+   non-empty **without reading its contents**, then runs:
 
    ```bash
-   python3 <plugin-path>/lib/vaultlib/cli.py config write --vault <vault> \
+   python3 "${CLAUDE_PLUGIN_ROOT}/lib/vaultlib/cli.py" config write --vault <vault> \
      --field feedback.repo --value <owner>/sb-client-<slug>
    ```
+
+   Run it directly, the same way, if you are not going through the skill.
 
 5. Rotate the token at any tune-up — swap the file's contents; the repo name
    in `config.json` doesn't change, so there is nothing to re-run `config

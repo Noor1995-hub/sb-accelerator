@@ -15,6 +15,14 @@ delivers them.
 
 ## Unreleased
 
+- **A new `/provision-vault` skill sets up a client machine with zero repo
+  checkout.** Previously, provisioning a new vault owner or EA's machine
+  meant the consultant had this repo checked out on it. The skill now
+  instantiates the vault, installs the pinned Obsidian plugins and theme,
+  and attempts the `.claude` symlink straight from the plugin's own cache —
+  the one thing every client machine already has once the plugin is
+  installed. The full manual provisioning path still works as a fallback.
+  (#106)
 - **The vault template now ships inside the plugin.** No behavior change for
   the vault owner or their EA — every skill, `.base` view, and piece of
   onboarding prose instantiates exactly as before. The template's home in

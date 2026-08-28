@@ -27,9 +27,13 @@ SLASH_RE = re.compile(r"`/([a-z][a-z0-9]*(?:-[a-z0-9]+)*)`")
 # Consultant-led: delaware runs it, at a visit, with the vault on screen.
 # upgrade-vault can be lossy ("not something to hand the vault owner or their
 # EA to run alone") and setup-my-brain is a once-ever two-hour interview run
-# by the consultant and the vault owner together. Neither belongs in a note
-# whose whole audience is the vault owner and their EA.
-CONSULTANT_LED = {"setup-my-brain", "upgrade-vault"}
+# by the consultant and the vault owner together. provision-vault runs before
+# the vault owner has a vault to be handed a command in, touches a credential
+# that must never appear in chat, and is never invoked by a self-serve skill
+# the way schedule-daily-loop is invoked by setup-my-brain below — nothing
+# calls it once setup day is over. None of the three belongs in a note whose
+# whole audience is the vault owner and their EA.
+CONSULTANT_LED = {"setup-my-brain", "upgrade-vault", "provision-vault"}
 
 # Safe to run unaccompanied by the vault owner or their EA.
 #
