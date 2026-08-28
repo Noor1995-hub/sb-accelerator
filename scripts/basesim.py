@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Evaluate Obsidian Bases view filters against a vault, deterministically.
 
-Why this exists: the five .base files in template/ are the vault's primary UI,
+Why this exists: the five .base files in plugin/template/ are the vault's primary UI,
 and until now the only check that a view selected the right rows was a human
 opening Obsidian and counting rows by eye (docs/local-setup.md step 3). An
 ontology rename silently empties a table, and nothing in CI notices.

@@ -1,19 +1,20 @@
 #!/usr/bin/env python3
-"""Skill frontmatter lint + clean-room scan for plugin/, template/, and fixtures/.
+"""Skill frontmatter lint + clean-room scan for plugin/ and fixtures/.
 
 Three jobs:
 1. Every plugin/skills/*/SKILL.md has YAML frontmatter with name (matching its
    directory), description, and user_invocable: true.
 2. No denylisted term (scripts/cleanroom-denylist.txt, case-insensitive
-   substrings) appears in any text file under plugin/, template/, or
-   fixtures/ — the clean-room rule from CLAUDE.md. plugin/ and template/
-   ship to clients; fixtures/ never ships but must stay just as clean.
+   substrings) appears in any text file under plugin/ or fixtures/ — the
+   clean-room rule from CLAUDE.md. plugin/ (which now carries the template at
+   plugin/template/) ships to clients; fixtures/ never ships but must stay
+   just as clean.
 3. No prose in those same trees names a slash command that is not a shipped
    skill. `/morning-brief` outlived the skill it named in
-   template/Start here.md (#84): the skill was removed on purpose — tomorrow's
-   note *is* the morning brief — and nothing tied the orientation note to the
-   shipped skill list. The vault owner's first act on day one was to type the
-   one command that note put in bold and get nothing back.
+   plugin/template/Start here.md (#84): the skill was removed on purpose —
+   tomorrow's note *is* the morning brief — and nothing tied the orientation
+   note to the shipped skill list. The vault owner's first act on day one was
+   to type the one command that note put in bold and get nothing back.
 
 Exemption: for the "busdev" term only, the matched `upstreamed-from:\\s*busdev@`
 span (case-insensitive) is stripped from the line before checking — the
@@ -50,7 +51,7 @@ SLASH_COMMAND_RE = re.compile(r"`/([a-z][a-z0-9]*(?:-[a-z0-9]+)*)`")
 # `Europe/Brussels`, `50-people/`, `(owner/name)` and any multi-segment path.
 BARE_COMMAND_RE = re.compile(r"(?<![\w/`.])/([a-z][a-z0-9]*(?:-[a-z0-9]+)+)(?![\w/-])")
 
-SHIPPED_TREES = ("plugin", "template", "fixtures")
+SHIPPED_TREES = ("plugin", "fixtures")
 
 
 def load_denylist(root: Path) -> list[str]:
@@ -152,9 +153,9 @@ def scan_cleanroom(root: Path, terms: list[str]) -> list[str]:
 def scan_skill_references(root: Path, shipped: set[str]) -> list[str]:
     """No prose that ships may name a slash command that is not a shipped skill.
 
-    Covers plugin/ as well as template/ and fixtures/: a SKILL.md pointing at a
-    deleted sibling skill is the same defect one step further from the vault
-    owner.
+    Covers plugin/ (which now carries the template at plugin/template/) and
+    fixtures/: a SKILL.md pointing at a deleted sibling skill is the same
+    defect one step further from the vault owner.
     Directories named .obsidian are skipped — machine config, not prose.
 
     Known boundaries, all deliberate:

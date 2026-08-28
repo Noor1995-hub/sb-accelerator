@@ -14,10 +14,10 @@ import sys
 
 # Paths whose effect is only observable in a rendered vault.
 UI_PATHS = (
-    "template/.obsidian/",                                  # theme, settings, snippets, navigator
-    "fixtures/demo-vault/",                                 # changes what renders
-    "template/99-workflow-config/reference/ontology.md",    # renames empty tables silently
-    "plugin/lib/vaultlib/markdown.py",                      # emits the bodies that render
+    "plugin/template/.obsidian/",                                  # theme, settings, snippets, navigator
+    "fixtures/demo-vault/",                                       # changes what renders
+    "plugin/template/99-workflow-config/reference/ontology.md",    # renames empty tables silently
+    "plugin/lib/vaultlib/markdown.py",                             # emits the bodies that render
 )
 UI_SUFFIXES = (".base", ".canvas")
 

@@ -2,14 +2,14 @@
 import json
 from pathlib import Path
 
-from lint_plugin import load_denylist, main, scan_cleanroom
+from lint_plugin import SHIPPED_TREES, load_denylist, main, scan_cleanroom
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 def make_repo(tmp_path: Path) -> Path:
     (tmp_path / "plugin" / "skills").mkdir(parents=True)
-    (tmp_path / "template").mkdir()
+    (tmp_path / "plugin" / "template").mkdir()
     (tmp_path / "scripts").mkdir()
     (tmp_path / "scripts" / "cleanroom-denylist.txt").write_text(
         "# comment\nmichael\nbusdev\n", encoding="utf-8"
@@ -65,9 +65,16 @@ def test_cleanroom_violation_in_plugin_fails(tmp_path):
 
 def test_cleanroom_violation_in_template_fails(tmp_path):
     root = make_repo(tmp_path)
-    (root / "template" / "CLAUDE.md").write_text("Sync with busdev daily.\n", encoding="utf-8")
+    (root / "plugin" / "template" / "CLAUDE.md").write_text("Sync with busdev daily.\n", encoding="utf-8")
     problems = main(root)
     assert any("busdev" in p.lower() for p in problems)
+
+
+def test_shipped_trees_is_narrowed_to_plugin_and_fixtures():
+    """template/ moved inside plugin/ (#86): plugin/ now subsumes it, so the
+    scan tree list must be exactly these two, no separate top-level template/
+    entry — while still covering both."""
+    assert set(SHIPPED_TREES) == {"plugin", "fixtures"}
 
 
 def test_cleanroom_violation_in_fixtures_fails(tmp_path):
@@ -181,7 +188,7 @@ def test_prose_naming_an_unshipped_command_fails(tmp_path):
     note bolds — and get nothing back."""
     root = make_repo(tmp_path)
     a_skill(root, "evening-sync")
-    write_prose(root, "template/Start here.md",
+    write_prose(root, "plugin/template/Start here.md",
                 "Two commands drive it:",
                 "- **`/morning-brief`** — what's happening today.")
     problems = main(root)
@@ -191,7 +198,7 @@ def test_prose_naming_an_unshipped_command_fails(tmp_path):
 def test_prose_naming_a_shipped_command_passes(tmp_path):
     root = make_repo(tmp_path)
     a_skill(root, "evening-sync")
-    write_prose(root, "template/Start here.md", "- **`/evening-sync`** — what happened today.")
+    write_prose(root, "plugin/template/Start here.md", "- **`/evening-sync`** — what happened today.")
     assert main(root) == []
 
 
@@ -200,7 +207,7 @@ def test_every_prose_file_is_scanned_not_just_the_orientation_note(tmp_path):
     context placeholders — a scan narrowed to Start here.md would miss them."""
     root = make_repo(tmp_path)
     a_skill(root, "evening-sync")
-    write_prose(root, "template/99-workflow-config/reference/ontology.md",
+    write_prose(root, "plugin/template/99-workflow-config/reference/ontology.md",
                 "Written by `/morning-brief`.")
     problems = main(root)
     assert any("ontology.md:1" in p and "morning-brief" in p for p in problems)
@@ -223,7 +230,7 @@ def test_backticked_paths_are_not_read_as_commands(tmp_path):
     read as a command."""
     root = make_repo(tmp_path)
     a_skill(root, "evening-sync")
-    write_prose(root, "template/Start here.md",
+    write_prose(root, "plugin/template/Start here.md",
                 "Your vault lives at `/Users/owner/second-brain`.",
                 "Attachments go in `70-resources/attachments`.",
                 "Config is `/99-workflow-config/config.json`.")
@@ -235,9 +242,9 @@ def test_a_command_name_carrying_digits_is_checked_not_exempted(tmp_path):
     same hazard test_skill_contracts.py warns about on CLI invocations."""
     root = make_repo(tmp_path)
     a_skill(root, "sync-m365")
-    write_prose(root, "template/Start here.md", "Run `/sync-m365`.")
+    write_prose(root, "plugin/template/Start here.md", "Run `/sync-m365`.")
     assert main(root) == []
-    write_prose(root, "template/Start here.md", "Run `/sync-m366`.")
+    write_prose(root, "plugin/template/Start here.md", "Run `/sync-m366`.")
     assert any("sync-m366" in p for p in main(root))
 
 
@@ -246,7 +253,7 @@ def test_config_readme_prose_is_checked_without_backticks(tmp_path):
     cannot use the backtick convention the markdown prose observes."""
     root = make_repo(tmp_path)
     a_skill(root, "evening-sync")
-    write_prose(root, "template/99-workflow-config/config.json", json.dumps(
+    write_prose(root, "plugin/template/99-workflow-config/config.json", json.dumps(
         {"_readme": ["Machine-read config — owned by the CLI and /morning-brief."]}))
     problems = main(root)
     assert any("config.json" in p and "_readme[0]" in p and "morning-brief" in p
@@ -258,7 +265,7 @@ def test_config_slash_bearing_values_are_not_read_as_commands(tmp_path):
     folder with a trailing slash, and an owner/name repo pair."""
     root = make_repo(tmp_path)
     a_skill(root, "evening-sync")
-    write_prose(root, "template/99-workflow-config/config.json", json.dumps({"_readme": [
+    write_prose(root, "plugin/template/99-workflow-config/config.json", json.dumps({"_readme": [
         "timezone: the vault owner's IANA timezone name, e.g. Europe/Brussels.",
         "owner: the person slug in 50-people/, the join key for metrics.",
         "feedback.repo: the sb-client-<slug> GitHub repo (owner/name).",
@@ -273,7 +280,7 @@ def test_check_is_inert_without_a_skill_inventory(tmp_path):
     partial tree. The hole that leaves is closed by
     test_skill_contracts.py::test_expected_skills_exist."""
     root = make_repo(tmp_path)
-    write_prose(root, "template/Start here.md", "Run `/morning-brief`.")
+    write_prose(root, "plugin/template/Start here.md", "Run `/morning-brief`.")
     assert main(root) == []
 
 
@@ -282,6 +289,6 @@ def test_obsidian_config_is_not_scanned_as_prose(tmp_path):
     template prose and must not be able to fail this repo's lint."""
     root = make_repo(tmp_path)
     a_skill(root, "evening-sync")
-    write_prose(root, "template/.obsidian/plugins/some-plugin/README.md",
+    write_prose(root, "plugin/template/.obsidian/plugins/some-plugin/README.md",
                 "Upstream docs mention `/some-other-command`.")
     assert main(root) == []

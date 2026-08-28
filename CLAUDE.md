@@ -9,9 +9,9 @@ The product monorepo for the **Second Brain Accelerator**: a personal AI
 operating system for a client executive and their EA — the vault owner and
 their assistant — deployed by delaware consultants inside AI transformation
 engagements and maintained as a versioned product — a Claude Code plugin
-(`plugin/`), a vault template (`template/`), and structure migrations
-(`migrations/`), plus the delaware-side playbooks (`playbooks/`) that never
-ship.
+(`plugin/`), a vault template (`plugin/template/`), and structure migrations
+(`plugin/migrations/`), plus the delaware-side playbooks (`playbooks/`) that
+never ship.
 
 Authoritative design: `docs/superpowers/specs/2026-08-22-second-brain-accelerator-design.md`.
 Bootstrap rationale and conventions provenance (modeled on bta-agents-portal):
@@ -19,10 +19,11 @@ Bootstrap rationale and conventions provenance (modeled on bta-agents-portal):
 
 ## The clean-room rule (hard rule)
 
-**Nothing in `plugin/` or `template/` may reference delaware clients, Michael,
-or busdev content.** These two trees ship to clients (source-available).
-"delaware" as the vendor name is fine; client names, people names, and busdev
-paths/content are not. `scripts/lint_plugin.py` greps for a denylist
+**Nothing in `plugin/` (which now includes the vault template at
+`plugin/template/`) may reference delaware clients, Michael, or busdev
+content.** This tree ships to clients (source-available). "delaware" as the
+vendor name is fine; client names, people names, and busdev paths/content are
+not. `scripts/lint_plugin.py` greps for a denylist
 (`scripts/cleanroom-denylist.txt`) in CI — but the lint is a net, not the rule.
 When porting from busdev, rewrite; never copy-paste-then-trim.
 
@@ -58,10 +59,10 @@ rendering change is verified.
 
 A change is **UI-impacting** when it touches any of:
 
-- `template/.obsidian/**` — theme, Minimal Theme Settings, CSS snippets, navigator
+- `plugin/template/.obsidian/**` — theme, Minimal Theme Settings, CSS snippets, navigator
 - any `*.base` or `*.canvas`
 - `fixtures/demo-vault/**` — it changes what renders
-- `template/99-workflow-config/reference/ontology.md` — property renames empty views
+- `plugin/template/99-workflow-config/reference/ontology.md` — property renames empty views
 - `plugin/lib/vaultlib/markdown.py` — it emits the bodies that render
 
 For those, run `/visual-check` (or the loop in `docs/visual-verification.md`)
@@ -82,7 +83,7 @@ python -m pytest scripts/tests -q    # validator unit tests
 ```
 
 Same three things CI runs. To exercise the plugin against a vault, instantiate
-`template/` into a scratch directory (`docs/local-setup.md`).
+`plugin/template/` into a scratch directory (`docs/local-setup.md`).
 
 ## Git & CI
 

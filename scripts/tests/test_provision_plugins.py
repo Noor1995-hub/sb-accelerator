@@ -1,7 +1,7 @@
 """Offline tests for the plugin provisioner. Network is never touched:
 provision() takes an injectable fetch, and the fake below records calls.
 The shipped pin manifest's shape (incl. real checksums present for every
-asset) is tested against the actual scripts/plugin-pins.json."""
+asset) is tested against the actual plugin/lib/plugin-pins.json."""
 import hashlib
 import json
 from pathlib import Path

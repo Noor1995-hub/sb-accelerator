@@ -15,7 +15,7 @@ what Session 1 does about scheduling, and what you should know before it does.
 
 ## 1. Instantiate the vault
 
-Copy the contents of `template/` — **including the hidden `.obsidian/`
+Copy the contents of `plugin/template/` — **including the hidden `.obsidian/`
 directory** — into the vault location you agreed with the client.
 
 Do not initialise git in the vault. The vault has no git by design; Obsidian
@@ -38,11 +38,11 @@ is the one line to give them.
 From the accelerator repo:
 
 ```bash
-python scripts/provision_plugins.py <vault>
+python plugin/lib/provision_plugins.py <vault>
 ```
 
 That installs the pinned, checksum-verified releases listed in
-`scripts/plugin-pins.json` into the vault's `.obsidian/plugins/` and
+`plugin/lib/plugin-pins.json` into the vault's `.obsidian/plugins/` and
 `.obsidian/themes/Minimal/`. The vault's first open then needs only the one
 **"trust author and enable plugins"** click — turning off Restricted Mode is
 the one step that can never ship as files.
@@ -88,7 +88,7 @@ Exclude three paths from sync:
 
 All three are account/device-level Obsidian Sync settings, configured on
 each machine at provisioning — none of this ships as files, and
-`template/.obsidian` carries no sync configuration to skip that step.
+`plugin/template/.obsidian` carries no sync configuration to skip that step.
 
 ## 5. Connect Obsidian Sync, then verify the exclusions again
 

@@ -20,7 +20,7 @@ from test_vaultlib_vault import make_vault
 REPO_ROOT = Path(__file__).resolve().parents[2]
 M001_DIR = REPO_ROOT / "plugin" / "migrations" / "001-structure-version-2"
 ASSETS = M001_DIR / "assets"
-TEMPLATE = REPO_ROOT / "template"
+TEMPLATE = REPO_ROOT / "plugin" / "template"
 DEMO_ENTITIES = REPO_ROOT / "fixtures" / "demo-vault" / "40-entities"
 
 

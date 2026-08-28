@@ -14,7 +14,7 @@ Engineering conventions and the bootstrap rationale:
 | Path | What it is |
 |---|---|
 | `plugin/` | Claude Code plugin: skills, hooks, agents. Ships to clients via `sb-dist`. |
-| `template/` | Vault skeleton: folders, `.obsidian/`, `.base` views, CLAUDE.md + context-portfolio slots. Instantiated once per client. |
+| `plugin/template/` | Vault skeleton: folders, `.obsidian/`, `.base` views, CLAUDE.md + context-portfolio slots. Instantiated once per client. |
 | `migrations/` | Versioned structure migrations, consumed by `/upgrade-vault`. |
 | `playbooks/` | Onboarding interview, pre-flight checklist, provisioning runbook, hypercare, EA training. Never ships. |
 | `docs/` | Architecture, backlog model, local setup, builder onboarding. |
@@ -27,8 +27,9 @@ Engineering conventions and the bootstrap rationale:
 - **L2** delaware company knowledge → **never ships** (separate overlay, later)
 - **L3** personal context → generated per user at onboarding, never in this repo
 
-**Hard rule:** nothing in `plugin/` or `template/` references delaware clients,
-Michael, or busdev content. CI lints this (`scripts/lint_plugin.py`).
+**Hard rule:** nothing in `plugin/` — which now includes the template at
+`plugin/template/` — references delaware clients, Michael, or busdev content.
+CI lints this (`scripts/lint_plugin.py`).
 
 ## Contributing
 

@@ -27,14 +27,14 @@ work, that's a bug in the harness, not in your setup.
 python scripts/make_test_vault.py /tmp/sb-test-vault
 ```
 
-This copies `template/` into `/tmp/sb-test-vault` and overlays
+This copies `plugin/template/` into `/tmp/sb-test-vault` and overlays
 `fixtures/demo-vault/` on top — a populated demo vault for one fictional
 persona (Morgan Ellery, CCO at Cascadia Intermodal Group). The script
 refuses to touch a target directory that already exists and has files in
 it — it fails fast (exit 1) instead of overwriting. Delete the directory
 first when you want a clean rebuild.
 
-Add `--with-plugins` to also download the pinned Obsidian community plugins and the Minimal theme into the vault (network required — pins and checksums live in `scripts/plugin-pins.json`):
+Add `--with-plugins` to also download the pinned Obsidian community plugins and the Minimal theme into the vault (network required — pins and checksums live in `plugin/lib/plugin-pins.json`):
 
 ```bash
 python scripts/make_test_vault.py /tmp/sb-test-vault --with-plugins
@@ -58,7 +58,7 @@ and you're done (turning off Restricted Mode is the one step that can never
 ship as files, by design).
 
 If you created the vault without the flag, either re-create it with
-`--with-plugins`, run `python scripts/provision_plugins.py /tmp/sb-test-vault`
+`--with-plugins`, run `python plugin/lib/provision_plugins.py /tmp/sb-test-vault`
 and reopen the vault, or install by hand — Dataview, Minimal Theme Settings,
 Style Settings, Notebook Navigator, plus the Minimal theme via Settings →
 Appearance. The authoritative list is the vault's own
@@ -152,7 +152,7 @@ python3 plugin/lib/vaultlib/cli.py entity read \
 
 Every call prints one JSON object with an `ok` field. Confirm the created
 project's frontmatter matches
-`template/99-workflow-config/reference/ontology.md`, and that its body carries
+`plugin/template/99-workflow-config/reference/ontology.md`, and that its body carries
 the three H2 sections the ontology's `body_sections` declares.
 
 ### 6. Tear down and recreate

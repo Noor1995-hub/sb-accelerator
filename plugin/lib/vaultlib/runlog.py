@@ -9,7 +9,7 @@ one place a human can grep:
 
 The log lives under the vault, not `$SCRATCH`: it is small, append-only,
 and it is meant to outlive any single run. It is runtime-created (the
-directory does not ship in `template/`), so an older vault gains it the
+directory does not ship in `plugin/template/`), so an older vault gains it the
 first time a routine runs after upgrading — no migration needed.
 """
 from __future__ import annotations

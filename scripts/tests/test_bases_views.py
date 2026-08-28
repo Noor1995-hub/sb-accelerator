@@ -5,9 +5,9 @@ file and confirm it shows fixture rows, not an empty table". The expected sets
 below were verified by hand in real Obsidian; when basesim.py disagrees with
 Obsidian, Obsidian is right (see basesim.py's fidelity rule).
 
-The corpus is the *composed* vault (template/ + fixtures/demo-vault/), the same
+The corpus is the *composed* vault (plugin/template/ + fixtures/demo-vault/), the same
 thing make_test_vault.py builds and a human opens, so a placeholder note added
-to template/ that would wrongly appear in a view fails here.
+to plugin/template/ that would wrongly appear in a view fails here.
 """
 from pathlib import Path
 
@@ -102,7 +102,7 @@ BASE_FILES = sorted({base for base, _, _ in EXPECTED})
 
 @pytest.fixture(scope="module")
 def vault(tmp_path_factory):
-    """template/ + fixtures/demo-vault/, composed exactly as a human's is."""
+    """plugin/template/ + fixtures/demo-vault/, composed exactly as a human's is."""
     target = tmp_path_factory.mktemp("bases") / "vault"
     build_vault(target, REPO_ROOT, fresh=False)
     return target

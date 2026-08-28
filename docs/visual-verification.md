@@ -216,7 +216,7 @@ delete it.
 - **A hand-tested vault poisons the row cross-check.** The first run flagged
   Meetings/Triage as 6 rows against `basesim`'s 4 — and both were right,
   because two meetings existed only in that vault. The tests recompute the
-  vault's provenance against `template/` + `fixtures/demo-vault/` and skip the
+  vault's provenance against `plugin/template/` + `fixtures/demo-vault/` and skip the
   comparison when it is not pristine, rather than reporting a phantom
   regression. Always tour a freshly built vault.
 - **`dev:console` captures nothing until `dev:debug on`.** Without attaching
