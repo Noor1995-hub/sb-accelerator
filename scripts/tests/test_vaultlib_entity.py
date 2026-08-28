@@ -107,6 +107,119 @@ def test_ensure_refuses_an_owner_that_is_not_a_person_slug(tmp_path):
     assert not (root / "40-entities" / "acme" / "dossier.md").exists()
 
 
+# --- ensure: updates on an existing dossier (#97) --------------------------
+
+def test_ensure_applies_owner_to_an_existing_dossier(tmp_path):
+    # The regression this closes: --owner on an existing entity used to be a
+    # silent no-op that still returned created: false with no other signal.
+    root = seeded(tmp_path)
+    result = entity.ensure(root, slug="meridian-freight-holdings",
+                           name="Meridian Freight Holdings", today="2026-09-01",
+                           owner="morgan-ellery")
+    assert result["created"] is False
+    assert result["changed"] is True
+    assert result["updated"] == ["owner"]
+    data, _ = md.split_frontmatter(
+        (root / "40-entities" / "meridian-freight-holdings" / "dossier.md")
+        .read_text(encoding="utf-8"))
+    assert data["owner"] == "morgan-ellery"
+    assert data["last-updated"] == "2026-09-01"
+
+
+def test_ensure_applies_multiple_provided_fields_at_once(tmp_path):
+    root = seeded(tmp_path)
+    result = entity.ensure(root, slug="meridian-freight-holdings",
+                           name="Meridian Freight Holdings", today="2026-09-01",
+                           owner="morgan-ellery", status="active",
+                           entity_type="client")
+    assert result["changed"] is True
+    assert sorted(result["updated"]) == ["entity-type", "owner", "status"]
+    data, _ = md.split_frontmatter(
+        (root / "40-entities" / "meridian-freight-holdings" / "dossier.md")
+        .read_text(encoding="utf-8"))
+    assert data["owner"] == "morgan-ellery"
+    assert data["status"] == "active"
+    assert data["entity-type"] == "client"
+
+
+def test_ensure_reports_changed_false_when_nothing_differs(tmp_path):
+    root = seeded(tmp_path, status="active", owner="morgan-ellery")
+    result = entity.ensure(root, slug="meridian-freight-holdings",
+                           name="Meridian Freight Holdings", today="2026-09-01",
+                           owner="morgan-ellery", status="active")
+    assert result["created"] is False
+    assert result["changed"] is False
+    assert result["updated"] == []
+
+
+def test_ensure_omitted_fields_touch_nothing(tmp_path):
+    # Absent flags must not be treated as "clear this field" — only fields the
+    # caller actually passed are candidates for an update.
+    root = seeded(tmp_path, status="active", owner="morgan-ellery",
+                 entity_type="client")
+    result = entity.ensure(root, slug="meridian-freight-holdings",
+                           name="Meridian Freight Holdings", today="2026-09-01")
+    assert result["changed"] is False
+    data, _ = md.split_frontmatter(
+        (root / "40-entities" / "meridian-freight-holdings" / "dossier.md")
+        .read_text(encoding="utf-8"))
+    assert data["owner"] == "morgan-ellery"
+    assert data["status"] == "active"
+    assert data["entity-type"] == "client"
+
+
+def test_ensure_does_not_rewrite_the_file_when_nothing_changed(tmp_path):
+    root = seeded(tmp_path)
+    target = root / "40-entities" / "meridian-freight-holdings" / "dossier.md"
+    before = target.read_text(encoding="utf-8")
+    entity.ensure(root, slug="meridian-freight-holdings",
+                 name="Meridian Freight Holdings", today="2026-09-01")
+    assert target.read_text(encoding="utf-8") == before
+
+
+def test_ensure_update_does_not_touch_the_body(tmp_path):
+    root = seeded(tmp_path)
+    target = root / "40-entities" / "meridian-freight-holdings" / "dossier.md"
+    target.write_text(target.read_text(encoding="utf-8") + "\nhand edit\n",
+                      encoding="utf-8")
+    entity.ensure(root, slug="meridian-freight-holdings",
+                 name="Meridian Freight Holdings", today="2026-09-01",
+                 owner="morgan-ellery")
+    assert "hand edit" in target.read_text(encoding="utf-8")
+
+
+def test_ensure_update_validates_the_resulting_frontmatter(tmp_path):
+    root = seeded(tmp_path)
+    with pytest.raises(entity.EntityError, match="status"):
+        entity.ensure(root, slug="meridian-freight-holdings",
+                     name="Meridian Freight Holdings", today=TODAY,
+                     status="lapsed")
+    data, _ = md.split_frontmatter(
+        (root / "40-entities" / "meridian-freight-holdings" / "dossier.md")
+        .read_text(encoding="utf-8"))
+    assert data["status"] == "prospect"
+
+
+def test_ensure_update_still_validates_a_bad_owner_slug(tmp_path):
+    root = seeded(tmp_path)
+    with pytest.raises(entity.EntityError, match="person slug"):
+        entity.ensure(root, slug="meridian-freight-holdings",
+                     name="Meridian Freight Holdings", today=TODAY,
+                     owner="jordan: reyes")
+
+
+def test_ensure_is_idempotent_a_second_time_with_the_same_fields(tmp_path):
+    root = seeded(tmp_path)
+    entity.ensure(root, slug="meridian-freight-holdings",
+                 name="Meridian Freight Holdings", today=TODAY,
+                 owner="morgan-ellery")
+    second = entity.ensure(root, slug="meridian-freight-holdings",
+                           name="Meridian Freight Holdings", today="2026-09-02",
+                           owner="morgan-ellery")
+    assert second["changed"] is False
+    assert second["updated"] == []
+
+
 # --- read -----------------------------------------------------------------
 
 def test_read_raises_on_a_missing_dossier(tmp_path):
@@ -800,13 +913,75 @@ def test_a_newline_in_free_text_cannot_fabricate_a_section_header(tmp_path):
     assert "injected" in parsed["sections"]["Sensitivities"]
 
 
-def test_writing_a_section_clears_its_unvalidated_marker(tmp_path):
+def test_writing_a_section_clears_its_own_unvalidated_marker_but_not_the_banner(
+        tmp_path):
+    # Defect (#97): a Context write used to strip the whole-document banner as
+    # a side effect, silently upgrading the dossier's trust status. The
+    # section's own per-row marker is still consumed here — that half of the
+    # behavior is correct and unchanged — but the banner now survives content
+    # writes unconditionally; clearing it is a separate, explicit act
+    # (entity.validate).
     root = seeded(tmp_path)
     entity.write(root, "meridian-freight-holdings", {"context": [
         {"label": "Industry", "fact": "freight", "why": "scope"}]}, TODAY)
     parsed = entity.read(root, "meridian-freight-holdings")
     assert "Context" not in parsed["unvalidated"]
+    assert parsed["banner"] is True
+
+
+def test_banner_survives_repeated_writes_across_sections(tmp_path):
+    root = seeded(tmp_path)
+    entity.write(root, "meridian-freight-holdings", {"context": [
+        {"label": "Industry", "fact": "freight", "why": "scope"}]}, TODAY)
+    entity.write(root, "meridian-freight-holdings", {"stakeholders": [
+        {"name": "Leo Marchetti"}]}, TODAY)
+    entity.write(root, "meridian-freight-holdings", {"sensitivities": [
+        {"topic": "T", "detail": "d", "implications": "i"}]}, TODAY)
+    parsed = entity.read(root, "meridian-freight-holdings")
+    assert parsed["banner"] is True
+
+
+# --- validate: the explicit banner-clear act (#97) -------------------------
+
+def test_validate_clears_the_banner(tmp_path):
+    root = seeded(tmp_path)
+    result = entity.validate(root, "meridian-freight-holdings", "2026-09-01")
+    assert result["changed"] is True
+    parsed = entity.read(root, "meridian-freight-holdings")
     assert parsed["banner"] is False
+
+
+def test_validate_bumps_last_updated(tmp_path):
+    root = seeded(tmp_path)
+    entity.validate(root, "meridian-freight-holdings", "2026-09-01")
+    data, _ = md.split_frontmatter(
+        (root / "40-entities" / "meridian-freight-holdings" / "dossier.md")
+        .read_text(encoding="utf-8"))
+    assert data["last-updated"] == "2026-09-01"
+
+
+def test_validate_is_idempotent(tmp_path):
+    root = seeded(tmp_path)
+    entity.validate(root, "meridian-freight-holdings", TODAY)
+    result = entity.validate(root, "meridian-freight-holdings", "2026-09-01")
+    assert result["changed"] is False
+    parsed = entity.read(root, "meridian-freight-holdings")
+    assert parsed["banner"] is False
+
+
+def test_validate_does_not_touch_section_content(tmp_path):
+    root = seeded(tmp_path)
+    entity.write(root, "meridian-freight-holdings", {"context": [
+        {"label": "Industry", "fact": "freight", "why": "scope"}]}, TODAY)
+    entity.validate(root, "meridian-freight-holdings", "2026-09-01")
+    parsed = entity.read(root, "meridian-freight-holdings")
+    assert "freight" in parsed["sections"]["Context"]
+
+
+def test_validate_raises_on_a_missing_dossier(tmp_path):
+    root = make_vault(tmp_path)
+    with pytest.raises(entity.EntityError, match="no dossier"):
+        entity.validate(root, "nobody", TODAY)
 
 
 def test_last_updated_is_bumped_without_reordering_frontmatter(tmp_path):

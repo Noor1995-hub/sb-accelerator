@@ -148,10 +148,68 @@ def _empty_body(name: str) -> str:
     return f"\n# {name}\n\n" + BANNER + "\n\n" + "\n".join(parts)
 
 
+def _apply_existing_fields(root: Path, path: Path, slug: str, *,
+                           name: str, entity_type: Optional[str],
+                           status: Optional[str],
+                           owner: Optional[str], today: str) -> dict:
+    """Apply explicitly provided fields to an already-existing dossier.
+
+    Only fields the caller actually passed are candidates for an update — an
+    absent flag must never read as "clear this field". This is the honest
+    half of the fix for #97: the previous early return dropped every provided
+    field (owner, name, entity-type, status) and still reported created:
+    false with no other signal, which is indistinguishable from an ordinary,
+    harmless no-op.
+    """
+    text = path.read_text(encoding="utf-8")
+    frontmatter, _ = markdown.split_frontmatter(text)
+
+    provided = {"entity-name": name}
+    if entity_type is not None:
+        provided["entity-type"] = entity_type
+    if status is not None:
+        provided["status"] = status
+    if owner is not None:
+        provided["owner"] = owner
+
+    updated_fields = sorted(
+        field for field, value in provided.items()
+        if frontmatter.get(field) != value
+    )
+    rel_path = path.relative_to(root).as_posix()
+    if not updated_fields:
+        return {"slug": slug, "path": rel_path, "created": False,
+                "changed": False, "updated": []}
+
+    merged = dict(frontmatter)
+    merged.update(provided)
+    problems = schema.validate("entity", merged)
+    if problems:
+        raise EntityError(
+            "refusing to update entity frontmatter to a non-conformant "
+            "state: " + "; ".join(problems)
+        )
+
+    rewritten = text
+    for field in updated_fields:
+        quoted = field in ENTITY_QUOTE_KEYS
+        rendered = markdown.emit_scalar(merged[field], quoted=quoted)
+        rewritten = markdown.upsert_scalar_field(rewritten, field, rendered)
+    rewritten = markdown.upsert_scalar_field(rewritten, "last-updated", today)
+    vault.atomic_write(path, rewritten)
+    return {"slug": slug, "path": rel_path, "created": False,
+            "changed": True, "updated": updated_fields}
+
+
 def ensure(root: Path, *, slug: str, name: str, today: str,
-           entity_type: Optional[str] = None, status: str = "prospect",
+           entity_type: Optional[str] = None, status: Optional[str] = None,
            owner: Optional[str] = None) -> dict:
-    """Create 40-entities/{slug}/dossier.md if it does not exist."""
+    """Create 40-entities/{slug}/dossier.md if it does not exist.
+
+    On an existing dossier, apply whichever of name / entity_type / status /
+    owner the caller explicitly passed as an update instead of silently
+    dropping them — see _apply_existing_fields.
+    """
     naming.validate_slug(slug)
     if owner:
         # owner is a join key to 50-people/{slug}.md, so it gets the same
@@ -166,15 +224,17 @@ def ensure(root: Path, *, slug: str, name: str, today: str,
             ) from exc
     path = _dossier_path(root, slug)
     if path.is_file():
-        return {"slug": slug, "path": path.relative_to(root).as_posix(),
-                "created": False}
+        return _apply_existing_fields(
+            root, path, slug, name=name, entity_type=entity_type,
+            status=status, owner=owner, today=today,
+        )
 
     frontmatter = {
         "type": "entity",
         "entity-name": name,
         "slug": slug,
         "entity-type": entity_type,
-        "status": status,
+        "status": status if status is not None else "prospect",
         "industry": None,
         "owner": owner,
         "created": today,
@@ -676,7 +736,7 @@ def write(root: Path, slug: str, edits: Mapping, today: str) -> dict:
         _validate_items(key, items)
 
     path = _dossier_path(root, slug)
-    parsed = read(root, slug)
+    read(root, slug)  # raises EntityError if the dossier does not exist
     text = path.read_text(encoding="utf-8")
     _, body = markdown.split_frontmatter(text)
     sections = markdown.split_sections(body)
@@ -712,19 +772,43 @@ def write(root: Path, slug: str, edits: Mapping, today: str) -> dict:
         updated.append((title, merged))
         changes.append(f"{title}: {touched} entr{'y' if touched == 1 else 'ies'}")
 
+    # The whole-document [!unvalidated] banner is preamble (title ""), which
+    # the loop above always carries into `updated` byte for byte — it is
+    # never a target of any edit key, so it survives unconditionally here.
+    # (#97) It used to be stripped as a side effect whenever the last
+    # per-section marker was consumed, silently upgrading the dossier's trust
+    # status with no review having happened. Clearing it is now the separate,
+    # explicit act in validate() below.
     new_body = markdown.render_sections(updated)
-    if UNVALIDATED not in new_body:
-        # The banner owns its own line and render_sections puts a blank one
-        # after it, so removing only the text leaves a widening gap under the
-        # H1. The narrower replacements stay as a fallback for a hand-edited
-        # file whose spacing is not ours.
-        new_body = (new_body.replace(BANNER + "\n\n", "")
-                    .replace(BANNER + "\n", "").replace(BANNER, ""))
-        if parsed["banner"]:
-            changes.append("removed the unvalidated banner")
 
     head = text[: text.index("\n---", 4) + len("\n---") + 1]
     rewritten = markdown.replace_scalar_field(head + new_body,
                                               "last-updated", today)
     vault.atomic_write(path, rewritten)
     return {"path": path.relative_to(root).as_posix(), "changes": changes}
+
+
+def validate(root: Path, slug: str, today: str) -> dict:
+    """Clear the dossier's [!unvalidated] banner — the explicit review act.
+
+    write() never removes the banner as a side effect of merging section
+    content (#97): the only way to record that the dossier as a whole has
+    been reviewed by a human is this call. Idempotent — calling it again once
+    the banner is already gone is a silent no-op, not an error, matching
+    ensure()'s and project.touch()'s "changed" precedent.
+    """
+    path = _dossier_path(root, slug)
+    parsed = read(root, slug)  # raises EntityError if the dossier is missing
+    if not parsed["banner"]:
+        return {"slug": slug, "path": parsed["path"], "changed": False}
+
+    text = path.read_text(encoding="utf-8")
+    # The banner owns its own line and render_sections puts a blank one after
+    # it, so removing only the text leaves a widening gap under the H1. The
+    # narrower replacements stay as a fallback for a hand-edited file whose
+    # spacing is not ours.
+    updated = (text.replace(BANNER + "\n\n", "")
+               .replace(BANNER + "\n", "").replace(BANNER, ""))
+    updated = markdown.upsert_scalar_field(updated, "last-updated", today)
+    vault.atomic_write(path, updated)
+    return {"slug": slug, "path": parsed["path"], "changed": True}

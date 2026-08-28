@@ -48,7 +48,12 @@ python3 "$VAULTLIB" entity ensure --vault "$VAULT" \
   --slug <slug> --name "<Display Name>" --type client --status prospect
 ```
 
-Ask which `entity-type` and `status` fit rather than guessing.
+Ask which `entity-type` and `status` fit rather than guessing. If the entity
+already exists and the user gives you a field that is missing or wrong on the
+dossier (an `--owner` never set, say), running `entity ensure` again with
+that flag is the fix — it applies whichever fields you pass to an existing
+dossier instead of silently dropping them, and the envelope's `changed` /
+`updated` tell you whether it actually took.
 
 ### 2. Read the current dossier
 
@@ -60,6 +65,13 @@ You get the frontmatter, all six sections, which sections are still marked
 unvalidated, and whether the banner is present. **Read this before routing** —
 knowing what is already recorded is what lets you update rather than duplicate,
 and lets you notice a contradiction.
+
+The banner (`> [!unvalidated] Generated context — verify before relying on
+details.`) survives `entity write` unconditionally now — writing content
+never clears it as a side effect. Clearing it is a separate, explicit act:
+`entity validate --slug <slug>`. Do not call it as part of routine routing;
+it is for a human's actual review of the dossier's content, the same
+discipline as rule 4 below for the stakeholder `needs-review` marker.
 
 One reading note: cells in the Stakeholders and Engagements tables come back
 with any pipe escaped as `\|`, because that is how they are stored. If you
@@ -189,3 +201,8 @@ two things the list cannot tell you:
    matters, ask.
 6. **Do not touch `status` or `entity-type`** unless the user asks. Those are
    relationship-level judgments.
+7. **The `[!unvalidated]` banner clears only through `entity validate`,
+   never as a side effect of routing content.** Do not call `entity validate`
+   on the user's behalf just because a write succeeded — it is the same
+   explicit-review discipline as rule 4, applied to the whole dossier instead
+   of one stakeholder row.

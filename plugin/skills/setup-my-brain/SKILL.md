@@ -118,7 +118,14 @@ the current block from `context read`, the current config values, the
 entities/projects/people already seeded. Revising is cheap and repeating is
 harmless — a marker-fenced `context write` replaces its block, `config write`
 sets a field, and `person ensure` / `entity ensure` return `created: false` on
-an object that already exists.
+an object that already exists. `entity ensure` on an existing dossier also
+applies whichever of `--name`/`--type`/`--status`/`--owner` you pass this
+time — it does not just re-affirm creation — and its envelope reports
+`changed` plus `updated: [...]` so you can tell a real edit from a no-op.
+`person ensure` never rewrites an existing note (curation added through
+People.base must survive), but if the `--name` you pass differs from the
+note's own, the envelope reports it under `ignored` rather than dropping it
+silently.
 
 `project scaffold` is the exception: it **refuses** a slug that already has a
 folder rather than touching a project that has been accumulating decisions and

@@ -145,6 +145,66 @@ def test_project_error_is_a_structured_failure(capsys, tmp_path):
     assert "entity ensure" in payload["error"]
 
 
+def test_entity_ensure_applies_owner_to_an_existing_entity_through_the_cli(
+        capsys, tmp_path):
+    # (#97) --owner on an existing entity used to be a silent no-op that
+    # still returned ok: true with no signal at all.
+    root = make_vault(tmp_path)
+    run(capsys, [
+        "entity", "ensure", "--vault", str(root), "--slug", "acme-industries",
+        "--name", "Acme Industries", "--today", "2026-08-23",
+    ])
+    code, payload = run(capsys, [
+        "entity", "ensure", "--vault", str(root), "--slug", "acme-industries",
+        "--name", "Acme Industries", "--owner", "morgan-ellery",
+        "--today", "2026-08-24",
+    ])
+    assert code == 0
+    assert payload["ok"] is True
+    assert payload["result"]["created"] is False
+    assert payload["result"]["changed"] is True
+    assert payload["result"]["updated"] == ["owner"]
+
+
+def test_entity_ensure_omitting_status_does_not_reset_it_through_the_cli(
+        capsys, tmp_path):
+    # --status used to default to "prospect" at the parser, so every ensure
+    # call — even a bare re-run meant only to fetch --owner onto the dossier —
+    # silently sent "prospect" and could stomp a status set earlier.
+    root = make_vault(tmp_path)
+    run(capsys, [
+        "entity", "ensure", "--vault", str(root), "--slug", "acme-industries",
+        "--name", "Acme Industries", "--status", "active",
+        "--today", "2026-08-23",
+    ])
+    code, payload = run(capsys, [
+        "entity", "ensure", "--vault", str(root), "--slug", "acme-industries",
+        "--name", "Acme Industries", "--owner", "morgan-ellery",
+        "--today", "2026-08-24",
+    ])
+    assert code == 0
+    assert payload["result"]["updated"] == ["owner"]
+    from vaultlib import entity as entity_lib
+    assert entity_lib.read(root, "acme-industries")["frontmatter"]["status"] == "active"
+
+
+def test_entity_validate_clears_the_banner_through_the_cli(capsys, tmp_path):
+    root = make_vault(tmp_path)
+    run(capsys, [
+        "entity", "ensure", "--vault", str(root), "--slug", "acme-industries",
+        "--name", "Acme Industries", "--today", "2026-08-23",
+    ])
+    code, payload = run(capsys, [
+        "entity", "validate", "--vault", str(root), "--slug", "acme-industries",
+        "--today", "2026-08-24",
+    ])
+    assert code == 0
+    assert payload["ok"] is True
+    assert payload["result"]["changed"] is True
+    from vaultlib import entity as entity_lib
+    assert entity_lib.read(root, "acme-industries")["banner"] is False
+
+
 def test_entity_write_reads_edits_from_stdin(capsys, tmp_path, monkeypatch):
     import io
     import json as _json
