@@ -891,3 +891,90 @@ def test_collide_rejects_a_negative_duration(tmp_path):
     root = make_vault(tmp_path)
     with pytest.raises(syncjob.SyncError, match="duration-min"):
         syncjob.collide(root, "2026-08-25T16:00", -5)
+
+
+# --- rederive_entities: the evening fold's drift repair ---
+
+
+def make_project(root: Path, slug: str, entity: str | None) -> None:
+    folder = root / "30-projects" / slug
+    folder.mkdir(parents=True, exist_ok=True)
+    body = f"---\ntype: project\nslug: {slug}\n"
+    if entity is not None:
+        body += f"entity: {entity}\n"
+    body += "---\n"
+    (folder / "index.md").write_text(body, encoding="utf-8")
+
+
+def write_meeting_with(root: Path, stem: str, *, projects, entities=None) -> None:
+    lines = ["---", "date: 2026-08-20T10:00", "type: meeting",
+             "projects: [" + ", ".join(projects) + "]"]
+    if entities is not None:
+        lines.append("entities: [" + ", ".join(entities) + "]")
+    lines += ["---", "", "## Key Takeaways", "- x"]
+    (root / "20-meetings" / f"{stem}.md").write_text("\n".join(lines),
+                                                      encoding="utf-8")
+
+
+def test_rederive_changes_a_drifted_note(tmp_path):
+    root = make_vault(tmp_path)
+    make_project(root, "yard-automation", "meridian-freight-holdings")
+    write_meeting_with(root, "20-08-26-drifted", projects=["yard-automation"],
+                       entities=["stale-entity"])
+    result = syncjob.rederive_entities(root)
+    assert result["checked"] == 1
+    assert result["changed"] == 1
+    assert result["changed_files"] == ["20-meetings/20-08-26-drifted.md"]
+    assert result["unresolved"] == []
+    text = (root / "20-meetings" / "20-08-26-drifted.md").read_text(encoding="utf-8")
+    assert "entities: [meridian-freight-holdings]" in text
+
+
+def test_rederive_leaves_a_correct_note_untouched(tmp_path):
+    root = make_vault(tmp_path)
+    make_project(root, "yard-automation", "meridian-freight-holdings")
+    write_meeting_with(root, "20-08-26-correct", projects=["yard-automation"],
+                       entities=["meridian-freight-holdings"])
+    before = (root / "20-meetings" / "20-08-26-correct.md").read_text(encoding="utf-8")
+    result = syncjob.rederive_entities(root)
+    assert result["checked"] == 1
+    assert result["changed"] == 0
+    assert result["changed_files"] == []
+    after = (root / "20-meetings" / "20-08-26-correct.md").read_text(encoding="utf-8")
+    assert after == before
+
+
+def test_rederive_reports_unresolvable_and_leaves_note_untouched(tmp_path):
+    root = make_vault(tmp_path)
+    make_project(root, "fieldless", None)
+    write_meeting_with(root, "20-08-26-unresolvable", projects=["fieldless"])
+    before = (root / "20-meetings" / "20-08-26-unresolvable.md").read_text(encoding="utf-8")
+    result = syncjob.rederive_entities(root)
+    assert result["checked"] == 1
+    assert result["changed"] == 0
+    assert len(result["unresolved"]) == 1
+    assert result["unresolved"][0]["file"] == "20-meetings/20-08-26-unresolvable.md"
+    assert "fieldless" in result["unresolved"][0]["reason"]
+    after = (root / "20-meetings" / "20-08-26-unresolvable.md").read_text(encoding="utf-8")
+    assert after == before
+
+
+def test_rederive_skips_project_less_meetings(tmp_path):
+    root = make_vault(tmp_path)
+    write_meeting_with(root, "20-08-26-noproject", projects=[])
+    result = syncjob.rederive_entities(root)
+    assert result["checked"] == 0
+    assert result["changed"] == 0
+    assert result["unresolved"] == []
+
+
+def test_rederive_is_idempotent(tmp_path):
+    root = make_vault(tmp_path)
+    make_project(root, "yard-automation", "meridian-freight-holdings")
+    write_meeting_with(root, "20-08-26-drifted", projects=["yard-automation"],
+                       entities=["stale-entity"])
+    first = syncjob.rederive_entities(root)
+    assert first["changed"] == 1
+    second = syncjob.rederive_entities(root)
+    assert second["changed"] == 0
+    assert second["changed_files"] == []

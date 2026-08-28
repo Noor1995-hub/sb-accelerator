@@ -192,6 +192,67 @@ def scaffold(root: Path, *, name: str, project_type: str, entity: str,
     }
 
 
+def derive_entities(root: Path, projects: list) -> list:
+    """Map each `projects[]` slug to its project's `entity:` field, in
+    `projects` order, then dedupe while preserving that order.
+
+    Shared by `meeting.write` (derive at creation) and the evening fold's
+    `sync rederive-entities` (repair drift after retriage) — both need the
+    same all-or-nothing contract migration 001 established for the same
+    computation (`_project_entities`/`_step_entities_backfill` in
+    `plugin/migrations/001-structure-version-2/migrate.py`): a note whose
+    `projects[]` does not *fully* map is refused rather than given a partial
+    `entities` list, because a partial list passes verification and quietly
+    leaves the unmapped project's dossier short a meeting, with nothing on
+    the page to say why. `entities: []` is never returned for an empty input
+    either — the caller decides whether that means "omit the field".
+    """
+    unresolved_missing: list = []
+    unresolved_fieldless: list = []
+    entity_by_project: dict = {}
+    for slug in dict.fromkeys(str(p) for p in projects):
+        index = root / PROJECTS_DIR / slug / "index.md"
+        if not index.is_file():
+            unresolved_missing.append(slug)
+            continue
+        try:
+            data, _ = markdown.split_frontmatter(
+                index.read_text(encoding="utf-8"))
+        except (ValueError, OSError):
+            unresolved_missing.append(slug)
+            continue
+        entity = data.get("entity")
+        if isinstance(entity, str) and entity.strip():
+            entity_by_project[slug] = entity.strip()
+        else:
+            unresolved_fieldless.append(slug)
+
+    if unresolved_missing or unresolved_fieldless:
+        reasons = []
+        if unresolved_missing:
+            reasons.append(
+                "no project index (or it will not parse) at "
+                + ", ".join(f"{PROJECTS_DIR}/{s}/index.md"
+                           for s in unresolved_missing))
+        if unresolved_fieldless:
+            reasons.append(
+                "no `entity:` field in "
+                + ", ".join(f"{PROJECTS_DIR}/{s}/index.md"
+                           for s in unresolved_fieldless))
+        raise ProjectError(
+            "cannot derive entities from projects[] — " + "; ".join(reasons)
+            + " — add the missing field(s) and retry rather than write a "
+              "partial entities list"
+        )
+
+    derived: list = []
+    for slug in (str(p) for p in projects):
+        entity = entity_by_project[slug]
+        if entity not in derived:
+            derived.append(entity)
+    return derived
+
+
 def _require_iso_date(value, label: str) -> str:
     text = str(value or "").strip()
     if not vault.ISO_DATE_RE.match(text):

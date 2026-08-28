@@ -104,6 +104,19 @@ unattended, interactive otherwise. Its step 1 already runs
 run it a second time. Record what it reports: synced stems, folded ticks,
 conflicts, per-adapter lines.
 
+**Repair:** re-derive `entities` from `projects` on every meeting note —
+`meeting write` derives it once at creation, but nothing keeps the two in
+sync afterward, so a project reassigned by hand during triage leaves the old
+entity behind until this runs:
+
+```bash
+python3 "$VAULTLIB" sync rederive-entities --vault "$VAULT"
+```
+
+Carry `changed` (a count worth mentioning if non-zero) and `unresolved` (a
+project slug missing its `entity:` field, or missing outright — the note is
+left untouched, not silently skipped) into the final summary.
+
 **Refresh:**
 
 ```bash

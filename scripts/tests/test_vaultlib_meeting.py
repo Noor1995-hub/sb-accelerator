@@ -4,6 +4,7 @@ review_status is not a payload field — every synced meeting lands
 needs-review (the auto-confirm gate deliberately did not ship; a fresh vault
 has no calibration data)."""
 from pathlib import Path
+from typing import Optional
 
 import pytest
 import yaml
@@ -17,7 +18,8 @@ def make_vault(tmp_path: Path) -> Path:
     (tmp_path / "20-meetings").mkdir()
     (tmp_path / "30-projects" / "yard-automation").mkdir(parents=True)
     (tmp_path / "30-projects" / "yard-automation" / "index.md").write_text(
-        "---\ntype: project\nslug: yard-automation\n---\n", encoding="utf-8")
+        "---\ntype: project\nslug: yard-automation\n"
+        "entity: meridian-freight-holdings\n---\n", encoding="utf-8")
     (tmp_path / "40-entities" / "meridian-freight-holdings").mkdir(parents=True)
     (tmp_path / "40-entities" / "meridian-freight-holdings"
      / "dossier.md").write_text(
@@ -29,6 +31,22 @@ def make_vault(tmp_path: Path) -> Path:
             f"---\nperson-name: X\nslug: {slug}\nrelationship:\n---\n",
             encoding="utf-8")
     return tmp_path
+
+
+def _add_project(root: Path, slug: str, entity: Optional[str] = None) -> None:
+    body = f"---\ntype: project\nslug: {slug}\n"
+    if entity is not None:
+        body += f"entity: {entity}\n"
+    body += "---\n"
+    (root / "30-projects" / slug).mkdir(parents=True, exist_ok=True)
+    (root / "30-projects" / slug / "index.md").write_text(body, encoding="utf-8")
+
+
+def _add_entity_dossier(root: Path, slug: str) -> None:
+    folder = root / "40-entities" / slug
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / "dossier.md").write_text(
+        f"---\ntype: entity\nslug: {slug}\n---\n", encoding="utf-8")
 
 
 def payload(**overrides) -> dict:
@@ -101,9 +119,53 @@ def test_rejects_unknown_project_and_unknown_attendee(tmp_path):
         meeting.write(root, payload(attendees=["ghost-attendee"]))
 
 
-def test_entities_is_written_when_supplied(tmp_path):
+def test_entities_is_derived_from_a_single_project(tmp_path):
+    # projects[] is non-empty (yard-automation, entity: meridian-freight-
+    # holdings), so entities is machine-derived rather than taken from the
+    # payload.
     root = make_vault(tmp_path)
-    result = meeting.write(root, payload(entities=["meridian-freight-holdings"]))
+    result = meeting.write(root, payload())
+    data = yaml.safe_load(
+        (root / result["path"]).read_text(encoding="utf-8").split("---")[1])
+    assert data["entities"] == ["meridian-freight-holdings"]
+
+
+def test_entities_is_derived_from_multiple_projects_and_deduped(tmp_path):
+    root = make_vault(tmp_path)
+    _add_project(root, "yard-automation-2", "meridian-freight-holdings")
+    result = meeting.write(
+        root, payload(projects=["yard-automation", "yard-automation-2"]))
+    data = yaml.safe_load(
+        (root / result["path"]).read_text(encoding="utf-8").split("---")[1])
+    # Both projects map to the same entity: one slug, not two.
+    assert data["entities"] == ["meridian-freight-holdings"]
+
+
+def test_entities_derived_from_projects_mapping_to_different_entities(tmp_path):
+    root = make_vault(tmp_path)
+    _add_entity_dossier(root, "northwind-holdings")
+    _add_project(root, "northwind-rollout", "northwind-holdings")
+    result = meeting.write(
+        root, payload(projects=["yard-automation", "northwind-rollout"]))
+    data = yaml.safe_load(
+        (root / result["path"]).read_text(encoding="utf-8").split("---")[1])
+    assert data["entities"] == ["meridian-freight-holdings", "northwind-holdings"]
+
+
+def test_refuses_payload_entities_when_projects_non_empty(tmp_path):
+    # The skill layer must stop hand-passing entities once a project is
+    # assigned — write() derives it, and a payload that tries anyway is
+    # refused rather than silently overridden.
+    root = make_vault(tmp_path)
+    with pytest.raises(meeting.MeetingError, match="derived from projects"):
+        meeting.write(root, payload(entities=["meridian-freight-holdings"]))
+
+
+def test_allows_payload_entities_when_projects_empty(tmp_path):
+    # A project-less meeting may still concern an entity by hand.
+    root = make_vault(tmp_path)
+    result = meeting.write(
+        root, payload(projects=[], entities=["meridian-freight-holdings"]))
     data = yaml.safe_load(
         (root / result["path"]).read_text(encoding="utf-8").split("---")[1])
     assert data["entities"] == ["meridian-freight-holdings"]
@@ -113,17 +175,32 @@ def test_entities_is_omitted_rather_than_written_empty(tmp_path):
     # An entity dossier is the only reader of this field, so `entities: []` on
     # every meeting without one is noise in the properties panel.
     root = make_vault(tmp_path)
-    result = meeting.write(root, payload())
+    result = meeting.write(root, payload(projects=[]))
     text = (root / result["path"]).read_text(encoding="utf-8")
     assert "entities:" not in text.split("---")[1]
 
 
 def test_rejects_an_entity_slug_with_no_dossier(tmp_path):
     # The dossier's Meeting Log is a Dataview query over this field: a slug
-    # that joins to nothing empties the table with no error anywhere.
+    # that joins to nothing empties the table with no error anywhere. Only
+    # reachable on a project-less meeting now (a project-carrying meeting's
+    # entities come from derivation, never the payload).
     root = make_vault(tmp_path)
     with pytest.raises(meeting.MeetingError, match="40-entities/typo-co"):
-        meeting.write(root, payload(entities=["typo-co"]))
+        meeting.write(root, payload(projects=[], entities=["typo-co"]))
+
+
+def test_all_or_nothing_when_a_project_entity_is_unresolvable(tmp_path):
+    # yard-automation resolves fine; the second project has no `entity:`
+    # field at all — derivation must refuse the whole note rather than write
+    # a partial entities list (migration 001's contract, shared here).
+    root = make_vault(tmp_path)
+    _add_project(root, "fieldless-project", entity=None)
+    with pytest.raises(meeting.MeetingError, match="fieldless-project"):
+        meeting.write(
+            root, payload(projects=["yard-automation", "fieldless-project"]))
+    # Nothing was written — a refused derivation leaves no note behind.
+    assert list((root / "20-meetings").glob("*.md")) == []
 
 
 def test_rejects_incomplete_confidence_stamp(tmp_path):

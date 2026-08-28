@@ -298,6 +298,13 @@ def build_parser() -> argparse.ArgumentParser:
                             help="the executive's person slug (excluded from key-people)")
     sync_queue.add_argument("--today", help="ISO date; defaults to today")
 
+    sync_rederive = sync_sub.add_parser(
+        "rederive-entities",
+        help="recompute entities from projects on every meeting; repairs "
+             "triage drift left by re-assigning projects[] after the note "
+             "was written")
+    _add_vault_argument(sync_rederive)
+
     meetings = top.add_parser("meeting", help="meeting notes")
     meetings_sub = meetings.add_subparsers(dest="action", required=True)
     meeting_write = meetings_sub.add_parser(
@@ -524,6 +531,8 @@ def _dispatch(args: argparse.Namespace) -> int:
         if args.action == "update-queue":
             return _ok(updatequeue.run(root, vault.today_iso(args.today),
                                        args.executive))
+        if args.action == "rederive-entities":
+            return _ok(syncjob.rederive_entities(root))
     if args.group == "meeting":
         payload = (json.load(sys.stdin) if args.note == "-"
                    else json.loads(Path(args.note).read_text(encoding="utf-8")))

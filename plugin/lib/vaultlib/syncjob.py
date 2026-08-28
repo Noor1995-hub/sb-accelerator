@@ -23,7 +23,7 @@ from datetime import datetime, timedelta
 from pathlib import Path, PurePosixPath
 from typing import Dict, List, Optional, Set, Tuple
 
-from . import markdown, scancache, vault
+from . import markdown, project, scancache, vault
 
 INBOX_DIR = vault.INBOX_DIR
 MEETINGS_DIR = vault.MEETINGS_DIR
@@ -424,6 +424,70 @@ def reconcile_reviews(root: Path) -> dict:
         flipped.append(rel)
     return {"flipped": flipped, "conflict_ticks": conflict_ticks,
             "warnings": warnings}
+
+
+def _entities_list(value) -> List[str]:
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, list):
+        return [str(item) for item in value]
+    return []
+
+
+def rederive_entities(root: Path) -> dict:
+    """Fold pass: re-derive `entities` from `projects` on every meeting note.
+
+    `entities` is machine-owned once a meeting has a project (see
+    `meeting.write`, which derives it at creation), but nothing keeps the two
+    in sync afterward — a project re-triaged by hand after the note was
+    written leaves the old `entities` stale. This is the repair: for every
+    meeting with a non-empty `projects[]`, recompute
+    `entities := project.derive_entities(projects)` and rewrite only when the
+    stored value differs. A meeting whose projects[] does not fully resolve
+    (missing project index, or a project missing its `entity:` field) is
+    reported under `unresolved` and left byte-identical — the same
+    all-or-nothing refusal `derive_entities` and migration 001 both use, so a
+    partial list is never written over a stale-but-honest one.
+    """
+    checked = 0
+    changed: List[str] = []
+    unresolved: List[dict] = []
+    warnings: List[str] = []
+    meetings = root / MEETINGS_DIR
+    for path in sorted(meetings.glob("*.md")) if meetings.is_dir() else []:
+        rel = path.relative_to(root).as_posix()
+        try:
+            text = path.read_text(encoding="utf-8")
+            data, _ = markdown.split_frontmatter(text)
+        except (ValueError, OSError) as exc:
+            warnings.append(f"{rel}: {exc}")
+            continue
+        projects = _entities_list(data.get("projects"))
+        if not projects:
+            continue
+        checked += 1
+        try:
+            derived = project.derive_entities(root, projects)
+        except project.ProjectError as exc:
+            unresolved.append({"file": rel, "reason": str(exc)})
+            continue
+        if _entities_list(data.get("entities")) == derived:
+            continue
+        rendered = "[" + ", ".join(derived) + "]"
+        try:
+            updated = markdown.upsert_scalar_field(text, "entities", rendered)
+        except ValueError as exc:
+            warnings.append(f"{rel}: {exc}")
+            continue
+        vault.atomic_write(path, updated)
+        changed.append(rel)
+    return {
+        "checked": checked,
+        "changed": len(changed),
+        "changed_files": changed,
+        "unresolved": unresolved,
+        "warnings": warnings,
+    }
 
 
 def _free_target(folder: Path, name: str) -> Path:

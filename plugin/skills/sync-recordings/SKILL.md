@@ -367,18 +367,21 @@ Judgment, with signals in this order — stop at the first confident match:
 An empty `projects: []` is fine — triage catches unassigned meetings. Never
 force a link.
 
-**Also pass `entities`** — the entity slugs the meeting was *about*, which is
-wider than who was in the room. You have them already: signal 1 resolves the
-entity directly, and a match via signal 2 or 3 gives a project whose
-`entity:` field names one. An internal 1:1 reviewing a client account carries
-that client; a meeting about no entity at all carries nothing.
+**Pass `entities` only when `projects` is empty.** Once a meeting carries a
+project, `meeting write` derives `entities` itself from that project's
+`entity:` field (deduped across every project the meeting carries) — passing
+`entities` alongside a non-empty `projects` is refused as a strict-payload
+error, because a hand-passed value would drift the moment triage reassigns
+`projects[]` later and nothing would repair it until the evening fold's next
+pass. So when signal 2 or 3 gave you a project, just pass `projects`; do not
+also compute or pass `entities`.
 
-This is the field an entity dossier's Meeting Log joins on, and it is the
-*only* one: Dataview sees just what a meeting note itself says, and a note
-that names its projects does not name the organization behind them. So pass
-it even when `projects` is empty — an intro call with a prospect that has no
-project yet still belongs in that prospect's dossier, and this is the only
-way it gets there.
+The case that still needs `entities` from you is a project-less meeting that
+is nonetheless about an entity: signal 1 resolves the entity directly (an
+external attendee's domain) with no project yet to carry it — an intro call
+with a prospect, for instance. That is the *only* way such a meeting reaches
+its entity's dossier, since the dossier's Meeting Log is a Dataview query
+over this field and Dataview sees just what the meeting note itself says.
 
 Attendees are **person slugs**. For each attendee named by the calendar or
 clearly identified in the transcript, ensure the note exists:
@@ -482,7 +485,6 @@ cat > "$SCRATCH/rec_42.payload.json" <<'JSON'
   "calendar_match": false,
   "attendees": ["priya-nathan", "morgan-ellery"],
   "projects": ["meridian-yard-automation-program"],
-  "entities": ["meridian-freight-holdings"],
   "recording-duration": 40,
   "source": "recorder",
   "source-recording-id": "plaud:rec_42",
@@ -496,6 +498,10 @@ cat > "$SCRATCH/rec_42.payload.json" <<'JSON'
 JSON
 python3 "$VAULTLIB" meeting write --vault "$VAULT" --note "$SCRATCH/rec_42.payload.json"
 ```
+
+No `entities` key here on purpose: `projects` is non-empty, so `meeting
+write` derives `entities` from `meridian-yard-automation-program`'s `entity:`
+field itself. Passing `entities` alongside a non-empty `projects` is refused.
 
 Payload rules the CLI enforces (so get them right the first time):
 
@@ -512,10 +518,12 @@ Payload rules the CLI enforces (so get them right the first time):
   project folders, `40-entities/<slug>/dossier.md`). `attendees` must be
   non-empty — except on a `type: note` capture, which may pass `[]` when the
   item names nobody. `projects` may be empty (triage catches unassigned
-  meetings). `entities` is optional and omitted from the file when not passed.
-  Optional `people` (slug list) renders a `## People` wikilink section.
-  `takeaways` is 1–5 strings. `type` values with a colon (`"1:1"`) are handled
-  by the CLI — pass them as plain strings.
+  meetings). `entities` is optional, machine-derived from `projects` whenever
+  `projects` is non-empty, and omitted from the file when there is nothing to
+  write — pass it yourself only when `projects` is empty, and never alongside
+  a non-empty `projects` (refused). Optional `people` (slug list) renders a
+  `## People` wikilink section. `takeaways` is 1–5 strings. `type` values
+  with a colon (`"1:1"`) are handled by the CLI — pass them as plain strings.
 - Do NOT pass `review_status`, `reviewed`, `archived`, or `processed` — the
   CLI sets them.
 - `source-recording-id` is **required** on every write — it IS the dedup

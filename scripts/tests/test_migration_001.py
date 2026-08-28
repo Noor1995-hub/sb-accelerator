@@ -12,7 +12,8 @@ from pathlib import Path
 
 import pytest
 
-from vaultlib import migrate
+from vaultlib import entity as entity_module
+from vaultlib import meeting, migrate, project
 
 from test_vaultlib_vault import make_vault
 
@@ -995,6 +996,52 @@ def test_entities_backfill_refuses_a_partially_derivable_meeting(tmp_path):
         "20-meetings/2026-04-05-partly.md"]
     with pytest.raises(Exception, match="entities"):
         module.verify(root)
+
+
+def test_meeting_write_output_satisfies_migration_001_verify(tmp_path):
+    """#94 moved entities derivation into `meeting.write` / `project.
+    derive_entities` — a live write, not this migration's one-time backfill.
+    `verify`'s invariant (any meeting with non-empty projects[] carries
+    `entities`) must still hold for a note the *new* write path produces, or
+    a freshly synced meeting would fail the very check this migration
+    enforces on every legacy one."""
+def test_meeting_write_output_satisfies_migration_001_verify(tmp_path):
+    """#94 moved entities derivation into `meeting.write` / `project.
+    derive_entities` — a live write, not this migration's one-time backfill.
+    `verify`'s invariant (any meeting with non-empty projects[] carries
+    `entities`) must still hold for a note the *new* write path produces, or
+    a freshly synced meeting would fail the very check this migration
+    enforces on every legacy one."""
+    module = load_m001()
+    root = old_vault(tmp_path)
+    module.apply(root)  # gets the vault to the post-migration shape verify wants
+
+    entity_module.ensure(root, slug="fresh-holdings", name="Fresh Holdings",
+                         today="2026-04-01")
+    project.scaffold(root, name="Fresh Initiative", project_type="initiative",
+                     entity="fresh-holdings", owner="morgan-ellery",
+                     today="2026-04-01")
+    person = root / "50-people" / "morgan-ellery.md"
+    person.write_text(
+        "---\nperson-name: Morgan Ellery\nslug: morgan-ellery\n"
+        "relationship: colleague\n---\n", encoding="utf-8")
+
+    meeting.write(root, {
+        "title": "fresh initiative kickoff",
+        "date": "2026-04-05T09:00",
+        "type": "meeting",
+        "calendar-subject": "Fresh Initiative — kickoff",
+        "calendar_match": True,
+        "attendees": ["morgan-ellery"],
+        "projects": ["fresh-initiative"],
+        "recording-duration": 30,
+        "source": "teams",
+        "source-recording-id": "m365:fresh0001",
+        "takeaways": ["Kicked off."],
+        "debrief": "Kickoff notes.",
+    })
+
+    module.verify(root)  # must not raise: entities was derived, not omitted
 
 
 def test_a_refused_meeting_derives_the_complete_list_on_the_next_run(tmp_path):
