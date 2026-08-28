@@ -45,7 +45,8 @@ delivers them.
   fixed, and the first sync of an evening is noticeably quicker for it. (#87)
 - **No more permission pop-up mid-sync.** A large transcript could make the
   sync ask for access to a system folder — alarming, and never necessary.
-  It no longer goes near that folder. (#87)
+  It no longer goes near that folder, not even to tidy up after itself.
+  (#87, #96)
 - **The evening run costs less.** The helpers that read your recordings and
   update your projects now run on a smaller model. Same output, materially
   cheaper per evening — which matters most for the runs you schedule and
