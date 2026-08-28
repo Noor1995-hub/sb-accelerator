@@ -172,7 +172,11 @@ def build_parser() -> argparse.ArgumentParser:
     ent_ensure.add_argument("--name", required=True, help="display name")
     ent_ensure.add_argument("--type", dest="entity_type",
                             choices=schema.enum_values("entity", "entity-type"))
-    ent_ensure.add_argument("--status", default="prospect",
+    # No default: None means "not provided", so a re-run of ensure against an
+    # existing dossier (say, to pick up --owner) does not silently stomp a
+    # status set earlier. ensure() applies "prospect" itself, but only when
+    # creating.
+    ent_ensure.add_argument("--status",
                             choices=schema.enum_values("entity", "status"))
     ent_ensure.add_argument("--owner", help="owner person slug")
     ent_ensure.add_argument("--today", help="ISO date; defaults to today")
@@ -181,6 +185,14 @@ def build_parser() -> argparse.ArgumentParser:
         "read", help="print the dossier's frontmatter and sections as JSON")
     _add_vault_argument(ent_read)
     ent_read.add_argument("--slug", required=True)
+
+    ent_validate = entities_sub.add_parser(
+        "validate",
+        help="clear the [!unvalidated] banner — the explicit review act; "
+             "content writes never do this as a side effect")
+    _add_vault_argument(ent_validate)
+    ent_validate.add_argument("--slug", required=True)
+    ent_validate.add_argument("--today", help="ISO date; defaults to today")
 
     ent_write = entities_sub.add_parser(
         "write", help="apply section edits from a JSON payload")
@@ -449,6 +461,9 @@ def _dispatch(args: argparse.Namespace) -> int:
             ))
         if args.action == "read":
             return _ok(entity.read(root, args.slug))
+        if args.action == "validate":
+            return _ok(entity.validate(root, args.slug,
+                                       vault.today_iso(args.today)))
         payload = (json.load(sys.stdin) if args.edits == "-"
                    else json.loads(Path(args.edits).read_text(encoding="utf-8")))
         return _ok(entity.write(root, args.slug, payload,

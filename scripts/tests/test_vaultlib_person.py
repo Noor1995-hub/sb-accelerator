@@ -55,6 +55,31 @@ def test_ensure_is_idempotent_and_does_not_rewrite(tmp_path):
     assert "relationship: colleague" in target.read_text(encoding="utf-8")
 
 
+def test_ensure_reports_ignored_name_when_it_differs_from_the_note(tmp_path):
+    # (#97) person notes are curated through People.base and are never
+    # rewritten — that is deliberate. But the old envelope silently dropped a
+    # differing --name with no signal at all, which reads as an ordinary
+    # success. The caller must be told the name was not applied.
+    root = make_vault(tmp_path)
+    person.ensure(root, "Morgan Ellery", "2026-08-23")
+    # Same slug ("morgan-ellery"), different display text — the collision
+    # this exercises, not a different person.
+    result = person.ensure(root, "morgan ellery", "2026-08-24")
+    assert result["created"] is False
+    assert result["ignored"] == ["name"]
+    assert result["reason"]
+    text = (root / "50-people" / "morgan-ellery.md").read_text(encoding="utf-8")
+    assert 'person-name: "Morgan Ellery"' in text
+
+
+def test_ensure_reports_no_ignored_fields_when_name_matches(tmp_path):
+    root = make_vault(tmp_path)
+    person.ensure(root, "Morgan Ellery", "2026-08-23")
+    result = person.ensure(root, "Morgan Ellery", "2026-08-24")
+    assert result["created"] is False
+    assert "ignored" not in result
+
+
 def test_ensure_matches_an_existing_note_case_insensitively(tmp_path):
     root = make_vault(tmp_path)
     (root / "50-people" / "Morgan-Ellery.md").write_text(

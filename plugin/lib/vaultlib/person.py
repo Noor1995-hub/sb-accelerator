@@ -30,18 +30,29 @@ def ensure(root: Path, name: str, today: str) -> dict:
     """Create 50-people/{slug}.md if no note for this person exists yet.
 
     Never rewrites an existing note — curation added through People.base must
-    survive every later call.
+    survive every later call. But (#97) a caller-supplied name that differs
+    from the note's own is reported, not silently dropped: an envelope with
+    no signal at all reads as an ordinary success.
     """
     slug = naming.slugify(name)
     naming.validate_slug(slug)
 
     found = _existing_note(root, slug)
     if found is not None:
-        return {
+        result = {
             "slug": slug,
             "path": found.relative_to(root).as_posix(),
             "created": False,
         }
+        existing, _ = markdown.split_frontmatter(
+            found.read_text(encoding="utf-8"))
+        if existing.get("person-name") != name:
+            result["ignored"] = ["name"]
+            result["reason"] = (
+                "person notes are curated through People.base and are never "
+                "rewritten by ensure; edit the note directly to change the name"
+            )
+        return result
 
     frontmatter = {
         "person-name": name,

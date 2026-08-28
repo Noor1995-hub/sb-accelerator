@@ -61,7 +61,13 @@ Ask only for what is missing, one question at a time.
   ```
 
   Ask which `--type` and `--status` fit rather than guessing: `prospect` for
-  something being pursued, `active` for a live relationship.
+  something being pursued, `active` for a live relationship. `entity ensure`
+  is safe to run again even if the entity already exists: on an existing
+  dossier it applies whichever fields you pass (`--name`, `--type`,
+  `--status`, `--owner`) rather than silently ignoring them, and its envelope
+  reports `changed` plus `updated: [...]` so you know whether anything
+  actually moved. It never claims a plain success for a field it did not
+  apply.
 - **Parent** — only for initiatives, and only if the user implies one.
   Maximum two levels; areas of responsibility are always top-level. The CLI
   enforces both.
