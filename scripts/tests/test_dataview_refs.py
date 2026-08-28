@@ -13,12 +13,12 @@ import dqlrefs
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 FIXTURE_ROOT = REPO_ROOT / "fixtures" / "demo-vault"
-TEMPLATE_ROOT = REPO_ROOT / "template"
+TEMPLATE_ROOT = REPO_ROOT / "plugin" / "template"
 
 # (vault root, note) pairs. The root travels with the note rather than being
 # inferred: only fixtures carry Dataview blocks today, but a block added to
-# template/ (the HOME dashboard, #32) must resolve its FROM paths against
-# template/, not against the fixtures.
+# plugin/template/ (the HOME dashboard, #32) must resolve its FROM paths against
+# plugin/template/, not against the fixtures.
 NOTES_WITH_BLOCKS = sorted(
     (root, path)
     for root in (FIXTURE_ROOT, TEMPLATE_ROOT)

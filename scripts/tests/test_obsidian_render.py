@@ -72,7 +72,7 @@ def note_surfaces(tour):
 
 @pytest.fixture(scope="module")
 def pristine(tour):
-    """Whether the toured vault still matches template/ + fixtures/.
+    """Whether the toured vault still matches plugin/template/ + fixtures/.
 
     A hand-tested vault makes the basesim cross-check meaningless: the first
     run of this harness flagged Meetings/Triage as 6 rows against basesim's 4,
@@ -124,7 +124,7 @@ def test_headers_render_declared_display_names(base_surfaces):
     """
     failures = []
     for key, payload in base_surfaces.items():
-        base_file = REPO_ROOT / "template" / payload["surface"]["path"]
+        base_file = REPO_ROOT / "plugin" / "template" / payload["surface"]["path"]
         if not base_file.is_file():
             continue
         declared = declared_display_names(base_file)
@@ -140,7 +140,7 @@ def test_headers_render_declared_display_names(base_surfaces):
 
 @pytest.fixture(scope="module")
 def basesim_corpus(tmp_path_factory):
-    """template/ + fixtures/demo-vault/ composed the same way a human's vault is —
+    """plugin/template/ + fixtures/demo-vault/ composed the same way a human's vault is —
     the corpus basesim computes its row sets against."""
     vault = tmp_path_factory.mktemp("probe-corpus") / "vault"
     build_vault(vault, REPO_ROOT, fresh=False)

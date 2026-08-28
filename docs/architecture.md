@@ -19,7 +19,7 @@ a release when clients should get it (quarterly, around tune-ups). Structure
 migrations are consultant-run via `/upgrade-vault`; a plugin/vault
 structure-version mismatch check makes skills degrade gracefully until migrated.
 
-The vault's own marker is `template/structure-version` — a plain integer,
+The vault's own marker is `plugin/template/structure-version` — a plain integer,
 bumped only by a migration under `migrations/`, read by `/upgrade-vault`.
 
 ## The vault's `claude/` directory

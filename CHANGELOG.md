@@ -15,6 +15,11 @@ delivers them.
 
 ## Unreleased
 
+- **The vault template now ships inside the plugin.** No behavior change for
+  the vault owner or their EA — every skill, `.base` view, and piece of
+  onboarding prose instantiates exactly as before. The template's home in
+  the repo moved from `template/` to `plugin/template/` so the whole product
+  can be published as a single marketplace plugin. (#105)
 - **The product's word for the person the vault serves is now "vault owner."**
   "Exec"/"executive" is gone from the skills, template, and prose — the first
   customers are executives, but not every vault owner will be one. The config

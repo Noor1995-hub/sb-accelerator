@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Template skeleton invariants.
 
-While template/ is empty, that's the valid bootstrap state. The template
-ships no README of its own — builder-facing instantiation documentation lives
-in playbooks/ and docs/, because everything under template/ is copied into the
-client's vault and read by the vault owner.
+While plugin/template/ is empty, that's the valid bootstrap state. The
+template ships no README of its own — builder-facing instantiation
+documentation lives in playbooks/ and docs/, because everything under
+plugin/template/ is copied into the client's vault and read by the vault
+owner.
 
 The moment anything exists in it (the template-extraction issue), the template
 must carry its markers: CLAUDE.md (vault instructions), structure-version
@@ -27,9 +28,9 @@ EXPECTED_STRUCTURE_VERSION = "2"
 
 
 def main(root: Path) -> list[str]:
-    template = root / "template"
+    template = root / "plugin" / "template"
     if not template.is_dir():
-        return ["template/ directory is missing"]
+        return ["plugin/template/ directory is missing"]
     entries = [p for p in template.rglob("*") if p.name != ".gitkeep"]
     if not entries:
         return []  # unpopulated skeleton — valid bootstrap state

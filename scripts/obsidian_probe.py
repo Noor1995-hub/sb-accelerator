@@ -285,7 +285,7 @@ def _inventory(root: Path) -> set:
 
 
 def provenance(vault: Path, repo_root: Path = REPO_ROOT, fresh: bool = False) -> tuple:
-    """Compare a vault's content against template/ (+ fixtures/) it was built from.
+    """Compare a vault's content against plugin/template/ (+ fixtures/) it was built from.
 
     Why this is not optional: cross-validating base:query against basesim.py on
     a *hand-tested* vault reports phantom regressions. The first run of this
@@ -295,7 +295,7 @@ def provenance(vault: Path, repo_root: Path = REPO_ROOT, fresh: bool = False) ->
 
     Returns (extra, missing) — either non-empty means "not pristine".
     """
-    sources = [repo_root / "template"]
+    sources = [repo_root / "plugin" / "template"]
     if not fresh:
         sources.append(repo_root / "fixtures" / "demo-vault")
     expected = set()
@@ -566,7 +566,7 @@ def cmd_doctor(args) -> int:
             if extra or missing:
                 notes.append(
                     f"vault is NOT pristine ({len(extra)} extra, {len(missing)} missing "
-                    "vs template/ + fixtures/). Rendering checks still run; the "
+                    "vs plugin/template/ + fixtures/). Rendering checks still run; the "
                     "basesim cross-check will skip.")
             else:
                 notes.append("vault is pristine — full cross-validation available.")

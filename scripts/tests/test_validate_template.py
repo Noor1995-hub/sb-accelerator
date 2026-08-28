@@ -10,20 +10,20 @@ def test_missing_template_dir_fails(tmp_path):
 
 
 def test_empty_template_passes(tmp_path):
-    (tmp_path / "template").mkdir()
+    (tmp_path / "plugin" / "template").mkdir(parents=True)
     assert main(tmp_path) == []
 
 
 def test_lone_readme_is_not_a_bootstrap_state(tmp_path):
-    """template/ ships no README of its own — a root README is not exempt."""
-    (tmp_path / "template").mkdir()
-    (tmp_path / "template" / "README.md").write_text("stub", encoding="utf-8")
+    """plugin/template/ ships no README of its own — a root README is not exempt."""
+    (tmp_path / "plugin" / "template").mkdir(parents=True)
+    (tmp_path / "plugin" / "template" / "README.md").write_text("stub", encoding="utf-8")
     problems = main(tmp_path)
     assert any("CLAUDE.md" in p for p in problems)
 
 
 def test_populated_template_requires_markers(tmp_path):
-    t = tmp_path / "template"
+    t = tmp_path / "plugin" / "template"
     (t / "10-meetings").mkdir(parents=True)
     problems = main(tmp_path)
     assert any("CLAUDE.md" in p for p in problems)
@@ -31,7 +31,7 @@ def test_populated_template_requires_markers(tmp_path):
 
 
 def make_populated_template(tmp_path):
-    t = tmp_path / "template"
+    t = tmp_path / "plugin" / "template"
     (t / "10-meetings").mkdir(parents=True)
     (t / "CLAUDE.md").write_text(
         "vault instructions\n\n"

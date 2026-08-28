@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Instantiate a throwaway vault for hand-testing the plugin.
 
-Copies template/ into TARGET, then overlays fixtures/demo-vault/ on top
+Copies plugin/template/ into TARGET, then overlays fixtures/demo-vault/ on top
 unless --fresh is given (template-only, for onboarding testing). Refuses to
 touch a TARGET that already exists and is non-empty — this script only ever
 creates, never merges into or overwrites existing work. With --with-plugins,
@@ -23,6 +23,13 @@ from pathlib import Path
 def provision_into(vault: Path) -> tuple[list[str], list[str]]:
     """Install the pinned Obsidian plugins + theme into the new vault.
     Kept as a thin module-level seam so tests monkeypatch it (no network)."""
+    # provision_plugins.py lives at plugin/lib/ (it ships with the plugin),
+    # not next to this script — put it on sys.path before importing. Tests
+    # get this for free from conftest.py; a direct `python3
+    # scripts/make_test_vault.py` invocation does not.
+    lib_dir = str(Path(__file__).resolve().parents[1] / "plugin" / "lib")
+    if lib_dir not in sys.path:
+        sys.path.insert(0, lib_dir)
     from provision_plugins import PINS_PATH, load_pins, provision
 
     return provision(vault, load_pins(PINS_PATH))
@@ -36,7 +43,7 @@ def build_vault(target: Path, repo_root: Path, fresh: bool) -> list[str]:
     if target.exists() and (not target.is_dir() or any(target.iterdir())):
         raise TargetNotEmptyError(f"{target} already exists and is not empty")
     target.mkdir(parents=True, exist_ok=True)
-    shutil.copytree(repo_root / "template", target, dirs_exist_ok=True)
+    shutil.copytree(repo_root / "plugin" / "template", target, dirs_exist_ok=True)
     if not fresh:
         shutil.copytree(repo_root / "fixtures" / "demo-vault", target, dirs_exist_ok=True)
     warnings: list[str] = []
@@ -55,7 +62,7 @@ def build_vault(target: Path, repo_root: Path, fresh: bool) -> list[str]:
 
 def parse_args(argv):
     parser = argparse.ArgumentParser(
-        description="Instantiate a test vault from template/ (+ demo fixtures unless --fresh)."
+        description="Instantiate a test vault from plugin/template/ (+ demo fixtures unless --fresh)."
     )
     parser.add_argument("target", type=Path, help="Directory to create the test vault in")
     parser.add_argument(

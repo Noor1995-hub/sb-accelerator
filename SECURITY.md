@@ -14,8 +14,9 @@ description, or a workflow log. If you ever think "I'll just paste the key for a
 
 ## What must never be in this repo at all
 
-- Client vault content, client names in `plugin/` or `template/` (clean-room rule — root
-  `CLAUDE.md`), or anything from a client engagement beyond `registry.yaml`'s deployment rows.
+- Client vault content, client names in `plugin/` (which now includes the
+  vault template at `plugin/template/`) (clean-room rule — root `CLAUDE.md`),
+  or anything from a client engagement beyond `registry.yaml`'s deployment rows.
 - Personal content from the busdev lab. Porting is a rewrite, not a copy.
 
 ## Rotate on handovers

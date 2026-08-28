@@ -2,7 +2,7 @@
 
 Walks the demo-vault fixture tree and checks each object note's frontmatter
 against the ontology's normative schema. The schema is NOT hand-encoded
-here: template/99-workflow-config/reference/ontology.md carries one fenced
+here: plugin/template/99-workflow-config/reference/ontology.md carries one fenced
 yaml block per object type (keyed by `object:`), and this module loads them
 at import time — editing a block IS editing what this guard enforces.
 Harness-only concerns (which files to walk, slug-join rules, fixture
@@ -17,7 +17,7 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 FIXTURE_ROOT = REPO_ROOT / "fixtures" / "demo-vault"
-ONTOLOGY_DOC = REPO_ROOT / "template" / "99-workflow-config" / "reference" / "ontology.md"
+ONTOLOGY_DOC = REPO_ROOT / "plugin" / "template" / "99-workflow-config" / "reference" / "ontology.md"
 
 YAML_FENCE_RE = re.compile(r"^```yaml\s*\n(.*?)^```\s*$", re.MULTILINE | re.DOTALL)
 

@@ -16,7 +16,7 @@ from pathlib import Path
 from lint_plugin import scan_skill_references, shipped_skills
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-TEMPLATE = REPO_ROOT / "template"
+TEMPLATE = REPO_ROOT / "plugin" / "template"
 START_HERE = TEMPLATE / "Start here.md"
 
 # Same shape as the linter's, deliberately restated: this module asserts what

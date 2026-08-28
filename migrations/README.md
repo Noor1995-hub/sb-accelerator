@@ -13,7 +13,7 @@ accumulated v0.2.0 → v0.6.2 vault changes — moved into the migration that
 implements it, quoted verbatim in the docstring of
 `plugin/migrations/001-structure-version-2/migrate.py`. Read it there.
 
-The version a freshly instantiated vault ships at is `template/structure-version`,
+The version a freshly instantiated vault ships at is `plugin/template/structure-version`,
 and `scripts/validate_template.py` pins it to the last migration's
 `TARGET_VERSION`: a migration that lands without that bump ships new vaults at
 the old version, and `/upgrade-vault` opens by proposing a migration with

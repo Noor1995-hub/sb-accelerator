@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-TEMPLATE = REPO_ROOT / "template"
+TEMPLATE = REPO_ROOT / "plugin" / "template"
 NN_DATA = TEMPLATE / ".obsidian" / "plugins" / "notebook-navigator" / "data.json"
 MINIMAL_DATA = TEMPLATE / ".obsidian" / "plugins" / "obsidian-minimal-settings" / "data.json"
 APPEARANCE = TEMPLATE / ".obsidian" / "appearance.json"
@@ -184,7 +184,7 @@ def test_workspace_references_no_files_outside_the_template():
     import re
     blob = WORKSPACE.read_text(encoding="utf-8")
     for path in set(re.findall(r'"file":\s*"([^"]+)"', blob)):
-        assert (TEMPLATE / path).exists(), f"workspace.json references {path!r}, absent from template/"
+        assert (TEMPLATE / path).exists(), f"workspace.json references {path!r}, absent from plugin/template/"
 
 
 def test_workspace_sidebar_is_wide_enough_for_the_navigator():

@@ -65,7 +65,7 @@ the questions to settle before you get that far.
       Mode; if that is off the table the vault still works on a degraded
       path — runbook §3.
 - [ ] The client machines can reach GitHub releases, so
-      `scripts/provision_plugins.py` can fetch the pinned Obsidian plugins.
+      `plugin/lib/provision_plugins.py` can fetch the pinned Obsidian plugins.
       On a locked-down fleet, agree the by-hand install fallback instead —
       runbook §2.
 - [ ] Vault folder connected in Cowork on both machines. Confirm Cowork

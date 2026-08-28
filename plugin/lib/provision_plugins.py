@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Provision Obsidian community plugins + theme into a vault from pinned,
-checksummed official GitHub releases (scripts/plugin-pins.json).
+checksummed official GitHub releases (plugin/lib/plugin-pins.json).
 
 Idempotent: an asset already in place with a matching sha256 is skipped;
 a missing or tampered asset is (re)downloaded and verified before install.

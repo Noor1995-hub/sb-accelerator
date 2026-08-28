@@ -20,9 +20,9 @@ from pathlib import Path
 import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-ONTOLOGY_DOC = REPO_ROOT / "template" / "99-workflow-config" / "reference" / "ontology.md"
+ONTOLOGY_DOC = REPO_ROOT / "plugin" / "template" / "99-workflow-config" / "reference" / "ontology.md"
 SCHEMA_JSON = REPO_ROOT / "plugin" / "lib" / "vaultlib" / "schema.json"
-SOURCE_LABEL = "template/99-workflow-config/reference/ontology.md"
+SOURCE_LABEL = "plugin/template/99-workflow-config/reference/ontology.md"
 
 YAML_FENCE_RE = re.compile(r"^```yaml\s*\n(.*?)^```\s*$", re.MULTILINE | re.DOTALL)
 

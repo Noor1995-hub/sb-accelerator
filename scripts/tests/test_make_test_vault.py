@@ -1,4 +1,4 @@
-"""Tests build against the real template/ and fixtures/demo-vault/ trees,
+"""Tests build against the real plugin/template/ and fixtures/demo-vault/ trees,
 same pattern as test_lint_plugin.py's use of the shipped denylist — a
 synthetic fixture tree would defeat the point of testing the actual
 instantiation."""
