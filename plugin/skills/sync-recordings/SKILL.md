@@ -594,8 +594,9 @@ python3 "$VAULTLIB" scratch sweep --dir "$SCRATCH"
 
 `scratch sweep` is stdlib-only and deletes a fixed, built-in pattern list
 (`plaud.whoami.json`, `m365.whoami.json`, `rec_*.json`, `plaud.list.json`,
-`m365_*.json`, `*.blob.md`, `ids.json`, `*.payload.json`, `decision.json`)
-directly inside `--dir`, never recursing — this is the whole reason it
+`m365_*.json`, `*.blob.md`, `ids.json`, `*.payload.json`, `decision.json`,
+plus `sentmail.sample.json`, `calendar.*.json` and `*.block.md` from
+Session-1 onboarding) directly inside `--dir`, never recursing — this is the whole reason it
 exists rather than `rm -f`. **Every scratch file this contract names you
 write already matches one of those patterns; name any other raw connector
 file to match one too** (`m365_events.json` fits `m365_*.json`,

@@ -43,6 +43,21 @@ def test_sweep_deletes_only_known_patterns(tmp_path):
         assert name in result["deleted"]
 
 
+def test_sweep_covers_the_session_1_onboarding_files(tmp_path):
+    # /setup-my-brain writes these during the live interview; its deletion
+    # points are the same full sweep, so they must be in the pattern list.
+    for name in ("sentmail.sample.json", "calendar.next-two-weeks.json",
+                 "identity.block.md", "communication-style.block.md"):
+        (tmp_path / name).write_text("x", encoding="utf-8")
+
+    result = scratch.sweep(str(tmp_path))
+
+    for name in ("sentmail.sample.json", "calendar.next-two-weeks.json",
+                 "identity.block.md", "communication-style.block.md"):
+        assert not (tmp_path / name).exists(), f"{name} should have been swept"
+        assert name in result["deleted"]
+
+
 def test_sweep_is_idempotent_on_an_already_clean_directory(tmp_path):
     result = scratch.sweep(str(tmp_path))
     assert result["deleted"] == []
