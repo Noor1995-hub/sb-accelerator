@@ -15,6 +15,10 @@ delivers them.
 
 ## Unreleased
 
+- **An evening run with several unrecognised names no longer loses tomorrow's note.**
+  The link check now reports every unresolvable name at once, so the run's
+  single retry can fix them all — previously two bad names meant no note,
+  discovered the next morning. (#111)
 - **A hand-edited `type` on an entity or project is now caught by
   validation.** `type: entity` and `type: project` are pinned in the
   ontology, so a stray value can no longer pass conformance silently. (#109)

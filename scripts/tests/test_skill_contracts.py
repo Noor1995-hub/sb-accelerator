@@ -370,6 +370,23 @@ def test_evening_sync_recovers_from_a_link_refusal_rather_than_ending_the_run():
     )
 
 
+def test_evening_sync_retry_fixes_every_named_offender_not_just_the_first():
+    # Issue #78: `_check_links` used to raise on the first offender, so a
+    # recap with two independently-bad links exhausted the single retry on
+    # the first and still failed on the second — no note for tomorrow. The
+    # CLI now names every offender in one error; the skill has to say the
+    # retry must address all of them, or a model fixes only the first link
+    # it sees and repeats the original bug on the second retry attempt.
+    # Normalized whitespace: this is a multi-word phrase absent from the
+    # file today (verified with grep before writing this test), and this
+    # paragraph will be reflowed sooner or later.
+    text = _normalized(_evening_sync()).lower()
+    assert "fix or drop every link the error names" in text, (
+        "the guard paragraph must say to act on every named offender, not "
+        "just the first, so the single retry is always enough"
+    )
+
+
 def test_evening_sync_states_unattended_catchup_behaviour():
     section = _evening_sync().split("## Unattended mode", 1)
     assert len(section) == 2, "evening-sync has no Unattended mode section"

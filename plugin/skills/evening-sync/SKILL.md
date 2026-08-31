@@ -309,11 +309,13 @@ not delete it to force a rewrite.
 **A refused link must not cost the vault owner their note.** The link check runs
 before anything is written, so a refusal here means tomorrow has no note at
 all — discovered next morning, which is the failure rule 7 already forbids
-for a refused calendar. The error is precise enough to act on: an
-unresolvable target names the slug, an alias mismatch names the true display
-name. So take the resolved name from the error, or drop the offending link,
-and retry the write once — never a third attempt. Record the refusal and
-what you changed as a stage-7 warning. Never end the run without a note.
+for a refused calendar. The error names every offender at once, not just the
+first, precisely so one retry is enough: an unresolvable target names the
+slug, an alias mismatch names the true display name. So take the resolved
+name from the error, or drop the offending link — fix or drop every link the
+error names, not only the first — and retry the write once — never a third
+attempt. Record the refusal and what you changed as a stage-7 warning. Never
+end the run without a note.
 
 `recap_window` is what makes the run idempotent: the CLI fingerprints the
 window's meetings, jottings and decisions and stamps the digest on the recap
