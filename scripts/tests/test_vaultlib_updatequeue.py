@@ -301,6 +301,31 @@ def test_unparseable_state_updated_warns_and_falls_back(tmp_path):
             for entry in result["projectsNeedingUpdate"]] == ["alpha"]
 
 
+def test_offset_bearing_dates_do_not_crash_the_run(tmp_path):
+    """A hand-edited `date: ...+02:00` parses into an *aware* datetime, and
+    order-comparing aware against a naive threshold raises TypeError — which
+    cli.py reports as a malformed payload and which aborts the whole vault's
+    queue after earlier projects have already had metrics rewritten. Wall
+    clock is the only frame this module has, so the offset is dropped, the
+    way m365.py and dates.py already do."""
+    root = make_vault(tmp_path)
+    write_project(root, "alpha", last_updated="2026-06-12")
+    write_project(root, "beta", last_updated="2026-06-12",
+                  state_updated="2026-06-12T18:30+02:00")
+    write_meeting(root, "aware-alpha", date_value="2026-06-12T10:00+02:00",
+                  projects=("alpha",))
+    write_meeting(root, "aware-beta", date_value="2026-06-12T19:00+02:00",
+                  projects=("beta",))
+    result = updatequeue.run(root, today="2026-06-12", owner="owner-morgan")
+    assert sorted(entry["slug"]
+                  for entry in result["projectsNeedingUpdate"]) == ["alpha",
+                                                                   "beta"]
+    # The offset is dropped, not honoured: 19:00 wall clock is after 18:30.
+    beta = next(e for e in result["projectsNeedingUpdate"]
+                if e["slug"] == "beta")
+    assert beta["stateUpdated"] == "2026-06-12T18:30"
+
+
 def test_touch_then_rerun_converges(tmp_path):
     """The stamp is what stops churn: once `project touch` records the moment
     the state was synthesized, the same meeting no longer queues."""

@@ -64,6 +64,15 @@ def _parse_iso_datetime(value) -> Optional[datetime]:
     itself before a timestamp written that afternoon and vanish. Anything
     fromisoformat accepts keeps its own time. A value that parses only as far
     as a leading day falls back to end-of-day for the same reason.
+
+    Every datetime this module compares is **naive wall clock**, so an offset
+    a human typed by hand (`2026-06-12T10:00+02:00`) is dropped rather than
+    honoured — the same thing `m365.py` and `dates.py` do. Returning an aware
+    datetime here would make the queue predicate order-compare aware against
+    a naive threshold, and that TypeError aborts the whole vault's queue mid
+    run, after earlier projects have already had their metrics rewritten. It
+    also collapses a version split: `...Z` is aware on 3.11+ and a ValueError
+    on this module's 3.10 floor.
     """
     text = str(value or "").strip()
     if not text:
@@ -73,7 +82,7 @@ def _parse_iso_datetime(value) -> Optional[datetime]:
         day = _parse_first_iso_date(text)
         return datetime.combine(day, end_of_day) if day else None
     try:
-        return datetime.fromisoformat(text)
+        return datetime.fromisoformat(text).replace(tzinfo=None)
     except ValueError:
         pass
     day = _parse_first_iso_date(text)
