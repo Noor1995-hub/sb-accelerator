@@ -15,6 +15,12 @@ delivers them.
 
 ## Unreleased
 
+- **M365 calendar searches now reach the whole window, not just the first
+  25 events.** The three skills that search the calendar (recording sync,
+  evening sync, onboarding) now call the connector with its real window
+  parameters — `afterDateTime`/`beforeDateTime` — and page past the
+  connector's 25-events-per-call cap. Before, a busy week synced only a
+  first page of meetings and the rest silently never appeared. (#125)
 - **Recording sync is cheaper and harder to fool.** Extraction always runs
   in per-recording workers, Plaud transcripts are validated against the
   recorder's own duration so a partial transcript can no longer become a

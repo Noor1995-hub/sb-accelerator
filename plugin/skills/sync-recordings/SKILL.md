@@ -311,21 +311,27 @@ resolve timezone names, the error's hint says to pass `--utc-offset` instead.
 **Microsoft 365** (when enabled, available, and account-verified): Teams
 transcribes meetings on the vault owner's calendar, and the calendar event is the
 key to its own transcript. Search the trailing **7 local days**
-(`outlook_calendar_search`, query `*`, `utc_from`/`utc_to` from
-`dates window --vault "$VAULT"` — the clamp to `sync.start-date` rides
-along; a `window_empty: true` result means skip the search outright), drop
-cancelled and all-day events, and keep online meetings.
+(`outlook_calendar_search`, passing the `utc_from`/`utc_to` values from
+`dates window --vault "$VAULT"` as `afterDateTime`/`beforeDateTime` — the
+clamp to `sync.start-date` rides along; a `window_empty: true` result means
+skip the search outright), drop cancelled and all-day events, and keep
+online meetings. The tool answers at most **25 events per call**: when a
+response carries `nextOffset`, call again with `offset` set to it until it
+stops. A trailing week routinely holds more than 25 events, and a
+first-page-only search silently drops the rest — nothing fails, those
+meetings just never sync.
 
 **A full event read is expensive, so dedup runs before the fetch, not
 after.** Keep the listing lean: never search a window wider than `dates
 window` returned, and write only the four fields triage reads — `id`,
-`subject`, `start`, `end`, values verbatim — for each kept event, as one
-JSON array to `$SCRATCH/m365_search.json` with the Write tool. The
-connector's calendar search selects no fields, so this scratch write is
-where the listing gets trimmed — a live run wrote 53k characters of raw
-listing for 33 events when 11 mattered and four fields per event were ever
-read. (A listing is not a transcript — rule 8 does not apply.) Then ask
-the seen-events cache which occurrences still need the full read:
+`subject`, `start`, `end`, values verbatim — for each kept event, across
+every page, as one JSON array to `$SCRATCH/m365_search.json` with the
+Write tool. The connector's calendar search selects no fields, so this
+scratch write is where the listing gets trimmed — a live run wrote 53k
+characters of raw listing for 33 events when 11 mattered and four fields
+per event were ever read. (A listing is not a transcript — rule 8 does not
+apply.) Then ask the seen-events cache which occurrences still need the
+full read:
 
 ```bash
 python3 "$VAULTLIB" sync m365-triage --vault "$VAULT" \
@@ -474,7 +480,10 @@ the query window deterministically:
 python3 "$VAULTLIB" dates window --vault "$VAULT" --start 2026-08-20T16:42 --timezone <tz>
 ```
 
-Query with `utc_from`/`utc_to`. Score candidates: title-keyword overlap and
+Pass its `utc_from`/`utc_to` values as the tool's
+`afterDateTime`/`beforeDateTime`. The window around one recording is narrow,
+but if the response carries `nextOffset`, page through (`offset` set to it)
+before scoring. Score candidates: title-keyword overlap and
 attendee-name matches beat same-day-only. A match pre-fills
 `calendar-subject`, `organizer`, `location`, `recurring`, `attendee-emails`.
 
