@@ -12,25 +12,35 @@ Full background: `docs/visual-verification.md`.
    python scripts/make_test_vault.py test-vaults/$(date +%F)-visual --with-plugins
    ```
 
-2. Bring up the isolated probe instance and capture every surface:
+2. Bring up the isolated probe instance and capture every surface — twice: the
+   default 1920x1200 window, then a 1440x900 window (a 13" client laptop, and
+   the width `test_triage_controls_survive_a_1440_window` bites on). Each
+   `tour` needs its own `--out` so the second capture does not overwrite the
+   first:
 
    ```bash
    python scripts/obsidian_probe.py doctor
    python scripts/obsidian_probe.py up --vault test-vaults/$(date +%F)-visual
-   python scripts/obsidian_probe.py tour
+   python scripts/obsidian_probe.py tour --out .obsidian-probe-out
+   python scripts/obsidian_probe.py --width 1440 --height 900 tour --out .obsidian-probe-out-1440
    ```
 
-3. Assert the invariants:
+3. Assert the invariants against each capture:
 
    ```bash
    python -m pytest scripts/tests -q -m obsidian
+   SB_PROBE_OUT=.obsidian-probe-out-1440 python -m pytest scripts/tests -q -m obsidian
    ```
 
-4. **Read the screenshots in `.obsidian-probe-out/`.** This is the step that
-   cannot be automated away: the tests cover what a selector can express, and
-   the PNGs cover legibility, spacing, column widths, empty states and anything
-   that simply looks wrong. Report what you see, and say plainly if a surface
-   was not captured rather than implying full coverage.
+4. **Read the screenshots in `.obsidian-probe-out/` and
+   `.obsidian-probe-out-1440/`.** This is the step that cannot be automated
+   away: the tests cover what a selector can express, and the PNGs cover
+   legibility, spacing, column widths, empty states and anything that simply
+   looks wrong. Report what you see, and say plainly if a surface was not
+   captured rather than implying full coverage. The 1440 capture is the one
+   that matters for Meetings.base Triage — confirm `✓ Reviewed`,
+   `⚠ Duplicate of` and `🗑 Archive` are all visible without horizontal
+   scrolling.
 
 The tour is invisible — the probe window shows for the few seconds the
 instance takes to boot, then `up` cloaks it (opacity 0, clicks pass through)
