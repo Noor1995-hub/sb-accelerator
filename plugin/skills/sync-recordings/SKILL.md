@@ -66,8 +66,8 @@ The JSON envelope and interpreter resolution are documented in the plugin's
    step 1 listing trim is fine.)
 9. **Batch independent CLI calls into one Bash call.** Every separate tool
    turn re-reads the whole session context. Calls with no data dependency —
-   `sync reconcile-reviews` and `sync scan`; the per-recording `plaud
-   reassemble` calls — go in one invocation, separate lines, never
+   `sync reconcile-reviews` and `sync scan`; the `person ensure` calls for a
+   meeting's attendees — go in one invocation, separate lines, never
    `&&`-chained — a failed call must not swallow the envelopes behind it.
    Each still prints its own JSON envelope, in order; read `ok` on every one.
 
@@ -554,7 +554,12 @@ never spawn in the background and then loop checking on it.
 
 **When a batch returns, act on each line, then bank.**
 
-- `written: <stem>` — count it; step 7 verifies from disk anyway.
+- `written: <stem>` — count it; step 7 verifies from disk anyway. A
+  `written:` line that mentions a `confirmed-target` conflict counts under
+  **Possible duplicates**, not Processed: the CLI wrote a `-v2` sibling
+  carrying a `conflicts-with` edge instead of touching the confirmed note,
+  and it shows in triage under `⚠ Duplicate of`. A mentioned
+  `stem-collision` is just a `-2` filename suffix — nothing was at risk.
 - `no-transcript` / `forbidden` — settled negatives.
 - `fetch-error` — no outcome line is banked; it retries next run.
 - `auth-error` — stop dispatching that adapter's remaining recordings and

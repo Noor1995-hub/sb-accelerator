@@ -115,7 +115,10 @@ python3 "$VAULTLIB" meeting write --vault "$VAULT" --note "$SCRATCH/<stem>.paylo
 ```
 
 If `meeting write` refuses, fix the payload per the `error` and `hint` and
-retry — the contract names every rule. Read the result: `conflict` of kind
+retry — the contract names every rule. The one refusal you never retry is
+an `error` naming an already-synced id: dedup was bypassed upstream — stop
+and reply `fetch-error: already-synced id (dedup bypassed)` so a human sees
+it. Read the result: `conflict` of kind
 `confirmed-target` or `stem-collision` still counts as written — mention it
 in your outcome line. Verify the result's `path` exists on disk before
 replying `written:`.
