@@ -233,6 +233,22 @@ def test_sync_recordings_triages_m365_before_the_fetch():
         "triage must gate the full event reads, not follow them")
 
 
+# #122: 15 no-op extraction subagents at ~62k tokens each — transcript
+# availability must be settled by the orchestrator, and settled negatives
+# recorded, BEFORE any subagent is dispatched.
+def test_sync_recordings_gates_dispatch_on_a_fetched_transcript():
+    text = read_skill("sync-recordings")
+    assert '"forbidden"' in text, (
+        "a cross-tenant 403 needs a recorded outcome or it refetches forever")
+    assert "never makes a Graph call" in text, (
+        "the dispatch gate must say a subagent never fetches")
+    dispatch = text.index("### 6. Extract and write")
+    assert text.index("sync m365-record") < dispatch, (
+        "settled negative outcomes are recorded before dispatch, not after")
+    assert text.rindex("sync m365-record") > dispatch, (
+        "written outcomes are still recorded after the notes exist")
+
+
 def test_sync_recordings_states_the_start_date_bound():
     text = read_skill("sync-recordings")
     assert "sync.start-date" in text

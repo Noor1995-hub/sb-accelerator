@@ -206,7 +206,9 @@ validation, metrics arithmetic, marker merges, atomic writes).
    question.
 8. **Extraction subagents** (parallel, pinned to a small model — structured
    extraction, not judgment): transcript-first Key Takeaways / Debrief /
-   Action Items, full-name attendees, write via `cli.py meeting write`.
+   Action Items, full-name attendees, write via `cli.py meeting write`;
+   dispatched only for recordings whose transcript the orchestrator already
+   fetched (#122).
 9. **Person auto-creation** for unknown attendees (`relationship: null`,
    surfacing as Uncurated in People.base — same convention as P1a's owner
    rule).

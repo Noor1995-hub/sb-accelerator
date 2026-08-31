@@ -282,7 +282,8 @@ python3 "$VAULTLIB" sync m365-triage --vault "$VAULT" \
 
 Everything the cache already answers is filtered out here, before any
 fetch: `filtered` counts occurrences already written into the vault,
-permanently skipped, or finally transcript-less. A `no-transcript` outcome
+permanently skipped, refused by another organization's tenant, or finally
+transcript-less. A `no-transcript` outcome
 stays provisional for 48 hours after the meeting ends — Teams delivers
 transcripts with delay — so those come back in `fetch` as
 `recheck-no-transcript` until the window passes. Only the occurrences in
@@ -312,9 +313,39 @@ the cache back-fills for meetings synced before the cache existed.
 For each new id, fetch the transcript: `read_resource` on the entry's
 `transcript_url` **exactly as `m365 ids` returned it** — never rebuild or
 re-scope the URL; a recurring series answers a rebuilt, unscoped URL with
-other occurrences' transcripts. A `NOT_FOUND` with `transcripts_empty` is an
-explicit skip line (transcription was off for that meeting), not an error.
-Write the raw result to `$SCRATCH/m365_<hex>.transcript.json`, then
+other occurrences' transcripts. Write each raw result to
+`$SCRATCH/m365_<hex>.transcript.json`. Two answers are settled skips, not
+errors: a `NOT_FOUND` with `transcripts_empty` means transcription was off
+for that meeting, and a **403/Forbidden** means the transcript lives in
+another organization's tenant and this account will never be allowed to
+read it. Report each kind as one count, never per-event lines.
+
+**Record every negatively-settled occurrence now — before any extraction
+subagent exists** — so the next run's triage answers for them without a
+fetch, even if this run dies mid-extraction: the answers a fetch was paid
+for are banked the moment they are known. Write one JSON array to
+`$SCRATCH/m365_outcomes_settled.json` with the Write tool, one entry per
+occurrence, keyed by the `id` and `start_utc` the triage result carried:
+
+- `"outcome": "no-transcript"` — the event carried no `meetingTranscriptUrl`
+  (`m365 ids` skipped it), or the transcript fetch answered
+  `transcripts_empty`;
+- `"outcome": "forbidden"` — the transcript fetch was refused (403):
+  another tenant owns it, permanently;
+- `"outcome": "skipped"` — the id went onto the never-propose-again list
+  (`sync skip`), here or on an earlier run.
+
+A recording that *failed* — a transport error — gets **no outcome line**,
+and neither does a cross-adapter duplicate deferred under `--unattended`:
+like everywhere else here, what is not settled is not recorded, and the
+occurrence surfaces again next run.
+
+```bash
+python3 "$VAULTLIB" sync m365-record --vault "$VAULT" \
+  --outcomes "$SCRATCH/m365_outcomes_settled.json"
+```
+
+For each occurrence whose transcript content is now on disk in `$SCRATCH`,
 normalize:
 
 ```bash
@@ -325,30 +356,6 @@ python3 "$VAULTLIB" m365 reassemble --event "$SCRATCH/m365_event_3.json" \
 
 The result names the blob file and carries `recording_id`, `duration_min`,
 and `recorded_local`, like `plaud reassemble`.
-
-**The M365 branch's last act — after step 6 has written its notes — is
-recording every settled occurrence back into the seen-events cache**, so the
-next run's triage answers for them without a fetch. Write one JSON array to
-`$SCRATCH/m365_outcomes.json` with the Write tool, one entry per occurrence,
-keyed by the `id` and `start_utc` the triage result carried:
-
-- `"outcome": "written"` plus its `recording_id` — the meeting note is
-  verified on disk, or `sync dedup` said the id was already in the vault;
-- `"outcome": "no-transcript"` — the event carried no `meetingTranscriptUrl`
-  (`m365 ids` skipped it), or the transcript fetch answered
-  `transcripts_empty`;
-- `"outcome": "skipped"` — the id went onto the never-propose-again list
-  (`sync skip`), here or on an earlier run.
-
-A recording that *failed* — a transport error, a refused write — gets **no
-outcome line**, and neither does a cross-adapter duplicate deferred under
-`--unattended`: like everywhere else here, what is not settled is not
-recorded, and the occurrence surfaces again next run.
-
-```bash
-python3 "$VAULTLIB" sync m365-record --vault "$VAULT" \
-  --outcomes "$SCRATCH/m365_outcomes.json"
-```
 
 **Then check for a cross-adapter duplicate before anything is written.**
 The ledger keys on exact ids, so it cannot see that a Plaud recording and a
@@ -370,7 +377,9 @@ anyway or drops it permanently with `sync skip --id m365:<hex> --reason
 cross-adapter duplicates line; it will keep deferring until an interactive
 run settles it, and that is the safe direction. A match flagged
 `imprecise: true` (a date-only note) is a *possible* duplicate — surface
-it the same way, never auto-resolve it.
+it the same way, never auto-resolve it. A `sync skip` decided here settles
+the occurrence: give it a `"skipped"` outcome line through another
+`sync m365-record` call — the cache merges across calls.
 
 An m365 recording's routing starts ahead of plaud's: the event **is** the
 calendar record. Pre-fill `calendar-subject`, `organizer`, `location`,
@@ -383,6 +392,15 @@ setting most deployments have off), and its speech recognition garbles
 names and product terms — so attendees come from the calendar, never from
 the transcript, and transcript keywords stay the weakest routing signal
 (step 3 already ranks them last).
+
+**The dispatch gate.** Step 6 may dispatch an extraction subagent **only**
+for an occurrence whose transcript content is already on disk in `$SCRATCH`
+— a subagent **never makes a Graph call**, never fetches a transcript, and
+is never used to discover whether one exists. Transcript availability was
+settled above, by you, and the settled outcomes are already in the cache;
+an occurrence without a transcript blob simply does not reach step 6. The
+one outcome still open — `written` — is recorded at the end of step 6, once
+the notes are verified on disk.
 
 ### 2. Calendar enrichment (optional, honest about absence)
 
@@ -511,7 +529,11 @@ one: the blob or file content, the routing you decided (projects, attendee
 slugs, confidence stamp, calendar fields), and the payload contract below.
 Extraction is structured work — takeaways, debrief, action items **from the
 transcript**; enrichment summaries are supporting context only, never the
-source of record.
+source of record. Every recording reaching this step already has its
+content in hand — an inbox file's text, a Plaud blob, or an M365 transcript
+fetched in step 1. Never dispatch a subagent to find out whether a
+transcript exists: that answer was settled, and recorded, before this step
+began.
 
 **Spawn each with `model: sonnet`.** A subagent inherits the session's model
 unless you say otherwise, so a nightly run started from an expensive session
@@ -617,6 +639,23 @@ M365 recordings have no inbox file to move.
 what still needs processing — that is what makes the folder answerable
 without running anything, and why no index note or state file exists.
 
+**Then bank the M365 `written` outcomes.** For each m365-sourced recording
+whose note is verified on disk — and each id `sync dedup` reported as
+already `synced` back in step 1, which is how the cache back-fills for
+meetings synced before it existed — write one entry with
+`"outcome": "written"` plus its `recording_id`, keyed by the `id` and
+`start_utc` the triage result carried, to
+`$SCRATCH/m365_outcomes_written.json`, and record it:
+
+```bash
+python3 "$VAULTLIB" sync m365-record --vault "$VAULT" \
+  --outcomes "$SCRATCH/m365_outcomes_written.json"
+```
+
+This joins the negative outcomes recorded in step 1 — the cache merges
+across calls. A write that failed gets no outcome line; it surfaces again
+next run.
+
 ### 7. Summarize — from disk, not from memory
 
 Count what exists, not what you intended (a lab run once reported
@@ -634,6 +673,7 @@ Count what exists, not what you intended (a lab run once reported
 **Possible cross-adapter duplicates:** {N} — deferred; needs an interactive run
 **Skipped / errors:** {N} (will retry next run)
 **M365 fetches saved:** {N} of {N} listed occurrences answered from the seen-events cache | cache cold (first run)
+**M365 subagents dispatched:** {N} of {N} candidates — the rest had no transcript yet ({N}), a transcript locked in another organization's tenant ({N}), or were already in the vault ({N})
 **Adapters:** inbox ok · plaud ok | REFUSED — signed in as a different account (account-mismatch) | REFUSED — no account bound to this vault yet (no-account-hint) | disabled | unavailable · m365 ok | REFUSED — signed in as a different account (account-mismatch) | REFUSED — no account bound to this vault yet (no-account-hint) | disabled | unavailable
 **Calendar enrichment:** ok | UNAVAILABLE
 **Warnings:** {verbatim} | none
