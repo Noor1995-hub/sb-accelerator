@@ -297,6 +297,27 @@ def release_lock(home) -> None:
         pass
 
 
+def lock_is_live(held: dict, home) -> bool:
+    """Whether a lock read from disk still describes a live instance.
+
+    An adopted lock (cmd_up finding an unlocked-but-running socket) has no
+    pid to check -- `write_lock(home, vault, pid=None)` -- and pid_alive(None)
+    is unconditionally False, so a naive pid check would read every adopted
+    instance as dead the moment it is written: doctor would call it stale,
+    the next `up` would release the lock and drop back to "unidentified
+    socket", and a foreign-vault `up` would take the unlink-and-relaunch
+    branch against an instance that is very much still running. A pid-less
+    lock is treated as live for as long as its socket still answers instead;
+    once the socket is gone too, it reverts to stale like any other lock.
+    """
+    if not held:
+        return False
+    pid = held.get("pid")
+    if pid is not None:
+        return pid_alive(pid)
+    return socket_path(home).exists()
+
+
 # --------------------------------------------------------------------- the guard
 
 def wait_ready(timeout: float = 30.0, **kw) -> None:
@@ -632,7 +653,7 @@ def cmd_doctor(args) -> int:
         home = Path(args.home)
         notes.append(f"probe home: {home}")
         held = read_lock(home)
-        if held and pid_alive(held.get("pid", -1)):
+        if held and lock_is_live(held, home):
             notes.append(f"lock: LIVE pid={held.get('pid')} "
                          f"vault={held.get('vault')} ts={held.get('ts')}")
         elif held:
@@ -713,15 +734,19 @@ def cmd_up(args) -> int:
     check_socket_path(home)
     userdata = home / "userdata"
     fresh_profile = not userdata.exists()
-    userdata.mkdir(parents=True, exist_ok=True)
-    register_vault(userdata, vault)
 
+    # Adjudicate the lock/socket BEFORE writing anything to the profile.
+    # register_vault below is destructive (PROBE_VAULT_ID is one fixed key,
+    # so it replaces whatever session A last wrote) -- every refusal path
+    # above it must fire before that write, or a refused `up --vault B`
+    # would leave A's own profile pointed at B on its way out the door.
+    #
     # Never tear down a live instance to get here — that is another
     # session's Obsidian, possibly mid-tour. Refuse on a foreign live lock,
     # break a stale one automatically, and only launch fresh once neither a
     # live lock nor a live-but-unlocked instance explains the socket.
     held = read_lock(home)
-    if held and pid_alive(held.get("pid", -1)):
+    if held and lock_is_live(held, home):
         if held.get("vault") != str(vault):
             raise ProbeError(
                 f"probe home {home} is already driving a different vault:\n"
@@ -730,10 +755,10 @@ def cmd_up(args) -> int:
                 "  Refusing rather than tearing it down mid-tour -- never kill another\n"
                 "  session's instance (docs/superpowers/lessons.md).\n"
                 "  Fix: wait for that session's `down`, or pass a different --home.")
-        # same vault, live pid: fall through; socket exists so launch is skipped
+        # same vault, live: fall through; socket exists so launch is skipped
     else:
         if held:
-            release_lock(home)  # stale: recorded pid is dead
+            release_lock(home)  # stale: recorded pid is dead (or pid-less and unanswered)
         if socket_path(home).exists():
             # socket with no live lock: legacy instance or crash orphan — verify
             try:
@@ -770,6 +795,9 @@ def cmd_up(args) -> int:
                     socket_path(home).unlink()  # dead/wedged; let launch fire
                 except OSError:
                     pass
+
+    userdata.mkdir(parents=True, exist_ok=True)
+    register_vault(userdata, vault)
 
     if not socket_path(home).exists():
         if fresh_profile:

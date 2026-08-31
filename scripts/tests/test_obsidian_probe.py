@@ -426,6 +426,85 @@ def test_up_warns_before_unlinking_a_socket_that_is_not_answering(
     assert str(home / "userdata") in err, "must name the profile so a human can find it"
 
 
+def test_up_refusal_leaves_the_profile_registry_untouched(monkeypatch, tmp_path, vault):
+    """Regression test for review finding #1: cmd_up used to mkdir userdata
+    and register_vault -- which destructively overwrites the one fixed
+    PROBE_VAULT_ID entry -- before adjudicating the lock. A refused
+    `up --vault B` therefore used to leave session A's own registry pointed
+    at B on its way out. Every refusal must fire before that write."""
+    home = tmp_path / "probe-home"
+    home.mkdir()
+    userdata = home / "userdata"
+    userdata.mkdir()
+    registry = userdata / "obsidian.json"
+    sentinel = (b'{"vaults": {"5b0000000000c1a0": {"path": "/session-a/vault", '
+                b'"open": true}}, "cli": true}')
+    registry.write_bytes(sentinel)
+
+    monkeypatch.setattr(probe, "check_socket_path", lambda h: None)
+    other_vault = tmp_path / "test-vaults" / "other"
+    probe.write_lock(home, other_vault, os.getpid())  # self: definitely alive
+
+    argv = ["--home", str(home), "up", "--vault", str(vault)]
+    with pytest.raises(probe.ProbeError, match="already driving"):
+        probe.cmd_up(args_for(argv))
+
+    assert registry.read_bytes() == sentinel, \
+        "a refused up must not touch the other session's registry"
+
+
+def test_up_refuses_a_foreign_vault_against_an_adopted_lock(monkeypatch, tmp_path, vault):
+    """Regression test for review finding #2: a pid-less adopted lock must
+    still be treated as live while its socket answers, or a foreign-vault
+    `up` demotes it back to "unidentified socket" instead of refusing."""
+    home = tmp_path / "probe-home"
+    home.mkdir()
+    monkeypatch.setattr(probe, "check_socket_path", lambda h: None)
+    probe.socket_path(home).write_text("")
+    probe.write_lock(home, vault, pid=None)  # adopted, as cmd_up itself writes it
+
+    other = tmp_path / "test-vaults" / "other"
+    other.mkdir(parents=True)
+    argv = ["--home", str(home), "up", "--vault", str(other.resolve())]
+    with pytest.raises(probe.ProbeError, match="already driving"):
+        probe.cmd_up(args_for(argv))
+
+
+def test_doctor_reports_an_adopted_live_lock_as_live_not_stale(
+        monkeypatch, tmp_path, vault, capsys):
+    """The other half of finding #2: doctor must not call a live adopted
+    instance stale just because its lock has no pid on record."""
+    home = tmp_path / "probe-home"
+    home.mkdir()
+    monkeypatch.setattr(probe, "check_socket_path", lambda h: None)
+    probe.socket_path(home).write_text("")
+    probe.write_lock(home, vault, pid=None)  # adopted
+    stub_cli(monkeypatch, vault)  # so doctor's follow-up checks stay offline
+
+    probe.cmd_doctor(args_for(["--home", str(home), "doctor"]))
+
+    out = capsys.readouterr().out
+    assert "lock: LIVE" in out
+    assert "lock: stale" not in out
+
+
+def test_doctor_reports_a_pidless_lock_as_stale_once_its_socket_is_gone(
+        monkeypatch, tmp_path, vault, capsys):
+    """The pid-less-is-live exception is narrow: once the socket it was
+    adopted against is gone too, it must revert to an ordinary stale lock,
+    not stay live forever."""
+    home = tmp_path / "probe-home"
+    home.mkdir()
+    monkeypatch.setattr(probe, "check_socket_path", lambda h: None)
+    probe.write_lock(home, vault, pid=None)  # adopted, but no socket present
+
+    probe.cmd_doctor(args_for(["--home", str(home), "doctor"]))
+
+    out = capsys.readouterr().out
+    assert "lock: stale" in out
+    assert "lock: LIVE" not in out
+
+
 # --- cmd_tour (#67: tour output reliability, plus the #75 lock cross-check) ---
 
 def test_tour_resolves_a_relative_out_to_the_invocation_cwd(monkeypatch, tmp_path, vault):
