@@ -214,7 +214,8 @@
         "meetings-30d",
         "key-people",
         "next-milestone",
-        "next-milestone-date"
+        "next-milestone-date",
+        "state-updated"
       ],
       "required": [
         "project-name",

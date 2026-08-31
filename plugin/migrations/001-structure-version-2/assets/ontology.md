@@ -149,7 +149,7 @@ object: project
 required: [project-name, slug, status, project-type, entity, owner, created,
            last-updated]
 optional: [type, parent, stakeholders, meetings-7d, meetings-30d, key-people,
-           next-milestone, next-milestone-date]
+           next-milestone, next-milestone-date, state-updated]
 enums:
   status: [active, paused, completed, cancelled]
   project-type: [initiative, area-of-responsibility]
@@ -158,10 +158,18 @@ body_sections: [Decisions, Open Items, Related Meetings]
 ```
 
 - **Edges:** `parent` (project slug) · `stakeholders[]` (person slugs).
-- **Auto-maintained:** `meetings-7d`, `meetings-30d`, `key-people`.
+- **Auto-maintained:** `meetings-7d`, `meetings-30d`, `key-people`,
+  `state-updated`.
   **Index extras:** `next-milestone`, `next-milestone-date`.
 - `entity` is a slug string joining to an Entity's `slug` (and folder name).
 - Example: `30-projects/acme-industries-operating-model/index.md`
+- `state-updated` is a full ISO timestamp (`YYYY-MM-DDTHH:MM`) written by
+  `project touch` alongside `last-updated`. `last-updated` stays the
+  human-facing day; `state-updated` is what the evening run's update queue
+  compares meeting datetimes against, so a meeting confirmed on the same day
+  the state was last written still queues. Projects that predate the field
+  fall back to a day-granularity comparison that errs toward queuing until
+  their first touch.
 - **`project-type` is one axis: timeboxed vs ongoing.** `initiative` is
   bounded work with an end; `area-of-responsibility` is a standing
   responsibility with no end date. Counterparty is deliberately *not*

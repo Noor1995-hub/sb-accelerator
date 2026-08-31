@@ -10,6 +10,7 @@ parent: meridian-warehouse-pilot-phase-0
 stakeholders: [priya-nathan, leo-marchetti, renee-castillo]
 created: 2026-02-15
 last-updated: 2026-06-01
+state-updated: 2026-06-01T18:30
 meetings-7d: 0
 meetings-30d: 1
 key-people: [priya-nathan, jamie-ellwood, leo-marchetti]
