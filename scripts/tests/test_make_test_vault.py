@@ -4,13 +4,16 @@ synthetic fixture tree would defeat the point of testing the actual
 instantiation."""
 import os
 import tempfile
+from datetime import date
 from pathlib import Path
 
 import pytest
 
 from make_test_vault import TargetNotEmptyError, build_vault, main
+from redate import discover_anchor, weekday_aligned_shift
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+FIXTURE_ROOT = REPO_ROOT / "fixtures" / "demo-vault"
 
 
 def _symlinks_supported() -> bool:
@@ -143,3 +146,58 @@ def test_symlink_failure_degrades_to_warning(tmp_path, monkeypatch):
     warnings = build_vault(target, REPO_ROOT, fresh=True)
     assert (target / "CLAUDE.md").is_file()  # vault still built
     assert any(".claude" in w for w in warnings)
+
+
+def test_cli_accepts_demo_day_flag(tmp_path):
+    target = tmp_path / "vault"
+    demo_day = date(2026, 9, 10)
+    exit_code = main([str(target), "--demo-day", demo_day.isoformat()])
+    assert exit_code == 0
+    anchor = discover_anchor(FIXTURE_ROOT)
+    _, recap_from = weekday_aligned_shift(anchor, demo_day)
+    assert (target / "60-daily-notes" / f"{recap_from.isoformat()}.md").is_file()
+
+
+def test_cli_echoes_demo_day_and_shift(tmp_path, capsys):
+    target = tmp_path / "vault"
+    exit_code = main([str(target), "--demo-day", "2026-09-10"])
+    assert exit_code == 0
+    out = capsys.readouterr().out
+    assert "2026-09-10" in out
+    assert "demo day" in out
+
+
+def test_cli_rejects_malformed_demo_day(tmp_path, capsys):
+    target = tmp_path / "vault"
+    with pytest.raises(SystemExit) as exc_info:
+        main([str(target), "--demo-day", "nope"])
+    # argparse type-conversion failures exit 2 and mention the flag on stderr.
+    assert exc_info.value.code == 2
+    assert "--demo-day" in capsys.readouterr().err
+
+
+def test_cli_default_demo_day_uses_todays_date(tmp_path, monkeypatch):
+    fixed_today = date(2026, 9, 10)
+
+    class FixedDate(date):
+        @classmethod
+        def today(cls):
+            return fixed_today
+
+    monkeypatch.setattr("redate.date", FixedDate)
+    target = tmp_path / "vault"
+    exit_code = main([str(target)])
+    assert exit_code == 0
+    anchor = discover_anchor(FIXTURE_ROOT)
+    _, recap_from = weekday_aligned_shift(anchor, fixed_today)
+    assert (target / "60-daily-notes" / f"{recap_from.isoformat()}.md").is_file()
+
+
+def test_fresh_mode_never_calls_redate(tmp_path, monkeypatch):
+    def fail(*args, **kwargs):
+        pytest.fail("redate_vault must not run in --fresh mode")
+
+    monkeypatch.setattr("redate.redate_vault", fail)
+    target = tmp_path / "vault"
+    exit_code = main([str(target), "--fresh", "--demo-day", "2026-09-10"])
+    assert exit_code == 0

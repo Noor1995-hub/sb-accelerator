@@ -9,19 +9,52 @@ The corpus is the *composed* vault (plugin/template/ + fixtures/demo-vault/), th
 thing make_test_vault.py builds and a human opens, so a placeholder note added
 to plugin/template/ that would wrongly appear in a view fails here.
 """
+from datetime import date
 from pathlib import Path
 
 import pytest
 
 import basesim
+import redate
 from make_test_vault import build_vault
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
+# make_test_vault.py now re-dates the demo fixtures on every fresh=False
+# build (#91), so meeting/decision stems no longer match their committed
+# names literally. Pin a fixed demo day so this suite stays deterministic,
+# and run every hand-verified stem below through the same shift the real
+# build applies, via redate.py's own (independently tested) transform —
+# the row-membership truth below is unchanged, only the filenames are.
+DEMO_DAY = date(2026, 9, 10)
+_ANCHOR = redate.discover_anchor(REPO_ROOT / "fixtures" / "demo-vault")
+_SHIFT_DAYS, _ = redate.weekday_aligned_shift(_ANCHOR, DEMO_DAY)
+
+
+def _shifted(stem: str) -> str:
+    return redate._shifted_stem(stem, _SHIFT_DAYS) or stem
+
+
 ENTITIES = "40-entities/{}/dossier.md"
 PROJECTS = "30-projects/{}/index.md"
-MEETINGS = "20-meetings/{}.md"
 PEOPLE = "50-people/{}.md"
+
+
+def MEETINGS(stem):
+    return f"20-meetings/{_shifted(stem)}.md"
+
+
+def CRM_DECISIONS(stem):
+    return f"30-projects/commercial-ops-crm-modernization/decisions/{_shifted(stem)}.md"
+
+
+def MERIDIAN_DECISIONS(stem):
+    return f"30-projects/meridian-yard-automation-program/decisions/{_shifted(stem)}.md"
+
+
+def NORDBRIDGE_DECISIONS(stem):
+    return f"30-projects/nordbridge-regional-rollout-proposal/decisions/{_shifted(stem)}.md"
+
 
 ALL_ENTITIES = {ENTITIES.format(s) for s in (
     "commercial-operations", "meridian-freight-holdings", "nordbridge-components")}
@@ -29,20 +62,17 @@ ALL_PROJECTS = {PROJECTS.format(s) for s in (
     "commercial-ops-crm-modernization", "commercial-ops-pipeline-governance",
     "meridian-warehouse-pilot-phase-0", "meridian-yard-automation-program",
     "nordbridge-regional-rollout-proposal")}
-CRM_DECISIONS = "30-projects/commercial-ops-crm-modernization/decisions/{}.md"
-MERIDIAN_DECISIONS = "30-projects/meridian-yard-automation-program/decisions/{}.md"
-NORDBRIDGE_DECISIONS = "30-projects/nordbridge-regional-rollout-proposal/decisions/{}.md"
 ALL_DECISIONS = {
-    CRM_DECISIONS.format("2026-04-20-big-bang-cutover-adopted"),
-    CRM_DECISIONS.format("2026-06-01-phased-migration-by-region-adopted"),
-    CRM_DECISIONS.format("2026-06-01-vendor-shortlist-approved"),
-    MERIDIAN_DECISIONS.format("2026-03-10-phased-regional-rollout-adopted"),
-    MERIDIAN_DECISIONS.format("2026-03-10-shared-spares-pool-withdrawn"),
-    MERIDIAN_DECISIONS.format("2026-05-20-single-vendor-strategy-adopted"),
-    NORDBRIDGE_DECISIONS.format("2026-03-02-pilot-site-selection-withdrawn"),
-    NORDBRIDGE_DECISIONS.format("2026-06-12-phase-1-site-nomination-deferred"),
+    CRM_DECISIONS("2026-04-20-big-bang-cutover-adopted"),
+    CRM_DECISIONS("2026-06-01-phased-migration-by-region-adopted"),
+    CRM_DECISIONS("2026-06-01-vendor-shortlist-approved"),
+    MERIDIAN_DECISIONS("2026-03-10-phased-regional-rollout-adopted"),
+    MERIDIAN_DECISIONS("2026-03-10-shared-spares-pool-withdrawn"),
+    MERIDIAN_DECISIONS("2026-05-20-single-vendor-strategy-adopted"),
+    NORDBRIDGE_DECISIONS("2026-03-02-pilot-site-selection-withdrawn"),
+    NORDBRIDGE_DECISIONS("2026-06-12-phase-1-site-nomination-deferred"),
 }
-ALL_MEETINGS = {MEETINGS.format(s) for s in (
+ALL_MEETINGS = {MEETINGS(s) for s in (
     "01-06-26-commercial-ops-status-update", "02-03-26-nordbridge-intro-call",
     "05-06-26-pipeline-governance-review", "10-03-26-meridian-steerco-01",
     "12-06-26-jordan-1on1", "12-06-26-jordan-1on1-v2", "15-04-26-priya-1on1",
@@ -64,19 +94,19 @@ EXPECTED = [
 
     ("30-projects/Decisions.base", "All", ALL_DECISIONS),
     ("30-projects/Decisions.base", "Active", {
-        CRM_DECISIONS.format("2026-06-01-vendor-shortlist-approved"),
-        CRM_DECISIONS.format("2026-06-01-phased-migration-by-region-adopted"),
-        MERIDIAN_DECISIONS.format("2026-05-20-single-vendor-strategy-adopted"),
-        NORDBRIDGE_DECISIONS.format("2026-06-12-phase-1-site-nomination-deferred"),
+        CRM_DECISIONS("2026-06-01-vendor-shortlist-approved"),
+        CRM_DECISIONS("2026-06-01-phased-migration-by-region-adopted"),
+        MERIDIAN_DECISIONS("2026-05-20-single-vendor-strategy-adopted"),
+        NORDBRIDGE_DECISIONS("2026-06-12-phase-1-site-nomination-deferred"),
     }),
     # The unattended-capture queue: three decisions written by the pipeline
     # and not yet validated by the vault owner/EA. The absence-tolerant
     # `reviewed != true` filter would also catch pre-0.2.0 notes that carry
     # no reviewed key at all.
     ("30-projects/Decisions.base", "Needs review", {
-        CRM_DECISIONS.format("2026-06-01-vendor-shortlist-approved"),
-        CRM_DECISIONS.format("2026-06-01-phased-migration-by-region-adopted"),
-        NORDBRIDGE_DECISIONS.format("2026-06-12-phase-1-site-nomination-deferred"),
+        CRM_DECISIONS("2026-06-01-vendor-shortlist-approved"),
+        CRM_DECISIONS("2026-06-01-phased-migration-by-region-adopted"),
+        NORDBRIDGE_DECISIONS("2026-06-12-phase-1-site-nomination-deferred"),
     }),
 
     ("20-meetings/Meetings.base", "All Meetings", ALL_MEETINGS),
@@ -88,8 +118,8 @@ EXPECTED = [
     # Triage alongside the unreviewed intro call, flagged by its ⚠ Duplicate
     # of column rather than by a status of its own.
     ("20-meetings/Meetings.base", "Triage", {
-        MEETINGS.format("02-03-26-nordbridge-intro-call"),
-        MEETINGS.format("12-06-26-jordan-1on1-v2"),
+        MEETINGS("02-03-26-nordbridge-intro-call"),
+        MEETINGS("12-06-26-jordan-1on1-v2"),
     }),
 
     ("50-people/People.base", "All", ALL_PEOPLE),
@@ -102,9 +132,10 @@ BASE_FILES = sorted({base for base, _, _ in EXPECTED})
 
 @pytest.fixture(scope="module")
 def vault(tmp_path_factory):
-    """plugin/template/ + fixtures/demo-vault/, composed exactly as a human's is."""
+    """plugin/template/ + fixtures/demo-vault/, composed exactly as a human's is
+    (re-dated to the fixed DEMO_DAY above so the row set stays deterministic)."""
     target = tmp_path_factory.mktemp("bases") / "vault"
-    build_vault(target, REPO_ROOT, fresh=False)
+    build_vault(target, REPO_ROOT, fresh=False, demo_day=DEMO_DAY)
     return target
 
 
