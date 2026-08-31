@@ -275,6 +275,8 @@ def test_sync_recordings_worker_contract_carries_the_fetch_mechanics():
         "step 1 must forbid the orchestrator fetching")
     assert "next_cursor" not in step1, (
         "pagination mechanics belong to the worker contract, not step 1")
+    assert "never fetched in this context" in step1, (
+        "step 1 must state the M365 transcript is worker-fetched")
     ref = read_ref("sync-recordings", "worker-contract.md")
     for phrase in ("next_cursor", "transcript_url", "plaud reassemble",
                    "m365 reassemble", "sync collide", "meeting write",

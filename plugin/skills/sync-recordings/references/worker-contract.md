@@ -101,7 +101,11 @@ without re-extraction.
 
 ## Extract and write
 
-Read `references/payload-contract.md` (its path is in your prompt) and draft
+Extract from the blob file the `reassemble` result named — never from the raw
+transcript files you wrote to scratch: the M365 one is unparsed WEBVTT, and
+for a recurring series it may carry other occurrences' transcripts (an inbox
+item has no blob: extract from the file you were given). Read
+`references/payload-contract.md` (its path is in your prompt) and draft
 the payload to `$SCRATCH/<stem>.payload.json`: content fields from the
 transcript; every routing field copied from your prompt unchanged; `date` is
 `recorded_local` unchanged and `recording-duration` is `duration_min`. When

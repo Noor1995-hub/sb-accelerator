@@ -525,8 +525,9 @@ Pass each worker *paths and decisions*, not content:
 - its recording reference and scratch stem: Plaud — the file id and
   `$SCRATCH/rec_N.meta.json`; M365 — `$SCRATCH/m365_event_<n>.json` and the
   `transcript_url` from `m365 ids`, verbatim; inbox — the file's path, its
-  `recording_id` from `sync scan`, and its date read from the file's own
-  content or header;
+  `recording_id` from `sync scan`, its date read from the file's own content
+  or header, and its scratch stem — the inbox file's own name stem (its
+  payload file `<stem>.payload.json` is swept by pattern like the rest);
 - the routing you decided: `projects`, attendee slugs, `confidence` +
   `confidence-reasons`, `calendar_match`, `calendar-subject` (always
   non-empty — the matched event's subject, or the item's own subject or a
@@ -569,7 +570,9 @@ never spawn in the background and then loop checking on it.
   adapters; the worker's window check can, and it drafted its payload
   without writing. Interactively: show both notes and ask once — "write it
   anyway" is `meeting write --vault "$VAULT" --note "<path>"` right here,
-  no re-extraction; "drop it" is `sync skip --id m365:<hex> --reason "same
+  no re-extraction — then include a `written` entry for it (with its
+  `recording_id`) in the batch outcomes you bank below; "drop it" is
+  `sync skip --id m365:<hex> --reason "same
   meeting already synced as <existing id>"`, which banks as a `"skipped"`
   outcome. Under `--unattended`: neither — count it in the summary's
   cross-adapter duplicates line; it defers until an interactive run
@@ -624,8 +627,8 @@ Count what exists, not what you intended (a lab run once reported
 **Possible cross-adapter duplicates:** {N} — deferred; needs an interactive run
 **Skipped / errors:** {N} (will retry next run)
 **M365 fetches saved:** {N} of {N} listed occurrences answered from the seen-events cache | cache cold (first run)
-**Workers dispatched:** {N} ({N} plaud · {N} m365 · {N} inbox) — m365 candidates not dispatched had no transcript URL yet ({N}), were already in the vault ({N}), or were answered by the cache ({N}); worker outcomes: {N} written · {N} no-transcript · {N} forbidden · {N} fetch-error
-**Adapters:** inbox ok · plaud ok | REFUSED — signed in as a different account (account-mismatch) | REFUSED — no account bound to this vault yet (no-account-hint) | disabled | unavailable · m365 ok | REFUSED — signed in as a different account (account-mismatch) | REFUSED — no account bound to this vault yet (no-account-hint) | disabled | unavailable
+**Workers dispatched:** {N} ({N} plaud · {N} m365 · {N} inbox) — m365 candidates not dispatched had no transcript URL yet ({N}), were already in the vault ({N}), or were answered by the cache ({N}); worker outcomes: {N} written · {N} no-transcript · {N} forbidden · {N} fetch-error · {N} auth-error
+**Adapters:** inbox ok · plaud ok | REFUSED — signed in as a different account (account-mismatch) | REFUSED — no account bound to this vault yet (no-account-hint) | disabled | unavailable | STOPPED mid-run — connector wants re-authentication (auth-error) · m365 ok | REFUSED — signed in as a different account (account-mismatch) | REFUSED — no account bound to this vault yet (no-account-hint) | disabled | unavailable | STOPPED mid-run — connector wants re-authentication (auth-error)
 **Calendar enrichment:** ok | UNAVAILABLE
 **Warnings:** {verbatim} | none
 ```
