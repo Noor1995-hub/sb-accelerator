@@ -107,11 +107,12 @@ python3 "$VAULTLIB" config read --vault "$VAULT"
   `playbooks/provisioning-runbook.md`. Do not offer to write the missing
   files.
 - **`ok: true`** — carry `config` and `missing` forward. On a fresh vault
-  `missing` is exactly `["owner", "timezone"]`; that is the honest state,
-  not an error. An account hint only joins the list once its adapter is
-  enabled, so both connectors being unbound shows up as `enabled: false` in
-  `config`, never in `missing` — phase 2 reads the adapter entries, not this
-  list.
+  `missing` is exactly `["owner", "sync.start-date", "timezone"]`; that is
+  the honest state, not an error — this skill fills all three, the start
+  date right after owner and timezone below. An account hint only joins the
+  list once its adapter is enabled, so both connectors being unbound shows
+  up as `enabled: false` in `config`, never in `missing` — phase 2 reads
+  the adapter entries, not this list.
 
 ```bash
 python3 "$VAULTLIB" migrate status --vault "$VAULT"

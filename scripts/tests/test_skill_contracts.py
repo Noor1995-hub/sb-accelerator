@@ -240,11 +240,26 @@ def test_sync_recordings_states_the_start_date_bound():
         "the clamp only holds when the skill passes the vault")
 
 
-@pytest.mark.parametrize("name", ["setup-my-brain", "provision-vault"])
+@pytest.mark.parametrize("name", ["setup-my-brain", "provision-vault",
+                                  "upgrade-vault"])
 def test_provisioning_writes_the_sync_start_date(name):
+    # upgrade-vault is the tune-up path the CHANGELOG points pre-existing
+    # vaults at; it must resolve the entry too, not just report it.
     text = read_skill(name)
     assert "--field sync.start-date" in text, (
-        f"{name} must stamp the vault's horizon at provisioning (#110)")
+        f"{name} must stamp the vault's horizon (#110)")
+
+
+@pytest.mark.parametrize("name", ["setup-my-brain", "upgrade-vault"])
+def test_default_config_missing_list_matches_config_read(name):
+    """Both skills teach the agent what a template-default vault's `missing`
+    looks like, as a hard "exactly" — a stale list reads as an anomaly at the
+    exact moment the skill is telling the agent to trust it."""
+    text = read_skill(name)
+    assert '`["owner", "sync.start-date", "timezone"]`' in text, (
+        f"{name}: the fresh-vault missing list drifted from config.read()")
+    assert '`["owner", "timezone"]`' not in text, (
+        f"{name}: still claims the pre-#110 two-entry missing list")
 
 
 def test_sync_recordings_routes_non_meetings_to_a_type_note():
