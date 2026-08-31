@@ -10,6 +10,7 @@ IP that stays home.
 | `pre-flight-checklist.md` | What must be true before an engagement — qualifying items first, then setup tasks, plus the degradation ladder when one fails |
 | `provisioning-runbook.md` | Setup day at the client: instantiating the vault, provisioning Obsidian, the symlink, sync exclusions, handover |
 | `plugin-distribution.md` | How the plugin reaches a client machine: marketplaces, the five delivery paths, pinning, and the release train |
+| `e2e-round-2-runbook.md` | The Wave 2 anchor activity: tune-up the internal DryRun vault via the real `/upgrade-vault` path, rehearse the full daily loop, run the visual tier, then watch one real week (#107) |
 
 Read them in that order — the checklist decides whether to proceed, the
 runbook executes, and distribution is the one decision the other two both
