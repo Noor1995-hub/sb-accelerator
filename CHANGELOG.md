@@ -19,7 +19,7 @@ delivers them.
   Active view used to hide the `Updated` column off the right edge — the
   wide project-type values ate the row's width first. The column order now
   puts type (already shown in the group header) last, and a render check
-  pins `Updated` staying on screen. (#PLACEHOLDER)
+  pins `Updated` staying on screen. (#115)
 - **A pipe you type into a dossier table cell no longer deletes the rest of
   the cell.** Previously, writing `wants a | b comparison` by hand into a
   Stakeholders or Engagements cell made the next `/update-entity` write
