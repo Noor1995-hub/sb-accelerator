@@ -153,10 +153,15 @@ def build_parser() -> argparse.ArgumentParser:
     scaffold.add_argument("--source", help="one line for the Context callout")
 
     proj_touch = projects_sub.add_parser(
-        "touch", help="bump last-updated (and optionally the milestone pair)")
+        "touch", help="bump last-updated and state-updated (and optionally "
+                      "the milestone pair)")
     _add_vault_argument(proj_touch)
     proj_touch.add_argument("--slug", required=True)
     proj_touch.add_argument("--date", help="ISO date; defaults to today")
+    proj_touch.add_argument(
+        "--timestamp",
+        help="ISO datetime YYYY-MM-DDTHH:MM; defaults to now — when the "
+             "project's state was actually synthesized")
     proj_touch.add_argument("--next-milestone", dest="next_milestone",
                             help="one line; requires --next-milestone-date")
     proj_touch.add_argument("--next-milestone-date", dest="next_milestone_date",
@@ -470,6 +475,7 @@ def _dispatch(args: argparse.Namespace) -> int:
         if args.action == "touch":
             return _ok(project.touch(
                 root, slug=args.slug, date_iso=vault.today_iso(args.date),
+                timestamp=args.timestamp,
                 next_milestone=args.next_milestone,
                 next_milestone_date=args.next_milestone_date,
             ))

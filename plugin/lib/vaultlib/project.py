@@ -6,6 +6,8 @@ level, an area given a parent.
 """
 from __future__ import annotations
 
+import re
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
@@ -14,6 +16,9 @@ from . import markdown, naming, schema, vault
 PROJECTS_DIR = vault.PROJECTS_DIR
 ENTITIES_DIR = vault.ENTITIES_DIR
 PROJECT_QUOTE_KEYS = frozenset({"project-name", "next-milestone"})
+# Seconds are accepted on the way in (a caller may pass a fuller stamp) but
+# never written — the field is minute-precision, like a meeting's `date`.
+ISO_DATETIME_RE = re.compile(r"\A\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?\Z")
 
 _PLACEHOLDER = "_none yet_"
 
@@ -260,14 +265,40 @@ def _require_iso_date(value, label: str) -> str:
     return text
 
 
-def touch(root, *, slug: str, date_iso: str,
+def _require_iso_datetime(value, label: str) -> str:
+    """A full ISO timestamp to the minute, or a refusal naming the flag.
+
+    A bare date is rejected on purpose: it would stamp 00:00 and put the
+    threshold *before* every meeting of that day, reintroducing the churn the
+    timestamp exists to stop. The regex pins the shape and fromisoformat
+    checks the value is a real moment (`2026-06-12T99:99` matches the shape).
+    """
+    text = str(value or "").strip()
+    if not ISO_DATETIME_RE.match(text):
+        raise ProjectError(
+            f"{label} {value!r} must be an ISO datetime YYYY-MM-DDTHH:MM "
+            "(a bare date is refused — the time is the point)")
+    try:
+        datetime.fromisoformat(text)
+    except ValueError as exc:
+        raise ProjectError(f"{label} {value!r} is not a real moment: {exc}") from exc
+    return text
+
+
+def touch(root, *, slug: str, date_iso: str, timestamp: Optional[str] = None,
           next_milestone=None, next_milestone_date=None) -> dict:
     """Bump the auto-maintained frontmatter of a project-state update.
 
     Stage-5 subagents own the Now callout and Open Items as body prose; the
     frontmatter half comes through here so no model ever authors it. Only
-    last-updated (and, together, the milestone pair) can change; every other
-    byte of index.md stays put.
+    last-updated, state-updated (and, together, the milestone pair) can
+    change; every other byte of index.md stays put.
+
+    `last-updated` stays the human-facing day. `state-updated` records the
+    minute the state was actually synthesized, and that is what the evening
+    run's update queue compares meeting datetimes against — a day was too
+    coarse, so a meeting confirmed later the same day used to be dropped from
+    the queue forever (issue #98). `timestamp` defaults to now.
     """
     try:
         naming.validate_slug(str(slug or "").strip())
@@ -280,6 +311,10 @@ def touch(root, *, slug: str, date_iso: str,
             "create it first with /new-project"
         )
     stamped = _require_iso_date(date_iso, "date")
+    if timestamp is None:
+        state_stamp = datetime.now().isoformat(timespec="minutes")
+    else:
+        state_stamp = _require_iso_datetime(timestamp, "--timestamp")
     if (next_milestone is None) != (next_milestone_date is None):
         raise ProjectError(
             "next-milestone and next-milestone-date travel together — "
@@ -287,6 +322,7 @@ def touch(root, *, slug: str, date_iso: str,
         )
     text = index_path.read_text(encoding="utf-8")
     updated = markdown.upsert_scalar_field(text, "last-updated", stamped)
+    updated = markdown.upsert_scalar_field(updated, "state-updated", state_stamp)
     milestone = None
     milestone_date = None
     if next_milestone is not None:
@@ -310,6 +346,7 @@ def touch(root, *, slug: str, date_iso: str,
         "slug": slug,
         "path": f"{PROJECTS_DIR}/{slug}/index.md",
         "last-updated": stamped,
+        "state-updated": state_stamp,
         "next-milestone": milestone,
         "next-milestone-date": milestone_date,
         "changed": changed,

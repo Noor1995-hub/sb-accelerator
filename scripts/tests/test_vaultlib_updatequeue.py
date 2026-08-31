@@ -8,12 +8,12 @@ excluded from key-people by slug, never by display name.
 import json
 import subprocess
 import sys
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 import pytest
 
-from vaultlib import updatequeue
+from vaultlib import project, updatequeue
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CLI = REPO_ROOT / "plugin" / "lib" / "vaultlib" / "cli.py"
@@ -33,13 +33,16 @@ def write_person(root: Path, slug: str) -> None:
 
 
 def write_project(root: Path, slug: str, *, status="active",
-                  last_updated="2026-06-01", with_metrics=True) -> Path:
+                  last_updated="2026-06-01", state_updated=None,
+                  with_metrics=True) -> Path:
     folder = root / "30-projects" / slug
     folder.mkdir(parents=True, exist_ok=True)
     lines = ["---", "type: project", f'project-name: "{slug}"', f"slug: {slug}",
              f"status: {status}", "project-type: initiative", "entity: acme",
              "owner: owner-morgan", "created: 2026-01-01",
              f"last-updated: {last_updated}"]
+    if state_updated is not None:
+        lines += [f"state-updated: {state_updated}"]
     if with_metrics:
         lines += ["meetings-7d: 9", "meetings-30d: 9", "key-people: [stale-slug]"]
     lines += ["---", "", "## Decisions", "", "## Open Items", "",
@@ -120,12 +123,13 @@ def test_queue_membership_and_projection(tmp_path):
     root = make_vault(tmp_path)
     write_person(root, "ana-fields")
     write_project(root, "alpha", last_updated="2026-06-01")
-    write_project(root, "beta", last_updated="2026-06-12")
+    write_project(root, "beta", last_updated="2026-06-12",
+                  state_updated="2026-06-12T18:00")
     write_project(root, "gamma", status="paused", last_updated="2026-01-01")
     write_decision(root, "alpha", "2026-06-02-a-prior-decision")
     write_meeting(root, "new-alpha", date_value="2026-06-10T10:00",
                   projects=("alpha",), attendees=("ana-fields", "owner-morgan"))
-    # Dated exactly on beta's last-updated day: not strictly after -> not queued.
+    # Same day as beta's state write, but before it -> not queued.
     write_meeting(root, "old-beta", date_value="2026-06-12T10:00",
                   projects=("beta",), attendees=("ana-fields",))
     # Paused projects are never queued, even with newer meetings.
@@ -139,6 +143,7 @@ def test_queue_membership_and_projection(tmp_path):
     assert entry["indexPath"] == "30-projects/alpha/index.md"
     assert entry["decisionsDir"] == "30-projects/alpha/decisions/"
     assert entry["lastUpdated"] == "2026-06-01"
+    assert entry["stateUpdated"] is None  # never touched -> day-level fallback
     assert entry["newCount"] == 1
     assert entry["newFiles"] == ["20-meetings/new-alpha.md"]
     assert entry["existingDecisions"][0]["stem"] == "2026-06-02-a-prior-decision"
@@ -218,16 +223,129 @@ def test_owner_slug_is_validated(tmp_path):
 
 def test_self_check_trips_on_a_silent_skip():
     confirmed = [{"file": "20-meetings/m.md", "date": date(2026, 6, 10),
+                  "datetime": datetime(2026, 6, 10, 10, 0),
                   "projects": ["alpha"], "attendees": []}]
     warnings = updatequeue.self_check(
         confirmed, queued_slugs=set(),
-        active_last_updated={"alpha": date(2026, 6, 1)})
+        active_stamps={"alpha": (date(2026, 6, 1), None)})
     assert len(warnings) == 1 and "SELF-CHECK" in warnings[0]
-    # Queued or up-to-date projects never trip it.
+    # Queued, up-to-date, or non-active projects never trip it.
     assert updatequeue.self_check(confirmed, {"alpha"},
-                                  {"alpha": date(2026, 6, 1)}) == []
+                                  {"alpha": (date(2026, 6, 1), None)}) == []
     assert updatequeue.self_check(confirmed, set(),
-                                  {"alpha": date(2026, 6, 12)}) == []
+                                  {"alpha": (date(2026, 6, 12), None)}) == []
+    assert updatequeue.self_check(confirmed, set(), {}) == []
+
+
+def test_same_day_meeting_queues_when_no_state_updated(tmp_path):
+    """Issue #98: the queue compared days with a strict `>`, so a meeting
+    confirmed on the same day the project state was last written was dropped
+    from the queue forever. With no `state-updated` the threshold falls back
+    to the last-updated day at 00:00 — day-granularity `>=`, erring toward
+    queuing."""
+    root = make_vault(tmp_path)
+    write_project(root, "alpha", last_updated="2026-06-12")
+    write_meeting(root, "same-day", date_value="2026-06-12T10:00",
+                  projects=("alpha",))
+    result = updatequeue.run(root, today="2026-06-12", owner="owner-morgan")
+    queue = result["projectsNeedingUpdate"]
+    assert [entry["slug"] for entry in queue] == ["alpha"]
+    assert queue[0]["newFiles"] == ["20-meetings/same-day.md"]
+    assert queue[0]["stateUpdated"] is None
+
+
+def test_state_updated_timestamp_splits_a_day(tmp_path):
+    """Once the stamp exists the comparison is by the minute, so the same day
+    has a before and an after."""
+    root = make_vault(tmp_path)
+    write_project(root, "alpha", last_updated="2026-06-12",
+                  state_updated="2026-06-12T18:00")
+    write_meeting(root, "before-the-write", date_value="2026-06-12T10:00",
+                  projects=("alpha",))
+    write_meeting(root, "after-the-write", date_value="2026-06-12T19:00",
+                  projects=("alpha",))
+    result = updatequeue.run(root, today="2026-06-12", owner="owner-morgan")
+    queue = result["projectsNeedingUpdate"]
+    assert [entry["slug"] for entry in queue] == ["alpha"]
+    assert queue[0]["newCount"] == 1
+    assert queue[0]["newFiles"] == ["20-meetings/after-the-write.md"]
+    assert queue[0]["stateUpdated"] == "2026-06-12T18:00"
+    assert result["warnings"] == []
+
+
+def test_date_only_meeting_errs_toward_queuing(tmp_path):
+    """A bare `date: YYYY-MM-DD` carries no time. Reading it as end-of-day
+    means an untimed meeting queues rather than vanishing."""
+    root = make_vault(tmp_path)
+    write_project(root, "alpha", last_updated="2026-06-12",
+                  state_updated="2026-06-12T18:00")
+    write_meeting(root, "untimed", date_value="2026-06-12",
+                  projects=("alpha",))
+    result = updatequeue.run(root, today="2026-06-12", owner="owner-morgan")
+    assert [entry["slug"]
+            for entry in result["projectsNeedingUpdate"]] == ["alpha"]
+
+
+def test_unparseable_state_updated_warns_and_falls_back(tmp_path):
+    """A garbage stamp must not silence the project the way an unparseable
+    last-updated does — warn about the field and fall back to the day."""
+    root = make_vault(tmp_path)
+    write_project(root, "alpha", last_updated="2026-06-12",
+                  state_updated="garbage")
+    write_meeting(root, "same-day", date_value="2026-06-12T10:00",
+                  projects=("alpha",))
+    result = updatequeue.run(root, today="2026-06-12", owner="owner-morgan")
+    assert any("state-updated" in w and "alpha" in w
+               for w in result["warnings"])
+    assert [entry["slug"]
+            for entry in result["projectsNeedingUpdate"]] == ["alpha"]
+
+
+def test_touch_then_rerun_converges(tmp_path):
+    """The stamp is what stops churn: once `project touch` records the moment
+    the state was synthesized, the same meeting no longer queues."""
+    root = make_vault(tmp_path)
+    write_project(root, "alpha", last_updated="2026-06-12")
+    write_meeting(root, "same-day", date_value="2026-06-12T10:00",
+                  projects=("alpha",))
+    first = updatequeue.run(root, today="2026-06-12", owner="owner-morgan")
+    assert [entry["slug"]
+            for entry in first["projectsNeedingUpdate"]] == ["alpha"]
+    project.touch(root, slug="alpha", date_iso="2026-06-12",
+                  timestamp="2026-06-12T19:30")
+    second = updatequeue.run(root, today="2026-06-12", owner="owner-morgan")
+    assert second["projectsNeedingUpdate"] == []
+    assert [w for w in second["warnings"] if "SELF-CHECK" in w] == []
+
+
+def test_self_check_catches_the_day_granularity_drop():
+    """Independence is the point: the sweep is a day-granularity `>=` and only
+    a recorded state-updated timestamp suppresses it — so the strict-`>` day
+    comparison the queue used to run gets caught here rather than passing
+    silently, which is what the two passes are for."""
+    confirmed = [{"file": "20-meetings/m.md", "date": date(2026, 6, 12),
+                  "datetime": datetime(2026, 6, 12, 10, 0),
+                  "projects": ["alpha"], "attendees": []}]
+    warnings = updatequeue.self_check(
+        confirmed, queued_slugs=set(),
+        active_stamps={"alpha": (date(2026, 6, 12), None)})
+    assert len(warnings) == 1 and "SELF-CHECK" in warnings[0]
+    # A state-updated timestamp after the meeting is the one piece of evidence
+    # that suppresses the flag.
+    assert updatequeue.self_check(
+        confirmed, set(),
+        {"alpha": (date(2026, 6, 12), datetime(2026, 6, 12, 18, 0))}) == []
+
+
+def test_self_check_flags_unparseable_last_updated(tmp_path):
+    """A project that can never be queued is the worst silent skip of all, so
+    the self-check names it instead of skipping it."""
+    confirmed = [{"file": "20-meetings/m.md", "date": date(2026, 6, 12),
+                  "datetime": datetime(2026, 6, 12, 10, 0),
+                  "projects": ["alpha"], "attendees": []}]
+    warnings = updatequeue.self_check(confirmed, set(), {"alpha": None})
+    assert len(warnings) == 1
+    assert "unparseable" in warnings[0] and "alpha" in warnings[0]
 
 
 def test_cli_update_queue_envelope(tmp_path):
