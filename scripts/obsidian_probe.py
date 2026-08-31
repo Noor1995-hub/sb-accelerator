@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import hashlib
 import json
 import os
 import shutil
@@ -47,10 +48,14 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 # Short by necessity, not taste: the CLI binds "$HOME/.obsidian-cli.sock" and
 # macOS caps a unix socket path (sun_path) at 104 bytes. A rig inside the repo
 # — .../.claude/worktrees/<name>/.obsidian-probe/home — is 127 chars and the
-# app dies with `listen EINVAL`. Living outside the repo also means the
-# one-time "enable the CLI" click survives every worktree and rebuild.
+# app dies with `listen EINVAL`. This is the base that derive_probe_home()
+# hangs its per-worktree homes off of, and the fallback when someone passes
+# --home explicitly. Trust (both the CLI-enabled toggle and Restricted Mode)
+# is per-profile, not per-path — living outside the repo does not make it
+# cross-worktree; a fresh derived home still needs its own one-time clicks.
 DEFAULT_PROBE_HOME = Path.home() / ".sb-probe"
 SOCKET_NAME = ".obsidian-cli.sock"
+LOCK_NAME = "probe.lock"
 SUN_PATH_MAX = 104
 
 # The probe always registers its vault under this one id, whatever the vault's
@@ -205,6 +210,112 @@ def check_socket_path(home: Path) -> None:
             f"probe HOME is too deep: the socket path is {len(p)} bytes and "
             f"macOS caps unix socket paths at {SUN_PATH_MAX}.\n  {p}\n"
             f"  Fix: use a shorter --home (the default {DEFAULT_PROBE_HOME} is safe).")
+
+
+def derive_probe_home(repo_root: Path = REPO_ROOT) -> Path:
+    """One probe profile per worktree checkout. Hashed, not the literal path
+    embedded, so the socket stays well under the 104-byte sun_path cap
+    regardless of how deep the worktree lives (see check_socket_path)."""
+    digest = hashlib.sha256(str(repo_root).encode()).hexdigest()[:10]
+    return DEFAULT_PROBE_HOME.parent / f"{DEFAULT_PROBE_HOME.name}-{digest}"
+
+
+def resolve_home(args) -> None:
+    """Fill in the derived default only when --home was not given explicitly."""
+    if getattr(args, "home", None) is None:
+        args.home = str(derive_probe_home())
+
+
+# ------------------------------------------------------------------- the lock
+
+def lock_path(home: Path) -> Path:
+    return Path(home) / LOCK_NAME
+
+
+def read_lock(home) -> Optional[dict]:
+    """None when no lock is held, or its file is not valid JSON."""
+    p = lock_path(home)
+    if not p.is_file():
+        return None
+    try:
+        return json.loads(p.read_text())
+    except ValueError:
+        return None
+
+
+def pid_alive(pid) -> bool:
+    """Best-effort liveness of a lock's recorded pid.
+
+    The probe only ever runs the *app* on macOS, but this module's unit tests
+    run cross-platform in CI, and on Windows `os.kill(pid, 0)` does not mean
+    "signal 0" the way POSIX overloads it to mean "just check" -- `0` is
+    `CTRL_C_EVENT`, so it sends a real Ctrl-C to the process group. A test
+    that calls `pid_alive(os.getpid())` would interrupt the test run itself.
+    So Windows gets its own liveness check via the Win32 API instead of
+    os.kill, even though nothing here launches Obsidian on Windows.
+    """
+    if not pid or pid <= 0:
+        return False
+    if sys.platform == "win32":
+        import ctypes
+        from ctypes import wintypes
+        PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+        STILL_ACTIVE = 259  # a process that happened to exit with code 259
+        # reads as alive -- an acceptable false positive for a dev tool.
+        kernel32 = ctypes.windll.kernel32
+        handle = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+        if not handle:
+            return False
+        try:
+            code = wintypes.DWORD()
+            ok = kernel32.GetExitCodeProcess(handle, ctypes.byref(code))
+            return bool(ok) and code.value == STILL_ACTIVE
+        finally:
+            kernel32.CloseHandle(handle)
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True  # exists, just not ours
+    except OSError:
+        return False
+    return True
+
+
+def write_lock(home, vault, pid) -> None:
+    home = Path(home)
+    home.mkdir(parents=True, exist_ok=True)
+    lock_path(home).write_text(json.dumps(
+        {"pid": pid, "vault": str(vault), "ts": time.time()}))
+
+
+def release_lock(home) -> None:
+    try:
+        lock_path(home).unlink(missing_ok=True)
+    except OSError:
+        pass
+
+
+def lock_is_live(held: dict, home) -> bool:
+    """Whether a lock read from disk still describes a live instance.
+
+    An adopted lock (cmd_up finding an unlocked-but-running socket) has no
+    pid to check -- `write_lock(home, vault, pid=None)` -- and pid_alive(None)
+    is unconditionally False, so a naive pid check would read every adopted
+    instance as dead the moment it is written: doctor would call it stale,
+    the next `up` would release the lock and drop back to "unidentified
+    socket", and a foreign-vault `up` would take the unlink-and-relaunch
+    branch against an instance that is very much still running. A pid-less
+    lock is treated as live for as long as its socket still answers instead;
+    once the socket is gone too, it reverts to stale like any other lock.
+    """
+    if not held:
+        return False
+    pid = held.get("pid")
+    if pid is not None:
+        return pid_alive(pid)
+    return socket_path(home).exists()
 
 
 # --------------------------------------------------------------------- the guard
@@ -519,7 +630,6 @@ def _instance_kw(args) -> dict:
 
 
 def cmd_doctor(args) -> int:
-    home = Path(args.home)
     problems = []
     notes = []
 
@@ -540,6 +650,17 @@ def cmd_doctor(args) -> int:
                      "applies, but screenshots capture your window and navigation "
                      "moves your session.")
     else:
+        home = Path(args.home)
+        notes.append(f"probe home: {home}")
+        held = read_lock(home)
+        if held and lock_is_live(held, home):
+            notes.append(f"lock: LIVE pid={held.get('pid')} "
+                         f"vault={held.get('vault')} ts={held.get('ts')}")
+        elif held:
+            notes.append(f"lock: stale pid={held.get('pid')} "
+                         f"vault={held.get('vault')} ts={held.get('ts')}")
+        else:
+            notes.append("lock: none held")
         try:
             check_socket_path(home)
         except ProbeError as exc:
@@ -581,7 +702,6 @@ def cmd_doctor(args) -> int:
 
 
 def cmd_up(args) -> int:
-    home = Path(args.home)
     vault = Path(args.vault).resolve()
     if not vault.is_dir():
         raise ProbeError(f"no such vault directory: {vault}")
@@ -610,19 +730,90 @@ def cmd_up(args) -> int:
         print(f"using your own instance, driving {base}")
         return 0
 
+    home = Path(args.home)
     check_socket_path(home)
     userdata = home / "userdata"
+    fresh_profile = not userdata.exists()
+
+    # Adjudicate the lock/socket BEFORE writing anything to the profile.
+    # register_vault below is destructive (PROBE_VAULT_ID is one fixed key,
+    # so it replaces whatever session A last wrote) -- every refusal path
+    # above it must fire before that write, or a refused `up --vault B`
+    # would leave A's own profile pointed at B on its way out the door.
+    #
+    # Never tear down a live instance to get here — that is another
+    # session's Obsidian, possibly mid-tour. Refuse on a foreign live lock,
+    # break a stale one automatically, and only launch fresh once neither a
+    # live lock nor a live-but-unlocked instance explains the socket.
+    held = read_lock(home)
+    if held and lock_is_live(held, home):
+        if held.get("vault") != str(vault):
+            raise ProbeError(
+                f"probe home {home} is already driving a different vault:\n"
+                f"    {held.get('vault')}\n"
+                f"  (pid {held.get('pid')}, started {time.ctime(held.get('ts', 0))})\n"
+                "  Refusing rather than tearing it down mid-tour -- never kill another\n"
+                "  session's instance (docs/superpowers/lessons.md).\n"
+                "  Fix: wait for that session's `down`, or pass a different --home.")
+        # same vault, live: fall through; socket exists so launch is skipped
+    else:
+        if held:
+            release_lock(home)  # stale: recorded pid is dead (or pid-less and unanswered)
+        if socket_path(home).exists():
+            # socket with no live lock: legacy instance or crash orphan — verify
+            try:
+                live_vault = resolve_vault_path(home=home)
+            except ProbeError:
+                live_vault = None
+            if live_vault == vault:
+                write_lock(home, vault, pid=None)  # adopt; pid unknown, still tracked
+            elif live_vault is not None:
+                raise ProbeError(
+                    f"probe home {home} has a running instance with no lock on "
+                    f"record, and it is driving {live_vault}, not the requested "
+                    f"{vault}.\n  Refusing to guess. Fix: "
+                    f"`python scripts/obsidian_probe.py --home {home} down`, then retry.")
+            else:
+                # resolve_vault_path raised: the socket is not answering. That
+                # can mean the instance is dead -- or it means "a modal blocks
+                # the CLI socket for the entire instance" (docs/visual-
+                # verification.md) and the window is still very much alive,
+                # just wedged behind a dialog. Unlinking either way is the
+                # only way to let a fresh launch through, but a wedged
+                # instance does not go away because its socket file did --
+                # say so, since after this `down`/`doctor` will report
+                # nothing running while that window still sits there.
+                print(
+                    f"warning: {socket_path(home)} was not answering, so it is "
+                    "being unlinked to let a fresh instance launch. If this "
+                    "was a wedged instance (a modal blocking its CLI socket) "
+                    "rather than a dead one, its window is still running and "
+                    f"will not be reachable via `down` or `doctor` anymore -- "
+                    f"find and quit it by hand (profile at {userdata}).",
+                    file=sys.stderr)
+                try:
+                    socket_path(home).unlink()  # dead/wedged; let launch fire
+                except OSError:
+                    pass
+
     userdata.mkdir(parents=True, exist_ok=True)
     register_vault(userdata, vault)
 
-    if socket_path(home).exists():
-        try:
-            if resolve_vault_path(home=home) != vault:
-                cmd_down(args)
-        except ProbeError:
-            pass
-
     if not socket_path(home).exists():
+        if fresh_profile:
+            # Printed before the launch, not after: a fresh profile is the
+            # one case where the 20s poll below can genuinely need a human,
+            # so the warning has to land before that wait, not as a
+            # postscript to a timeout that already happened.
+            print(
+                f"fresh probe profile at {home} -- the probe window may show "
+                "one of two one-time dialogs before it is ready. Accept "
+                "whichever appears (both are per-profile, not global -- a "
+                "new worktree pays for them again):\n"
+                "  - 'trust author and enable plugins', if this vault carries "
+                "community plugins (Restricted Mode)\n"
+                "  - Settings -> General -> Advanced -> enable 'Command line "
+                "interface', if the CLI toggle seeded from disk didn't take")
         env = dict(os.environ, HOME=str(home))
         # --user-data-dir is what actually defeats Electron's single-instance
         # lock (HOME alone does not: the second launch hands off and exits).
@@ -633,10 +824,13 @@ def cmd_up(args) -> int:
         # offering to reset the default keychain — and any modal wedges the CLI
         # socket. The probe never signs in to anything, so an in-memory keychain
         # costs nothing and leaves the real one untouched.
-        subprocess.Popen([str(OBSIDIAN_BIN), f"--user-data-dir={userdata}",
-                          "--use-mock-keychain", *BACKGROUND_FLAGS],
-                         env=env, stdout=subprocess.DEVNULL,
-                         stderr=subprocess.DEVNULL, start_new_session=True)
+        proc = subprocess.Popen([str(OBSIDIAN_BIN), f"--user-data-dir={userdata}",
+                                 "--use-mock-keychain", *BACKGROUND_FLAGS],
+                                env=env, stdout=subprocess.DEVNULL,
+                                stderr=subprocess.DEVNULL, start_new_session=True)
+        # Recorded before the poll below, not after: a second `up` racing this
+        # one during boot must see a live lock, not an empty window.
+        write_lock(home, vault, proc.pid)
         for _ in range(40):
             time.sleep(0.5)
             if socket_path(home).exists():
@@ -644,10 +838,14 @@ def cmd_up(args) -> int:
         else:
             raise ProbeError(
                 f"probe instance never bound {socket_path(home)} within 20s.\n"
-                "  If the probe window is showing 'trust author and enable plugins', "
-                "accept it — turning off Restricted Mode is the one step that cannot "
-                "ship as files. Thanks to the fixed vault id it is asked once per "
-                "profile, not once per vault.")
+                "  A fresh profile can need one of two one-time clicks before "
+                "the socket binds -- look in the probe window for either:\n"
+                "    - 'trust author and enable plugins', if this vault carries "
+                "community plugins (Restricted Mode)\n"
+                "    - Settings -> General -> Advanced -> enable 'Command line "
+                "interface', if the CLI toggle seeded from disk didn't take\n"
+                "  Both are per-profile, so this is once per probe home, not "
+                "once per vault.")
 
     wait_ready(home=home)
     base = guard(home=home)
@@ -663,12 +861,24 @@ def cmd_up(args) -> int:
 def cmd_tour(args) -> int:
     kw = _instance_kw(args)
     vault = guard(**kw)
+    if not args.shared:
+        home = Path(args.home)
+        held = read_lock(home)
+        if held and held.get("vault") not in (None, str(vault)):
+            raise ProbeError(
+                f"lock at {home} records vault {held['vault']!r} but the live "
+                f"instance answered for {vault}. Another session may have taken "
+                "over this home mid-run -- re-run `doctor` before trusting this capture.")
     # Re-cloak in case the window was left showing — a trust dialog just
     # accepted, or a previous --foreground run. Never for --shared: that is
     # the user's own window.
     if not args.shared and not FOREGROUND:
         cloak_window(**kw)
-    out = Path(args.out)
+    # Resolved against the invocation's cwd, not the probe instance's: a
+    # relative --out from a caller in a different directory (a CI-adjacent
+    # wrapper, a different shell) previously landed wherever the process
+    # happened to be chdir'd to, which was easy to get wrong silently.
+    out = Path(args.out).resolve()
     if out.exists():
         shutil.rmtree(out)
     (out / "dom").mkdir(parents=True)
@@ -684,27 +894,40 @@ def cmd_tour(args) -> int:
     cli(["dev:console", "clear"], **kw)
 
     captured = []
+    failed = []
     for s in surfaces(vault):
         open_surface(s, **kw)
         png = out / f"{s['key']}.png"
         capture_png(png, **kw)
-        payload = {"surface": s, "dom": capture_dom(s, **kw)}
+        # capture_png is synchronous — no polling — so the file (or its
+        # absence) is already final by the time we check it. A silently
+        # empty or missing PNG is worse than a loud one: it looks like a
+        # captured surface until someone opens the file.
+        ok = png.is_file() and png.stat().st_size > 0
+        payload = {"surface": s, "dom": capture_dom(s, **kw), "pngCaptured": ok}
         if s["kind"] == "base":
             payload["queryRows"] = query_base(s, **kw)
         (out / "dom" / f"{s['key']}.json").write_text(
             json.dumps(payload, indent=2) + "\n")
-        captured.append(s["key"])
-        print(f"  captured {s['key']}")
+        if ok:
+            captured.append(s["key"])
+            print(f"  captured {s['key']}")
+        else:
+            failed.append(s["key"])
+            print(f"  FAILED  {s['key']} (no screenshot written to {png})",
+                  file=sys.stderr)
 
     (out / "summary.json").write_text(json.dumps({
         "vault": str(vault),
         "window": [args.width, args.height],
         "surfaces": captured,
+        "failedSurfaces": failed,
         "errors": cli(["dev:errors"], **kw),
         "consoleErrors": cli(["dev:console", "level=error"], **kw),
     }, indent=2) + "\n")
-    print(f"\n{len(captured)} surfaces -> {out}")
-    return 0
+    tail = f" ({len(failed)} FAILED: {', '.join(failed)})" if failed else ""
+    print(f"\n{len(captured)} surfaces -> {out}{tail}")
+    return 1 if failed else 0
 
 
 def cmd_down(args) -> int:
@@ -713,22 +936,30 @@ def cmd_down(args) -> int:
         return 0
     home = Path(args.home)
     if not socket_path(home).exists():
+        release_lock(home)  # tidy leftovers
         print("no probe instance running")
         return 0
+    held = read_lock(home)
+    if held:
+        print(f"  stopping pid {held.get('pid')} (vault {held.get('vault')})")
     try:
         eval_js("require('electron').remote.app.quit(); 'quitting'", home=home)
     except ProbeError:
         pass
     time.sleep(2)
+    release_lock(home)
     print("probe instance stopped")
     return 0
 
 
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    p.add_argument("--home", default=str(DEFAULT_PROBE_HOME),
-                   help=f"probe profile dir (default {DEFAULT_PROBE_HOME}); keep it "
-                        "short, macOS caps socket paths at 104 bytes")
+    p.add_argument("--home", default=None,
+                   help="probe profile dir (default: derived per-worktree under "
+                        f"{DEFAULT_PROBE_HOME.parent}, so concurrent checkouts don't "
+                        "fight over one instance -- `doctor` prints the resolved "
+                        "path); pass a value to force a fixed/shared profile. Keep "
+                        "it short either way, macOS caps socket paths at 104 bytes")
     p.add_argument("--shared", action="store_true",
                    help="drive your own Obsidian instead of an isolated one "
                         "(the guard still applies)")
@@ -751,6 +982,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
     args = build_parser().parse_args(argv)
+    resolve_home(args)
     global FOREGROUND
     FOREGROUND = bool(getattr(args, "foreground", False))
     handler = {"doctor": cmd_doctor, "up": cmd_up, "tour": cmd_tour,

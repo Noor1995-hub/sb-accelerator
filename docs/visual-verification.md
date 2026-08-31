@@ -81,6 +81,12 @@ python scripts/obsidian_probe.py down
 
 `/visual-check` runs the same sequence.
 
+`tour` exits non-zero, and prints `FAILED <key>` to stderr, for any surface
+whose screenshot wasn't actually written — a relative `--out` resolving
+somewhere unexpected used to fail exactly this way, silently. Treat those
+surfaces as unverified rather than assuming coverage; `summary.json`'s
+`failedSurfaces` lists them too.
+
 ### Isolation, and why it is not optional
 
 `up` launches a **second Obsidian instance** with its own profile, so your own
@@ -102,13 +108,18 @@ required:
 - `HOME=<probe>` moves the CLI socket, which is what routes commands to the
   probe instead of your instance.
 
-The probe profile lives at `~/.sb-probe` and **must stay a short path**. macOS
-caps a unix socket path (`sun_path`) at 104 bytes; a rig inside the repo —
-`.../.claude/worktrees/<name>/.obsidian-probe/home` — is 127 characters and
-Obsidian dies with `listen EINVAL`. `doctor` checks the length up front.
+The probe profile lives under `~/.sb-probe-<hash>` by default — one profile per
+worktree checkout, derived from a hash of the repo root, not the literal path
+(that keeps the socket well under the 104-byte cap regardless of how deep the
+worktree lives). `doctor` prints the resolved path. Pass `--home` to override
+it — for a fixed, shared profile, or to point at another worktree's — and it
+**must stay a short path**: macOS caps a unix socket path (`sun_path`) at 104
+bytes; a rig inside the repo — `.../.claude/worktrees/<name>/.obsidian-probe/home`
+— is 127 characters and Obsidian dies with `listen EINVAL`. `doctor` checks the
+length up front either way.
 
-Living outside the repo is also why the one-time Restricted Mode click survives
-every worktree, rebuild and fresh vault.
+Living outside the repo is also why the socket path stays short regardless of
+how deep a given worktree checkout lives on disk.
 
 `--shared` drives your own instance instead. The guard still applies, but
 expect your session to move around; use it only when the isolated instance is
@@ -132,15 +143,45 @@ closed, and nothing else in the repo may call the CLI directly.
 such command — so it verifies instead: focus the test vault yourself, and the
 probe refuses if you have not.
 
-### Restricted Mode: one click, once
+### Concurrency
+
+Per-worktree homes make it unlikely two sessions collide, but not impossible —
+a shared `--home`, or two worktrees that happen to hash the same, still can.
+`up` writes `<home>/probe.lock`: the launched Obsidian process's pid, the
+vault it opened, and a timestamp. On the next `up` against that home:
+
+- a **live** lock for a *different* vault is refused, not torn down — never
+  kill another session's instance (see `docs/superpowers/lessons.md`). Wait
+  for that session's `down`, or use a different `--home`.
+- a live lock for the *same* vault is reused; no relaunch.
+- a **stale** lock (recorded pid no longer alive) is broken automatically and
+  a fresh instance launches.
+- a running instance with no lock on record (a legacy home, or a crash
+  orphan) is adopted if it already has the right vault open, and refused
+  otherwise rather than guessed at.
+
+`doctor` reports the lock state (`LIVE`, `stale`, or `none held`) alongside the
+resolved probe home. `down` releases the lock after quitting the instance (and
+tidies up a stale one even when no instance is running). `tour` re-checks the
+lock against the vault the live instance actually answers for, and refuses if
+another session appears to have taken the home over mid-run.
+
+This enforces in code what `docs/superpowers/lessons.md` had documented as
+folklore: never kill another session's probe instance.
+
+### Restricted Mode: one click per probe home
 
 A vault carrying community plugins shows *"trust author and enable plugins"* on
 first open. That cannot ship as files — it is a consent decision.
 
 Obsidian records it in localStorage under `enable-plugin-<vaultId>`, so the
 probe always registers its vault under a **fixed id** (`PROBE_VAULT_ID`)
-whatever the vault's path. Accept the dialog once in the probe profile and every
-throwaway vault you build afterwards inherits the trust.
+whatever the vault's path. Accept the dialog once in a probe profile and every
+throwaway vault you build afterwards inherits the trust — **within that
+profile**. Trust no longer amortizes globally: the probe home is now derived
+per-worktree, so a new worktree checkout is a new profile and costs one more
+click. `up` prints a `fresh probe profile at …` notice the first time it
+launches a given home, as the reminder.
 
 **A modal blocks the CLI socket for the entire instance**, not just the vault
 showing it — so an un-dismissed dialog makes every command time out, including
