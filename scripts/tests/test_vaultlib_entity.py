@@ -619,8 +619,14 @@ def test_a_non_string_role_or_stance_is_a_structured_error(tmp_path, field, valu
     # before .strip(), so a non-string raised AttributeError — which the
     # backstop did not catch either. `"role": ["sponsor"]` instead of
     # `"sponsor"` is a routine LLM JSON slip, not an exotic input.
+    #
+    # The error is now the payload-shape refusal rather than the vocabulary
+    # one: a non-string never reaches the vocabulary check, and naming the type
+    # is more actionable than reporting `['sponsor']` as an unknown role. The
+    # vocabulary check still owns off-vocabulary *strings* — see
+    # test_off_vocabulary_role_is_refused and its stance twin.
     root = seeded(tmp_path)
-    with pytest.raises(entity.EntityError, match="is not one of"):
+    with pytest.raises(entity.EntityError, match="must be a string"):
         entity.write(root, "meridian-freight-holdings", {"stakeholders": [
             dict({"name": "Dana Whitfield"}, **{field: value})]}, TODAY)
 
@@ -1125,3 +1131,225 @@ def test_write_uses_lf_endings(tmp_path):
         {"topic": "T", "detail": "d", "implications": "i"}]}, TODAY)
     raw = (root / "40-entities" / "meridian-freight-holdings" / "dossier.md").read_bytes()
     assert b"\r\n" not in raw
+
+
+# --- repair: hand-edited file content (#40, #41) ---------------------------
+#
+# The policy these pin: hand-edited FILE content is repaired — never lost,
+# never blocking a write — and every repair is reported. The refusal tests
+# further down pin the other half: an off-shape model PAYLOAD is refused loudly.
+
+SLUG = "meridian-freight-holdings"
+
+
+def _dossier(root):
+    return root / "40-entities" / SLUG / "dossier.md"
+
+
+def _hand_edit(root, old, new):
+    """Simulate a human editing the dossier in Obsidian."""
+    path = _dossier(root)
+    text = path.read_text(encoding="utf-8")
+    assert old in text, f"the fixture no longer contains {old!r}"
+    path.write_text(text.replace(old, new, 1), encoding="utf-8")
+    return path
+
+
+def test_an_unescaped_human_pipe_never_truncates_the_row(tmp_path):
+    # The #40 repro. A raw `|` typed into a Notes cell in Obsidian read as a
+    # column delimiter, the row split into six cells, and everything past
+    # column five was dropped on the next write — reporting ok: true.
+    root = seeded(tmp_path)
+    entity.write(root, SLUG, {"stakeholders": [
+        {"name": "Dana Whitfield", "title": "CFO",
+         "notes": "placeholder note"}]}, TODAY)
+    _hand_edit(root, "placeholder note", "wants a | b comparison before Q4")
+
+    entity.write(root, SLUG, {"stakeholders": [
+        {"name": "Leo Marchetti", "title": "COO"}]}, TODAY)
+
+    section = entity.read(root, SLUG)["sections"]["Stakeholders"]
+    row = [line for line in section.splitlines() if "Whitfield" in line][0]
+    assert r"wants a \| b comparison before Q4" in row, (
+        f"the hand-typed pipe truncated the cell: {row!r}")
+    assert len(re.findall(r"(?<!\\)\|", row)) == 6  # 5 columns => 6 delimiters
+    assert "Leo Marchetti" in section
+
+
+def test_parse_table_rejoins_surplus_cells():
+    # The issue's repro table, verbatim.
+    tbl = (
+        "| Name | Role | Stance | Notes |\n"
+        "| --- | --- | --- | --- |\n"
+        "| [[dana-whitfield]] | CFO | supportive | wants a | b comparison "
+        "before Q4 |\n"
+    )
+    _preamble, rows, _postamble, repairs = entity._parse_table(tbl, 4)
+    assert rows == [["[[dana-whitfield]]", "CFO", "supportive",
+                     r"wants a \| b comparison before Q4"]]
+    assert any("re-joined" in note for note in repairs), (
+        f"a repair this destructive must be reported: {repairs}")
+
+
+def test_pipe_repair_is_reported_in_the_result(tmp_path):
+    root = seeded(tmp_path)
+    entity.write(root, SLUG, {"stakeholders": [
+        {"name": "Dana Whitfield", "notes": "placeholder note"}]}, TODAY)
+    _hand_edit(root, "placeholder note", "wants a | b comparison")
+
+    result = entity.write(root, SLUG, {"stakeholders": [
+        {"name": "Leo Marchetti", "title": "COO"}]}, TODAY)
+
+    assert result["repairs"], "the repair was applied but never reported"
+    assert any("Stakeholders" in note for note in result["repairs"])
+
+
+def test_a_hand_deleted_separator_row_does_not_eat_the_first_data_row(tmp_path):
+    # _parse_table skipped the first two pipe-prefixed lines unconditionally.
+    # Obsidian renders a separator-less table fine, so the human saw nothing
+    # wrong — and lost the first stakeholder on the next write.
+    root = seeded(tmp_path)
+    entity.write(root, SLUG, {"stakeholders": [
+        {"name": "Dana Whitfield", "title": "CFO"}]}, TODAY)
+    _hand_edit(root, "|------|-------|------------------|--------|-------|\n", "")
+
+    entity.write(root, SLUG, {"stakeholders": [
+        {"name": "Leo Marchetti", "title": "COO"}]}, TODAY)
+
+    section = entity.read(root, SLUG)["sections"]["Stakeholders"]
+    assert "Dana Whitfield" in section, "the first data row was eaten"
+    assert entity.STAKEHOLDER_HEADER in section, (
+        "the canonical separator row was not restored")
+
+
+def test_pipe_prefixed_prose_survives_verbatim_not_as_a_row(tmp_path):
+    # `startswith("|")` was the only thing separating structure from prose, so
+    # a human's note beginning with a pipe became a padded one-cell row.
+    root = seeded(tmp_path)
+    entity.write(root, SLUG, {"stakeholders": [
+        {"name": "Dana Whitfield", "title": "CFO"}]}, TODAY)
+    note = "| route all scheduling through Sam"
+    _hand_edit(root, "## Relationship History",
+               f"{note}\n\n## Relationship History")
+
+    entity.write(root, SLUG, {"stakeholders": [
+        {"name": "Leo Marchetti", "title": "COO"}]}, TODAY)
+
+    section = entity.read(root, SLUG)["sections"]["Stakeholders"]
+    assert note in section.splitlines(), (
+        f"the annotation was reshaped into a row: {section!r}")
+
+
+def test_indented_line_after_tail_content_stays_in_the_tail(tmp_path):
+    # _merge_dated_bullets sent every indented non-blank line to blocks[-1],
+    # even once the loop had moved past the entries into trailing content — so
+    # the line was reattributed to the last dated entry instead of staying put.
+    root = seeded(tmp_path)
+    entity.write(root, SLUG, {"relationship_history": [
+        {"date": "2026-01-05", "what": "intro call",
+         "significance": "opened the door"}]}, TODAY)
+    comment = "<!-- sourced from the referral thread -->"
+    remark = "  - Morgan owns the relationship from here."
+    _hand_edit(root, "opened the door", f"opened the door\n{comment}\n{remark}")
+
+    entity.write(root, SLUG, {"relationship_history": [
+        {"date": "2026-03-01", "what": "steerco",
+         "significance": "scope agreed"}]}, TODAY)
+
+    section = entity.read(root, SLUG)["sections"]["Relationship History"]
+    for kept in (comment, remark):
+        assert kept in section, f"lost existing content: {kept!r}"
+    assert section.index(comment) < section.index(remark), (
+        "the indented remark was pulled back under a dated entry")
+
+
+# --- refuse: off-shape model payloads (#41) --------------------------------
+
+def test_unknown_entry_field_is_refused_naming_the_field(tmp_path):
+    # An unknown key used to be dropped silently with ok: true, so the model
+    # had no way to learn it had guessed the shape wrong.
+    root = seeded(tmp_path)
+    for pattern in ("titel", "'title'"):
+        with pytest.raises(entity.EntityError, match=pattern):
+            entity.write(root, SLUG, {"stakeholders": [
+                {"name": "Dana Whitfield", "titel": "CFO"}]}, TODAY)
+
+
+def test_non_string_entry_value_is_refused_not_reprd(tmp_path):
+    # _text() str()s whatever it is handed, so a list landed in the note as
+    # its Python repr — a corrupt-looking note reported as a success.
+    root = seeded(tmp_path)
+    with pytest.raises(entity.EntityError, match="must be a string"):
+        entity.write(root, SLUG, {"relationship_history": [
+            {"date": "2026-01-05", "what": ["a", "b"],
+             "significance": "opened the door"}]}, TODAY)
+    assert "['a', 'b']" not in _dossier(root).read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize("edit_key, rest", [
+    ("relationship_history", {"what": "w", "significance": "s"}),
+    ("meeting_log", {"topic": "t", "dynamics": "d"}),
+])
+@pytest.mark.parametrize("bad_date", ["21-08-2026", "2026-13-40",
+                                      "sometime in June"])
+def test_invalid_date_is_refused_on_dated_sections(tmp_path, edit_key, rest,
+                                                   bad_date):
+    # _date_key sorts on a fixed slice of the rendered bullet, so a date that
+    # is not YYYY-MM-DD sorted into an arbitrary position and stayed there.
+    root = seeded(tmp_path)
+    with pytest.raises(entity.EntityError, match="YYYY-MM-DD"):
+        entity.write(root, SLUG, {edit_key: [dict(rest, date=bad_date)]}, TODAY)
+
+
+def test_read_returns_human_added_sections(tmp_path):
+    # Both skills read before writing, so a section read() cannot see makes
+    # the model plan against a partial picture of the dossier.
+    root = seeded(tmp_path)
+    path = _dossier(root)
+    path.write_text(
+        path.read_text(encoding="utf-8")
+        + "\n## Procurement Notes\n\nFramework agreement renews in March.\n",
+        encoding="utf-8")
+
+    parsed = entity.read(root, SLUG)
+
+    assert "Procurement Notes" in parsed["extra_sections"]
+    assert "Framework agreement" in parsed["extra_sections"]["Procurement Notes"]
+    assert list(parsed["sections"]) == schema.body_sections("entity")
+    assert "Procurement Notes" not in parsed["sections"]
+
+
+def test_none_optional_field_is_still_a_no_op(tmp_path):
+    # The non-string check must not turn an explicit null into an error: None
+    # means "no update" for every fill-only merge.
+    root = seeded(tmp_path)
+    entity.write(root, SLUG, {"stakeholders": [
+        {"name": "Leo Marchetti", "title": "COO"}]}, TODAY)
+    entity.write(root, SLUG, {"stakeholders": [
+        {"name": "Leo Marchetti", "title": None, "notes": "wants numbers"}]},
+        TODAY)
+    section = entity.read(root, SLUG)["sections"]["Stakeholders"]
+    row = [line for line in section.splitlines() if "Marchetti" in line][0]
+    assert "COO" in row
+    assert "wants numbers" in row
+
+
+def test_second_identical_write_is_byte_identical(tmp_path):
+    # A spacing guard across the table and bullet mergers together: the
+    # rendered file is a fixed point of re-applying the same payload, so no
+    # write drifts the blank-line layout of a section it did not change.
+    root = seeded(tmp_path)
+    edits = {
+        "context": [{"label": "Fleet", "fact": "three yards",
+                     "why": "sets the automation scope"}],
+        "stakeholders": [{"name": "Leo Marchetti", "title": "COO"}],
+        "sensitivities": [{"topic": "Incumbent integrator", "detail": "d",
+                           "implications": "i"}],
+        "engagements": [{"project": "meridian-yard-automation-program",
+                         "status": "Active",
+                         "one_liner": "Three-yard rollout"}],
+    }
+    entity.write(root, SLUG, edits, TODAY)
+    first = _dossier(root).read_bytes()
+    entity.write(root, SLUG, edits, TODAY)
+    assert _dossier(root).read_bytes() == first
