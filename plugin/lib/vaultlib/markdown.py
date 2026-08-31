@@ -260,6 +260,12 @@ def split_sections(body: str, level: int = 2) -> List[Tuple[str, str]]:
 
     Headings inside fenced code blocks are ignored — project index bodies
     carry Dataview blocks, and a `##` inside one is not a section.
+
+    Heading-shaped content *inside* a block-list item — `- ## Not a section` —
+    deliberately does not split either, because the check is a `startswith` on
+    the raw line and no vault writer emits that shape. Making it split would
+    carve a human's own list in half and surface a phantom section that
+    render_sections then writes back as a real heading.
     """
     marker = "#" * level + " "
     sections: List[Tuple[str, List[str]]] = [("", [])]

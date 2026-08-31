@@ -66,6 +66,10 @@ unvalidated, and whether the banner is present. **Read this before routing** —
 knowing what is already recorded is what lets you update rather than duplicate,
 and lets you notice a contradiction.
 
+Any section the user added themselves comes back separately under
+`extra_sections` — read it before routing, but route new content only into the
+six managed sections, because `entity write` has no key for the others.
+
 The banner (`> [!unvalidated] Generated context — verify before relying on
 details.`) survives `entity write` unconditionally now — writing content
 never clears it as a side effect. Clearing it is a separate, explicit act:
@@ -187,6 +191,11 @@ two things the list cannot tell you:
   Group COO" — never silently overwrite a fact the user may care about.
 - **What you deliberately did not record**, if you dropped something as too
   thin or too speculative to be worth a permanent entry.
+
+If the envelope's `repairs` list is not empty, say what the CLI repaired — it
+tidied up a hand-edit in the dossier (a raw `|` inside a table cell, a deleted
+separator row, a note starting with a pipe). Nothing was lost, but the user
+wrote those bytes and should hear that they changed.
 
 ## Rules
 
