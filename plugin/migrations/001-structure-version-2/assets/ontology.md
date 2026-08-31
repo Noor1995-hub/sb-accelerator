@@ -22,6 +22,17 @@ skills consult them before writing any object frontmatter. The prose around
 each block carries the rationale and conventions the YAML cannot. Editing a
 block IS editing the ontology — there is no second copy to keep in sync.
 
+**`type` is not a single axis across objects — decided, not an oversight
+(#44).** `decision.type` is pinned to `[decision]` and `entity.type` /
+`project.type` are now pinned to `[entity]` / `[project]`: on those three
+objects `type` **is** the object discriminator. `meeting.type` is a different
+axis entirely — the meeting *kind* (`steerco`, `workshop`, `1:1`, …), never
+the discriminator — and `person` carries no `type` field at all. The
+canonical way to map a note to its object type is **folder shape**, not the
+`type` field: see `scripts/dqlrefs.py`'s `_PATH_TYPES` and
+`folder_object_type()` for the reference implementation. Anything that needs
+to resolve "what object is this note" must use path shape, not `type`.
+
 ## 1. Object catalog
 
 ### Meeting — `20-meetings/{DD-MM-YY-slug}.md` · Base: `Meetings.base`
@@ -142,6 +153,7 @@ optional: [type, parent, stakeholders, meetings-7d, meetings-30d, key-people,
 enums:
   status: [active, paused, completed, cancelled]
   project-type: [initiative, area-of-responsibility]
+  type: [project]
 body_sections: [Decisions, Open Items, Related Meetings]
 ```
 
@@ -274,6 +286,7 @@ optional: [entity-type, industry, owner, created, last-updated]
 enums:
   status: [prospect, active, dormant]
   entity-type: [client, business-unit, partner, supplier, other]
+  type: [entity]
 body_sections: [Context, Stakeholders, Relationship History, Meeting Log,
                 Sensitivities, Engagements]
 ```

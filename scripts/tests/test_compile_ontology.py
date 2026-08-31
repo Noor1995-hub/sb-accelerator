@@ -88,3 +88,14 @@ def test_review_status_retired_needs_attention():
     rather than a status — so the enum is two values, and stays two."""
     meeting = co.compile_schema()["objects"]["meeting"]
     assert meeting["enums"]["review_status"] == ["needs-review", "confirmed"]
+
+
+def test_entity_and_project_type_are_pinned_discriminators():
+    """#44: `type` on entity/project is the object discriminator and was
+    unconstrained — a hand-edited dossier carrying `type: sprocket` passed
+    conformance silently. Pinned to a single-value enum so validation catches
+    it. (`meeting.type` is a different axis — the meeting *kind* — and stays
+    its own multi-value enum; `person` has no `type` field at all.)"""
+    objects = co.compile_schema()["objects"]
+    assert objects["entity"]["enums"]["type"] == ["entity"]
+    assert objects["project"]["enums"]["type"] == ["project"]

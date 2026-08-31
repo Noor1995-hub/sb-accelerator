@@ -15,6 +15,9 @@ delivers them.
 
 ## Unreleased
 
+- **A hand-edited `type` on an entity or project is now caught by
+  validation.** `type: entity` and `type: project` are pinned in the
+  ontology, so a stray value can no longer pass conformance silently. (#44)
 - **A new `/provision-vault` skill sets up a client machine with zero repo
   checkout.** Previously, provisioning a new vault owner or EA's machine
   meant the consultant had this repo checked out on it. The skill now
