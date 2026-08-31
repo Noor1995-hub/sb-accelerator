@@ -25,12 +25,19 @@ Full background: `docs/visual-verification.md`.
    python scripts/obsidian_probe.py --width 1440 --height 900 tour --out .obsidian-probe-out-1440
    ```
 
+   If `up` refuses because another session's lock is live on this probe home,
+   wait for that session to finish (or run its own `down`) and retry — never
+   kill another session's instance.
+
 3. Assert the invariants against each capture:
 
    ```bash
    python -m pytest scripts/tests -q -m obsidian
    SB_PROBE_OUT=.obsidian-probe-out-1440 python -m pytest scripts/tests -q -m obsidian
    ```
+
+   If a `tour` exited non-zero or printed `FAILED <key>` lines, report those
+   surfaces as not captured rather than treating the run as full coverage.
 
 4. **Read the screenshots in `.obsidian-probe-out/` and
    `.obsidian-probe-out-1440/`.** This is the step that cannot be automated
