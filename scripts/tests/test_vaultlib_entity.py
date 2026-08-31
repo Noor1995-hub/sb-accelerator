@@ -691,9 +691,9 @@ def test_relationship_history_merge_is_a_fixed_point(tmp_path):
     # monotonic and unbounded, and only when trailing content was present,
     # which is exactly the case the preservation fix was added to protect.
     rendered = "\n- **2026-01-05:** intro call — opened the door\n\n<!-- note -->\n"
-    once, _ = entity._merge_relationship_history(rendered, [])
+    once, _, _ = entity._merge_relationship_history(rendered, [])
     assert once == rendered, "merging zero entries changed the section"
-    twice, _ = entity._merge_relationship_history(once, [])
+    twice, _, _ = entity._merge_relationship_history(once, [])
     assert twice == once, "the merge is not a fixed point"
 
 

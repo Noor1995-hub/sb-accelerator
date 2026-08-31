@@ -4,12 +4,34 @@ One hard rule runs through every merge: never remove existing content. Add or
 update only, and report contradictions to the caller rather than resolving
 them silently.
 
+Two sources of malformed input meet in this module, and they get opposite
+treatment (#40, #41):
+
+- **Hand-edited FILE content is repaired.** A human editing a dossier in
+  Obsidian is not writing our storage format — a raw `|` inside a cell, a
+  deleted separator row, a note that happens to start with a pipe. None of
+  that is lost and none of it blocks a write: it is reinterpreted the way the
+  human meant it, tidied into a self-consistent file on the next write, and
+  every repair comes back in the result's `repairs` list so the skill can say
+  what changed. Refusing here would strand the user with a note they consider
+  fine and a CLI that will not touch it.
+- **Off-shape model PAYLOADS are refused, loudly.** A misspelled field, a list
+  where prose belongs, a date that is not `YYYY-MM-DD` — nothing is written and
+  the EntityError names the field, the index, and what to send instead. The
+  caller is a model that can retry; writing a plausible-looking wrong file and
+  reporting ok is the worse outcome.
+
+The per-section field tables below are write()'s API contract, not vault
+ontology: they describe the JSON a caller may send, which is why they live
+here rather than in schema.json.
+
 Section shapes and merge rules are the contract in ontology.md §Entity. Two
 skills write dossiers — /new-project creates a baseline, /update-entity
 maintains one — so the rules live here rather than in either SKILL.md.
 """
 from __future__ import annotations
 
+import datetime
 import re
 from pathlib import Path
 from typing import Dict, List, Mapping, Optional, Sequence, Tuple
@@ -73,6 +95,22 @@ _REQUIRED_EDIT_FIELDS = {
     "sensitivities": ("topic", "detail", "implications"),
     "engagements": ("project",),
 }
+# Every field a section entry may carry, required ones included. An unknown key
+# used to be dropped silently and reported ok, so a model that misspelled
+# `title` learned nothing and the note was quietly missing a column.
+_KNOWN_EDIT_FIELDS = {
+    "context": ("label", "fact", "why"),
+    "stakeholders": ("name", "title", "role", "stance", "notes"),
+    "relationship_history": ("date", "what", "significance"),
+    "meeting_log": ("date", "topic", "dynamics"),
+    "sensitivities": ("topic", "detail", "implications"),
+    "engagements": ("project", "status", "one_liner"),
+}
+# Sections whose entries are sorted on the ISO date they render with, via
+# _date_key's fixed slice. Validated at the boundary so that slice never sees
+# anything but YYYY-MM-DD.
+_DATED_EDIT_KEYS = ("relationship_history", "meeting_log")
+_ISO_DATE_RE = re.compile(r"\A\d{4}-\d{2}-\d{2}\Z")
 # Fields the Meeting Log used to carry as hand-written bullets and no longer
 # does. Rejected rather than ignored: dropping them silently would return an
 # ok envelope to a caller that believes the content was written.
@@ -256,6 +294,15 @@ def ensure(root: Path, *, slug: str, name: str, today: str,
 # --- reading --------------------------------------------------------------
 
 def read(root: Path, slug: str) -> dict:
+    """Parse a dossier into frontmatter, the six managed sections, and any
+    section a human added.
+
+    `extra_sections` is a separate key rather than more entries in `sections`
+    because `sections` is a fixed six-key contract the callers index by name —
+    and because write() has no edit key for a human's own section, so the two
+    are not interchangeable. Both skills read before writing, and a section
+    read() could not see made the model plan against a partial dossier (#41).
+    """
     path = _dossier_path(root, slug)
     if not path.is_file():
         raise EntityError(
@@ -278,12 +325,15 @@ def read(root: Path, slug: str) -> dict:
                 "by hand (merge the duplicate headers) before editing it here."
             )
         seen[title] = content
+    managed = schema.body_sections("entity")
     return {
         "slug": slug,
         "path": path.relative_to(root).as_posix(),
         "frontmatter": frontmatter,
-        "sections": {title: seen.get(title, "")
-                     for title in schema.body_sections("entity")},
+        "sections": {title: seen.get(title, "") for title in managed},
+        # File order, because that is where the human put them.
+        "extra_sections": {title: content for title, content in seen.items()
+                           if title not in managed},
         "unvalidated": [title for title, content in seen.items()
                         if UNVALIDATED in content],
         "banner": BANNER in preamble,
@@ -382,33 +432,98 @@ def _split_row(line: str) -> list:
     return [part.strip() for part in parts]
 
 
-def _parse_table(content: str,
-                 columns: int) -> Tuple[List[str], List[List[str]], List[str]]:
-    """Return (lines before the table, data rows as cell lists, lines after).
+_SEPARATOR_CELL_RE = re.compile(r"\A:?-+:?\Z")
+
+
+def _looks_like_row(stripped: str) -> bool:
+    """Is this line a table row, or a human's prose that starts with a pipe?
+
+    `startswith("|")` used to be the whole test, so a note beginning with a
+    pipe became a one-cell stakeholder padded out with empties (#41). A real
+    row opens and closes with an unescaped delimiter and therefore holds at
+    least two of them.
+    """
+    if not stripped.startswith("|") or not stripped.endswith("|"):
+        return False
+    if stripped.endswith(r"\|"):
+        return False
+    return len(_ROW_SPLIT_RE.findall(stripped)) >= 2
+
+
+def _is_separator(stripped: str) -> bool:
+    """Is this row the `|---|---|` rule under a header?"""
+    cells = _split_row(stripped)
+    return bool(cells) and all(_SEPARATOR_CELL_RE.match(cell) for cell in cells)
+
+
+def _excerpt(text: str, limit: int = 60) -> str:
+    return text if len(text) <= limit else text[: limit - 3] + "..."
+
+
+def _parse_table(
+    content: str, columns: int
+) -> Tuple[List[str], List[List[str]], List[str], List[str]]:
+    """Return (lines before the table, data rows, lines after, repairs).
 
     Both the preamble and the postamble are a human's own annotation — a note
     under the Stakeholders table naming someone's assistant, say — and the hard
     rule is that a merge never removes existing content. Trailing lines used to
     match neither branch here and were silently dropped on the next write.
+
+    Three hand-edit shapes are repaired rather than reinterpreted, each with a
+    note in `repairs` (#40, #41): a raw `|` a human typed into a cell is text,
+    not a column break, so surplus cells are re-joined into the last column; a
+    deleted separator row no longer costs the first data row; and a
+    pipe-prefixed line that is not row-shaped stays prose. Existing content is
+    never deleted, but it may be **regrouped** — an annotation between two rows
+    comes back below the table rather than in place. Keeping it exactly where
+    it sat needs positional bookkeeping the merge does not carry, and no repair
+    note is emitted for it: it would fire on every write of a dossier that is
+    not corrupt.
     """
     preamble: List[str] = []
     rows: List[List[str]] = []
     postamble: List[str] = []
-    seen_header = 0
+    repairs: List[str] = []
+    seen_rows = 0
     for line in _lines(content):
         stripped = line.strip()
-        if stripped.startswith("|"):
-            seen_header += 1
-            if seen_header <= 2:
-                continue  # header row and separator
+        if stripped.startswith("|") and not _looks_like_row(stripped):
+            (postamble if seen_rows else preamble).append(line)
+            repairs.append(
+                "pipe-prefixed line kept as an annotation, not a table row: "
+                + _excerpt(stripped)
+            )
+            continue
+        if _looks_like_row(stripped):
+            seen_rows += 1
+            if seen_rows == 1:
+                continue  # the header row
+            if seen_rows == 2:
+                if _is_separator(stripped):
+                    continue
+                repairs.append(
+                    "separator row was missing; treated the second line as "
+                    "data — the next write restores it"
+                )
             cells = _split_row(stripped)
+            if len(cells) > columns:
+                surplus = len(cells) - columns
+                # Escaped, because rows live in stored form in memory:
+                # _render_table writes them out verbatim, so the file becomes
+                # self-consistent on this write and parses cleanly on the next.
+                cells = cells[: columns - 1] + [r" \| ".join(cells[columns - 1:])]
+                repairs.append(
+                    f"re-joined {surplus} extra cell(s) into the last column; "
+                    "an unescaped `|` in a cell is text, not a column break"
+                )
             cells += [""] * (columns - len(cells))
-            rows.append(cells[:columns])
-        elif seen_header == 0:
+            rows.append(cells)
+        elif seen_rows == 0:
             preamble.append(line)
         else:
             postamble.append(line)
-    return preamble, rows, postamble
+    return preamble, rows, postamble, repairs
 
 
 def _render_table(preamble: List[str], header: str, rows: List[List[str]],
@@ -425,7 +540,7 @@ def _render_table(preamble: List[str], header: str, rows: List[List[str]],
 
 # --- per-section merges ---------------------------------------------------
 
-def _merge_context(content: str, items) -> Tuple[str, int]:
+def _merge_context(content: str, items) -> Tuple[str, int, List[str]]:
     merged, touched = _merge_labelled_bullets(
         content, items, "label",
         lambda item: (f"- **{_text(item['label'])}:** {_text(item['fact'])} "
@@ -440,15 +555,16 @@ def _merge_context(content: str, items) -> Tuple[str, int]:
             "bullet's label rather than adding a new one, or merge two related "
             "bullets before writing."
         )
-    return merged, touched
+    return merged, touched, []
 
 
-def _merge_sensitivities(content: str, items) -> Tuple[str, int]:
-    return _merge_labelled_bullets(
+def _merge_sensitivities(content: str, items) -> Tuple[str, int, List[str]]:
+    merged, touched = _merge_labelled_bullets(
         content, items, "topic",
         lambda item: (f"- **{_text(item['topic'])}:** {_text(item['detail'])} "
                       f"— {_text(item['implications'])}"),
     )
+    return merged, touched, []
 
 
 _WIKILINK_RE = re.compile(r"\A\[\[([^\]|]+)(?:\|[^\]]*)?\]\]\Z")
@@ -478,8 +594,8 @@ def _name_key(cell: str) -> str:
         return text.lower()
 
 
-def _merge_stakeholders(content: str, items) -> Tuple[str, int]:
-    preamble, rows, postamble = _parse_table(content, 5)
+def _merge_stakeholders(content: str, items) -> Tuple[str, int, List[str]]:
+    preamble, rows, postamble, repairs = _parse_table(content, 5)
     touched = 0
     for item in items:
         # str()-wrapped like every other caller value in this module:
@@ -521,7 +637,8 @@ def _merge_stakeholders(content: str, items) -> Tuple[str, int]:
                 incoming[4] = f"{incoming[4]} {NEEDS_REVIEW}".strip()
             rows.append(incoming)
         touched += 1
-    return _render_table(preamble, STAKEHOLDER_HEADER, rows, postamble), touched
+    rendered = _render_table(preamble, STAKEHOLDER_HEADER, rows, postamble)
+    return rendered, touched, repairs
 
 
 _LINK_TEXT_RE = re.compile(r"\A\[([^\]]+)\]")
@@ -537,8 +654,8 @@ def _row_project_slug(cell: str) -> str:
     return match.group(1).strip() if match else cell.strip()
 
 
-def _merge_engagements(content: str, items) -> Tuple[str, int]:
-    preamble, rows, postamble = _parse_table(content, 3)
+def _merge_engagements(content: str, items) -> Tuple[str, int, List[str]]:
+    preamble, rows, postamble, repairs = _parse_table(content, 3)
     touched = 0
     for item in items:
         slug = str(item["project"]).strip()
@@ -572,7 +689,8 @@ def _merge_engagements(content: str, items) -> Tuple[str, int]:
                 incoming[1] = "Active"
             rows.append(incoming)
         touched += 1
-    return _render_table(preamble, ENGAGEMENT_HEADER, rows, postamble), touched
+    rendered = _render_table(preamble, ENGAGEMENT_HEADER, rows, postamble)
+    return rendered, touched, repairs
 
 
 def _date_key(block: List[str]) -> str:
@@ -589,19 +707,36 @@ def _merge_dated_bullets(content: str, items, render, *,
     continuation line stays attached to the entry it sits under, and any other
     trailing content (a stray comment, a note) stays below them. Filtering the
     section down to its bold bullets used to delete all of it.
+
+    Content is never deleted, but it may be **regrouped**: a lead-in a human
+    wrote *between* two entries comes back above the first one, because the
+    entries are re-sorted as a block and an interleaved line has no stable
+    place in that order.
+
+    Once the walk has left the entries — the first non-blank line that is
+    neither a dated bullet nor a continuation — later indented lines belong to
+    the trailing content, not to the last dated entry. Sending them to
+    `blocks[-1]` regardless was the reattribution defect in #41. A fresh dated
+    bullet reopens a block, so a sub-bullet under it still attaches. Blank
+    lines keep their old routing and do not close the entries, which is what
+    keeps blank-line-separated sub-bullets with the entry they annotate.
     """
     lead: List[str] = []
     blocks: List[List[str]] = []
     tail: List[str] = []
+    in_tail = False
     for line in _strip_placeholder(_lines(content)):
         if _body(line).startswith("- **"):
             blocks.append([line])
+            in_tail = False
         elif not blocks:
             lead.append(line)
-        elif line[:1] in (" ", "\t") and line.strip():
+        elif line[:1] in (" ", "\t") and line.strip() and not in_tail:
             blocks[-1].append(line)
         else:
             tail.append(line)
+            if line.strip():
+                in_tail = True
     for item in items:
         blocks.append([render(item)])
     # Stable, so two entries sharing a date keep the order they arrived in
@@ -626,15 +761,17 @@ def _merge_dated_bullets(content: str, items, render, *,
     return "\n" + "\n".join(body).strip("\n") + "\n", len(items)
 
 
-def _merge_relationship_history(content: str, items) -> Tuple[str, int]:
-    return _merge_dated_bullets(
+def _merge_relationship_history(content: str,
+                                items) -> Tuple[str, int, List[str]]:
+    merged, touched = _merge_dated_bullets(
         content, items,
         lambda item: (f"- **{_text(item['date'])}:** {_text(item['what'])} "
                       f"— {_text(item['significance'])}"),
         newest_first=False)
+    return merged, touched, []
 
 
-def _merge_meeting_log(content: str, items) -> Tuple[str, int]:
+def _merge_meeting_log(content: str, items) -> Tuple[str, int, List[str]]:
     """Add Dynamics bullets under the section's `### Dynamics` heading.
 
     Everything above that heading is the Dataview index — a query, not
@@ -660,7 +797,7 @@ def _merge_meeting_log(content: str, items) -> Tuple[str, int]:
         lambda item: (f"- **{_text(item['date'])} — {_text(item['topic'])}:** "
                       f"{_text(item['dynamics'])}"),
         newest_first=True)
-    return "\n".join(lines[:position + 1]) + "\n" + merged, touched
+    return "\n".join(lines[:position + 1]) + "\n" + merged, touched, []
 
 
 _MERGERS = {
@@ -675,27 +812,45 @@ _MERGERS = {
 
 # --- payload validation ---------------------------------------------------
 
+def _is_iso_date(value: str) -> bool:
+    """Is this exactly a YYYY-MM-DD calendar date?
+
+    The regex is not redundant with fromisoformat: from 3.11 the latter also
+    accepts `20260823` and full timestamps, and this module's floor is 3.10.
+    fromisoformat is not redundant with the regex either — it is what rejects
+    2026-13-40.
+    """
+    if not _ISO_DATE_RE.match(value):
+        return False
+    try:
+        datetime.date.fromisoformat(value)
+    except ValueError:
+        return False
+    return True
+
+
 def _validate_items(edit_key: str, items: list) -> None:
     """Reject malformed entries before any merge runs.
 
     The merge functions index required keys directly, so a missing key would
     otherwise surface as a KeyError traceback with no JSON envelope — and the
     caller reading stdout is a model that has been told to read `ok`.
+
+    This is the refusal half of the module's policy pair: a payload is the
+    model's own output and it can retry, so every off-shape entry fails loudly
+    and names the field. (Hand-edited file content gets the opposite
+    treatment — see _parse_table.) The check order matters: the retired-field
+    guidance is more specific than "unknown field", and both are more useful
+    than a type or date complaint about a key that should not be there at all.
     """
     required = _REQUIRED_EDIT_FIELDS[edit_key]
+    known = _KNOWN_EDIT_FIELDS[edit_key]
     retired = _RETIRED_EDIT_FIELDS.get(edit_key, {})
     for index, item in enumerate(items):
         if not isinstance(item, dict):
             raise EntityError(
                 f"{edit_key}[{index}] must be an object with "
                 f"{list(required)}, got {type(item).__name__}"
-            )
-        missing = [key for key in required
-                   if not str(item.get(key) or "").strip()]
-        if missing:
-            raise EntityError(
-                f"{edit_key}[{index}] is missing required field(s) {missing}; "
-                f"every {edit_key} entry needs {list(required)}"
             )
         gone = sorted(key for key in retired if item.get(key))
         if gone:
@@ -706,12 +861,52 @@ def _validate_items(edit_key: str, items: list) -> None:
                             for key in gone)
                 + f". Pass only {list(required)}."
             )
+        unknown = sorted(key for key in item if key not in known)
+        if unknown:
+            raise EntityError(
+                f"{edit_key}[{index}] has unknown field(s) {unknown}; "
+                f"{edit_key} entries take {list(known)}"
+            )
+        for key in known:
+            value = item.get(key)
+            # None stays "no update": every fill-only merge reads an absent or
+            # null optional field as "leave the stored value alone".
+            if value is not None and not isinstance(value, str):
+                raise EntityError(
+                    f"{edit_key}[{index}].{key} must be a string, got "
+                    f"{type(value).__name__}; render it as prose before "
+                    "sending"
+                )
+        missing = [key for key in required
+                   if not str(item.get(key) or "").strip()]
+        if missing:
+            raise EntityError(
+                f"{edit_key}[{index}] is missing required field(s) {missing}; "
+                f"every {edit_key} entry needs {list(required)}"
+            )
+        if edit_key in _DATED_EDIT_KEYS:
+            # `date` is required and non-blank by here, and _date_key sorts on
+            # a fixed slice of the rendered bullet — so anything else sorted
+            # into an arbitrary position and stayed there.
+            value = item["date"].strip()
+            if not _is_iso_date(value):
+                raise EntityError(
+                    f"{edit_key}[{index}].date {value!r} is not a calendar "
+                    "date in YYYY-MM-DD form; pass an ISO date like 2026-08-23"
+                )
 
 
 # --- writing --------------------------------------------------------------
 
 def write(root: Path, slug: str, edits: Mapping, today: str) -> dict:
-    """Apply section edits to an existing dossier."""
+    """Apply section edits to an existing dossier.
+
+    Returns `{"path", "changes", "repairs"}`. `repairs` is always present and
+    empty for a clean file; each entry names the section and what was tidied up
+    in the human's own content. The skill surfaces it, because a repair the
+    user is not told about is indistinguishable from a bug they will find
+    later (#40).
+    """
     unknown = [key for key in edits if key not in _EDIT_KEYS]
     if unknown:
         raise EntityError(
@@ -757,6 +952,7 @@ def write(root: Path, slug: str, edits: Mapping, today: str) -> dict:
         )
 
     changes: List[str] = []
+    repairs: List[str] = []
     updated: List[Tuple[str, str]] = []
     for title, content in sections:
         edit_key = next((key for key, name in _SECTION_FOR_EDIT.items()
@@ -764,7 +960,8 @@ def write(root: Path, slug: str, edits: Mapping, today: str) -> dict:
         if edit_key is None or edit_key not in active:
             updated.append((title, content))
             continue
-        merged, touched = _MERGERS[edit_key](content, active[edit_key])
+        merged, touched, notes = _MERGERS[edit_key](content, active[edit_key])
+        repairs.extend(f"{title}: {note}" for note in notes)
         # A human supplied this content, so the section is no longer
         # unvalidated.
         merged = "\n".join(line for line in merged.split("\n")
@@ -785,7 +982,8 @@ def write(root: Path, slug: str, edits: Mapping, today: str) -> dict:
     rewritten = markdown.replace_scalar_field(head + new_body,
                                               "last-updated", today)
     vault.atomic_write(path, rewritten)
-    return {"path": path.relative_to(root).as_posix(), "changes": changes}
+    return {"path": path.relative_to(root).as_posix(), "changes": changes,
+            "repairs": repairs}
 
 
 def validate(root: Path, slug: str, today: str) -> dict:
