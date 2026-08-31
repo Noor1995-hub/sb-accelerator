@@ -16,7 +16,7 @@ from the `gh` CLI, so it works from the terminal and from Claude Code.
 |---|---|---|---|
 | **What kind of work** | `type:` **label** | many | feature / infra / chore (bug = built-in `bug`) |
 | **Which part of the product** | `area:` **label** | many | plugin / template / playbooks / migrations / dist |
-| **When it ships** | **Milestone** | one | v0.1 / v0.2 / v1.0 / Unscheduled |
+| **When it ships** | **Milestone** | one | Wave 1–4 / Unscheduled |
 | **How urgent / what state** | Board **Priority** + **Status** fields | one each | High·Med·Low / Todo·In Progress·Done |
 
 Large items break down with native **sub-issues** (parent shows an auto progress bar) — e.g.
@@ -33,12 +33,17 @@ the "Port core skills" parent has one sub-issue per skill.
 
 **Milestones**
 
+Sequenced as waves toward the first client deployment (re-planned 2026-08-31; the earlier
+`v0.1`/`v0.2`/`v1.0` milestones are closed). Waves are strictly ordered: a wave starts when
+the previous one exits clean.
+
 | Milestone | Theme |
 |---|---|
-| `v0.1 walking skeleton` | Template extraction + core skills ported + net-new skills |
-| `v0.2 internal dry run` | Playbooks + full runbook rehearsal on a delaware colleague |
-| `v1.0 pilot` | sb-dist + release pipeline + provisioning + first client |
-| `Unscheduled` | Default for new inflow until triage assigns a real milestone |
+| `Wave 1 — critical fixes` | Nothing silently wrong before re-testing: P0s, silent data loss, broken first instruction |
+| `Wave 2 — DryRun migration + E2E` | Migrate the internal DryRun vault via `/upgrade-vault` + full-loop rehearsal (#107), plus probe/test-infra fixes |
+| `Wave 3 — provisioning` | sb-dist + release pipeline, per-client provisioning, Session-1 playbooks |
+| `Wave 4 — field test` | Internal dry run with a delaware colleague + assistant as fake client (#9) |
+| `Unscheduled` | Default for new inflow until triage assigns a wave |
 
 ## How to add work
 
@@ -49,7 +54,7 @@ scopes (`gh auth refresh -s project` for the board).
 REPO=DLW-INT-BTA-BELUX/sb-accelerator
 
 gh issue create -R $REPO --title "…" --body "…" \
-  --milestone "v0.1 walking skeleton" --label "area:plugin" --label "type:feature"
+  --milestone "Unscheduled" --label "area:plugin" --label "type:feature"
 
 # Sub-issue under a parent
 gh issue create -R $REPO --title "…" --body "…" --parent <N> \
