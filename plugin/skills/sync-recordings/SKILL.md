@@ -593,6 +593,15 @@ The cache merges across calls; Plaud and inbox outcomes have no cache and
 feed only the summary. Banking per batch keeps the maximum crash loss to
 one batch — one cheap worker-side re-fetch next run.
 
+The first banking call also carries the back-fill: one `written` entry (with
+its `recording_id`) for each id `sync dedup` reported as already `synced` in
+step 1 — those ids never reach a worker, so no batch line produces them, and
+this is how the cache warms for meetings synced before it existed. When
+every m365 candidate deduped away and no worker was dispatched at all, make
+this banking call anyway, with just the back-fill entries — a cold cache
+over an already-synced window must warm on this run, not re-pay the event
+reads forever.
+
 **Then sweep what you wrote.** For each inbox-sourced recording whose
 worker replied `written:` with a note verified on disk, move its inbox
 source out of the queue:
