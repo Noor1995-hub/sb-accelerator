@@ -126,8 +126,8 @@ python3 "$VAULTLIB" sync update-queue --vault "$VAULT" --today <today> --owner <
 This writes `meetings-7d` / `meetings-30d` / `key-people` on active projects
 and `meetings-7d` / `meetings-30d` on people (confirmed meetings only — the
 review queue is the quality gate), and returns `projectsNeedingUpdate`: each
-entry carries `indexPath`, `decisionsDir`, `lastUpdated`, `newFiles`, and the
-`existingDecisions` projection. Carry `warnings` — especially `SELF-CHECK`
+entry carries `indexPath`, `decisionsDir`, `lastUpdated`, `stateUpdated`,
+`newFiles`, and the `existingDecisions` projection. Carry `warnings` — especially `SELF-CHECK`
 lines — into the final summary verbatim.
 
 ## Stage 4 — Project-state updates
@@ -151,6 +151,10 @@ python3 "$VAULTLIB" project touch --vault "$VAULT" --slug <slug> --date <today> 
 ```
 
    (Omit the milestone pair when no concrete next event was identified.)
+   `touch` also stamps `state-updated` with the current time — that timestamp,
+   not the day in `last-updated`, is what the next run's update queue compares
+   meeting datetimes against, so a meeting confirmed later the same day still
+   queues.
 4. Decision capture: extract candidates from the new meetings AND the
    harvest jottings, then follow
    `${CLAUDE_PLUGIN_ROOT}/skills/log-decision/SKILL.md` in **background mode**
@@ -334,8 +338,8 @@ Counts come from what exists, not from what you intended (a lab run once
 reported "Processed: 0" after writing a meeting correctly):
 
 - tomorrow's note exists at `note_to_write` with a fresh mtime;
-- every project reported updated shows today's `last-updated` in its
-  frontmatter;
+- every project reported updated shows today's `last-updated` **and a fresh
+  `state-updated`** in its frontmatter;
 - every recording reported synced has its stem in `20-meetings/`.
 
 ```
