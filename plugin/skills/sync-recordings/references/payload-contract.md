@@ -1,16 +1,19 @@
-# Meeting-note payload contract (extraction subagents only)
+# Meeting-note payload contract (extraction workers only)
 
-You are the extraction subagent for exactly one recording. Read the content
-file you were given, extract against this contract, and reply with ONE fenced
-JSON payload plus ONE outcome line — never the transcript or blob text. The
-orchestrator passes your JSON to `meeting write` verbatim; the routing fields
-(projects, attendees, confidence, calendar fields, source, ids, date,
-recording-duration, and — when the prompt names one — entities) were
-decided for you and arrive in your prompt — copy them in unchanged. Your job
-is the content fields: `title`, `type` (unless the prompt tells you this is
-a `type: note` capture, in which case that too is decided for you),
-`takeaways`, `debrief`, `action-items` — from the transcript; enrichment
-summaries are supporting context only, never the source of record.
+You are the worker for exactly one recording. This file defines the payload
+`meeting write` accepts; your fetch, write and reply mechanics are in
+`worker-contract.md`, which your prompt also names. You draft the payload to
+your scratch path and call `meeting write` yourself, and your reply is one
+outcome line — never the payload, transcript, or blob text. The routing
+fields (projects, attendees, confidence, calendar fields, source, ids, and —
+when the prompt names one — entities) were decided for you and arrive in
+your prompt: copy them in unchanged. `date` and `recording-duration` come
+from your own `reassemble` result — except for inbox items and captures,
+where the prompt carries them. Your job is the content fields: `title`,
+`type` (unless the prompt says this is a `type: note` capture, in which case
+that too is decided for you), `takeaways`, `debrief`, `action-items` — from
+the transcript; enrichment summaries are supporting context only, never the
+source of record.
 
 ```json
 {

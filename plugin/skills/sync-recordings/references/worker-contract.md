@@ -5,10 +5,10 @@ every raw page to scratch verbatim, reassemble, check for a cross-adapter
 duplicate (M365), extract against the payload contract, write the note, and
 verify it on disk. Your reply is **one outcome line from the table at the
 bottom — nothing else**: never transcript, blob, or payload text. Your
-prompt carries the vault root, the scratch directory (`$SCRATCH`), the CLI
-path (`$VAULTLIB`), the timezone, your recording's reference, its scratch
-stem (`rec_N` / `m365_<hex>`), and every routing decision already made —
-copy those into the payload unchanged.
+prompt carries the vault root (`$VAULT`), the scratch directory
+(`$SCRATCH`), the CLI path (`$VAULTLIB`), the timezone, your recording's
+reference, its scratch stem (`rec_N` / `m365_<hex>`), and every routing
+decision already made — copy those into the payload unchanged.
 
 Scratch filenames must match the stems you were given: `scratch sweep`
 deletes by pattern (`rec_*.json`, `m365_*.json`, `*.blob.md`,
