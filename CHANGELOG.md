@@ -15,6 +15,7 @@ delivers them.
 
 ## Unreleased
 
+- `/sync-recordings` now fetches each transcript inside its per-recording worker instead of the main session — long-context cost and latency drop sharply on multi-recording syncs, and recordings process in parallel (#PR)
 - **M365 calendar searches now reach the whole window, not just the first
   25 events.** The three skills that search the calendar (recording sync,
   evening sync, onboarding) now call the connector with its real window
