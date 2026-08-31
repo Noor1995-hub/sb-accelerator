@@ -251,6 +251,32 @@ def test_triage_controls_survive_a_1440_window(tour, base_surfaces):
         "screen")
 
 
+def test_projects_active_updated_column_survives_a_1440_window(tour, base_surfaces):
+    """Projects.base Active has the same shape of bug #66 fixed for Meetings.base
+    Triage: at 1440x900 (a 13" client laptop) the `Updated` column used to be
+    virtualised off the right edge, because the wide `project-type` values
+    (e.g. "area-of-responsibility") ate the row's width before Bases ever
+    reached the last-updated column. The Active view is already grouped by
+    project-type, so its `order:` now puts that column last — the group
+    header already says it, and this pins `Updated` staying on screen instead.
+
+    Only bites when the capture was actually taken at <=1440 wide — see
+    test_triage_controls_survive_a_1440_window for why."""
+    window = tour["summary"].get("window")
+    if not window:
+        pytest.skip("capture predates the recorded window size in summary.json")
+    width, _height = window
+    if width > 1440:
+        pytest.skip(f"captured at {width}px, not the <=1440 client-laptop width")
+    active = base_surfaces.get("base-projects-active")
+    if active is None:
+        pytest.skip("tour captured no Projects.base Active view")
+    headers = set(active["dom"].get("headers") or [])
+    assert "Updated" in headers, (
+        f"Projects Active at {width}px is missing 'Updated' from its rendered "
+        f"headers {sorted(headers)} — last-updated is off screen")
+
+
 def test_no_runtime_errors_during_the_tour(tour):
     errors = tour["summary"].get("errors") or ""
     assert "No errors captured" in errors or not errors.strip(), (
