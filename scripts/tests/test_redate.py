@@ -79,23 +79,49 @@ def test_inbox_dates_never_before_recap_from(tmp_path, demo_day):
 
 
 @pytest.mark.parametrize("demo_day", WEEK)
+def test_inbox_dates_stay_inside_the_recap_window(tmp_path, demo_day):
+    """Window-fit is the hard constraint (controller ruling on #91): every
+    planned date lands inside [recap_from, demo_day], regardless of whether
+    the weekday lock held or degraded. This is the regression test for the
+    original bug where Mon/Tue demo days pushed every inbox file 1-2 days
+    *past* demo_day (and Wed collapsed them all onto a single date)."""
+    target = _build_unshifted(tmp_path, name=f"unshifted-{demo_day.isoformat()}")
+    _, recap_from = weekday_aligned_shift(ANCHOR, demo_day)
+    inbox_dates = plan_inbox_dates(target, recap_from, demo_day)
+    assert inbox_dates
+    assert all(recap_from <= new_date <= demo_day for new_date in inbox_dates.values())
+
+
+@pytest.mark.parametrize("demo_day", WEEK)
 def test_inbox_relative_order_preserved(tmp_path, demo_day):
+    """Cross-file order (locked file vs. the other 4) is not preserved by
+    design (controller ruling: window-fit wins). Only the 4 free-floating
+    files stay non-decreasing relative to each other, in their original
+    order."""
     target = _build_unshifted(tmp_path, name=f"unshifted-{demo_day.isoformat()}")
     _, recap_from = weekday_aligned_shift(ANCHOR, demo_day)
     inbox_dates = plan_inbox_dates(target, recap_from, demo_day)
     original_stems = [p.stem for p in sorted((target / redate.INBOX_DIR).iterdir())
-                       if p.suffix == ".txt"]
+                       if p.suffix == ".txt" and WEEKDAY_LOCKED_INBOX_SLUG not in p.stem]
     ordered = [inbox_dates[stem] for stem in original_stems]
     assert ordered == sorted(ordered)
 
 
 @pytest.mark.parametrize("demo_day", WEEK)
 def test_weekday_locked_file_keeps_original_weekday(tmp_path, demo_day):
+    """The lock holds (weekday()==2, Wednesday) whenever the recap window
+    contains a Wednesday — true for Wed..Sun demo days. On Mon/Tue the
+    window contains no Wednesday, so the lock degrades and the file is
+    placed like the other four instead; it must still land inside the
+    window (controller ruling on #91 — window-fit beats the weekday lock)."""
     target = _build_unshifted(tmp_path, name=f"unshifted-{demo_day.isoformat()}")
     _, recap_from = weekday_aligned_shift(ANCHOR, demo_day)
     inbox_dates = plan_inbox_dates(target, recap_from, demo_day)
     locked_stem = next(stem for stem in inbox_dates if WEEKDAY_LOCKED_INBOX_SLUG in stem)
-    assert inbox_dates[locked_stem].weekday() == 2  # Wednesday
+    locked_date = inbox_dates[locked_stem]
+    assert recap_from <= locked_date <= demo_day
+    if demo_day.weekday() not in (0, 1):  # Wed..Sun: the window has a Wednesday
+        assert locked_date.weekday() == 2
 
 
 def test_rfc2822_weekday_regenerated_correctly(tmp_path):

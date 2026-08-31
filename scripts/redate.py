@@ -12,16 +12,28 @@ Friday", `as of 12-06-26`) stays correct with zero text regeneration.
 
 Cluster B (the 5 inbox files) cannot use a single delta: the Wed..Mon span
 of their original dates crosses a weekend past the recap window for some
-demo days, so each file is placed individually (`plan_inbox_dates`). One of
-the five — WEEKDAY_LOCKED_INBOX_SLUG — has dialogue that derives weekday
-names from its own date ("I'll send an invite for Thursday or Friday",
-"you're there Friday") and cannot be rewritten mechanically; it is kept on
-its original weekday instead.
+demo days, so each file is placed individually (`plan_inbox_dates`), and
+every placement is constrained to land inside the recap window
+`[recap_from, demo_day]` — never before, never after. One of the five —
+WEEKDAY_LOCKED_INBOX_SLUG — has dialogue that derives weekday names from its
+own date ("I'll send an invite for Thursday or Friday", "you're there
+Friday"), so it is placed on the latest Wednesday inside the window whenever
+the window contains one (true for Wed..Sun demo days).
 
-Accepted, documented trade-off: when demo_day is a Monday or Tuesday, the
-recap window is too short to contain a Wednesday, so the weekday-locked file
-lands 1-2 days *after* demo_day (one file, 2 of the 7 possible weekdays) —
-the alternative is breaking its Thursday/Friday dialogue, which is worse.
+Window-fit wins over the weekday lock, not the other way around: when
+demo_day is a Monday or Tuesday, the window is too short to contain any
+Wednesday, so the lock degrades and that file is placed like the other four
+instead (its dialogue is forward-looking — "Thursday or Friday" — which
+stays plausible read from any weekday it lands on). It also degrades on a
+Monday specifically because the window itself is a single day
+(recap_from == demo_day): all 5 files land on demo_day that day, by
+construction, not as a special case.
+
+Order across all 5 files is not preserved — cross-file order preservation
+was aesthetic (the 5 files carry no cross-references) and is dropped in
+favor of every file staying inside the window. The 4 non-locked files stay
+in non-decreasing order relative to *each other* (their original relative
+order), spread evenly (integer floor division) across the window.
 """
 from __future__ import annotations
 
@@ -247,47 +259,51 @@ def _latest_on_or_before(end: date, weekday: int) -> date:
     return end - timedelta(days=(end.weekday() - weekday) % 7)
 
 
-def _earliest_on_or_after(start: date, weekday: int) -> date:
-    return start + timedelta(days=(weekday - start.weekday()) % 7)
+def _evenly_distribute(items: list, start: date, window_days: int) -> dict:
+    """`items` (old_date, slug, path) tuples, in the order they should stay
+    non-decreasing in, mapped to dates spread across
+    [start, start + window_days] by integer floor division."""
+    count = len(items)
+    result = {}
+    for index, (_, _, path) in enumerate(items):
+        offset = (window_days * index) // (count - 1) if count > 1 else 0
+        result[path.stem] = start + timedelta(days=offset)
+    return result
 
 
 def plan_inbox_dates(target: Path, recap_from: date, demo_day: date) -> dict:
     """Where each inbox file lands: old filename stem -> new date.
 
-    The weekday-locked file keeps its original weekday, placed as close to
-    demo_day as the recap window allows (see the module docstring for the
-    Mon/Tue trade-off). The other four are spread, in their original date
-    order, evenly across the span from the locked file's new date through
-    demo_day.
+    Window-fit is the only hard constraint: every date lands inside
+    `[recap_from, demo_day]`. The weekday-locked file is placed on the
+    latest Wednesday inside that window when there is one; when the window
+    contains no Wednesday (Mon/Tue demo days — see the module docstring),
+    it is folded into the same even-distribution as the other four instead
+    of being placed outside the window to preserve its weekday.
     """
     items = _inbox_files(target)
     if not items:
         return {}
 
-    locked = [item for item in items if item[1] == WEEKDAY_LOCKED_INBOX_SLUG]
-    if not locked:
+    if not any(slug == WEEKDAY_LOCKED_INBOX_SLUG for _, slug, _ in items):
         raise RedateError(
             f"expected an inbox file for {WEEKDAY_LOCKED_INBOX_SLUG!r} under "
             f"{target / INBOX_DIR}"
         )
-    original_weekday = locked[0][0].weekday()
 
-    checkin_date = _latest_on_or_before(demo_day, original_weekday)
-    if checkin_date < recap_from:
-        checkin_date = _earliest_on_or_after(recap_from, original_weekday)
+    window_days = (demo_day - recap_from).days
+    wednesday = _latest_on_or_before(demo_day, 2)  # Mon=0 ... Wed=2
 
-    others = [item for item in items if item[1] != WEEKDAY_LOCKED_INBOX_SLUG]
-    span_start = checkin_date
-    span_end = max(demo_day, checkin_date)
-    span_days = (span_end - span_start).days
-    n_others = len(others)
+    if recap_from <= wednesday <= demo_day:
+        locked = next(item for item in items if item[1] == WEEKDAY_LOCKED_INBOX_SLUG)
+        others = [item for item in items if item[1] != WEEKDAY_LOCKED_INBOX_SLUG]
+        inbox_dates = {locked[2].stem: wednesday}
+        inbox_dates.update(_evenly_distribute(others, recap_from, window_days))
+        return inbox_dates
 
-    inbox_dates = {path.stem: checkin_date for _, slug, path in items
-                   if slug == WEEKDAY_LOCKED_INBOX_SLUG}
-    for index, (_, _, path) in enumerate(others):
-        offset = (span_days * index) // (n_others - 1) if n_others > 1 else 0
-        inbox_dates[path.stem] = span_start + timedelta(days=offset)
-    return inbox_dates
+    # The lock degrades: no Wednesday fits, so place every file (including
+    # the normally-locked one) the same way, in original order.
+    return _evenly_distribute(items, recap_from, window_days)
 
 
 def _rfc2822_span(new_date: date) -> str:
