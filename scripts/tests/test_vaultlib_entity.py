@@ -1240,6 +1240,53 @@ def test_pipe_prefixed_prose_survives_verbatim_not_as_a_row(tmp_path):
         f"the annotation was reshaped into a row: {section!r}")
 
 
+def test_a_row_whose_trailing_pipe_was_deleted_is_still_a_row(tmp_path):
+    # GFM makes the trailing pipe optional and Obsidian renders such a line as
+    # a row, so a shape-based row test demoted it to prose: the payload then
+    # missed the existing row, appended a duplicate person, and stranded the
+    # human's stance and note below the table — on every write, forever.
+    # SKILL.md tells the user to clear the needs-review marker themselves, and
+    # selecting from `<!--` to end of line takes the ` |` with it.
+    root = seeded(tmp_path)
+    entity.write(root, SLUG, {"stakeholders": [
+        {"name": "Sam Okafor", "title": "Executive Assistant",
+         "stance": "champion"}]}, TODAY)
+    _hand_edit(root, " <!-- needs-review --> |", "  schedules Leo")
+
+    result = entity.write(root, SLUG, {"stakeholders": [
+        {"name": "Sam Okafor", "title": "EA"}]}, TODAY)
+
+    section = entity.read(root, SLUG)["sections"]["Stakeholders"]
+    rows = [line for line in section.splitlines() if "Okafor" in line]
+    assert len(rows) == 1, f"the stakeholder was duplicated: {rows}"
+    assert "schedules Leo" in rows[0], "the human's note was stranded"
+    assert "champion" in rows[0], "the human's stance was stranded"
+    assert "EA" in rows[0]
+    assert result["repairs"] == [], (
+        f"a row missing its optional trailing pipe is not a repair: {result}")
+
+
+def test_a_reported_repair_never_fires_twice(tmp_path):
+    # Every reported repair changes bytes and leaves the file canonical, so the
+    # second write over the same content has nothing to report. A note that
+    # recurs on every write of a healthy dossier is noise the skill would
+    # relay to the user forever.
+    root = seeded(tmp_path)
+    entity.write(root, SLUG, {"stakeholders": [
+        {"name": "Dana Whitfield", "notes": "placeholder note"}]}, TODAY)
+    _hand_edit(root, "placeholder note", "wants a | b comparison")
+    _hand_edit(root, "|------|-------|------------------|--------|-------|\n", "")
+
+    first = entity.write(root, SLUG, {"stakeholders": [
+        {"name": "Leo Marchetti", "title": "COO"}]}, TODAY)
+    assert len(first["repairs"]) == 2, first["repairs"]
+
+    second = entity.write(root, SLUG, {"stakeholders": [
+        {"name": "Leo Marchetti", "title": "Group COO"}]}, TODAY)
+    assert second["repairs"] == [], (
+        f"the repair did not converge: {second['repairs']}")
+
+
 def test_indented_line_after_tail_content_stays_in_the_tail(tmp_path):
     # _merge_dated_bullets sent every indented non-blank line to blocks[-1],
     # even once the loop had moved past the entries into trailing content — so

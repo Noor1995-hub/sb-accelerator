@@ -435,29 +435,10 @@ def _split_row(line: str) -> list:
 _SEPARATOR_CELL_RE = re.compile(r"\A:?-+:?\Z")
 
 
-def _looks_like_row(stripped: str) -> bool:
-    """Is this line a table row, or a human's prose that starts with a pipe?
-
-    `startswith("|")` used to be the whole test, so a note beginning with a
-    pipe became a one-cell stakeholder padded out with empties (#41). A real
-    row opens and closes with an unescaped delimiter and therefore holds at
-    least two of them.
-    """
-    if not stripped.startswith("|") or not stripped.endswith("|"):
-        return False
-    if stripped.endswith(r"\|"):
-        return False
-    return len(_ROW_SPLIT_RE.findall(stripped)) >= 2
-
-
 def _is_separator(stripped: str) -> bool:
     """Is this row the `|---|---|` rule under a header?"""
     cells = _split_row(stripped)
     return bool(cells) and all(_SEPARATOR_CELL_RE.match(cell) for cell in cells)
-
-
-def _excerpt(text: str, limit: int = 60) -> str:
-    return text if len(text) <= limit else text[: limit - 3] + "..."
 
 
 def _parse_table(
@@ -470,32 +451,43 @@ def _parse_table(
     rule is that a merge never removes existing content. Trailing lines used to
     match neither branch here and were silently dropped on the next write.
 
-    Three hand-edit shapes are repaired rather than reinterpreted, each with a
-    note in `repairs` (#40, #41): a raw `|` a human typed into a cell is text,
-    not a column break, so surplus cells are re-joined into the last column; a
-    deleted separator row no longer costs the first data row; and a
-    pipe-prefixed line that is not row-shaped stays prose. Existing content is
-    never deleted, but it may be **regrouped** — an annotation between two rows
-    comes back below the table rather than in place. Keeping it exactly where
-    it sat needs positional bookkeeping the merge does not carry, and no repair
-    note is emitted for it: it would fire on every write of a dossier that is
-    not corrupt.
+    **A blank line ends the table**, which is the markdown renderer's own rule
+    and therefore the one thing that cannot put this parser and Obsidian into
+    disagreement. That is what separates structure from prose: a pipe-prefixed
+    line inside the block is a row (a human's note that opens with a pipe is
+    one to Obsidian too, so calling it prose would be the divergence, not the
+    fix), and a pipe-prefixed line after the blank stays the paragraph it
+    renders as. Deciding it on the line's own shape instead — trailing pipe,
+    pipe count — misclassifies a row whose trailing `|` a human deleted, which
+    GFM makes optional; that row then appended a duplicate person and stranded
+    their note below the table, on every write, forever.
+
+    Two hand-edit shapes are repaired, each with a note in `repairs`
+    (#40, #41): a raw `|` a human typed into a cell is text, not a column
+    break, so surplus cells are re-joined into the last column; and a deleted
+    separator row no longer costs the first data row. Both change bytes and
+    both converge — the file is canonical after one write, so neither note
+    fires again. Nothing else is reported, because a note that repeats on
+    every write of a healthy dossier is noise.
+
+    Existing content is never deleted, but it may be **regrouped**: an
+    annotation between two rows comes back below the table rather than in
+    place. Keeping it exactly where it sat needs positional bookkeeping the
+    merge does not carry.
     """
     preamble: List[str] = []
     rows: List[List[str]] = []
     postamble: List[str] = []
     repairs: List[str] = []
     seen_rows = 0
+    closed = False
     for line in _lines(content):
         stripped = line.strip()
-        if stripped.startswith("|") and not _looks_like_row(stripped):
-            (postamble if seen_rows else preamble).append(line)
-            repairs.append(
-                "pipe-prefixed line kept as an annotation, not a table row: "
-                + _excerpt(stripped)
-            )
-            continue
-        if _looks_like_row(stripped):
+        if not stripped:
+            # The blank line that ends the table. Before the header it is just
+            # layout; _render_table normalises the spacing either way.
+            closed = closed or bool(seen_rows)
+        elif stripped.startswith("|") and not closed:
             seen_rows += 1
             if seen_rows == 1:
                 continue  # the header row
@@ -517,12 +509,12 @@ def _parse_table(
                     f"re-joined {surplus} extra cell(s) into the last column; "
                     "an unescaped `|` in a cell is text, not a column break"
                 )
+            # A short row keeps the silent right-pad: a human who deleted a
+            # trailing empty cell changed nothing a reader can see.
             cells += [""] * (columns - len(cells))
             rows.append(cells)
-        elif seen_rows == 0:
-            preamble.append(line)
-        else:
-            postamble.append(line)
+            continue
+        (postamble if seen_rows else preamble).append(line)
     return preamble, rows, postamble, repairs
 
 
@@ -709,7 +701,7 @@ def _merge_dated_bullets(content: str, items, render, *,
     section down to its bold bullets used to delete all of it.
 
     Content is never deleted, but it may be **regrouped**: a lead-in a human
-    wrote *between* two entries comes back above the first one, because the
+    wrote *between* two entries comes back below all of them, because the
     entries are re-sorted as a block and an interleaved line has no stable
     place in that order.
 
