@@ -221,6 +221,47 @@ def test_sync_summaries_speak_plainly(name):
     )
 
 
+# #110: dedup must run BEFORE the fetch (the measured $8/run failure was
+# full event reads for candidates the ledger then discarded), and no adapter
+# may reach before the vault's own start date.
+def test_sync_recordings_triages_m365_before_the_fetch():
+    text = read_skill("sync-recordings")
+    assert "sync m365-triage" in text, "the pre-fetch cache gate is missing"
+    assert "sync m365-record" in text, (
+        "outcomes must be recorded back or every run re-fetches")
+    assert text.index("sync m365-triage") < text.index("m365 ids"), (
+        "triage must gate the full event reads, not follow them")
+
+
+def test_sync_recordings_states_the_start_date_bound():
+    text = read_skill("sync-recordings")
+    assert "sync.start-date" in text
+    assert 'dates window --vault "$VAULT"' in text, (
+        "the clamp only holds when the skill passes the vault")
+
+
+@pytest.mark.parametrize("name", ["setup-my-brain", "provision-vault",
+                                  "upgrade-vault"])
+def test_provisioning_writes_the_sync_start_date(name):
+    # upgrade-vault is the tune-up path the CHANGELOG points pre-existing
+    # vaults at; it must resolve the entry too, not just report it.
+    text = read_skill(name)
+    assert "--field sync.start-date" in text, (
+        f"{name} must stamp the vault's horizon (#110)")
+
+
+@pytest.mark.parametrize("name", ["setup-my-brain", "upgrade-vault"])
+def test_default_config_missing_list_matches_config_read(name):
+    """Both skills teach the agent what a template-default vault's `missing`
+    looks like, as a hard "exactly" — a stale list reads as an anomaly at the
+    exact moment the skill is telling the agent to trust it."""
+    text = read_skill(name)
+    assert '`["owner", "sync.start-date", "timezone"]`' in text, (
+        f"{name}: the fresh-vault missing list drifted from config.read()")
+    assert '`["owner", "timezone"]`' not in text, (
+        f"{name}: still claims the pre-#110 two-entry missing list")
+
+
 def test_sync_recordings_routes_non_meetings_to_a_type_note():
     text = (SKILLS_DIR / "sync-recordings" / "SKILL.md").read_text(encoding="utf-8")
     assert "type: note" in text, "no non-meeting destination documented"

@@ -445,6 +445,7 @@ def write_vault_config(root, extra=None):
             "plaud": {"enabled": True, "account_hint": "morgan@example.com"},
             "m365": {"enabled": False, "account_hint": None},
         },
+        "sync": {"start-date": "2026-08-26"},
     }
     if extra:
         cfg.update(extra)
@@ -643,6 +644,132 @@ def test_m365_reassemble_through_the_cli(capsys, tmp_path):
     assert payload["ok"] is True
     assert payload["result"]["recording_id"].startswith("m365:")
     assert payload["result"]["recorded_local"] == "2026-08-25T16:00"
+
+
+M365_LISTING = [{
+    "id": "AAMkAGId1",
+    "subject": "Weekly sync",
+    "start": {"dateTime": "2026-08-25T14:00:00.0000000", "timeZone": "UTC"},
+    "end": {"dateTime": "2026-08-25T15:00:00.0000000", "timeZone": "UTC"},
+}]
+
+
+def test_sync_m365_triage_and_record_round_trip_through_the_cli(
+    capsys, tmp_path
+):
+    root = make_vault(tmp_path)
+    listing = tmp_path / "search.json"
+    listing.write_text(json.dumps(M365_LISTING), encoding="utf-8")
+
+    code, payload = run(capsys, [
+        "sync", "m365-triage", "--vault", str(root),
+        "--events", str(listing), "--now", "2026-08-25T18:00:00",
+    ])
+    assert code == 0
+    assert payload["result"]["fetch"][0] == {
+        "id": "AAMkAGId1", "start_utc": "2026-08-25T14:00:00",
+        "subject": "Weekly sync", "reason": "unseen"}
+
+    outcomes = tmp_path / "outcomes.json"
+    outcomes.write_text(json.dumps([{
+        "id": "AAMkAGId1", "start_utc": "2026-08-25T14:00:00",
+        "outcome": "written", "recording_id": "m365:0123456789abcdef",
+    }]), encoding="utf-8")
+    code, payload = run(capsys, [
+        "sync", "m365-record", "--vault", str(root),
+        "--outcomes", str(outcomes), "--now", "2026-08-25T19:00:00",
+    ])
+    assert code == 0
+    assert payload["result"]["recorded"] == 1
+
+    code, payload = run(capsys, [
+        "sync", "m365-triage", "--vault", str(root),
+        "--events", str(listing), "--now", "2026-08-25T20:00:00",
+    ])
+    assert code == 0
+    assert payload["result"]["fetch"] == []
+    assert payload["result"]["filtered"]["written"] == 1
+
+
+def test_sync_m365_record_bad_outcome_is_a_structured_error(capsys, tmp_path):
+    root = make_vault(tmp_path)
+    outcomes = tmp_path / "outcomes.json"
+    outcomes.write_text(json.dumps([{
+        "id": "AAMkAGId1", "start_utc": "2026-08-25T14:00:00",
+        "outcome": "maybe",
+    }]), encoding="utf-8")
+    code, payload = run(capsys, [
+        "sync", "m365-record", "--vault", str(root),
+        "--outcomes", str(outcomes),
+    ])
+    assert code == 1
+    assert payload["ok"] is False
+    assert "outcome" in payload["error"]
+    assert payload["hint"]
+
+
+def test_sync_m365_triage_accepts_a_z_suffixed_now(capsys, tmp_path):
+    """Graph timestamps end in Z and a caller will echo that form; Python
+    3.10's fromisoformat rejects it, so the CLI must not."""
+    root = make_vault(tmp_path)
+    listing = tmp_path / "search.json"
+    listing.write_text(json.dumps(M365_LISTING), encoding="utf-8")
+    code, payload = run(capsys, [
+        "sync", "m365-triage", "--vault", str(root),
+        "--events", str(listing), "--now", "2026-08-25T18:00:00Z",
+    ])
+    assert code == 0
+    assert payload["result"]["fetch"][0]["reason"] == "unseen"
+
+
+def test_sync_m365_triage_rejects_a_malformed_now(capsys, tmp_path):
+    root = make_vault(tmp_path)
+    listing = tmp_path / "search.json"
+    listing.write_text(json.dumps(M365_LISTING), encoding="utf-8")
+    code, payload = run(capsys, [
+        "sync", "m365-triage", "--vault", str(root),
+        "--events", str(listing), "--now", "last tuesday",
+    ])
+    assert code == 1
+    assert payload["ok"] is False
+
+
+def test_dates_window_with_a_vault_clamps_to_the_config_start_date(
+    capsys, tmp_path
+):
+    """#110 end to end: the skill passes --vault, and the window can no
+    longer reach before the vault's own sync.start-date."""
+    root = make_vault(tmp_path)
+    write_vault_config(root)  # sync.start-date = 2026-08-26
+    code, payload = run(capsys, [
+        "dates", "window", "--vault", str(root),
+        "--start", "2026-08-27", "--utc-offset", "+00:00", "--hours", "48",
+    ])
+    assert code == 0
+    assert payload["result"]["utc_from"] == "2026-08-26T00:00:00"
+    assert payload["result"]["clamped"] is True
+
+
+def test_dates_window_with_a_null_start_date_does_not_clamp(capsys, tmp_path):
+    # Pre-existing vaults: no start date means no clamp, never an error.
+    root = make_vault(tmp_path)
+    write_vault_config(root, extra={"sync": {"start-date": None}})
+    code, payload = run(capsys, [
+        "dates", "window", "--vault", str(root),
+        "--start", "2026-08-27", "--utc-offset", "+00:00", "--hours", "48",
+    ])
+    assert code == 0
+    assert payload["result"]["utc_from"] == "2026-08-25T00:00:00"
+    assert "clamped" not in payload["result"]
+
+
+def test_dates_window_without_a_vault_stays_stateless(capsys):
+    code, payload = run(capsys, [
+        "dates", "window", "--start", "2026-08-20T16:42",
+        "--utc-offset=-05:00",
+    ])
+    assert code == 0
+    assert payload["result"]["utc_from"] == "2026-08-20T19:42:00"
 
 
 def test_plaud_reassemble_takes_every_page_of_a_paginated_transcript(

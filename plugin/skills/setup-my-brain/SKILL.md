@@ -107,11 +107,12 @@ python3 "$VAULTLIB" config read --vault "$VAULT"
   `playbooks/provisioning-runbook.md`. Do not offer to write the missing
   files.
 - **`ok: true`** — carry `config` and `missing` forward. On a fresh vault
-  `missing` is exactly `["owner", "timezone"]`; that is the honest state,
-  not an error. An account hint only joins the list once its adapter is
-  enabled, so both connectors being unbound shows up as `enabled: false` in
-  `config`, never in `missing` — phase 2 reads the adapter entries, not this
-  list.
+  `missing` is exactly `["owner", "sync.start-date", "timezone"]`; that is
+  the honest state, not an error — this skill fills all three, the start
+  date right after owner and timezone below. An account hint only joins the
+  list once its adapter is enabled, so both connectors being unbound shows
+  up as `enabled: false` in `config`, never in `missing` — phase 2 reads
+  the adapter entries, not this list.
 
 ```bash
 python3 "$VAULTLIB" migrate status --vault "$VAULT"
@@ -255,6 +256,19 @@ python3 "$VAULTLIB" config write --vault "$VAULT" --field timezone --value "Euro
 
 Both values are what phases 4 and 4b need to run at all. If either write
 fails, resolve it now rather than discovering it at the close of the session.
+
+Then, if `config read` reported `sync.start-date` in `missing`, stamp the
+vault's horizon with today's date — no question to ask, this is the
+provisioning date by definition:
+
+```bash
+python3 "$VAULTLIB" config write --vault "$VAULT" --field sync.start-date --value <today, YYYY-MM-DD>
+```
+
+From here on, no sync ever considers a meeting dated before it — recurring
+calendar series otherwise expose occurrences from long before the vault
+existed. If the vault owner asks for older meetings, that is a deliberate,
+interactive backfill run later, never a reason to backdate this value.
 
 ### File 2 — areas of responsibility are not projects
 

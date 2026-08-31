@@ -1,9 +1,11 @@
 """Microsoft 365 adapter: derive dedup ids from calendar event reads and
 reassemble raw connector JSON into one capture-bundle blob.
 
-Ids are computable at discovery time — from the event read alone, before the
-expensive transcript fetch — so `sync dedup` can gate the fetch exactly as it
-does for Plaud. Shapes are the lab-verified M365 connector responses;
+Ids are computable from the event read alone, before the expensive
+transcript fetch — so `sync dedup` gates that fetch exactly as it does for
+Plaud. The event read itself is gated one stage earlier: seenevents.triage
+answers, from the cheap calendar-search listing, which occurrences still
+need it at all. Shapes are the lab-verified M365 connector responses;
 anything else raises rather than guessing.
 """
 from __future__ import annotations

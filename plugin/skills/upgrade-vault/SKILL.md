@@ -148,15 +148,28 @@ python3 "$VAULTLIB" config read --vault "$VAULT"
 ```
 
 On a config left at the template default, `missing` is exactly
-`["owner", "timezone"]` — an `account_hint` only joins the list once its
-adapter is `enabled`, so unbound connectors show up as `enabled: false` in
-`config` and never in `missing`. Walk the consultant through resolving every
-entry that is there, plus any connector this deployment is meant to use,
-either with `config write` directly:
+`["owner", "sync.start-date", "timezone"]` — an `account_hint` only joins
+the list once its adapter is `enabled`, so unbound connectors show up as
+`enabled: false` in `config` and never in `missing`. Walk the consultant
+through resolving every entry that is there, plus any connector this
+deployment is meant to use, either with `config write` directly:
 
 ```bash
 python3 "$VAULTLIB" config write --vault "$VAULT" --field timezone --value "Europe/Brussels"
 ```
+
+For `sync.start-date` — the horizon below which no sync ever looks — write
+the date the vault was **provisioned**, which for a pre-existing vault means
+asking the consultant when that visit was:
+
+```bash
+python3 "$VAULTLIB" config write --vault "$VAULT" --field sync.start-date --value <provisioning date, YYYY-MM-DD>
+```
+
+Err early, not late: a date before the vault existed only costs cheap
+re-checks, while a date after a meeting that never synced hides that meeting
+from every future run. When nobody remembers the provisioning date, the
+vault's oldest daily note is a safe bound. Never set it later than today.
 
 (one call per field; `--field` takes any of the writable fields, `--value`
 the new value, or `--null` to unset a nullable one) — or by handing off to

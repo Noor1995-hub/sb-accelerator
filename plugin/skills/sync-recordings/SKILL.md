@@ -50,6 +50,15 @@ running it — declared but unavailable is also **an explicit skip line,
 never a silent zero**. Anything in `missing` that blocks a step below is
 reported the same way.
 
+`sync.start-date` is the vault's horizon: **no adapter lists, fetches, or
+writes a meeting dated before it.** `dates window --vault "$VAULT"` clamps
+every query window to it automatically, and the Plaud listing window below
+is bounded by it too. A null value (a vault provisioned before this key
+existed) means no bound — say so in the summary's warnings so the
+deployment gets the date added. Backfilling older meetings stays possible,
+but only as a deliberate interactive run with an explicitly stated range
+(`dates window` without `--vault`) — never something a routine sync does.
+
 | Adapter | Discovery | Availability check |
 |---|---|---|
 | `inbox` | `sync scan` over `10-inbox/` | always available |
@@ -193,7 +202,8 @@ inflates the pending count. Ids are content hashes, so an archived file
 keeps its id and stays deduped.
 
 **Plaud** (when enabled, available, and account-verified): call `mcp__plaud__list_files` for the recent
-window. Write the raw JSON result to `$SCRATCH/plaud.list.json` with the Write tool
+window — never a range that starts before `sync.start-date`. Write the raw
+JSON result to `$SCRATCH/plaud.list.json` with the Write tool
 — never echo large JSON through Bash. Then dedup the ids,
 namespaced:
 
@@ -255,8 +265,33 @@ resolve timezone names, the error's hint says to pass `--utc-offset` instead.
 transcribes meetings on the vault owner's calendar, and the calendar event is the
 key to its own transcript. Search the trailing **7 local days**
 (`outlook_calendar_search`, query `*`, `utc_from`/`utc_to` from
-`dates window`), drop cancelled and all-day events, and keep online
-meetings. For each candidate, fetch the **full event** with `read_resource`
+`dates window --vault "$VAULT"` — the clamp to `sync.start-date` rides
+along; a `window_empty: true` result means skip the search outright), drop
+cancelled and all-day events, and keep online meetings.
+
+**A full event read is expensive, so dedup runs before the fetch, not
+after.** Write the kept listing entries — the raw search objects, carrying
+at least `id`, `subject`, `start` and `end` — as one JSON array to
+`$SCRATCH/m365_search.json` with the Write tool, then ask the seen-events
+cache which occurrences still need the full read:
+
+```bash
+python3 "$VAULTLIB" sync m365-triage --vault "$VAULT" \
+  --events "$SCRATCH/m365_search.json"
+```
+
+Everything the cache already answers is filtered out here, before any
+fetch: `filtered` counts occurrences already written into the vault,
+permanently skipped, or finally transcript-less. A `no-transcript` outcome
+stays provisional for 48 hours after the meeting ends — Teams delivers
+transcripts with delay — so those come back in `fetch` as
+`recheck-no-transcript` until the window passes. Only the occurrences in
+`fetch` proceed; surface any `warnings`. The cache is disposable by design
+(the vault ledger still dedups every write), so on the first run after
+upgrading everything fetches once and the outcomes recorded below make
+every later run cheap.
+
+For each `fetch` entry, fetch the **full event** with `read_resource`
 on its `calendar:///events/...` URI and write the raw JSON to
 `$SCRATCH/m365_event_<n>.json` with the Write tool — never echo it through
 Bash. Collect the full event objects into one array,
@@ -268,8 +303,11 @@ python3 "$VAULTLIB" m365 ids --events "$SCRATCH/m365_events.json"
 
 Events in `skipped` (`no-transcript-url`) have no transcript *yet* — report
 them as one count, not per-event lines; they retry naturally while inside
-the window. Feed the `recording_id` values through `sync dedup` exactly as
-for plaud. Only `new` ids proceed.
+the window, and stop costing a fetch once their recorded outcome below goes
+final. Feed the `recording_id` values through `sync dedup` exactly as
+for plaud. Only `new` ids proceed — but an id `sync dedup` reports as
+already `synced` still gets a `written` outcome recorded below: that is how
+the cache back-fills for meetings synced before the cache existed.
 
 For each new id, fetch the transcript: `read_resource` on the entry's
 `transcript_url` **exactly as `m365 ids` returned it** — never rebuild or
@@ -287,6 +325,30 @@ python3 "$VAULTLIB" m365 reassemble --event "$SCRATCH/m365_event_3.json" \
 
 The result names the blob file and carries `recording_id`, `duration_min`,
 and `recorded_local`, like `plaud reassemble`.
+
+**The M365 branch's last act — after step 6 has written its notes — is
+recording every settled occurrence back into the seen-events cache**, so the
+next run's triage answers for them without a fetch. Write one JSON array to
+`$SCRATCH/m365_outcomes.json` with the Write tool, one entry per occurrence,
+keyed by the `id` and `start_utc` the triage result carried:
+
+- `"outcome": "written"` plus its `recording_id` — the meeting note is
+  verified on disk, or `sync dedup` said the id was already in the vault;
+- `"outcome": "no-transcript"` — the event carried no `meetingTranscriptUrl`
+  (`m365 ids` skipped it), or the transcript fetch answered
+  `transcripts_empty`;
+- `"outcome": "skipped"` — the id went onto the never-propose-again list
+  (`sync skip`), here or on an earlier run.
+
+A recording that *failed* — a transport error, a refused write — gets **no
+outcome line**, and neither does a cross-adapter duplicate deferred under
+`--unattended`: like everywhere else here, what is not settled is not
+recorded, and the occurrence surfaces again next run.
+
+```bash
+python3 "$VAULTLIB" sync m365-record --vault "$VAULT" \
+  --outcomes "$SCRATCH/m365_outcomes.json"
+```
 
 **Then check for a cross-adapter duplicate before anything is written.**
 The ledger keys on exact ids, so it cannot see that a Plaud recording and a
@@ -339,7 +401,7 @@ When the gate passes, match each recording to a calendar event. Compute
 the query window deterministically:
 
 ```bash
-python3 "$VAULTLIB" dates window --start 2026-08-20T16:42 --timezone <tz>
+python3 "$VAULTLIB" dates window --vault "$VAULT" --start 2026-08-20T16:42 --timezone <tz>
 ```
 
 Query with `utc_from`/`utc_to`. Score candidates: title-keyword overlap and
@@ -571,6 +633,7 @@ Count what exists, not what you intended (a lab run once reported
 **Possible duplicates:** {N} ({list the stems}) — kept as separate notes; each would have overwritten a meeting you already confirmed
 **Possible cross-adapter duplicates:** {N} — deferred; needs an interactive run
 **Skipped / errors:** {N} (will retry next run)
+**M365 fetches saved:** {N} of {N} listed occurrences answered from the seen-events cache | cache cold (first run)
 **Adapters:** inbox ok · plaud ok | REFUSED — signed in as a different account (account-mismatch) | REFUSED — no account bound to this vault yet (no-account-hint) | disabled | unavailable · m365 ok | REFUSED — signed in as a different account (account-mismatch) | REFUSED — no account bound to this vault yet (no-account-hint) | disabled | unavailable
 **Calendar enrichment:** ok | UNAVAILABLE
 **Warnings:** {verbatim} | none

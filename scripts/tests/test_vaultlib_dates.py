@@ -57,6 +57,51 @@ def test_window_zoneinfo_applies_dst():
     assert aug["offset_source"] == "zoneinfo"
 
 
+def test_window_clamps_to_start_date():
+    """#110: a window reaching before the vault's start date is cut off at
+    that date's local midnight — no adapter may ever be asked for earlier."""
+    result = dates.window("2026-08-27T01:00", utc_offset="+02:00", hours=48,
+                          start_date="2026-08-26")
+    # unclamped from would be 2026-08-24T23:00 UTC; the floor is local
+    # 2026-08-26T00:00 at +02:00 → 2026-08-25T22:00 UTC
+    assert result["utc_from"] == "2026-08-25T22:00:00"
+    assert result["utc_to"] == "2026-08-28T23:00:00"
+    assert result["clamped"] is True
+    assert result["window_empty"] is False
+    assert result["start_date"] == "2026-08-26"
+
+
+def test_window_entirely_before_start_date_is_empty():
+    result = dates.window("2026-08-20", utc_offset="+00:00", hours=0,
+                          start_date="2026-08-26")
+    assert result["window_empty"] is True
+    assert result["clamped"] is True
+    # both bounds land on the floor: a caller that queries anyway gets nothing
+    assert result["utc_from"] == "2026-08-26T00:00:00"
+    assert result["utc_to"] == "2026-08-26T00:00:00"
+
+
+def test_window_after_start_date_is_untouched():
+    result = dates.window("2026-08-20T16:42", utc_offset="-05:00", hours=2,
+                          start_date="2026-01-01")
+    assert result["utc_from"] == "2026-08-20T19:42:00"
+    assert result["utc_to"] == "2026-08-20T23:42:00"
+    assert result["clamped"] is False
+    assert result["window_empty"] is False
+
+
+def test_window_without_start_date_reports_no_clamp_keys():
+    result = dates.window("2026-08-20T16:42", utc_offset="-05:00", hours=2)
+    assert "clamped" not in result
+    assert "window_empty" not in result
+
+
+def test_window_rejects_malformed_start_date():
+    with pytest.raises(dates.DatesError, match="start-date"):
+        dates.window("2026-08-20T16:42", utc_offset="-05:00",
+                     start_date="26-08-2026")
+
+
 def test_unknown_timezone_raises_with_offset_hint():
     with pytest.raises(dates.DatesError, match="utc-offset"):
         dates.window("2026-08-20T16:42", timezone="Not/AZone")

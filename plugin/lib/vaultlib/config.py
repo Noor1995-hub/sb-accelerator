@@ -13,6 +13,7 @@ rejected.
 """
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 
 import json
@@ -25,10 +26,11 @@ KNOWN_VERSION = 1
 CONNECTOR_ADAPTERS = ("plaud", "m365")
 ADAPTERS = ("inbox",) + CONNECTOR_ADAPTERS
 FEEDBACK_REPO_RE = re.compile(r"\A[\w.-]+/[\w.-]+\Z")
-_TOP_LEVEL_KEYS = ("config-version", "timezone", "owner", "adapters", "feedback")
+_TOP_LEVEL_KEYS = ("config-version", "timezone", "owner", "adapters",
+                   "feedback", "sync")
 
 WRITABLE_FIELDS = (
-    "timezone", "owner", "feedback.repo",
+    "timezone", "owner", "feedback.repo", "sync.start-date",
 ) + tuple(f"adapters.{name}.enabled" for name in ADAPTERS) + tuple(
     f"adapters.{name}.account_hint" for name in CONNECTOR_ADAPTERS)
 
@@ -72,6 +74,8 @@ def _validate(cfg: dict) -> dict:
             f"{KNOWN_VERSION} — this plugin cannot read it"
         )
     cfg.setdefault("feedback", {"repo": None})
+    # Deployed vaults predate both keys; absence is the honest null state.
+    cfg.setdefault("sync", {"start-date": None})
     unknown = sorted(set(cfg) - set(_TOP_LEVEL_KEYS))
     if unknown:
         raise ConfigError(f"unknown config keys: {unknown}")
@@ -125,13 +129,42 @@ def _validate(cfg: dict) -> dict:
             not isinstance(repo, str) or not FEEDBACK_REPO_RE.match(repo)):
         raise ConfigError(
             'feedback.repo must be null or an "owner/name" GitHub slug')
+    sync = cfg["sync"]
+    if not isinstance(sync, dict) or set(sync) != {"start-date"}:
+        raise ConfigError(
+            'sync must be an object with exactly the key "start-date"')
+    _validate_start_date(sync["start-date"])
     return cfg
+
+
+def _validate_start_date(value) -> None:
+    """Null, or a real ISO calendar date. A date, deliberately not a
+    datetime: the vault's horizon is a provisioning day, and anything finer
+    would invite timezone arithmetic into a config file."""
+    if value is None:
+        return
+    if not isinstance(value, str) or not re.match(r"\A\d{4}-\d{2}-\d{2}\Z",
+                                                  value):
+        raise ConfigError(
+            f"sync.start-date {value!r} must be null or an ISO date "
+            "(YYYY-MM-DD)")
+    try:
+        datetime.strptime(value, "%Y-%m-%d")
+    except ValueError as exc:
+        raise ConfigError(
+            f"sync.start-date {value!r} is not a real date") from exc
 
 
 def read(root: Path) -> dict:
     """Validated config plus the completeness report skills act on."""
     cfg = _validate(_load(root))
     missing = [key for key in ("owner", "timezone") if cfg[key] is None]
+    if cfg["sync"]["start-date"] is None:
+        # Recommended, not blocking: without it every trailing search can
+        # reach back before the vault existed (recurring series expose
+        # occurrences years old). Provisioning writes it; a pre-existing
+        # vault surfaces it here so an upgrade visit knows to add it.
+        missing.append("sync.start-date")
     for name in CONNECTOR_ADAPTERS:
         entry = cfg["adapters"][name]
         if entry["enabled"] and entry["account_hint"] is None:

@@ -116,6 +116,10 @@ def check_config(template: Path) -> list[str]:
             )
     if cfg.get("feedback") != {"repo": None}:
         problems.append('template config.json must ship feedback as {"repo": null}')
+    if cfg.get("sync") != {"start-date": None}:
+        problems.append(
+            'template config.json must ship sync as {"start-date": null} — '
+            "provisioning writes the real date per deployment")
     return problems
 
 
