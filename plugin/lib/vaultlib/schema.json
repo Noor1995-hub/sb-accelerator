@@ -65,6 +65,9 @@
           "prospect",
           "active",
           "dormant"
+        ],
+        "type": [
+          "entity"
         ]
       },
       "optional": [
@@ -198,6 +201,9 @@
           "paused",
           "completed",
           "cancelled"
+        ],
+        "type": [
+          "project"
         ]
       },
       "optional": [
