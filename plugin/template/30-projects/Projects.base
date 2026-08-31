@@ -35,11 +35,11 @@ views:
     order:
       - formula.open
       - project-name
-      - project-type
       - entity
       - next-milestone
       - next-milestone-date
       - last-updated
+      - project-type
     sort:
       - property: last-updated
         direction: DESC
