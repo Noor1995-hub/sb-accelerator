@@ -16,6 +16,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 SKILLS_DIR = REPO_ROOT / "plugin" / "skills"
 
 SKILL_FILES = sorted(SKILLS_DIR.glob("*/SKILL.md"))
+REF_FILES = sorted(SKILLS_DIR.glob("*/references/*.md"))
 # Skills invoke the CLI through the $VAULTLIB convention rather than repeating
 # the path, so match either form: `cli.py <group> <action>` or
 # `"$VAULTLIB" <group> <action>`. Group and action names may carry digits
@@ -72,12 +73,13 @@ def test_skill_states_its_surface_requirement(path):
     )
 
 
-@pytest.mark.parametrize("path", SKILL_FILES, ids=lambda p: p.parent.name)
+@pytest.mark.parametrize("path", SKILL_FILES + REF_FILES, ids=lambda p: p.parent.name)
 def test_every_cli_invocation_named_by_a_skill_exists(path):
     implemented = known_subcommands()
     text = path.read_text(encoding="utf-8")
     referenced = set(INVOCATION_RE.findall(text))
-    assert referenced, f"{path.parent.name}: no CLI invocation found"
+    if path.name == "SKILL.md":
+        assert referenced, f"{path.parent.name}: no CLI invocation found"
     unknown = referenced - implemented
     assert not unknown, (
         f"{path.parent.name} references subcommands the CLI does not implement: "
@@ -139,6 +141,10 @@ def test_plugin_claude_md_documents_the_bare_stem_boundary():
 
 def read_skill(name: str) -> str:
     return (SKILLS_DIR / name / "SKILL.md").read_text(encoding="utf-8")
+
+
+def read_ref(skill: str, name: str) -> str:
+    return (SKILLS_DIR / skill / "references" / name).read_text(encoding="utf-8")
 
 
 def test_sync_skills_gate_connectors_through_config():
@@ -233,20 +239,47 @@ def test_sync_recordings_triages_m365_before_the_fetch():
         "triage must gate the full event reads, not follow them")
 
 
-# #122: 15 no-op extraction subagents at ~62k tokens each — transcript
-# availability must be settled by the orchestrator, and settled negatives
-# recorded, BEFORE any subagent is dispatched.
-def test_sync_recordings_gates_dispatch_on_a_fetched_transcript():
+# The #122 failure shape — a fleet of extraction subagents each paid ~62k
+# tokens to learn "nothing to write" — is prevented by triage + dedup gating
+# dispatch and by workers fetching FIRST (a negative is a first-tool-call
+# exit), not by centralizing fetches. The orchestrator stays the seen-events
+# cache's only writer.
+def test_sync_recordings_dispatches_workers_only_after_triage_and_dedup():
     text = read_skill("sync-recordings")
+    assert "survived triage" in text, (
+        "the dispatch gate must condition dispatch on triage + dedup")
     assert '"forbidden"' in text, (
         "a cross-tenant 403 needs a recorded outcome or it refetches forever")
-    assert "never makes a Graph call" in text, (
-        "the dispatch gate must say a subagent never fetches")
-    dispatch = text.index("### 6. Extract and write")
+    dispatch = text.index("### 6.")
     assert text.index("sync m365-record") < dispatch, (
-        "settled negative outcomes are recorded before dispatch, not after")
+        "no-transcript-url and skipped outcomes are banked before dispatch")
     assert text.rindex("sync m365-record") > dispatch, (
-        "written outcomes are still recorded after the notes exist")
+        "batch outcomes are banked after workers return")
+
+
+def test_sync_recordings_worker_outcomes_are_a_closed_vocabulary():
+    text = read_skill("sync-recordings")
+    for token in ("written:", "no-transcript", "forbidden",
+                  "fetch-error", "auth-error", "possible-duplicate-of"):
+        assert token in text, f"outcome vocabulary is missing {token}"
+    assert "never writes the seen-events cache" in text, (
+        "the single-writer rule must be stated")
+
+
+def test_sync_recordings_worker_contract_carries_the_fetch_mechanics():
+    text = read_skill("sync-recordings")
+    assert "references/worker-contract.md" in text, (
+        "step 6 must point workers at the contract file")
+    step1 = text.split("## The three adapters")[1].split("### 6.")[0]
+    assert "Never call" in step1 and "mcp__plaud__get_transcript" in step1, (
+        "step 1 must forbid the orchestrator fetching")
+    assert "next_cursor" not in step1, (
+        "pagination mechanics belong to the worker contract, not step 1")
+    ref = read_ref("sync-recordings", "worker-contract.md")
+    for phrase in ("next_cursor", "transcript_url", "plaud reassemble",
+                   "m365 reassemble", "sync collide", "meeting write",
+                   "payload-contract.md", "verbatim"):
+        assert phrase in ref, f"worker contract is missing {phrase}"
 
 
 def test_sync_recordings_states_the_start_date_bound():
