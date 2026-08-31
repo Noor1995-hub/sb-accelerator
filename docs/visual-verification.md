@@ -118,8 +118,8 @@ bytes; a rig inside the repo — `.../.claude/worktrees/<name>/.obsidian-probe/h
 — is 127 characters and Obsidian dies with `listen EINVAL`. `doctor` checks the
 length up front either way.
 
-Living outside the repo is also why the one-time Restricted Mode click survives
-every worktree, rebuild and fresh vault.
+Living outside the repo is also why the socket path stays short regardless of
+how deep a given worktree checkout lives on disk.
 
 `--shared` drives your own instance instead. The guard still applies, but
 expect your session to move around; use it only when the isolated instance is

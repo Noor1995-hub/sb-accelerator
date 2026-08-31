@@ -48,8 +48,11 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 # Short by necessity, not taste: the CLI binds "$HOME/.obsidian-cli.sock" and
 # macOS caps a unix socket path (sun_path) at 104 bytes. A rig inside the repo
 # — .../.claude/worktrees/<name>/.obsidian-probe/home — is 127 chars and the
-# app dies with `listen EINVAL`. Living outside the repo also means the
-# one-time "enable the CLI" click survives every worktree and rebuild.
+# app dies with `listen EINVAL`. This is the base that derive_probe_home()
+# hangs its per-worktree homes off of, and the fallback when someone passes
+# --home explicitly. Trust (both the CLI-enabled toggle and Restricted Mode)
+# is per-profile, not per-path — living outside the repo does not make it
+# cross-worktree; a fresh derived home still needs its own one-time clicks.
 DEFAULT_PROBE_HOME = Path.home() / ".sb-probe"
 SOCKET_NAME = ".obsidian-cli.sock"
 LOCK_NAME = "probe.lock"
@@ -721,12 +724,43 @@ def cmd_up(args) -> int:
                     f"{vault}.\n  Refusing to guess. Fix: "
                     f"`python scripts/obsidian_probe.py --home {home} down`, then retry.")
             else:
+                # resolve_vault_path raised: the socket is not answering. That
+                # can mean the instance is dead -- or it means "a modal blocks
+                # the CLI socket for the entire instance" (docs/visual-
+                # verification.md) and the window is still very much alive,
+                # just wedged behind a dialog. Unlinking either way is the
+                # only way to let a fresh launch through, but a wedged
+                # instance does not go away because its socket file did --
+                # say so, since after this `down`/`doctor` will report
+                # nothing running while that window still sits there.
+                print(
+                    f"warning: {socket_path(home)} was not answering, so it is "
+                    "being unlinked to let a fresh instance launch. If this "
+                    "was a wedged instance (a modal blocking its CLI socket) "
+                    "rather than a dead one, its window is still running and "
+                    f"will not be reachable via `down` or `doctor` anymore -- "
+                    f"find and quit it by hand (profile at {userdata}).",
+                    file=sys.stderr)
                 try:
                     socket_path(home).unlink()  # dead/wedged; let launch fire
                 except OSError:
                     pass
 
     if not socket_path(home).exists():
+        if fresh_profile:
+            # Printed before the launch, not after: a fresh profile is the
+            # one case where the 20s poll below can genuinely need a human,
+            # so the warning has to land before that wait, not as a
+            # postscript to a timeout that already happened.
+            print(
+                f"fresh probe profile at {home} -- the probe window may show "
+                "one of two one-time dialogs before it is ready. Accept "
+                "whichever appears (both are per-profile, not global -- a "
+                "new worktree pays for them again):\n"
+                "  - 'trust author and enable plugins', if this vault carries "
+                "community plugins (Restricted Mode)\n"
+                "  - Settings -> General -> Advanced -> enable 'Command line "
+                "interface', if the CLI toggle seeded from disk didn't take")
         env = dict(os.environ, HOME=str(home))
         # --user-data-dir is what actually defeats Electron's single-instance
         # lock (HOME alone does not: the second launch hands off and exits).
@@ -751,10 +785,14 @@ def cmd_up(args) -> int:
         else:
             raise ProbeError(
                 f"probe instance never bound {socket_path(home)} within 20s.\n"
-                "  If the probe window is showing 'trust author and enable plugins', "
-                "accept it — turning off Restricted Mode is the one step that cannot "
-                "ship as files. Thanks to the fixed vault id it is asked once per "
-                "profile, not once per vault.")
+                "  A fresh profile can need one of two one-time clicks before "
+                "the socket binds -- look in the probe window for either:\n"
+                "    - 'trust author and enable plugins', if this vault carries "
+                "community plugins (Restricted Mode)\n"
+                "    - Settings -> General -> Advanced -> enable 'Command line "
+                "interface', if the CLI toggle seeded from disk didn't take\n"
+                "  Both are per-profile, so this is once per probe home, not "
+                "once per vault.")
 
     wait_ready(home=home)
     base = guard(home=home)
@@ -764,12 +802,6 @@ def cmd_up(args) -> int:
     else:
         cloak_window(home=home)
     print(f"probe instance driving {base}")
-    if fresh_profile:
-        print(
-            f"fresh probe profile at {home} -- if this vault carries community "
-            "plugins, accept the one-time 'trust author and enable plugins' "
-            "dialog in the probe window (per-profile, not global -- a new "
-            "worktree costs one click).")
     return 0
 
 

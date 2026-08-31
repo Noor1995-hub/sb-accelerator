@@ -388,6 +388,44 @@ def test_up_refuses_an_unlocked_running_instance_with_a_different_vault(
         "must never tear down an instance it did not launch and cannot identify"
 
 
+def test_up_warns_before_unlinking_a_socket_that_is_not_answering(
+        monkeypatch, tmp_path, vault, capsys):
+    """The regression test for review finding #3: a socket that raises on
+    resolve_vault_path is not necessarily dead -- 'a modal blocks the CLI
+    socket for the entire instance' (docs/visual-verification.md) describes a
+    wedged-but-alive window. Unlinking to let a fresh launch through is still
+    correct, but it must say so, since it makes that window unreachable via
+    `down`/`doctor` afterwards."""
+    home = tmp_path / "probe-home"
+    home.mkdir()
+    monkeypatch.setattr(probe, "check_socket_path", lambda h: None)
+    probe.socket_path(home).write_text("")  # present, about to prove unresponsive
+
+    calls = {"n": 0}
+
+    def fake_cli(args, **kw):
+        calls["n"] += 1
+        if calls["n"] == 1:  # the one resolve_vault_path check against the old socket
+            raise probe.ProbeError("wedged: no answer")
+        return json.dumps({"result": {"value": str(vault)}})
+    monkeypatch.setattr(probe, "cli", fake_cli)
+
+    class FakeProc:
+        pid = 4242
+
+    def fake_popen(cmd, **kw):
+        probe.socket_path(home).write_text("")  # the fresh instance binds
+        return FakeProc()
+    monkeypatch.setattr(probe.subprocess, "Popen", fake_popen)
+
+    argv = ["--home", str(home), "up", "--vault", str(vault)]
+    assert probe.cmd_up(args_for(argv)) == 0
+
+    err = capsys.readouterr().err
+    assert "was not answering" in err
+    assert str(home / "userdata") in err, "must name the profile so a human can find it"
+
+
 # --- cmd_tour (#67: tour output reliability, plus the #75 lock cross-check) ---
 
 def test_tour_resolves_a_relative_out_to_the_invocation_cwd(monkeypatch, tmp_path, vault):
