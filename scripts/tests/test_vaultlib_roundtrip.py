@@ -15,7 +15,7 @@ from datetime import date
 
 import yaml
 
-from vaultlib import decision, markdown, project, syncjob, updatequeue
+from vaultlib import decision, entity, markdown, project, syncjob, updatequeue
 
 from test_vaultlib_updatequeue import (make_vault, write_meeting,
                                        write_person, write_project)
@@ -245,3 +245,20 @@ def test_pyyaml_reads_the_dates_meetings_and_lists_correctly(tmp_path):
     assert parsed["meetings-7d"] == 1
     assert isinstance(parsed["key-people"], list)
     assert parsed["last-updated"] in ("2026-06-01", date(2026, 6, 1))
+
+
+def test_entity_name_with_backslash_reads_back_in_pyyaml(tmp_path):
+    """A backslash before a quote is the one sequence YAML re-reads as an
+    escape, so vaultlib and PyYAML disagreed about the value (#47, fixed by
+    escaping the backslash first in markdown.emit_scalar). Pinned from the
+    entity side because entity-name is a quoted display-name field and the one
+    the /update-entity flow writes from free-form user input.
+    """
+    root = make_vault(tmp_path)
+    name = 'Meridian \\" Freight Holdings'
+    entity.ensure(root, slug="meridian", name=name, today="2026-08-31")
+
+    text = (root / "40-entities" / "meridian"
+            / "dossier.md").read_text(encoding="utf-8")
+    assert yaml.safe_load(text.split("---\n")[1])["entity-name"] == name
+    assert markdown.split_frontmatter(text)[0]["entity-name"] == name

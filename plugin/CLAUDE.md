@@ -39,6 +39,10 @@ cell it is given. Passing the stored form straight back through
 to the two table sections, Stakeholders and Engagements; bullet and heading
 sections store free text as given.
 
+A raw `|` a human typed straight into a cell in Obsidian is repaired on the
+next write — re-joined into the column it belongs to, stored escaped — and
+reported in the result's `repairs` list.
+
 ### Wikilink fields cross the boundary as bare stems
 
 `decision write` takes `supersedes` and `source` as bare note stems

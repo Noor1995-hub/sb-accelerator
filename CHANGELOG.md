@@ -15,6 +15,17 @@ delivers them.
 
 ## Unreleased
 
+- **A pipe you type into a dossier table cell no longer deletes the rest of
+  the cell.** Previously, writing `wants a | b comparison` by hand into a
+  Stakeholders or Engagements cell made the next `/update-entity` write
+  silently drop everything after the `|`, while the table looked fine in
+  Obsidian. Hand-edits like that — a raw pipe, a deleted separator row, a note
+  starting with `|` — are now repaired instead: nothing is lost, the file is
+  tidied on the next write, and the skill tells you what was repaired.
+  Sections you add to a dossier yourself are now visible to the skills too.
+  Malformed *generated* updates — a misspelled field, a non-text value, a date
+  that isn't `YYYY-MM-DD` — are now refused with a clear error instead of
+  writing something wrong. (#114)
 - **Routine syncs stop re-downloading meetings they already know about, and
   the vault never looks before its own start date.** The Microsoft 365 sync
   now remembers, per meeting occurrence, whether it was written, skipped, or
