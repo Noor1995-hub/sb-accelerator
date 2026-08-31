@@ -33,11 +33,14 @@ from .m365 import _parse_graph_dt, M365Error
 
 CACHE_RELPATH = Path("99-workflow-config") / "sync-state" / "seen-events.json"
 CACHE_VERSION = 1
-OUTCOMES = ("written", "no-transcript", "skipped")
+OUTCOMES = ("written", "no-transcript", "skipped", "forbidden")
 # Teams transcripts trail the meeting; the lab saw them minutes-to-hours
 # late. Two days is the horizon after which "no transcript" stops being
 # "not yet" and becomes the answer.
 NO_TRANSCRIPT_FINAL_AFTER_HOURS = 48
+# "forbidden" is a cross-tenant 403 on the transcript fetch: the ACL never
+# heals, so — unlike "no-transcript" — it is terminal the moment it is
+# recorded, same as "skipped".
 # Occurrences older than this fall out of every search window this plugin
 # runs (7 trailing days), so their entries are dead weight; dropping them
 # costs at most one re-check if a wider window ever asks again.
@@ -127,7 +130,8 @@ def triage(root: Path, events, now_utc: datetime) -> dict:
     entries = cache["events"]
     fetch: List[dict] = []
     warnings: List[str] = []
-    filtered = {"written": 0, "no_transcript_final": 0, "skipped": 0}
+    filtered = {"written": 0, "no_transcript_final": 0, "skipped": 0,
+                "forbidden": 0}
     for event in events:
         if not isinstance(event, dict):
             raise SeenEventsError(
@@ -157,6 +161,8 @@ def triage(root: Path, events, now_utc: datetime) -> dict:
             filtered["written"] += 1
         elif outcome == "skipped":
             filtered["skipped"] += 1
+        elif outcome == "forbidden":
+            filtered["forbidden"] += 1
         elif outcome == "no-transcript":
             end = _occurrence_dt(event, "end") or start
             if now_utc - end >= timedelta(

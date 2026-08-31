@@ -54,7 +54,7 @@ def test_fresh_cache_sends_every_event_to_fetch(tmp_path):
     assert [e["id"] for e in result["fetch"]] == ["AAMkAGId1", "AAMkAGId2"]
     assert all(e["reason"] == "unseen" for e in result["fetch"])
     assert result["filtered"] == {"written": 0, "no_transcript_final": 0,
-                                  "skipped": 0}
+                                  "skipped": 0, "forbidden": 0}
 
 
 def test_triage_filters_written_and_skipped_occurrences(tmp_path):
@@ -68,7 +68,7 @@ def test_triage_filters_written_and_skipped_occurrences(tmp_path):
     result = seenevents.triage(root, events, NOW)
     assert [e["id"] for e in result["fetch"]] == ["AAMkAGId3"]
     assert result["filtered"] == {"written": 1, "no_transcript_final": 0,
-                                  "skipped": 1}
+                                  "skipped": 1, "forbidden": 0}
 
 
 def test_two_occurrences_of_one_series_are_distinct(tmp_path):
@@ -103,6 +103,32 @@ def test_no_transcript_after_48h_is_final(tmp_path):
     result = seenevents.triage(root, [listing_event()], past)
     assert result["fetch"] == []
     assert result["filtered"]["no_transcript_final"] == 1
+
+
+def test_forbidden_is_terminal_immediately(tmp_path):
+    """A cross-tenant 403 is a settled answer, not a "not yet": unlike
+    no-transcript, which stays provisional for 48h because Teams delivers
+    transcripts late, a forbidden fetch never heals, so it is filtered from
+    the very next triage and stays filtered a week later."""
+    root = make_vault(tmp_path)
+    seenevents.record(root, [outcome(kind="forbidden")], NOW)
+    soon = NOW + timedelta(minutes=1)
+    result = seenevents.triage(root, [listing_event()], soon)
+    assert result["fetch"] == []
+    assert result["filtered"]["forbidden"] == 1
+    later = NOW + timedelta(days=7)
+    result = seenevents.triage(root, [listing_event()], later)
+    assert result["fetch"] == []
+    assert result["filtered"]["forbidden"] == 1
+
+
+def test_forbidden_requires_no_recording_id(tmp_path):
+    root = make_vault(tmp_path)
+    recorded = seenevents.record(root, [{
+        "id": "AAMkAGId1", "start_utc": "2026-08-28T14:00:00",
+        "outcome": "forbidden",
+    }], NOW)
+    assert recorded["recorded"] == 1
 
 
 def test_recording_an_outcome_round_trips(tmp_path):

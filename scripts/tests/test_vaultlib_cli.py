@@ -734,6 +734,35 @@ def test_sync_m365_triage_rejects_a_malformed_now(capsys, tmp_path):
     assert payload["ok"] is False
 
 
+def test_sync_m365_record_accepts_a_forbidden_outcome(capsys, tmp_path):
+    """A cross-tenant 403 on the transcript fetch is recorded with no
+    recording_id — the ACL never heals, so it never maps onto the vault's
+    ledger the way a "written" outcome does."""
+    root = make_vault(tmp_path)
+    listing = tmp_path / "search.json"
+    listing.write_text(json.dumps(M365_LISTING), encoding="utf-8")
+
+    outcomes = tmp_path / "outcomes.json"
+    outcomes.write_text(json.dumps([{
+        "id": "AAMkAGId1", "start_utc": "2026-08-25T14:00:00",
+        "outcome": "forbidden",
+    }]), encoding="utf-8")
+    code, payload = run(capsys, [
+        "sync", "m365-record", "--vault", str(root),
+        "--outcomes", str(outcomes), "--now", "2026-08-25T19:00:00",
+    ])
+    assert code == 0
+    assert payload["result"]["recorded"] == 1
+
+    code, payload = run(capsys, [
+        "sync", "m365-triage", "--vault", str(root),
+        "--events", str(listing), "--now", "2026-09-01T20:00:00",
+    ])
+    assert code == 0
+    assert payload["result"]["fetch"] == []
+    assert payload["result"]["filtered"]["forbidden"] == 1
+
+
 def test_dates_window_with_a_vault_clamps_to_the_config_start_date(
     capsys, tmp_path
 ):

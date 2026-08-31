@@ -15,6 +15,15 @@ delivers them.
 
 ## Unreleased
 
+- **Syncing a calendar full of transcript-less meetings is now far cheaper
+  and faster.** The recording sync now settles whether a Teams transcript
+  actually exists — and records the answer — before handing any meeting to
+  an extraction worker, instead of after. A run that used to spin up a
+  worker per calendar event and come back empty now spins up workers only
+  for meetings with a real transcript. Meetings whose transcript belongs to
+  another organization's tenant — a permission refusal that never changes —
+  are now remembered and never retried, instead of being re-checked on
+  every run. (#124)
 - **The Projects list now fits a 13-inch laptop.** On a 1440×900 window the
   Active view used to hide the `Updated` column off the right edge — the
   wide project-type values ate the row's width first. The column order now
