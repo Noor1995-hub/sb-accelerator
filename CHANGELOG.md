@@ -15,6 +15,13 @@ delivers them.
 
 ## Unreleased
 
+- **Same-day meetings now trigger an evening project-state update.** A meeting
+  confirmed on the same day a project's state was last written used to be
+  silently dropped from the update queue forever — the queue compared days,
+  not times. Projects now carry a `state-updated` timestamp written by the
+  evening run; on an existing vault the first run after upgrading may queue a
+  few projects one extra time while the new stamp settles, then behavior
+  converges. (#112)
 - **The triage checkboxes now fit a 13-inch laptop.** On a 1440×900 window
   the Meetings triage view used to hide ✓ Reviewed, ⚠ Duplicate of and
   🗑 Archive off the right edge — the columns are reordered so the controls

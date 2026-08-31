@@ -1,6 +1,7 @@
 """Project scaffolding. The guard rails here are the ones a model gets wrong:
 collisions, parent depth, and areas that should never be nested."""
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -210,11 +211,14 @@ def make_touch_vault(tmp_path):
 def test_touch_bumps_last_updated_and_nothing_else(tmp_path):
     root = make_touch_vault(tmp_path)
     before = (root / "30-projects" / "alpha" / "index.md").read_text(encoding="utf-8")
-    result = project.touch(root, slug="alpha", date_iso="2026-06-12")
+    result = project.touch(root, slug="alpha", date_iso="2026-06-12",
+                           timestamp="2026-06-12T19:30")
     after = (root / "30-projects" / "alpha" / "index.md").read_text(encoding="utf-8")
     assert result["last-updated"] == "2026-06-12" and result["changed"] is True
-    assert after == before.replace("last-updated: 2026-06-01",
-                                   "last-updated: 2026-06-12")
+    # The whole byte diff: last-updated replaced, state-updated inserted.
+    assert after == before.replace(
+        "last-updated: 2026-06-01",
+        "last-updated: 2026-06-12\nstate-updated: 2026-06-12T19:30")
 
 
 def test_touch_upserts_the_milestone_pair(tmp_path):
@@ -252,8 +256,10 @@ def test_touch_milestone_fields_travel_together(tmp_path):
 
 def test_touch_is_idempotent(tmp_path):
     root = make_touch_vault(tmp_path)
-    project.touch(root, slug="alpha", date_iso="2026-06-12")
-    second = project.touch(root, slug="alpha", date_iso="2026-06-12")
+    project.touch(root, slug="alpha", date_iso="2026-06-12",
+                  timestamp="2026-06-12T19:30")
+    second = project.touch(root, slug="alpha", date_iso="2026-06-12",
+                           timestamp="2026-06-12T19:30")
     assert second["changed"] is False
 
 
@@ -284,6 +290,47 @@ def test_touch_rejects_a_lone_carriage_return_in_the_milestone(tmp_path):
     assert after == before
 
 
+def test_touch_writes_state_updated(tmp_path):
+    """last-updated stays the human-facing day; state-updated is the minute
+    the state was actually synthesized, which is what the next evening run's
+    update queue compares meeting datetimes against (issue #98)."""
+    root = make_touch_vault(tmp_path)
+    result = project.touch(root, slug="alpha", date_iso="2026-06-12",
+                           timestamp="2026-06-12T19:30")
+    text = (root / "30-projects" / "alpha" / "index.md").read_text(
+        encoding="utf-8")
+    assert "state-updated: 2026-06-12T19:30" in text
+    assert result["state-updated"] == "2026-06-12T19:30"
+    data, _ = md.split_frontmatter(text)
+    assert data["state-updated"] == "2026-06-12T19:30"
+    assert data["last-updated"] == "2026-06-12"
+
+
+def test_touch_rejects_a_bad_or_bare_date_timestamp(tmp_path):
+    """A bare date would stamp 00:00 and reintroduce the churn the timestamp
+    exists to stop, so the gate refuses it as loudly as garbage."""
+    root = make_touch_vault(tmp_path)
+    before = (root / "30-projects" / "alpha" / "index.md").read_text(
+        encoding="utf-8")
+    for bad in ("2026-06-12", "garbage", "2026-06-12T99:99"):
+        with pytest.raises(project.ProjectError, match="timestamp"):
+            project.touch(root, slug="alpha", date_iso="2026-06-12",
+                          timestamp=bad)
+    after = (root / "30-projects" / "alpha" / "index.md").read_text(
+        encoding="utf-8")
+    assert after == before
+
+
+def test_touch_default_timestamp_is_a_datetime(tmp_path):
+    root = make_touch_vault(tmp_path)
+    result = project.touch(root, slug="alpha", date_iso="2026-06-12")
+    assert re.match(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$",
+                    result["state-updated"])
+    text = (root / "30-projects" / "alpha" / "index.md").read_text(
+        encoding="utf-8")
+    assert f"state-updated: {result['state-updated']}" in text
+
+
 def test_cli_touch_envelope(tmp_path):
     """`project touch` is the one write /evening-sync makes per queued project,
     so its envelope is pinned through a real process — argparse's --next-
@@ -292,6 +339,7 @@ def test_cli_touch_envelope(tmp_path):
     proc = subprocess.run(
         [sys.executable, str(CLI), "project", "touch", "--vault", str(root),
          "--slug", "alpha", "--date", "2026-06-12",
+         "--timestamp", "2026-06-12T19:30",
          "--next-milestone", "Vendor contract signature",
          "--next-milestone-date", "2026-09-01"],
         capture_output=True, text=True)
@@ -302,6 +350,7 @@ def test_cli_touch_envelope(tmp_path):
         "slug": "alpha",
         "path": "30-projects/alpha/index.md",
         "last-updated": "2026-06-12",
+        "state-updated": "2026-06-12T19:30",
         "next-milestone": "Vendor contract signature",
         "next-milestone-date": "2026-09-01",
         "changed": True,

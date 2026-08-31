@@ -9,6 +9,7 @@ owner: morgan-ellery
 stakeholders: [sam-okafor, omar-siddiqui]
 created: 2026-03-01
 last-updated: 2026-06-01
+state-updated: 2026-06-01T18:30
 meetings-7d: 0
 meetings-30d: 1
 key-people: [omar-siddiqui, sam-okafor]
