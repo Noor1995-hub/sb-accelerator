@@ -90,7 +90,12 @@ payload text:**
 | `no-transcript` | M365: fetch answered `transcripts_empty` (NOT_FOUND) |
 | `forbidden` | M365: 403 — another tenant owns it, permanent |
 | `fetch-error` | transport failure after retries; retries next run |
+| `auth-error` | connector wants re-authentication; orchestrator stops dispatching that adapter |
 | `possible-duplicate-of: <stem> (payload at <path>)` | collision; did not write (§6) |
+
+`auth-error` was a deviation found during planning: a Plaud 401 must stop
+the adapter, not read as a per-recording retry — re-authentication is the
+user's call, not something a worker can resolve by trying again.
 
 A worker never asks a question (subagents cannot), never makes a Graph or
 Plaud call for any recording other than its own, and never touches the
