@@ -1056,3 +1056,34 @@ def test_a_missing_display_name_warns_instead_of_blocking(tmp_path):
         recap="- [[taylor-brooks|Taylor Brooks]] owns the draft."))
     assert result["created"] is True
     assert "person-name" in result["warnings"][0]
+
+
+def test_two_bad_links_in_one_recap_are_reported_together(tmp_path):
+    """Issue #78: raising on the first offender exhausts the single retry
+    the skill allows, so a second independently-bad link in the same recap
+    still means no note. One error must name every offender at once."""
+    root = make_linkable_vault(tmp_path)
+    with pytest.raises(dailynote.DailyNoteError) as excinfo:
+        dailynote.write(root, payload(
+            recap=("- [[meridian-industrial-holdings]] wants a comparison.\n"
+                  "- [[phantom-project]] is also mentioned.")))
+    message = str(excinfo.value)
+    assert "meridian-industrial-holdings" in message
+    assert "phantom-project" in message
+
+
+def test_bad_links_in_different_regions_are_reported_together(tmp_path):
+    """Offenders in the recap and in a meeting's prep must land in the same
+    error, each still carrying its own region label, so the retry can fix
+    both without a second round trip."""
+    root = make_linkable_vault(tmp_path)
+    bad = payload(
+        recap="- [[meridian-industrial-holdings]] wants a comparison.")
+    bad["meetings"][0]["prep"] = "**Context:** [[ghost-entity]] escalated."
+    with pytest.raises(dailynote.DailyNoteError) as excinfo:
+        dailynote.write(root, bad)
+    message = str(excinfo.value)
+    assert "recap" in message
+    assert "meridian-industrial-holdings" in message
+    assert "meeting 1 prep" in message
+    assert "ghost-entity" in message

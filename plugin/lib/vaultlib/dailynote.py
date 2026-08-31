@@ -149,23 +149,32 @@ def _resolve_link(root: Path, target: str):
 
 
 def _check_links(root: Path, text: str, label: str,
-                 warnings: List[str]) -> None:
+                 warnings: List[str]) -> List[str]:
     """Every wikilink resolves; every identity alias matches the vault.
 
     Decision 19. A plain-prose name cannot be checked by anything, which is
     why the skill mandates the wikilink form — this is the half that a
     machine can hold.
+
+    Every unresolvable target and every identity-alias mismatch is
+    collected and returned rather than raised immediately (issue #78): a
+    recap with two independently-bad links used to exhaust the skill's
+    single retry on the first offender and still fail on the second, with
+    no note written for tomorrow. The caller raises once, across every
+    region, so a single retry always has everything it needs.
     """
+    offenders: List[str] = []
     for match in _WIKILINK_RE.finditer(text):
         target = match.group(1).strip()
         alias = match.group(2)
         kind, path, name_key = _resolve_link(root, target)
         if kind is None:
-            raise DailyNoteError(
+            offenders.append(
                 f"{label}: [[{target}]] resolves to no vault object — link "
                 "only to objects that exist (create one with /update-entity "
                 "or /new-project first), or leave the name out. Never write "
                 "a name you have not looked up.")
+            continue
         if alias is None or name_key is None:
             continue
         try:
@@ -183,23 +192,25 @@ def _check_links(root: Path, text: str, label: str,
                 "not verified")
             continue
         if alias.strip() != actual:
-            raise DailyNoteError(
+            offenders.append(
                 f"{label}: [[{target}|{alias}]] — that {kind} is called "
                 f"{actual!r}. Display names come from the vault, never from "
                 "the model.")
+    return offenders
 
 
 def _validate(root: Path, payload) -> Tuple[dict, List[str]]:
     if not isinstance(payload, dict):
         raise DailyNoteError("the payload must be a JSON object")
     warnings: List[str] = []
+    link_offenders: List[str] = []
     unknown = sorted(set(payload) - set(_ALLOWED_KEYS))
     if unknown:
         raise DailyNoteError(f"unknown payload key(s) {unknown}")
     date_iso = _require_date(payload.get("date"))
     window = _validate_window(payload, date_iso)
     recap = _clean_region_text(payload.get("recap"), "recap")
-    _check_links(root, recap, "recap", warnings)
+    link_offenders.extend(_check_links(root, recap, "recap", warnings))
     raw_meetings = payload.get("meetings")
     if not isinstance(raw_meetings, list):
         raise DailyNoteError("meetings must be a list (possibly empty)")
@@ -237,7 +248,8 @@ def _validate(root: Path, payload) -> Tuple[dict, List[str]]:
                     "rather than guessing")
         prep = _clean_region_text(entry.get("prep"),
                                   f"meeting {position} prep")
-        _check_links(root, prep, f"meeting {position} prep", warnings)
+        link_offenders.extend(
+            _check_links(root, prep, f"meeting {position} prep", warnings))
         meetings.append({"time": time_text, "subject": subject,
                          "entity": entity, "prep": prep})
     meetings_note = payload.get("meetings_note")
@@ -248,7 +260,10 @@ def _validate(root: Path, payload) -> Tuple[dict, List[str]]:
         meetings_note = _clean_region_text(meetings_note, "meetings_note")
         if "\n" in meetings_note:
             raise DailyNoteError("meetings_note must be a single line")
-        _check_links(root, meetings_note, "meetings_note", warnings)
+        link_offenders.extend(
+            _check_links(root, meetings_note, "meetings_note", warnings))
+    if link_offenders:
+        raise DailyNoteError("\n".join(link_offenders))
     return ({"date": date_iso, "recap": recap, "meetings": meetings,
              "meetings_note": meetings_note, "recap_window": window},
             warnings)
