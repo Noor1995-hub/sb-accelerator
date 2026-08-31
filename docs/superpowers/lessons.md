@@ -550,6 +550,14 @@ payload carries no such self-description, say so in the skill and treat the
 absence as the risk it is. And when a fix touches an MCP call, spend one live
 call reading the envelope before trusting the shape written down last time.
 
+**Second instance (2026-08-31).** `outlook_calendar_search`: three skills
+described a window as `utc_from`/`utc_to` parameters, but the live connector's
+schema (read against a connected instance) takes `afterDateTime`/
+`beforeDateTime` — and caps at 25 events per call, paging via the response's
+`nextOffset`, which no skill mentioned. Same failure shape: nothing errors, a
+busy window just syncs its first page. The closing rule above is the fix both
+times — read the envelope live before trusting the prose.
+
 ## 2026-08-26 — three regexes for one timestamp, agreeing with nobody
 
 **What went wrong.** `plaud.reassemble` and `m365.reassemble` returned

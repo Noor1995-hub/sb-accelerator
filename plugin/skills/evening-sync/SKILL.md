@@ -217,9 +217,16 @@ window deterministically:
 python3 "$VAULTLIB" dates window --start <next_business_day> --timezone <tz> --hours 0
 ```
 
-**Write the raw `outlook_calendar_search` result to `$SCRATCH/m365_calendar.json`
-with the Write tool — never hold it in the main context.** A day's calendar
-search easily runs tens of thousands of characters, and it is read once (to
+Pass the window's `utc_from`/`utc_to` values as the tool's
+`afterDateTime`/`beforeDateTime`. The tool answers at most **25 events per
+call** — a packed day plus its all-day entries can exceed that — so when a
+response carries `nextOffset`, call again with `offset` set to it until it
+stops.
+
+**Write the raw `outlook_calendar_search` results — every page — to
+`$SCRATCH/m365_calendar.json` with the Write tool — never hold them in the
+main context.** A day's calendar search easily runs tens of thousands of
+characters, and it is read once (to
 filter and sort) then never needed again; keeping it in context past that
 point is pure waste that every later turn in the run pays for again. Read it
 back from the file to filter out all-day and cancelled events; sort by start

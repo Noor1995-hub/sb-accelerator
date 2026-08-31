@@ -527,9 +527,11 @@ from phase 1.
 Open with **their own words from file 2**: the responsibilities and the
 in-flight things they already described, read back as two short lists. Add,
 when m365 is connected, the recurring subjects on their calendar over the next
-and last two weeks (`outlook_calendar_search`, with the query window computed
-deterministically by `dates window` rather than by hand). Then let the vault
-owner cut.
+and last two weeks (`outlook_calendar_search`, its `afterDateTime`/
+`beforeDateTime` taken from a query window computed deterministically by
+`dates window` rather than by hand). The tool caps at 25 events per call and
+four busy weeks far exceed that, so page — `offset` set to each response's
+`nextOffset` — until it stops. Then let the vault owner cut.
 
 The distinction from file 2 is what decides `--type`:
 
