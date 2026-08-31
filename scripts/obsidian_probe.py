@@ -244,9 +244,34 @@ def read_lock(home) -> Optional[dict]:
 
 
 def pid_alive(pid) -> bool:
-    """Best-effort liveness of a lock's recorded pid, via a signal-0 probe."""
+    """Best-effort liveness of a lock's recorded pid.
+
+    The probe only ever runs the *app* on macOS, but this module's unit tests
+    run cross-platform in CI, and on Windows `os.kill(pid, 0)` does not mean
+    "signal 0" the way POSIX overloads it to mean "just check" -- `0` is
+    `CTRL_C_EVENT`, so it sends a real Ctrl-C to the process group. A test
+    that calls `pid_alive(os.getpid())` would interrupt the test run itself.
+    So Windows gets its own liveness check via the Win32 API instead of
+    os.kill, even though nothing here launches Obsidian on Windows.
+    """
     if not pid or pid <= 0:
         return False
+    if sys.platform == "win32":
+        import ctypes
+        from ctypes import wintypes
+        PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+        STILL_ACTIVE = 259  # a process that happened to exit with code 259
+        # reads as alive -- an acceptable false positive for a dev tool.
+        kernel32 = ctypes.windll.kernel32
+        handle = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+        if not handle:
+            return False
+        try:
+            code = wintypes.DWORD()
+            ok = kernel32.GetExitCodeProcess(handle, ctypes.byref(code))
+            return bool(ok) and code.value == STILL_ACTIVE
+        finally:
+            kernel32.CloseHandle(handle)
     try:
         os.kill(pid, 0)
     except ProcessLookupError:
