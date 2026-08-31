@@ -1266,6 +1266,70 @@ def test_a_row_whose_trailing_pipe_was_deleted_is_still_a_row(tmp_path):
         f"a row missing its optional trailing pipe is not a repair: {result}")
 
 
+@pytest.mark.parametrize("gap", ["\n\n", "\n"],
+                         ids=["blank-line-between", "no-blank-line-between"])
+def test_a_pipe_note_above_the_stakeholder_table_is_not_taken_for_the_header(
+        tmp_path, gap):
+    # Taking the first pipe-prefixed line as the header regardless of what
+    # follows it put the note where the header belonged: the note was dropped
+    # as "the header row", the blank after it closed the table, and the real
+    # header, separator and every row fell through to prose. The payload then
+    # had no row to match, so it appended a duplicate Dana and stranded the
+    # original table below her. GFM opens a table at a header followed by a
+    # delimiter row, so Obsidian renders this input as a paragraph plus an
+    # intact table — the parser has to agree.
+    root = seeded(tmp_path)
+    entity.write(root, SLUG, {"stakeholders": [
+        {"name": "Dana Whitfield", "title": "CFO", "stance": "champion"}]},
+        TODAY)
+    note = "| a note: the CFO's assistant is Sam (reach him first)"
+    _hand_edit(root, entity.STAKEHOLDER_HEADER,
+               note + gap + entity.STAKEHOLDER_HEADER)
+
+    result = entity.write(root, SLUG, {"stakeholders": [
+        {"name": "Dana Whitfield", "title": "Group CFO"}]}, TODAY)
+
+    section = entity.read(root, SLUG)["sections"]["Stakeholders"]
+    rows = [line for line in section.splitlines() if "Whitfield" in line]
+    assert len(rows) == 1, f"the stakeholder was duplicated: {rows}"
+    assert "Group CFO" in rows[0]
+    assert "champion" in rows[0], "the stored stance was stranded"
+    assert note in section.splitlines(), "the human's note was not kept"
+    assert section.count("| Name | Title |") == 1, (
+        f"the original table was stranded as prose: {section!r}")
+    assert result["repairs"] == [], (
+        f"a note above the table is not a repair: {result['repairs']}")
+
+
+@pytest.mark.parametrize("gap", ["\n\n", "\n"],
+                         ids=["blank-line-between", "no-blank-line-between"])
+def test_a_pipe_note_above_the_engagements_table_is_not_taken_for_the_header(
+        tmp_path, gap):
+    # _merge_engagements shares _parse_table, so both tables carry the defect.
+    root = seeded(tmp_path)
+    entity.write(root, SLUG, {"engagements": [
+        {"project": "meridian-yard-automation-program", "status": "Completed",
+         "one_liner": "Three-yard rollout"}]}, TODAY)
+    note = "| a note: procurement owns the renewal calendar"
+    _hand_edit(root, entity.ENGAGEMENT_HEADER,
+               note + gap + entity.ENGAGEMENT_HEADER)
+
+    result = entity.write(root, SLUG, {"engagements": [
+        {"project": "meridian-yard-automation-program",
+         "one_liner": "Closed out in Q3"}]}, TODAY)
+
+    section = entity.read(root, SLUG)["sections"]["Engagements"]
+    rows = [line for line in section.splitlines()
+            if "meridian-yard-automation-program" in line]
+    assert len(rows) == 1, f"the engagement was duplicated: {rows}"
+    assert "Closed out in Q3" in rows[0]
+    assert "Completed" in rows[0], "the stored status was stranded"
+    assert note in section.splitlines(), "the human's note was not kept"
+    assert section.count("| Project | Status |") == 1, (
+        f"the original table was stranded as prose: {section!r}")
+    assert result["repairs"] == []
+
+
 def test_a_reported_repair_never_fires_twice(tmp_path):
     # Every reported repair changes bytes and leaves the file canonical, so the
     # second write over the same content has nothing to report. A note that

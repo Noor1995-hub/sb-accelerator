@@ -433,6 +433,10 @@ def _split_row(line: str) -> list:
 
 
 _SEPARATOR_CELL_RE = re.compile(r"\A:?-+:?\Z")
+# The header rows this module writes, as cells, for recognising a table whose
+# separator a human deleted.
+_STAKEHOLDER_HEADER_CELLS = _split_row(STAKEHOLDER_HEADER.split("\n")[0])
+_ENGAGEMENT_HEADER_CELLS = _split_row(ENGAGEMENT_HEADER.split("\n")[0])
 
 
 def _is_separator(stripped: str) -> bool:
@@ -441,8 +445,56 @@ def _is_separator(stripped: str) -> bool:
     return bool(cells) and all(_SEPARATOR_CELL_RE.match(cell) for cell in cells)
 
 
+def _header_key(cells: Sequence[str]) -> List[str]:
+    """Comparison key for a header row: spacing and case carry no meaning."""
+    return [_WS_RUN_RE.sub(" ", cell).strip().lower() for cell in cells]
+
+
+def _find_header(lines: Sequence[str], header_cells: Sequence[str]) -> int:
+    """Index of the table's header row, or -1 when there is no table.
+
+    Finding the header explicitly is the whole ballgame. Treating the *first*
+    pipe-prefixed line as the header regardless of what follows it meant a
+    human's note above the table was consumed as the header and deleted, the
+    real header and every row were demoted to prose, and the payload — with no
+    row left to match — appended a duplicate person. A never-delete *and*
+    never-duplicate violation from one wrong assumption.
+
+    A line opens the table when either holds:
+
+    1. **The next non-blank line is a separator.** This is the renderer's own
+       rule (GFM opens a table at a header followed by a delimiter row), so on
+       any well-formed file this parser and Obsidian cannot disagree. It is
+       also what keeps a hand-renamed header working.
+    2. **The line is this section's canonical header.** Rule 1 alone cannot
+       carry the deleted-separator repair: with the separator gone there is no
+       delimiter row to find, the table would never open, and the rows we are
+       trying to rescue would strand as prose. Every header in a dossier was
+       written by this module, so matching it — modulo spacing and case — is a
+       reliable second opening, and it is the one place we deliberately part
+       company with the renderer: Obsidian shows that file as plain text, and
+       repairing it into a table is the point.
+
+    Anything before the opening line is the human's own text.
+    """
+    canonical = _header_key(header_cells)
+    for index, line in enumerate(lines):
+        stripped = line.strip()
+        if not stripped.startswith("|"):
+            continue
+        if canonical and _header_key(_split_row(stripped)) == canonical:
+            return index
+        for later in lines[index + 1:]:
+            if not later.strip():
+                continue
+            if _is_separator(later.strip()):
+                return index
+            break
+    return -1
+
+
 def _parse_table(
-    content: str, columns: int
+    content: str, columns: int, header_cells: Sequence[str] = ()
 ) -> Tuple[List[str], List[List[str]], List[str], List[str]]:
     """Return (lines before the table, data rows, lines after, repairs).
 
@@ -451,16 +503,12 @@ def _parse_table(
     rule is that a merge never removes existing content. Trailing lines used to
     match neither branch here and were silently dropped on the next write.
 
-    **A blank line ends the table**, which is the markdown renderer's own rule
-    and therefore the one thing that cannot put this parser and Obsidian into
-    disagreement. That is what separates structure from prose: a pipe-prefixed
-    line inside the block is a row (a human's note that opens with a pipe is
-    one to Obsidian too, so calling it prose would be the divergence, not the
-    fix), and a pipe-prefixed line after the blank stays the paragraph it
-    renders as. Deciding it on the line's own shape instead — trailing pipe,
-    pipe count — misclassifies a row whose trailing `|` a human deleted, which
-    GFM makes optional; that row then appended a duplicate person and stranded
-    their note below the table, on every write, forever.
+    The table starts where `_find_header` says it does, and **a blank line ends
+    it** — the renderer's rule again. So a pipe-prefixed line outside that span
+    stays the paragraph Obsidian renders it as, while one inside it is a row,
+    with its trailing `|` optional as GFM allows. Deciding row-ness on the
+    line's own shape instead (trailing pipe, pipe count) misclassifies a row
+    whose ` |` a human deleted while clearing the `needs-review` marker.
 
     Two hand-edit shapes are repaired, each with a note in `repairs`
     (#40, #41): a raw `|` a human typed into a cell is text, not a column
@@ -473,31 +521,40 @@ def _parse_table(
     Existing content is never deleted, but it may be **regrouped**: an
     annotation between two rows comes back below the table rather than in
     place. Keeping it exactly where it sat needs positional bookkeeping the
-    merge does not carry.
+    merge does not carry. One shape is preserved rather than repaired — a table
+    whose *header* is gone has no recognisable opening, so its rows come back
+    as the preamble's prose and a fresh header is written above them. Nothing
+    is lost; guessing which loose pipe-prefixed lines used to be rows is how
+    prose gets eaten.
     """
-    preamble: List[str] = []
+    lines = _lines(content)
+    repairs: List[str] = []
+    header_index = _find_header(lines, header_cells)
+    if header_index < 0:
+        return lines, [], [], repairs
+
+    rest = lines[header_index + 1:]
+    cursor = 0
+    while cursor < len(rest) and not rest[cursor].strip():
+        cursor += 1
+    if cursor < len(rest) and _is_separator(rest[cursor].strip()):
+        cursor += 1
+    else:
+        # Only reachable through _find_header's rule 2 — the canonical header
+        # with its separator deleted by hand. Obsidian renders the whole thing
+        # as plain text; the rows are rescued and the separator comes back.
+        cursor = 0
+        repairs.append(
+            "separator row was missing; the rows under the header were read as "
+            "data — this write restores it"
+        )
+
     rows: List[List[str]] = []
     postamble: List[str] = []
-    repairs: List[str] = []
-    seen_rows = 0
     closed = False
-    for line in _lines(content):
+    for line in rest[cursor:]:
         stripped = line.strip()
-        if not stripped:
-            # The blank line that ends the table. Before the header it is just
-            # layout; _render_table normalises the spacing either way.
-            closed = closed or bool(seen_rows)
-        elif stripped.startswith("|") and not closed:
-            seen_rows += 1
-            if seen_rows == 1:
-                continue  # the header row
-            if seen_rows == 2:
-                if _is_separator(stripped):
-                    continue
-                repairs.append(
-                    "separator row was missing; treated the second line as "
-                    "data — the next write restores it"
-                )
+        if not closed and stripped.startswith("|"):
             cells = _split_row(stripped)
             if len(cells) > columns:
                 surplus = len(cells) - columns
@@ -514,8 +571,9 @@ def _parse_table(
             cells += [""] * (columns - len(cells))
             rows.append(cells)
             continue
-        (postamble if seen_rows else preamble).append(line)
-    return preamble, rows, postamble, repairs
+        closed = closed or not stripped
+        postamble.append(line)
+    return lines[:header_index], rows, postamble, repairs
 
 
 def _render_table(preamble: List[str], header: str, rows: List[List[str]],
@@ -587,7 +645,8 @@ def _name_key(cell: str) -> str:
 
 
 def _merge_stakeholders(content: str, items) -> Tuple[str, int, List[str]]:
-    preamble, rows, postamble, repairs = _parse_table(content, 5)
+    preamble, rows, postamble, repairs = _parse_table(
+        content, 5, _STAKEHOLDER_HEADER_CELLS)
     touched = 0
     for item in items:
         # str()-wrapped like every other caller value in this module:
@@ -647,7 +706,8 @@ def _row_project_slug(cell: str) -> str:
 
 
 def _merge_engagements(content: str, items) -> Tuple[str, int, List[str]]:
-    preamble, rows, postamble, repairs = _parse_table(content, 3)
+    preamble, rows, postamble, repairs = _parse_table(
+        content, 3, _ENGAGEMENT_HEADER_CELLS)
     touched = 0
     for item in items:
         slug = str(item["project"]).strip()
