@@ -323,80 +323,34 @@ Events in `skipped` (`no-transcript-url`) have no transcript *yet* — report
 them as one count, not per-event lines; they retry naturally while inside
 the window, and stop costing a fetch once their recorded outcome below goes
 final. Feed the `recording_id` values through `sync dedup` exactly as
-for plaud. Only `new` ids proceed — but an id `sync dedup` reports as
-already `synced` still gets a `written` outcome recorded below: that is how
-the cache back-fills for meetings synced before the cache existed.
+for plaud. Only `new` ids proceed.
 
-For each new id, fetch the transcript: `read_resource` on the entry's
-`transcript_url` **exactly as `m365 ids` returned it** — never rebuild or
-re-scope the URL; a recurring series answers a rebuilt, unscoped URL with
-other occurrences' transcripts. Write each raw result to
-`$SCRATCH/m365_<hex>.transcript.json`. Two answers are settled skips, not
-errors: a `NOT_FOUND` with `transcripts_empty` means transcription was off
-for that meeting, and a **403/Forbidden** means the transcript lives in
-another organization's tenant and this account will never be allowed to
-read it. Report each kind as one count, never per-event lines.
-
-**Record every negatively-settled occurrence now — before any extraction
-subagent exists** — so the next run's triage answers for them without a
-fetch, even if this run dies mid-extraction: the answers a fetch was paid
-for are banked the moment they are known. Write one JSON array to
+**Bank what the listing already settled — before any worker exists** — so
+the next run's triage answers for them without a fetch, even if this run
+dies mid-dispatch. Write one JSON array to
 `$SCRATCH/m365_outcomes_settled.json` with the Write tool, one entry per
 occurrence, keyed by the `id` and `start_utc` the triage result carried:
 
 - `"outcome": "no-transcript"` — the event carried no `meetingTranscriptUrl`
-  (`m365 ids` skipped it), or the transcript fetch answered
-  `transcripts_empty`;
-- `"outcome": "forbidden"` — the transcript fetch was refused (403):
-  another tenant owns it, permanently;
+  (`m365 ids` skipped it);
 - `"outcome": "skipped"` — the id went onto the never-propose-again list
   (`sync skip`), here or on an earlier run.
-
-A recording that *failed* — a transport error — gets **no outcome line**,
-and neither does a cross-adapter duplicate deferred under `--unattended`:
-like everywhere else here, what is not settled is not recorded, and the
-occurrence surfaces again next run.
 
 ```bash
 python3 "$VAULTLIB" sync m365-record --vault "$VAULT" \
   --outcomes "$SCRATCH/m365_outcomes_settled.json"
 ```
 
-For each occurrence whose transcript content is now on disk in `$SCRATCH`,
-normalize:
-
-```bash
-python3 "$VAULTLIB" m365 reassemble --event "$SCRATCH/m365_event_3.json" \
-  --transcript "$SCRATCH/m365_3.transcript.json" \
-  --out "$SCRATCH" --timezone <config.timezone>
-```
-
-The result names the blob file and carries `recording_id`, `duration_min`,
-and `recorded_local`, like `plaud reassemble`.
-
-**Then check for a cross-adapter duplicate before anything is written.**
-The ledger keys on exact ids, so it cannot see that a Plaud recording and a
-Teams transcript are the same conversation captured twice. The window check
-can — `recorded_local` is already the form `--start` wants, so pass it
-straight through:
-
-```bash
-python3 "$VAULTLIB" sync collide --vault "$VAULT" \
-  --start 2026-08-25T16:00 --duration-min 63
-```
-
-A match whose `source-recording-id` carries another namespace means this
-meeting is probably already in the vault. Interactively: show both — the
-existing note and this candidate — and ask once; the user either writes it
-anyway or drops it permanently with `sync skip --id m365:<hex> --reason
-"same meeting already synced as <existing id>"`. Under `--unattended`:
-**do not write it and do not skip it** — count it in the summary's
-cross-adapter duplicates line; it will keep deferring until an interactive
-run settles it, and that is the safe direction. A match flagged
-`imprecise: true` (a date-only note) is a *possible* duplicate — surface
-it the same way, never auto-resolve it. A `sync skip` decided here settles
-the occurrence: give it a `"skipped"` outcome line through another
-`sync m365-record` call — the cache merges across calls.
+The transcript itself is never fetched in this context. The worker step 6
+dispatches makes the one `read_resource` call on its occurrence's
+`transcript_url` — passed to it **exactly as `m365 ids` returned it** — and
+what it finds comes back as its outcome line: `"forbidden"` (a 403 —
+another organization's tenant owns the transcript, permanently),
+`no-transcript` (`transcripts_empty` — transcription was off), or a written
+note. Those outcomes are banked per batch in step 6. A recording that
+*failed* — a transport error — gets **no outcome line**, and neither does a
+cross-adapter duplicate deferred under `--unattended`: what is not settled
+is not recorded, and the occurrence surfaces again next run.
 
 An m365 recording's routing starts ahead of plaud's: the event **is** the
 calendar record. Pre-fill `calendar-subject`, `organizer`, `location`,
@@ -410,14 +364,18 @@ names and product terms — so attendees come from the calendar, never from
 the transcript, and transcript keywords stay the weakest routing signal
 (step 3 already ranks them last).
 
-**The dispatch gate.** Step 6 may dispatch an extraction subagent **only**
-for an occurrence whose transcript content is already on disk in `$SCRATCH`
-— a subagent **never makes a Graph call**, never fetches a transcript, and
-is never used to discover whether one exists. Transcript availability was
-settled above, by you, and the settled outcomes are already in the cache;
-an occurrence without a transcript blob simply does not reach step 6. The
-one outcome still open — `written` — is recorded at the end of step 6, once
-the notes are verified on disk.
+**The dispatch gate.** A worker is dispatched only for an occurrence that
+survived triage (`sync m365-triage`) and dedup (`sync dedup`) — never to
+discover whether a transcript exists for anything else. Each worker makes
+exactly the connector calls for its one assigned recording, and a negative
+answer is its first tool call, costing a skip, not an extraction — that,
+plus triage, is what keeps a fleet of workers from ever being paid to learn
+"nothing to write". A worker **never writes the seen-events cache**: every
+settled outcome comes back as one line, and you bank each batch's lines in
+one `sync m365-record` call the moment the batch returns (step 6). An id
+`sync dedup` reported as already `synced` still gets a `written` outcome
+banked there — that is how the cache back-fills for meetings synced before
+it existed.
 
 ### 2. Calendar enrichment (optional, honest about absence)
 
