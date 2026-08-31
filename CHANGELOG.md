@@ -15,6 +15,10 @@ delivers them.
 
 ## Unreleased
 
+- **The triage checkboxes now fit a 13-inch laptop.** On a 1440×900 window
+  the Meetings triage view used to hide ✓ Reviewed, ⚠ Duplicate of and
+  🗑 Archive off the right edge — the columns are reordered so the controls
+  come right after the subject, and a render check now pins them there. (#113)
 - **An evening run with several unrecognised names no longer loses tomorrow's note.**
   The link check now reports every unresolvable name at once, so the run's
   single retry can fix them all — previously two bad names meant no note,

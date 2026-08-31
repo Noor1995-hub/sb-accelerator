@@ -62,13 +62,20 @@ python scripts/obsidian_probe.py doctor
 # 3. Launch an isolated Obsidian and open the vault in it.
 python scripts/obsidian_probe.py up --vault test-vaults/$(date +%F)-visual
 
-# 4. Drive every surface, capturing a screenshot + a DOM dump for each.
-python scripts/obsidian_probe.py tour
+# 4. Drive every surface, capturing a screenshot + a DOM dump for each — at
+#    the default 1920x1200, then again at 1440x900 (a 13" client laptop).
+#    Each tour needs its own --out so the second run does not overwrite the
+#    first; --width/--height are global options, so they precede the
+#    subcommand.
+python scripts/obsidian_probe.py tour --out .obsidian-probe-out
+python scripts/obsidian_probe.py --width 1440 --height 900 tour --out .obsidian-probe-out-1440
 
-# 5. Assert the invariants.
+# 5. Assert the invariants, against each capture.
 python -m pytest scripts/tests -q -m obsidian
+SB_PROBE_OUT=.obsidian-probe-out-1440 python -m pytest scripts/tests -q -m obsidian
 
-# 6. Look at the screenshots in .obsidian-probe-out/. Not optional — see below.
+# 6. Look at the screenshots in .obsidian-probe-out/ and
+#    .obsidian-probe-out-1440/. Not optional — see below.
 python scripts/obsidian_probe.py down
 ```
 
@@ -211,8 +218,16 @@ delete it.
   `--foreground` restores the old visible, raise-before-capture behaviour. It
   is the fallback if captures ever come back identical to each other.
 - **Bases virtualises columns by width.** An 8-column view renders 5 headers at
-  1024px and 7 at 1600px. The probe pins the window to 1920×1200 so captures
-  are reproducible; a width-dependent assertion has to know its width.
+  1024px and 7 at 1600px. The probe pins the window to 1920×1200 by default so
+  captures are reproducible; a width-dependent assertion has to know its
+  width, which is why `tour` records the effective `[width, height]` into
+  `summary.json` rather than assuming the default. `--width`/`--height` are
+  global options (`obsidian_probe.py --width 1440 --height 900 tour`, not
+  `tour --width …`) so a second, narrower tour can be captured to its own
+  `--out` and checked against the same test suite — see
+  `test_triage_controls_survive_a_1440_window` in
+  `scripts/tests/test_obsidian_render.py`, which skips when the recorded
+  width is missing (an older capture) or above 1440.
 - **A hand-tested vault poisons the row cross-check.** The first run flagged
   Meetings/Triage as 6 rows against `basesim`'s 4 — and both were right,
   because two meetings existed only in that vault. The tests recompute the

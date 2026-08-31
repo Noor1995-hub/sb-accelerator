@@ -222,6 +222,35 @@ def test_evening_sync_markers_are_hidden_in_live_preview(note_surfaces):
             "Live Preview")
 
 
+def test_triage_controls_survive_a_1440_window(tour, base_surfaces):
+    """#66: at 1440x900 (a 13" client laptop) Meetings.base Triage used to
+    stop rendering columns before reaching ✓ Reviewed or ⚠ Duplicate of — the
+    one-click confirm and the clobber-risk signal, off screen behind a
+    scrollbar under a two-line row. The Triage `order:` was reordered so both
+    controls come right after the subject; this pins them so the next column
+    added to Triage cannot silently push either back off screen.
+
+    Only bites when the capture was actually taken at <=1440 wide — an older
+    capture predating summary.json's recorded window skips cleanly, as does
+    a capture taken at the default 1920x1200 (where the columns already fit
+    and this assertion would prove nothing)."""
+    window = tour["summary"].get("window")
+    if not window:
+        pytest.skip("capture predates the recorded window size in summary.json")
+    width, _height = window
+    if width > 1440:
+        pytest.skip(f"captured at {width}px, not the <=1440 client-laptop width")
+    triage = base_surfaces.get("base-meetings-triage")
+    if triage is None:
+        pytest.skip("tour captured no Meetings.base Triage view")
+    headers = set(triage["dom"].get("headers") or [])
+    missing = {"✓ Reviewed", "⚠ Duplicate of"} - headers
+    assert not missing, (
+        f"Triage at {width}px is missing {sorted(missing)} from its rendered "
+        f"headers {sorted(headers)} — a control needed for the queue is off "
+        "screen")
+
+
 def test_no_runtime_errors_during_the_tour(tour):
     errors = tour["summary"].get("errors") or ""
     assert "No errors captured" in errors or not errors.strip(), (

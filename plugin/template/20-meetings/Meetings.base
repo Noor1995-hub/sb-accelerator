@@ -42,16 +42,13 @@ views:
     order:
       - formula.open
       - date
-      - type
       - calendar-subject
-      - calendar_match
-      - attendees
-      - projects
-      - conflicts-with
       - reviewed
+      - conflicts-with
       - archived
-      - recording-duration
-      - source
+      - calendar_match
+      - projects
+      - attendees
     sort:
       - property: date
         direction: DESC
