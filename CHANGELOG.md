@@ -23,7 +23,7 @@ delivers them.
   vault also gains a start date, written at provisioning: no sync ever pulls
   in meetings from before the vault existed, which recurring calendar series
   used to do. Pre-existing vaults get the start date added at the next
-  tune-up; until then they behave as before. (#115)
+  tune-up; until then they behave as before. (#116)
 - **Same-day meetings now trigger an evening project-state update.** A meeting
   confirmed on the same day a project's state was last written used to be
   silently dropped from the update queue forever — the queue compared days,
