@@ -83,11 +83,20 @@ def _format_offset(minutes: int) -> str:
 
 
 def window(start_local: str, *, timezone: Optional[str] = None,
-           utc_offset: Optional[str] = None, hours: float = 2.0) -> dict:
+           utc_offset: Optional[str] = None, hours: float = 2.0,
+           start_date: Optional[str] = None) -> dict:
     """A UTC [from, to] window around a local timestamp.
 
     With a time component: ±hours around it. Date-only: that whole local day
     (00:00:00–23:59:59), still widened by ±hours.
+
+    `start_date` is the vault's sync start date (config `sync.start-date`,
+    #110): the window is cut off at that date's local midnight, because no
+    adapter may ever be asked for a meeting before the vault existed —
+    recurring series otherwise expose occurrences years back. A window that
+    ends before the floor collapses onto it and is flagged `window_empty`,
+    so the caller can skip the query outright rather than search a
+    zero-width range.
     """
     if hours < 0:
         raise DatesError(f"hours {hours!r} must be >= 0")
@@ -100,13 +109,30 @@ def window(start_local: str, *, timezone: Optional[str] = None,
         lo = local - pad
         hi = local + timedelta(hours=23, minutes=59, seconds=59) + pad
     shift = timedelta(minutes=offset_minutes)
-    return {
+    result = {
         "start_local": str(start_local).strip(),
         "utc_from": (lo - shift).strftime(_UTC_FMT),
         "utc_to": (hi - shift).strftime(_UTC_FMT),
         "offset": _format_offset(offset_minutes),
         "offset_source": source,
     }
+    if start_date is None:
+        return result
+    floor_local = datetime.combine(_parse_date(start_date, "start-date"),
+                                   datetime.min.time())
+    # The offset in force at the floor itself, not at the queried timestamp —
+    # the two differ across a DST transition.
+    floor_offset, _ = resolve_offset_minutes(floor_local, timezone, utc_offset)
+    floor_utc = floor_local - timedelta(minutes=floor_offset)
+    lo_utc, hi_utc = lo - shift, hi - shift
+    result["start_date"] = str(start_date).strip()
+    result["window_empty"] = hi_utc < floor_utc
+    result["clamped"] = lo_utc < floor_utc
+    if result["window_empty"]:
+        result["utc_from"] = result["utc_to"] = floor_utc.strftime(_UTC_FMT)
+    elif result["clamped"]:
+        result["utc_from"] = floor_utc.strftime(_UTC_FMT)
+    return result
 
 
 DAILY_NOTES_DIR = vault.DAILY_NOTES_DIR

@@ -213,6 +213,14 @@ def test_shipped_config_carries_null_feedback_repo():
     assert cfg["feedback"] == {"repo": None}
 
 
+def test_shipped_config_carries_null_sync_start_date():
+    """sync.start-date is written at provisioning (#110); the shipped default
+    must carry it explicitly as null so a fresh vault's config.json documents
+    the shape rather than relying on the read-side default."""
+    cfg = json.loads(CONFIG.read_text(encoding="utf-8"))
+    assert cfg["sync"] == {"start-date": None}
+
+
 def test_base_groupby_uses_the_object_form():
     """#60 item 8. Bases rejects `groupBy: <property>` with "must be a object"
     and the whole view then renders a parse error and zero rows — so the string

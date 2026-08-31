@@ -31,7 +31,7 @@ if __package__ in (None, ""):
     # the skills invoke it.
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from vaultlib import config, dailynote, dates, decision, entity, feedback, health, m365, meeting, migrate, person, plaud, project, runlog, scratch, schema, syncjob, updatequeue, vault  # noqa: E402
+from vaultlib import config, dailynote, dates, decision, entity, feedback, health, m365, meeting, migrate, person, plaud, project, runlog, scratch, schema, seenevents, syncjob, updatequeue, vault  # noqa: E402
 
 
 def _emit(payload: dict) -> None:
@@ -109,6 +109,12 @@ def build_parser() -> argparse.ArgumentParser:
     dates_sub = dates_group.add_subparsers(dest="action", required=True)
     dates_window = dates_sub.add_parser(
         "window", help="UTC query window around a local timestamp")
+    dates_window.add_argument(
+        "--vault",
+        help="optional vault root: the window is clamped to the vault's "
+             "sync.start-date, so no adapter is ever asked for a meeting "
+             "from before the vault existed. Omit only for a deliberate, "
+             "interactive backfill.")
     dates_window.add_argument("--start", required=True,
                               help="local ISO date or datetime")
     dates_window.add_argument("--timezone", help="IANA timezone name")
@@ -303,6 +309,30 @@ def build_parser() -> argparse.ArgumentParser:
                             help="the vault owner's person slug (excluded from key-people)")
     sync_queue.add_argument("--today", help="ISO date; defaults to today")
 
+    sync_triage = sync_sub.add_parser(
+        "m365-triage",
+        help="answer, from the cheap calendar-search listing alone, which "
+             "event occurrences still need the full event fetch")
+    _add_vault_argument(sync_triage)
+    sync_triage.add_argument(
+        "--events", required=True,
+        help="path to the raw search listing (JSON array of event objects), "
+             "or - for stdin")
+    sync_triage.add_argument(
+        "--now", help="UTC ISO datetime override (tests); defaults to now")
+
+    sync_record = sync_sub.add_parser(
+        "m365-record",
+        help="record per-occurrence outcomes back into the seen-events "
+             "cache, so the next run's triage skips them pre-fetch")
+    _add_vault_argument(sync_record)
+    sync_record.add_argument(
+        "--outcomes", required=True,
+        help="path to a JSON array of {id, start_utc, outcome[, "
+             "recording_id]} objects, or - for stdin")
+    sync_record.add_argument(
+        "--now", help="UTC ISO datetime override (tests); defaults to now")
+
     sync_rederive = sync_sub.add_parser(
         "rederive-entities",
         help="recompute entities from projects on every meeting; repairs "
@@ -433,12 +463,17 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def _dispatch(args: argparse.Namespace) -> int:
-    # dates (and later stateless subcommands) take no --vault.
-    root = vault.resolve(args.vault) if hasattr(args, "vault") else None
+    # dates window (stateless unless clamping) and dates plan aside, --vault
+    # is required everywhere it exists — getattr covers both shapes.
+    root = (vault.resolve(args.vault)
+            if getattr(args, "vault", None) is not None else None)
     if args.group == "dates":
         if args.action == "window":
+            start_date = (config.read(root)["config"]["sync"]["start-date"]
+                          if root is not None else None)
             return _ok(dates.window(args.start, timezone=args.timezone,
-                                    utc_offset=args.utc_offset, hours=args.hours))
+                                    utc_offset=args.utc_offset,
+                                    hours=args.hours, start_date=start_date))
         return _ok(dates.plan(root, args.today, timezone=args.timezone,
                               utc_offset=args.utc_offset,
                               catchup_threshold=args.catchup_threshold))
@@ -537,6 +572,14 @@ def _dispatch(args: argparse.Namespace) -> int:
         if args.action == "update-queue":
             return _ok(updatequeue.run(root, vault.today_iso(args.today),
                                        args.owner))
+        if args.action == "m365-triage":
+            payload = (json.load(sys.stdin) if args.events == "-"
+                       else json.loads(Path(args.events).read_text(encoding="utf-8")))
+            return _ok(seenevents.triage(root, payload, seenevents.parse_now(args.now)))
+        if args.action == "m365-record":
+            payload = (json.load(sys.stdin) if args.outcomes == "-"
+                       else json.loads(Path(args.outcomes).read_text(encoding="utf-8")))
+            return _ok(seenevents.record(root, payload, seenevents.parse_now(args.now)))
         if args.action == "rederive-entities":
             return _ok(syncjob.rederive_entities(root))
     if args.group == "meeting":
@@ -632,6 +675,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         return _fail(str(exc), "Fix the named payload field and retry.")
     except syncjob.SyncError as exc:
         return _fail(str(exc), "Fix the named id or argument and retry.")
+    except seenevents.SeenEventsError as exc:
+        return _fail(str(exc), "Fix the named listing or outcome entry and retry.")
     except plaud.PlaudError as exc:
         return _fail(str(exc), "Check the raw MCP JSON files named in the error.")
     except m365.M365Error as exc:

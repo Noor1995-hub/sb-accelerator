@@ -13,7 +13,12 @@
     "signed-in account does not match its hint is refused before any content",
     "is listed. Binding a vault to an account is a conscious act: write the",
     "hint here, explicitly.",
-    "feedback.repo: the delaware-created sb-client-<slug> GitHub repo (owner/name) that /report-feedback files issues on; null until provisioning sets it."
+    "feedback.repo: the delaware-created sb-client-<slug> GitHub repo (owner/name) that /report-feedback files issues on; null until provisioning sets it.",
+    "sync.start-date: the vault's horizon (ISO date), set to the provisioning",
+    "date by /setup-my-brain and /provision-vault. No adapter ever lists,",
+    "fetches, or writes a meeting dated before it — recurring calendar series",
+    "otherwise drag in occurrences from years back. Backfilling earlier",
+    "meetings is a deliberate, interactive act, never the default."
   ],
   "config-version": 1,
   "timezone": null,
@@ -23,5 +28,6 @@
     "plaud": {"enabled": false, "account_hint": null},
     "m365": {"enabled": false, "account_hint": null}
   },
-  "feedback": {"repo": null}
+  "feedback": {"repo": null},
+  "sync": {"start-date": null}
 }

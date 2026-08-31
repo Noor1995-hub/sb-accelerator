@@ -15,6 +15,15 @@ delivers them.
 
 ## Unreleased
 
+- **Routine syncs stop re-downloading meetings they already know about, and
+  the vault never looks before its own start date.** The Microsoft 365 sync
+  now remembers, per meeting occurrence, whether it was written, skipped, or
+  had no transcript — so each run fetches only what is genuinely new (a
+  transcript-less meeting is re-checked for 48 hours, then left alone). The
+  vault also gains a start date, written at provisioning: no sync ever pulls
+  in meetings from before the vault existed, which recurring calendar series
+  used to do. Pre-existing vaults get the start date added at the next
+  tune-up; until then they behave as before. (#115)
 - **Same-day meetings now trigger an evening project-state update.** A meeting
   confirmed on the same day a project's state was last written used to be
   silently dropped from the update queue forever — the queue compared days,

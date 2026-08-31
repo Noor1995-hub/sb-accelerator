@@ -29,6 +29,7 @@ def valid_config(**overrides) -> dict:
             "plaud": {"enabled": True, "account_hint": "morgan@example.com"},
             "m365": {"enabled": False, "account_hint": None},
         },
+        "sync": {"start-date": "2026-08-26"},
     }
     cfg.update(overrides)
     return cfg
@@ -335,6 +336,67 @@ def test_write_unknown_field_refused(tmp_path):
     write_config(root, valid_config())
     with pytest.raises(config.ConfigError):
         config.write(root, "adapters.plaud.nickname", "x")
+
+
+def test_read_accepts_sync_start_date(tmp_path):
+    root = make_vault(tmp_path)
+    write_config(root, valid_config(sync={"start-date": "2026-08-26"}))
+    result = config.read(root)
+    assert result["config"]["sync"]["start-date"] == "2026-08-26"
+    assert "sync.start-date" not in result["missing"]
+
+
+def test_read_defaults_absent_sync_to_null_start_date(tmp_path):
+    # Deployed vaults predate the sync key; absence must not fail — it reads
+    # as "no start date", the honest pre-upgrade state.
+    root = make_vault(tmp_path)
+    cfg = valid_config()
+    del cfg["sync"]
+    write_config(root, cfg)
+    result = config.read(root)
+    assert result["config"]["sync"] == {"start-date": None}
+
+
+def test_read_reports_null_start_date_as_missing(tmp_path):
+    # Recommended, not blocking: provisioning writes it, and a pre-existing
+    # vault surfaces it here so an upgrade visit knows to add it.
+    root = make_vault(tmp_path)
+    write_config(root, valid_config(sync={"start-date": None}))
+    assert "sync.start-date" in config.read(root)["missing"]
+
+
+@pytest.mark.parametrize("bad", [
+    {"start-date": "26-08-2026"},        # not ISO
+    {"start-date": "2026-02-30"},        # not a real date
+    {"start-date": "2026-08-26T10:00"},  # a date, not a datetime
+    {"start-date": ""},                  # empty string
+    {"start-date": None, "extra": 1},    # unknown key
+    {},                                  # missing the key entirely
+    "2026-08-26",                        # not an object
+])
+def test_read_rejects_malformed_sync(tmp_path, bad):
+    root = make_vault(tmp_path)
+    write_config(root, valid_config(sync=bad))
+    with pytest.raises(config.ConfigError):
+        config.read(root)
+
+
+def test_write_sync_start_date(tmp_path):
+    root = make_vault(tmp_path)
+    cfg = valid_config()
+    del cfg["sync"]
+    write_config(root, cfg)
+    result = config.write(root, "sync.start-date", "2026-08-26")
+    assert result["config"]["sync"]["start-date"] == "2026-08-26"
+
+
+def test_write_rejects_malformed_start_date(tmp_path):
+    root = make_vault(tmp_path)
+    write_config(root, valid_config())
+    with pytest.raises(config.ConfigError):
+        config.write(root, "sync.start-date", "yesterday")
+    # and the file is untouched
+    assert config.read(root)["config"]["sync"]["start-date"] == "2026-08-26"
 
 
 def test_write_feedback_repo(tmp_path):

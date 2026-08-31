@@ -256,6 +256,19 @@ python3 "$VAULTLIB" config write --vault "$VAULT" --field timezone --value "Euro
 Both values are what phases 4 and 4b need to run at all. If either write
 fails, resolve it now rather than discovering it at the close of the session.
 
+Then, if `config read` reported `sync.start-date` in `missing`, stamp the
+vault's horizon with today's date — no question to ask, this is the
+provisioning date by definition:
+
+```bash
+python3 "$VAULTLIB" config write --vault "$VAULT" --field sync.start-date --value <today, YYYY-MM-DD>
+```
+
+From here on, no sync ever considers a meeting dated before it — recurring
+calendar series otherwise expose occurrences from long before the vault
+existed. If the vault owner asks for older meetings, that is a deliberate,
+interactive backfill run later, never a reason to backdate this value.
+
 ### File 2 — areas of responsibility are not projects
 
 The role file is the longest one in a live session, and most of the drag comes

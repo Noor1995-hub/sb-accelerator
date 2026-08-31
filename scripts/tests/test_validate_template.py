@@ -60,6 +60,7 @@ def shipping_config() -> dict:
             "m365": {"enabled": False, "account_hint": None},
         },
         "feedback": {"repo": None},
+        "sync": {"start-date": None},
     }
 
 

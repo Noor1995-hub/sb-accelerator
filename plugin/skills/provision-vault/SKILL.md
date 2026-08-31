@@ -69,6 +69,19 @@ Never `git init` the vault. It has no git by design — Obsidian Sync's
 version history and the client's own backups cover recovery, and a `.git`
 directory inside a synced folder causes more problems than it solves.
 
+Then stamp the vault's horizon — today's date, the provisioning date:
+
+```bash
+VAULTLIB="${CLAUDE_PLUGIN_ROOT}/lib/vaultlib/cli.py"
+python3 "$VAULTLIB" config write --vault "$VAULT" --field sync.start-date --value <today, YYYY-MM-DD>
+```
+
+`sync.start-date` is the line no sync ever crosses: no adapter lists,
+fetches, or writes a meeting dated before it, so recurring calendar series
+cannot drag in occurrences from before the vault existed. If the client
+wants meetings from before today in the vault, that is a deliberate,
+interactive backfill run later — never a reason to backdate this value.
+
 ## Step 2 — Obsidian plugins and theme
 
 ```bash
