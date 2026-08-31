@@ -858,6 +858,33 @@ def test_a_truncated_plaud_transcript_is_a_structured_failure(capsys, tmp_path):
     assert "1 of 142 utterances" in payload["error"]
 
 
+def test_a_plaud_transcript_short_of_the_recorded_duration_is_a_structured_failure(
+    capsys, tmp_path
+):
+    """The coverage-floor guard, seen from the skill's side: a complete page
+    set that only accounts for 4 of the meta's 41 recorded minutes is an
+    error with a hint, not a short blob."""
+    meta = tmp_path / "meta.json"
+    meta.write_text(json.dumps({"id": "rec_42", "name": "Vendor strategy",
+                                "start_at": "2026-05-20T09:03:00",
+                                "duration": 2460000}), encoding="utf-8")
+    page = tmp_path / "page.json"
+    page.write_text(json.dumps({
+        "total": 1, "offset": 0, "returned": 1,
+        "segments": [{"speaker": "Speaker 1", "content": "one of many",
+                      "end_time": 240000}],
+    }), encoding="utf-8")
+
+    code, payload = run(capsys, [
+        "plaud", "reassemble", "--meta", str(meta), "--transcript", str(page),
+        "--out", str(tmp_path / "scratch"), "--utc-offset", "+02:00",
+    ])
+
+    assert code == 1
+    assert payload["ok"] is False
+    assert "4 of 41" in payload["error"]
+
+
 def test_an_m365_error_is_a_structured_failure_not_a_traceback(capsys, tmp_path):
     event = tmp_path / "event.json"
     event.write_text(json.dumps({"subject": "no url"}), encoding="utf-8")

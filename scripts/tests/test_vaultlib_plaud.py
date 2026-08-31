@@ -162,7 +162,7 @@ def page(offset, contents, *, total, end_step=60000, cursor=True):
 
 def test_two_pages_reassemble_into_one_blob_in_order(tmp_path):
     result = plaud.reassemble(
-        write_json(tmp_path, "m.json", META),
+        write_json(tmp_path, "m.json", dict(META, duration=240000)),
         [write_json(tmp_path, "t1.json", page(0, ["one", "two"], total=4)),
          write_json(tmp_path, "t2.json", page(2, ["three", "four"], total=4))],
         None, str(tmp_path / "s"), utc_offset="+00:00")
@@ -177,7 +177,7 @@ def test_pages_are_ordered_by_offset_not_by_argument_order(tmp_path):
     caller's business. The page's own `offset` is the only ordering the CLI
     trusts."""
     result = plaud.reassemble(
-        write_json(tmp_path, "m.json", META),
+        write_json(tmp_path, "m.json", dict(META, duration=240000)),
         [write_json(tmp_path, "b.json", page(2, ["three", "four"], total=4)),
          write_json(tmp_path, "a.json", page(0, ["one", "two"], total=4))],
         None, str(tmp_path / "s"), utc_offset="+00:00")
@@ -191,7 +191,7 @@ def test_duration_comes_from_the_last_page_not_the_first(tmp_path):
     """The truncation bug's second victim: a 32-minute meeting written as a
     third of its length because end_time came from utterance 50."""
     result = plaud.reassemble(
-        write_json(tmp_path, "m.json", META),
+        write_json(tmp_path, "m.json", dict(META, duration=300000)),
         [write_json(tmp_path, "t1.json", page(0, ["a", "b"], total=4)),
          write_json(tmp_path, "t2.json", page(2, ["c", "d"], total=4))],
         None, str(tmp_path / "s"), utc_offset="+00:00")
@@ -232,7 +232,7 @@ def test_a_complete_single_page_needs_no_second_page(tmp_path):
     """total == returned is the common case — a short recording. It must not
     acquire a new requirement."""
     result = plaud.reassemble(
-        write_json(tmp_path, "m.json", META),
+        write_json(tmp_path, "m.json", dict(META, duration=240000)),
         write_json(tmp_path, "t.json", page(0, ["one", "two"], total=2)),
         None, str(tmp_path / "s"), utc_offset="+00:00")
     assert "Speaker 2: two" in Path(result["blob_path"]).read_text(
@@ -240,8 +240,9 @@ def test_a_complete_single_page_needs_no_second_page(tmp_path):
 
 
 def test_an_untotalled_page_is_accepted_as_the_whole_transcript(tmp_path):
-    """SEGMENTS carries no `total` — the pre-pagination shape. Nothing can be
-    concluded about completeness, so nothing is claimed."""
+    """SEGMENTS carries no `total` — the pre-pagination shape. It passes
+    because it dangles no cursor and covers the meta duration, not because
+    nothing is claimed about it."""
     result = plaud.reassemble(
         write_json(tmp_path, "m.json", META),
         [write_json(tmp_path, "t.json", SEGMENTS)],
@@ -267,6 +268,140 @@ def test_two_legacy_payloads_raise(tmp_path):
             [write_json(tmp_path, "t1.json", LEGACY),
              write_json(tmp_path, "t2.json", LEGACY)],
             None, str(tmp_path / "s"), utc_offset="+00:00")
+
+
+def test_a_page_whose_returned_disagrees_with_its_segments_raises(tmp_path):
+    """The forged-counts incident: segments were condensed and the count
+    fields edited until tiling passed. `returned` must describe the file."""
+    body = page(0, ["one", "two"], total=2)
+    body["returned"] = 3
+    with pytest.raises(plaud.PlaudError, match="returned"):
+        plaud.reassemble(
+            write_json(tmp_path, "m.json", META),
+            write_json(tmp_path, "t.json", body),
+            None, str(tmp_path / "s"), utc_offset="+00:00")
+
+
+def test_pages_with_disagreeing_totals_raise(tmp_path):
+    p2 = page(2, ["three", "four"], total=4)
+    p2["total"] = 5
+    with pytest.raises(plaud.PlaudError, match="disagree about total"):
+        plaud.reassemble(
+            write_json(tmp_path, "m.json", META),
+            [write_json(tmp_path, "t1.json", page(0, ["one", "two"], total=4)),
+             write_json(tmp_path, "t2.json", p2)],
+            None, str(tmp_path / "s"), utc_offset="+00:00")
+
+
+def test_a_complete_count_with_a_dangling_cursor_raises(tmp_path):
+    """total says done but the cursor says more — the server never produces
+    this; someone edited a count field."""
+    body = page(0, ["one", "two"], total=2)
+    body["next_cursor"] = "eyJvIjoyfQ"
+    with pytest.raises(plaud.PlaudError, match="next_cursor"):
+        plaud.reassemble(
+            write_json(tmp_path, "m.json", META),
+            write_json(tmp_path, "t.json", body),
+            None, str(tmp_path / "s"), utc_offset="+00:00")
+
+
+def test_an_untotalled_page_with_a_dangling_cursor_raises(tmp_path):
+    """Closes the hole where a page set with no `total` skipped every check."""
+    body = dict(SEGMENTS, next_cursor="eyJvIjo1MH0")
+    with pytest.raises(plaud.PlaudError, match="next_cursor"):
+        plaud.reassemble(
+            write_json(tmp_path, "m.json", META),
+            write_json(tmp_path, "t.json", body),
+            None, str(tmp_path / "s"), utc_offset="+00:00")
+
+
+def test_the_live_null_cursor_last_page_shape_passes(tmp_path):
+    """The connector's real last page carries next_cursor with a null value,
+    not an absent key."""
+    body = page(0, ["one", "two"], total=2)
+    body["next_cursor"] = None
+    result = plaud.reassemble(
+        write_json(tmp_path, "m.json", dict(META, duration=240000)),
+        write_json(tmp_path, "t.json", body),
+        None, str(tmp_path / "s"), utc_offset="+00:00")
+    assert "Speaker 2: two" in Path(result["blob_path"]).read_text(
+        encoding="utf-8")
+
+
+def test_a_page_shorter_than_its_limit_with_a_cursor_raises(tmp_path):
+    """A short page is by definition the final page; a cursor on it is a
+    shape the server never produces."""
+    body = page(0, ["one"], total=1)
+    body["limit"] = 50
+    body["next_cursor"] = "eyJvIjoxfQ"
+    with pytest.raises(plaud.PlaudError, match="shorter than its limit"):
+        plaud.reassemble(
+            write_json(tmp_path, "m.json", META),
+            write_json(tmp_path, "t.json", body),
+            None, str(tmp_path / "s"), utc_offset="+00:00")
+
+
+def test_a_transcript_page_for_a_different_recording_raises(tmp_path):
+    body = page(0, ["one", "two"], total=2)
+    body["file_id"] = "rec_99"
+    with pytest.raises(plaud.PlaudError, match="rec_99"):
+        plaud.reassemble(
+            write_json(tmp_path, "m.json", META),
+            write_json(tmp_path, "t.json", body),
+            None, str(tmp_path / "s"), utc_offset="+00:00")
+
+
+def test_a_transcript_covering_under_half_the_recording_raises(tmp_path):
+    """The one number the page files cannot vote on: the meta's duration
+    comes from a different tool call, written before extraction began."""
+    with pytest.raises(plaud.PlaudError, match="4 of 41 recorded minutes"):
+        plaud.reassemble(
+            write_json(tmp_path, "m.json", META),               # 41 min
+            write_json(tmp_path, "t.json",
+                       page(0, ["one", "two", "three", "four"], total=4)),
+            None, str(tmp_path / "s"), utc_offset="+00:00")     # ends 4 min
+
+
+def test_a_short_legacy_transcript_raises_too(tmp_path):
+    """The duration check is shape-agnostic on purpose."""
+    short = [{"data_type": "transaction", "data_error_code": 10,
+              "data_content": json.dumps([
+                  {"speaker": "Speaker 1", "content": "hi",
+                   "end_time": 60000}])}]
+    with pytest.raises(plaud.PlaudError, match="1 of 41 recorded minutes"):
+        plaud.reassemble(
+            write_json(tmp_path, "m.json", META),
+            write_json(tmp_path, "t.json", short),
+            None, str(tmp_path / "s"), utc_offset="+00:00")
+
+
+def test_a_meta_without_duration_skips_the_coverage_check(tmp_path):
+    meta = {k: v for k, v in META.items() if k != "duration"}
+    result = plaud.reassemble(
+        write_json(tmp_path, "m.json", meta),
+        write_json(tmp_path, "t.json", page(0, ["one", "two"], total=2)),
+        None, str(tmp_path / "s"), utc_offset="+00:00")
+    assert result["coverage_pct"] is None
+    assert result["warnings"] == []
+
+
+def test_timestamps_far_beyond_the_recording_length_warn(tmp_path):
+    """Overshoot means a metadata quirk, not missing content — warn, never
+    refuse."""
+    result = plaud.reassemble(
+        write_json(tmp_path, "m.json", dict(META, duration=60000)),
+        write_json(tmp_path, "t.json", SEGMENTS),               # ends 40 min
+        None, str(tmp_path / "s"), utc_offset="+00:00")
+    assert any("beyond" in w for w in result["warnings"])
+
+
+def test_a_healthy_transcript_reports_coverage_and_no_warnings(tmp_path):
+    result = plaud.reassemble(
+        write_json(tmp_path, "m.json", META),
+        write_json(tmp_path, "t.json", SEGMENTS),               # 97.6%
+        None, str(tmp_path / "s"), utc_offset="+00:00")
+    assert result["coverage_pct"] == 98
+    assert result["warnings"] == []
 
 
 def test_recorded_local_is_accepted_verbatim_by_both_consumers(tmp_path):

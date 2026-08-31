@@ -35,6 +35,42 @@ The JSON envelope and interpreter resolution are documented in the plugin's
 /sync-recordings --unattended    # no prompts — scheduled runs and pipeline stages
 ```
 
+## Rules
+
+1. **Every write goes through `meeting write`.** No hand-authored
+   frontmatter, ever.
+2. **`source-recording-id` on every synced meeting.** The vault is the only
+   ledger; an id that is missing makes the recording sync twice.
+3. **Transcript-first.** Recorder summaries and calendar data enrich; the
+   transcript is the source of record.
+4. **Never overwrite a confirmed meeting.** The CLI guards this; if you see
+   a `confirmed-target` conflict, report it — do not work around it.
+5. **`calendar-tool-unavailable` ≠ `no-calendar-match`.** Couldn't look vs
+   looked and found nothing.
+6. **Errors are not recorded.** A failed recording writes nothing and
+   reappears next run. Never write a partial note to mark an attempt.
+7. **Extraction and payload drafting happen only in subagents** — never
+   inline, even for a single recording. Step 6 has the mechanics; the
+   payload contract lives in `references/payload-contract.md`, which only
+   the subagents read. Without the schema in this context there is nothing
+   to draft inline — that is deliberate.
+8. **Scratch transcripts are verbatim.** Every transcript file written to
+   scratch is the tool result's content, unchanged — never condensed,
+   summarized, or re-typed from memory. The pagination fields (`offset`,
+   `returned`, `total`, `next_cursor`) are facts about what the connector
+   sent and are never edited; when `plaud reassemble` refuses a page set,
+   the only remedy is re-fetching the missing pages by cursor. Catching
+   yourself editing those fields to satisfy the validator is a
+   stop-and-report condition: stop that recording, say so in the summary,
+   let it retry next run. (A calendar listing is not a transcript — the
+   step 1 listing trim is fine.)
+9. **Batch independent CLI calls into one Bash call.** Every separate tool
+   turn re-reads the whole session context. Calls with no data dependency —
+   `sync reconcile-reviews` and `sync scan`; the per-recording `plaud
+   reassemble` calls — go in one invocation, separate lines, never
+   `&&`-chained — a failed call must not swallow the envelopes behind it.
+   Each still prints its own JSON envelope, in order; read `ok` on every one.
+
 ## The three adapters
 
 Read the deployment config first — it, not prose, says which adapters this
@@ -112,10 +148,12 @@ adapter is *unavailable* (skip line), not unbound — do not guess either way.
 
 First fold pending triage ticks back into `review_status` — this is what
 makes the reviewed checkbox in Meetings.base actually confirm a note, and
-it runs in both modes:
+it runs in both modes. Batch it with the inbox scan below — neither has a
+data dependency on the other (rule 9):
 
 ```bash
 python3 "$VAULTLIB" sync reconcile-reviews --vault "$VAULT"
+python3 "$VAULTLIB" sync scan --vault "$VAULT"
 ```
 
 Report `flipped` in the summary; surface any `conflict_ticks` for a human — a
@@ -127,10 +165,6 @@ surface any `warnings` — a note whose review status predates this release
 needs the pending vault migration before its tick can fold.
 
 **Inbox:**
-
-```bash
-python3 "$VAULTLIB" sync scan --vault "$VAULT"
-```
 
 `candidates` are files whose content hash is in no meeting note and not on
 the skip list. Read the head of each and classify it — this is judgment, and
@@ -212,6 +246,11 @@ printf '%s' '["plaud:abc123", "plaud:def456"]' > "$SCRATCH/ids.json"
 python3 "$VAULTLIB" sync dedup --vault "$VAULT" --ids "$SCRATCH/ids.json"
 ```
 
+For each `new` id, write its `list_files` entry — the object exactly as the
+listing carried it — to `$SCRATCH/rec_N.meta.json`. `plaud reassemble`
+cross-checks the transcript's timeline against this meta's `duration`, so it
+must be the connector's own record, never reconstructed.
+
 Only `new` ids proceed. For each: `mcp__plaud__get_transcript` (required — on
 a transient error retry up to 3×, then skip this recording this run; it
 retries next run by construction) and `mcp__plaud__get_note` (optional
@@ -238,8 +277,14 @@ deleting one is just as much a touch as copying it, and cleaning up that
 directory is the harness's job, not this skill's. Halve `limit` and re-fetch
 from the same `cursor` instead.
 
+Every page file is the tool result verbatim (rule 8). `reassemble` refuses
+page sets whose counts, cursors, or timeline disagree with each other or the
+meta — every refusal means re-fetch, never edit.
+
 Then normalize — one path per page, in any order (the CLI orders them by each
-page's own `offset`, so scratch filenames carry no meaning):
+page's own `offset`, so scratch filenames carry no meaning). Normalize all
+recordings in one Bash call — one `reassemble` invocation per recording
+(rule 9):
 
 ```bash
 python3 "$VAULTLIB" plaud reassemble \
@@ -252,9 +297,11 @@ python3 "$VAULTLIB" plaud reassemble \
 The result names the blob file and carries `recording_id`, `duration_min`,
 and `recorded_local` — an ISO `YYYY-MM-DDTHH:MM` stamp that `meeting write`
 (`date`) and `sync collide` (`--start`) both take **verbatim**, with no
-reformatting. On a Plaud **401**: report it and stop this adapter — never
-retry auth in a loop; re-authentication is interactive and belongs to the
-user.
+reformatting. Surface any `warnings` in the result verbatim — in the
+summary, and in interactive mode quote them to the user before that
+recording is written. On a Plaud **401**: report it and stop this adapter —
+never retry auth in a loop; re-authentication is interactive and belongs to
+the user.
 
 The vault owner's timezone is `timezone` from `config read` — pass the IANA
 name. If it is in `missing`, the plaud and m365 adapters and calendar
@@ -270,10 +317,15 @@ along; a `window_empty: true` result means skip the search outright), drop
 cancelled and all-day events, and keep online meetings.
 
 **A full event read is expensive, so dedup runs before the fetch, not
-after.** Write the kept listing entries — the raw search objects, carrying
-at least `id`, `subject`, `start` and `end` — as one JSON array to
-`$SCRATCH/m365_search.json` with the Write tool, then ask the seen-events
-cache which occurrences still need the full read:
+after.** Keep the listing lean: never search a window wider than `dates
+window` returned, and write only the four fields triage reads — `id`,
+`subject`, `start`, `end`, values verbatim — for each kept event, as one
+JSON array to `$SCRATCH/m365_search.json` with the Write tool. The
+connector's calendar search selects no fields, so this scratch write is
+where the listing gets trimmed — a live run wrote 53k characters of raw
+listing for 33 events when 11 mattered and four fields per event were ever
+read. (A listing is not a transcript — rule 8 does not apply.) Then ask
+the seen-events cache which occurrences still need the full read:
 
 ```bash
 python3 "$VAULTLIB" sync m365-triage --vault "$VAULT" \
@@ -498,7 +550,10 @@ a future calibration needs — write it accurately, not optimistically.
 
 Skipped entirely under `--unattended`. Show one table — title, date,
 projects, new people, confidence — and ask once: proceed / edit / skip
-items. For a recording the user says to permanently drop:
+items. The title column is provisional: the real title is a step-6
+subagent output, decided from the transcript, not yet drafted here — show
+the source filename or the calendar subject in its place. For a recording
+the user says to permanently drop:
 
 ```bash
 python3 "$VAULTLIB" sync skip --vault "$VAULT" --id plaud:abc123 \
@@ -523,10 +578,41 @@ there.
 
 ### 6. Extract and write
 
-For each recording, build the payload and write. With several recordings,
-fan out subagents (one per recording, up to ~4 in parallel) and pass each
-one: the blob or file content, the routing you decided (projects, attendee
-slugs, confidence stamp, calendar fields), and the payload contract below.
+For each recording — **also when there is only one** (rule 7) — dispatch an
+extraction subagent, up to ~4 in parallel, blocking. Pass each one *paths*,
+not pasted content:
+
+- the content file: the Plaud blob (`$SCRATCH/rec_42.blob.md`), the inbox
+  file, or the M365 blob from `m365 reassemble` (the `blob_path` its result
+  names) — never the raw `m365_<hex>.transcript.json`, which is unparsed
+  WEBVTT and for a recurring series may carry other occurrences'
+  transcripts — the subagent reads it itself;
+- the routing you decided: `projects`, attendee slugs, `confidence` +
+  `confidence-reasons`, calendar fields — `calendar_match` (`true` only when
+  the m365 event pre-fill in step 1 or the calendar enrichment in step 2
+  actually matched; `false` otherwise, always `false` for a capture),
+  `calendar-subject` (the matched event's subject, or, when nothing matched,
+  the item's own subject or a short descriptive title per step 1; always
+  non-empty) plus whichever of `organizer`/`location`/`recurring`/
+  `attendee-emails` are known — `source`, `source-recording-id`, the
+  `recorded_local` date (an inbox item never passes through `reassemble` and
+  has no `recorded_local`; read its date from the file's own content or
+  header instead), `recording-duration` (`duration_min` from the `plaud
+  reassemble` / `m365 reassemble` result, `0` for a capture), and the step-1
+  classification (`type: note` for a capture; otherwise the subagent picks
+  the meeting subtype from the transcript);
+- `entities`, but only when `projects` is empty — the entity signal 1
+  resolved directly (step 3); leave it out once `projects` is non-empty,
+  since `meeting write` derives it itself;
+- the contract it must read before drafting:
+  `${CLAUDE_PLUGIN_ROOT}/skills/sync-recordings/references/payload-contract.md`.
+  **You never read that file yourself.** The schema staying out of this
+  context is what makes inline drafting impossible and keeps this step's
+  cost flat as the number of recordings grows — a live cost analysis found
+  a run that drafted five payloads inline late in a long session, ~25
+  requests each re-reading hundreds of thousands of tokens a subagent
+  would never have carried.
+
 Extraction is structured work — takeaways, debrief, action items **from the
 transcript**; enrichment summaries are supporting context only, never the
 source of record. Every recording reaching this step already has its
@@ -553,67 +639,17 @@ one at a time — either way, the loop resumes exactly when a batch completes,
 because that is what a blocking call does. Never spawn in the background and
 then loop checking on it.
 
-**Each subagent returns one line, not its payload.** The blob or transcript
-content goes to the subagent; the orchestrator gets back the fenced payload
-JSON for `meeting write` plus a one-line outcome — never the raw transcript
-or blob text echoed back into the main context. That is what keeps this
-step's context cost flat as the number of recordings grows.
+**Each subagent returns one fenced payload JSON plus a one-line outcome** —
+never the transcript or blob text echoed back. Write the returned JSON to
+`$SCRATCH/rec_42.payload.json` **verbatim** and pass it through:
 
 ```bash
-cat > "$SCRATCH/rec_42.payload.json" <<'JSON'
-{
-  "title": "vendor strategy walk-through",
-  "date": "2026-05-20T11:03",
-  "type": "brainstorm",
-  "calendar-subject": "Vendor strategy — working session",
-  "calendar_match": false,
-  "attendees": ["priya-nathan", "morgan-ellery"],
-  "projects": ["meridian-yard-automation-program"],
-  "recording-duration": 40,
-  "source": "recorder",
-  "source-recording-id": "plaud:rec_42",
-  "source-filename": "Vendor strategy walk-through",
-  "confidence": "low",
-  "confidence-reasons": ["calendar-tool-unavailable", "content-keyword-match", "all-attendees-known"],
-  "takeaways": ["Consolidating on a single automation vendor.", "Yard 2 commissioning slips ~6 weeks."],
-  "debrief": "### Vendor strategy\nWhat was argued, by whom, and what shifted.",
-  "action-items": ["**Priya Nathan** — circulate the revised schedule"]
-}
-JSON
 python3 "$VAULTLIB" meeting write --vault "$VAULT" --note "$SCRATCH/rec_42.payload.json"
 ```
 
-No `entities` key here on purpose: `projects` is non-empty, so `meeting
-write` derives `entities` from `meridian-yard-automation-program`'s `entity:`
-field itself. Passing `entities` alongside a non-empty `projects` is refused.
-
-Payload rules the CLI enforces (so get them right the first time):
-
-- `title` is a short kebab-able label — the filename becomes
-  `{DD-MM-YY}-{title-slug}.md`. `date` is ISO, the recording's local start —
-  for a Plaud or Teams recording that is `recorded_local` unchanged.
-- `type` is a closed enum and nothing else is accepted: **`meeting` · `1:1` ·
-  `steerco` · `workshop` · `brainstorm` · `status-update` · `note`**. A plain
-  conversation is `meeting`; there is no `call`, no `review`, no `sync`. When
-  none of the others clearly fits, `meeting` is the right answer.
-- `source` is a closed enum too: **`teams` · `recorder` · `manual` ·
-  `email`** — the channel the item arrived by, not the tool that made it.
-- `attendees`/`projects`/`entities` are slugs and must resolve (person notes,
-  project folders, `40-entities/<slug>/dossier.md`). `attendees` must be
-  non-empty — except on a `type: note` capture, which may pass `[]` when the
-  item names nobody. `projects` may be empty (triage catches unassigned
-  meetings). `entities` is optional, machine-derived from `projects` whenever
-  `projects` is non-empty, and omitted from the file when there is nothing to
-  write — pass it yourself only when `projects` is empty, and never alongside
-  a non-empty `projects` (refused). Optional `people` (slug list) renders a
-  `## People` wikilink section. `takeaways` is 1–5 strings. `type` values
-  with a colon (`"1:1"`) are handled by the CLI — pass them as plain strings.
-- Do NOT pass `review_status`, `reviewed`, `archived`, or `processed` — the
-  CLI sets them.
-- `source-recording-id` is **required** on every write — it IS the dedup
-  ledger. For inbox files it is the `recording_id` from `sync scan`; for
-  Plaud and Microsoft 365 it comes from `plaud reassemble` /
-  `m365 reassemble`.
+If `meeting write` refuses the payload, hand the `error` and `hint` back to
+a subagent for a corrected payload — never hand-edit it inline; that is
+drafting by another name.
 
 Read the result: a `conflict` of kind `confirmed-target` means the CLI wrote a
 `-v2` sibling carrying a `conflicts-with` edge instead of touching a confirmed
@@ -747,18 +783,3 @@ python3 "$VAULTLIB" runlog append --vault "$VAULT" --routine sync-recordings \
    Write it whether the run succeeded, refused an adapter, or found nothing —
    it is the one place a human looks after the fact, in
    `99-workflow-config/logs/routine-runs.log`.
-
-## Rules
-
-1. **Every write goes through `meeting write`.** No hand-authored
-   frontmatter, ever.
-2. **`source-recording-id` on every synced meeting.** The vault is the only
-   ledger; an id that is missing makes the recording sync twice.
-3. **Transcript-first.** Recorder summaries and calendar data enrich; the
-   transcript is the source of record.
-4. **Never overwrite a confirmed meeting.** The CLI guards this; if you see
-   a `confirmed-target` conflict, report it — do not work around it.
-5. **`calendar-tool-unavailable` ≠ `no-calendar-match`.** Couldn't look vs
-   looked and found nothing.
-6. **Errors are not recorded.** A failed recording writes nothing and
-   reappears next run. Never write a partial note to mark an attempt.

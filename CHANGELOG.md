@@ -15,6 +15,11 @@ delivers them.
 
 ## Unreleased
 
+- **Recording sync is cheaper and harder to fool.** Extraction always runs
+  in per-recording workers, Plaud transcripts are validated against the
+  recorder's own duration so a partial transcript can no longer become a
+  meeting note, and calendar listings are trimmed to the four fields the
+  sync reads. (#126)
 - **Syncing a calendar full of transcript-less meetings is now far cheaper
   and faster.** The recording sync now settles whether a Teams transcript
   actually exists — and records the answer — before handing any meeting to
