@@ -251,62 +251,21 @@ listing carried it — to `$SCRATCH/rec_N.meta.json`. `plaud reassemble`
 cross-checks the transcript's timeline against this meta's `duration`, so it
 must be the connector's own record, never reconstructed.
 
-Only `new` ids proceed. For each: `mcp__plaud__get_transcript` (required — on
-a transient error retry up to 3×, then skip this recording this run; it
-retries next run by construction) and `mcp__plaud__get_note` (optional
-enrichment — on failure proceed without). Write each raw result to scratch.
-
-**`get_transcript` is paginated, and one page is not the meeting.** It
-answers `limit` utterances at a time — 50 by default — and reports `total`,
-`offset` and a `next_cursor`. A half-hour meeting runs to well over a hundred
-utterances, so a single call is a fraction of the conversation, and the
-duration derived from it is the same fraction of the meeting. Call again with
-the returned `cursor` until `next_cursor` comes back **null** (the last page
-carries the key with a null value, it does not omit it), and write **every**
-page to its own scratch file (`rec_42.transcript.01.json`, `.02.json`, …).
-`plaud reassemble` counts what you pass against `total` and refuses an
-incomplete set — a missed page is an error you see, not a short note nobody
-notices.
-
-**If a page is too large for the tool result**, the harness spills it to a
-file under `~/.claude/projects/…/tool-results/`. Do not go near that path:
-anything under `~/.claude` trips the harness's sensitive-file prompt, which
-lands in front of the user mid-run and reads as the product asking for their
-secrets. Never `cp`, `cat`, `mv` — or `rm` — a tool-result overflow file:
-deleting one is just as much a touch as copying it, and cleaning up that
-directory is the harness's job, not this skill's. Halve `limit` and re-fetch
-from the same `cursor` instead.
-
-Every page file is the tool result verbatim (rule 8). `reassemble` refuses
-page sets whose counts, cursors, or timeline disagree with each other or the
-meta — every refusal means re-fetch, never edit.
-
-Then normalize — one path per page, in any order (the CLI orders them by each
-page's own `offset`, so scratch filenames carry no meaning). Normalize all
-recordings in one Bash call — one `reassemble` invocation per recording
-(rule 9):
-
-```bash
-python3 "$VAULTLIB" plaud reassemble \
-  --meta "$SCRATCH/rec_42.meta.json" \
-  --transcript "$SCRATCH"/rec_42.transcript.*.json \
-  --note "$SCRATCH/rec_42.note.json" \
-  --out "$SCRATCH" --timezone <config.timezone>
-```
-
-The result names the blob file and carries `recording_id`, `duration_min`,
-and `recorded_local` — an ISO `YYYY-MM-DDTHH:MM` stamp that `meeting write`
-(`date`) and `sync collide` (`--start`) both take **verbatim**, with no
-reformatting. Surface any `warnings` in the result verbatim — in the
-summary, and in interactive mode quote them to the user before that
-recording is written. On a Plaud **401**: report it and stop this adapter —
-never retry auth in a loop; re-authentication is interactive and belongs to
-the user.
+That is where this context's Plaud work ends. **Never call
+`mcp__plaud__get_transcript` or `mcp__plaud__get_note` yourself** — the
+fetch, pagination, reassembly, extraction and write all happen inside the
+per-recording worker step 6 dispatches, following
+`references/worker-contract.md`. A transcript that entered this context
+would be re-read by every request that follows; a live cost analysis
+measured exactly that as most of a long run's bill. Routing (step 3) works
+from the listing metadata and the calendar; when it needs transcript
+keywords, the worker matches them itself (signal 3).
 
 The vault owner's timezone is `timezone` from `config read` — pass the IANA
 name. If it is in `missing`, the plaud and m365 adapters and calendar
-enrichment cannot run: skip them with an explicit line. If the host cannot
-resolve timezone names, the error's hint says to pass `--utc-offset` instead.
+enrichment cannot run: skip them with an explicit line — the timezone rides
+into every worker briefing. If the host cannot resolve timezone names, the
+error's hint says to pass `--utc-offset` instead.
 
 **Microsoft 365** (when enabled, available, and account-verified): Teams
 transcribes meetings on the vault owner's calendar, and the calendar event is the
