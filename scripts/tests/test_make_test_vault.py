@@ -148,6 +148,20 @@ def test_symlink_failure_degrades_to_warning(tmp_path, monkeypatch):
     assert any(".claude" in w for w in warnings)
 
 
+def test_cli_omitted_demo_day_leaves_fixtures_pristine(tmp_path, capsys):
+    """--demo-day is opt-in (#91 controller ruling): the visual-check tier
+    (obsidian_probe.provenance() + its basesim cross-check) needs the demo
+    fixtures byte-pristine, so the default build must not re-date at all."""
+    target = tmp_path / "vault"
+    exit_code = main([str(target)])
+    assert exit_code == 0
+    note = target / "60-daily-notes" / "2026-06-15.md"
+    original = FIXTURE_ROOT / "60-daily-notes" / "2026-06-15.md"
+    assert note.is_file()
+    assert note.read_bytes() == original.read_bytes()
+    assert "demo day" not in capsys.readouterr().out  # nothing was re-dated
+
+
 def test_cli_accepts_demo_day_flag(tmp_path):
     target = tmp_path / "vault"
     demo_day = date(2026, 9, 10)
@@ -176,7 +190,10 @@ def test_cli_rejects_malformed_demo_day(tmp_path, capsys):
     assert "--demo-day" in capsys.readouterr().err
 
 
-def test_cli_default_demo_day_uses_todays_date(tmp_path, monkeypatch):
+def test_cli_bare_demo_day_flag_uses_todays_date(tmp_path, monkeypatch):
+    """--demo-day with no value (nargs="?") means "as if today were the demo
+    day" — distinct from omitting the flag entirely, which means no
+    re-dating at all (see test_cli_omitted_demo_day_leaves_fixtures_pristine)."""
     fixed_today = date(2026, 9, 10)
 
     class FixedDate(date):
@@ -186,7 +203,7 @@ def test_cli_default_demo_day_uses_todays_date(tmp_path, monkeypatch):
 
     monkeypatch.setattr("redate.date", FixedDate)
     target = tmp_path / "vault"
-    exit_code = main([str(target)])
+    exit_code = main([str(target), "--demo-day"])
     assert exit_code == 0
     anchor = discover_anchor(FIXTURE_ROOT)
     _, recap_from = weekday_aligned_shift(anchor, fixed_today)
