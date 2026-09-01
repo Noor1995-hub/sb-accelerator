@@ -97,16 +97,19 @@ Once your transcript fetch has succeeded — not `no-transcript`, not
 `forbidden`, not `fetch-error` — you are going to draft a payload: resolve
 the meeting's people before anything else, from the event you fetched,
 never from the transcript (Teams speech recognition garbles names). For
-every attendee **name** in your fetched event, plus the vault owner, batch
-one call per name into a single Bash invocation:
+every attendee **name** in your fetched event, batch one call per name
+into a single Bash invocation:
 
 ```bash
 python3 "$VAULTLIB" person ensure --vault "$VAULT" --name "<name>"
 ```
 
-Use each result's `slug` for the payload's `attendees`. Count the calls
-whose result carries `"created": true` — those are people this vault has
-never seen before; everyone else came back `"created": false`.
+Use each result's `slug`, plus the vault owner's person slug your prompt
+already carries, for the payload's `attendees` — the owner's slug arrives
+pre-resolved (the orchestrator read it from `config read`'s `owner`), so
+you never call `person ensure` for it yourself. Count the calls whose
+result carries `"created": true` — those are people this vault has never
+seen before; everyone else came back `"created": false`.
 
 Your prompt carries `confidence-inputs` — two booleans the orchestrator
 already computed from the calendar match, `high-if-no-new-attendees` and

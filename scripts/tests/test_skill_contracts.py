@@ -242,31 +242,49 @@ def test_sync_summaries_speak_plainly(name):
 # #110: dedup must run BEFORE the fetch (the measured $8/run failure was
 # full event reads for candidates the ledger then discarded), and no adapter
 # may reach before the vault's own start date.
+#
+# Task 3.3: the orchestrator no longer fetches the full event or derives
+# ids itself — that moved into the worker (`m365 ids` then `sync dedup`,
+# per `worker-contract.md`'s Fetching — M365 section). So SKILL.md's own
+# ordering claim shrinks to "triage gates dispatch", and the ids-before-dedup
+# ordering is asserted against the file that now owns it.
 def test_sync_recordings_triages_m365_before_the_fetch():
     text = read_skill("sync-recordings")
     assert "sync m365-triage" in text, "the pre-fetch cache gate is missing"
     assert "sync m365-record" in text, (
         "outcomes must be recorded back or every run re-fetches")
-    assert text.index("sync m365-triage") < text.index("m365 ids"), (
-        "triage must gate the full event reads, not follow them")
+    assert text.index("sync m365-triage") < text.index("### 6."), (
+        "triage must gate dispatch, not follow it")
+    ref = read_ref("sync-recordings", "worker-contract.md")
+    assert ref.index("m365 ids") < ref.index("sync dedup"), (
+        "the worker contract must still derive ids before it dedups — "
+        "SKILL.md no longer makes either call itself")
 
 
 # The #122 failure shape — a fleet of extraction subagents each paid ~62k
-# tokens to learn "nothing to write" — is prevented by triage + dedup gating
+# tokens to learn "nothing to write" — is prevented by triage gating
 # dispatch and by workers fetching FIRST (a negative is a first-tool-call
 # exit), not by centralizing fetches. The orchestrator stays the seen-events
 # cache's only writer.
+#
+# Task 3.3: dedup used to be a second orchestrator-side gate, run once
+# across the whole batch before dispatch. It is now the worker's own first
+# move after deriving ids (one occurrence at a time), so there is no longer
+# a pre-dispatch `sync m365-record` call to pin — the settled-outcomes
+# banking it used to feed was deleted; workers surface everything, including
+# already-synced, via outcome lines the batch banks after the fact.
 def test_sync_recordings_dispatches_workers_only_after_triage_and_dedup():
     text = read_skill("sync-recordings")
     assert "survived triage" in text, (
-        "the dispatch gate must condition dispatch on triage + dedup")
+        "the dispatch gate must condition dispatch on triage")
     assert '"forbidden"' in text, (
         "a cross-tenant 403 needs a recorded outcome or it refetches forever")
     dispatch = text.index("### 6.")
-    assert text.index("sync m365-record") < dispatch, (
-        "no-transcript-url and skipped outcomes are banked before dispatch")
-    assert text.rindex("sync m365-record") > dispatch, (
-        "batch outcomes are banked after workers return")
+    assert text.index("sync m365-triage") < dispatch, (
+        "triage must run before dispatch")
+    assert text.index("sync m365-record") > dispatch, (
+        "there is no pre-dispatch settled-outcomes banking any more — "
+        "every sync m365-record call happens after workers return")
 
 
 # Cost round 2: workers run as the plugin's own agent types, which pin the
@@ -327,7 +345,8 @@ def test_sync_recordings_dispatch_names_the_worker_agent_types():
 def test_sync_recordings_worker_outcomes_are_a_closed_vocabulary():
     text = read_skill("sync-recordings")
     for token in ("written:", "no-transcript", "forbidden",
-                  "fetch-error", "auth-error", "possible-duplicate-of"):
+                  "fetch-error", "auth-error", "possible-duplicate-of",
+                  "already-synced"):
         assert token in text, f"outcome vocabulary is missing {token}"
     assert "never writes the seen-events cache" in text, (
         "the single-writer rule must be stated")

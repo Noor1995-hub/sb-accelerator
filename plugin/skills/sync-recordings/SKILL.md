@@ -62,12 +62,17 @@ The JSON envelope and interpreter resolution are documented in the plugin's
    the only remedy is re-fetching the missing pages by cursor. Catching
    yourself editing those fields to satisfy the validator is a
    stop-and-report condition: stop that recording, say so in the summary,
-   let it retry next run. The same verbatim rule covers **full-event JSON**:
-   every `$SCRATCH/m365_event_<n>.json` and the `m365_events.json` array
-   hold the tool results' content unchanged — a live run that re-typed
-   events "from memory" garbled three transcript URLs and two ids before
-   catching itself. (A calendar listing is not a transcript — the
-   step 1 listing trim is fine.)
+   let it retry next run. The same verbatim rule covers this context's own
+   listing writes — `$SCRATCH/m365_search.json` and
+   `$SCRATCH/m365_routing.json` hold the calendar search's own field values
+   unchanged — and calendar enrichment's per-match **full-event JSON**
+   (step 2): a live run that re-typed an event "from memory" garbled three
+   transcript URLs and two ids before catching itself. The m365 adapter's
+   own full-event and transcript reads no longer happen here at all — the
+   worker fetches and writes its own `$SCRATCH/m365_event_<n>.json`, per
+   `worker-contract.md`. (A calendar listing is not a transcript — the
+   step 1 trim to `m365_search.json`'s four fields, and to
+   `m365_routing.json`'s nine, is fine.)
 9. **Batch independent CLI calls into one Bash call.** Every separate tool
    turn re-reads the whole session context. Calls with no data dependency —
    `sync reconcile-reviews` and `sync scan`; the `person ensure` calls for a
@@ -103,7 +108,7 @@ but only as a deliberate interactive run with an explicitly stated range
 |---|---|---|
 | `inbox` | `sync scan` over `10-inbox/` | always available |
 | `plaud` | Plaud MCP `list_files` | ToolSearch finds `mcp__plaud__list_files` |
-| `m365` | M365 calendar search + full event reads | ToolSearch finds `outlook_calendar_search` **and** `read_resource` |
+| `m365` | M365 calendar search (workers fetch their own events and transcripts) | ToolSearch finds `outlook_calendar_search` **and** `read_resource` |
 
 ### Account binding — before anything is listed
 
@@ -329,17 +334,17 @@ stops. A trailing week routinely holds more than 25 events, and a
 first-page-only search silently drops the rest — nothing fails, those
 meetings just never sync.
 
-**A full event read is expensive, so dedup runs before the fetch, not
-after.** Keep the listing lean: never search a window wider than `dates
-window` returned, and write only the four fields triage reads — `id`,
-`subject`, `start`, `end`, values verbatim — for each kept event, across
-every page, as one JSON array to `$SCRATCH/m365_search.json` with the
-Write tool. The connector's calendar search selects no fields, so this
-scratch write is where the listing gets trimmed — a live run wrote 53k
-characters of raw listing for 33 events when 11 mattered and four fields
-per event were ever read. (A listing is not a transcript — rule 8 does not
-apply.) Then ask the seen-events cache which occurrences still need the
-full read:
+**A full event read is expensive, so it no longer happens here at all —
+it's the worker's job, gated by triage.** Keep the listing lean: never
+search a window wider than `dates window` returned, and write only the
+four fields triage reads — `id`, `subject`, `start`, `end`, values
+verbatim — for each kept event, across every page, as one JSON array to
+`$SCRATCH/m365_search.json` with the Write tool. The connector's calendar
+search selects no fields, so this scratch write is where the listing gets
+trimmed — a live run wrote 53k characters of raw listing for 33 events
+when 11 mattered and four fields per event were ever read. (A listing is
+not a transcript — rule 8 does not apply.) Then ask the seen-events cache
+which occurrences still need a worker at all:
 
 ```bash
 python3 "$VAULTLIB" sync m365-triage --vault "$VAULT" \
@@ -347,7 +352,7 @@ python3 "$VAULTLIB" sync m365-triage --vault "$VAULT" \
 ```
 
 Everything the cache already answers is filtered out here, before any
-fetch: `filtered` counts occurrences already written into the vault,
+dispatch: `filtered` counts occurrences already written into the vault,
 permanently skipped, refused by another organization's tenant, or finally
 transcript-less. A `no-transcript` outcome
 stays provisional for 48 hours after the meeting ends — Teams delivers
@@ -361,82 +366,72 @@ in the summary, bank nothing for them, and let them sync normally on the
 first run after they end. Only the occurrences in
 `fetch` proceed; surface any `warnings`. The cache is disposable by design
 (the vault ledger still dedups every write), so on the first run after
-upgrading everything fetches once and the outcomes recorded below make
+upgrading everything dispatches once and the outcomes recorded below make
 every later run cheap.
 
-For each `fetch` entry, fetch the **full event** with `read_resource`
-on its `calendar:///events/...` URI and write the raw JSON to
-`$SCRATCH/m365_event_<n>.json` with the Write tool — never echo it through
-Bash. Collect the full event objects into one array,
-`$SCRATCH/m365_events.json`, then derive the dedup ids:
+For each `fetch` survivor, match its `id` back against the calendar-search
+pages you already hold and write one compact array,
+`$SCRATCH/m365_routing.json`, with — per event, **values verbatim from the
+listing, never rebuilt** — `id`, `subject`, `start`, `end`, `organizer`,
+`attendees`, `location`, `recurrence`, and `uri` (the URL-encoded
+`calendar:///events/<id>` form; never decode or reconstruct it — the
+worker reads it exactly as given). There is no full event read and no id
+derivation here any more: the worker fetches its own event, derives its
+own ids, and dedups itself before it ever reads a transcript —
+`worker-contract.md`'s Fetching — M365 section has the mechanics. The
+event is never fetched in this context, and neither is the transcript —
+the worker's step 6 dispatch makes both `read_resource` calls itself, and
+what it finds comes back as its outcome line: `already-synced:
+<recording_id>` (its own dedup call found the id already in the ledger —
+no transcript fetch, no payload), `no-transcript` (its own id-derivation
+call found no `meetingTranscriptUrl`, or the transcript read answered
+`transcripts_empty`), `"forbidden"` (a 403 — another organization's tenant
+owns the transcript, permanently), or a written note. Those outcomes are
+banked per batch in step 6. A recording that *failed* — a transport error
+— gets **no outcome line**, and neither does a cross-adapter duplicate
+deferred under `--unattended`: what is not settled is not recorded, and
+the occurrence surfaces again next run.
 
-```bash
-python3 "$VAULTLIB" m365 ids --events "$SCRATCH/m365_events.json"
-```
-
-Events in `skipped` (`no-transcript-url`) have no transcript *yet* — report
-them as one count, not per-event lines; they retry naturally while inside
-the window, and stop costing a fetch once their recorded outcome below goes
-final. Feed the `recording_id` values through `sync dedup` exactly as
-for plaud. Only `new` ids proceed.
-
-**Bank what the listing already settled — before any worker exists** — so
-the next run's triage answers for them without a fetch, even if this run
-dies mid-dispatch. Write one JSON array to
-`$SCRATCH/m365_outcomes_settled.json` with the Write tool, one entry per
-occurrence, keyed by the `id` and `start_utc` the triage result carried:
-
-- `"outcome": "no-transcript"` — the event carried no `meetingTranscriptUrl`
-  (`m365 ids` skipped it);
-- `"outcome": "skipped"` — the id went onto the never-propose-again list
-  (`sync skip`), here or on an earlier run.
-
-```bash
-python3 "$VAULTLIB" sync m365-record --vault "$VAULT" \
-  --outcomes "$SCRATCH/m365_outcomes_settled.json"
-```
-
-The transcript itself is never fetched in this context. The worker step 6
-dispatches makes the one `read_resource` call on its occurrence's
-`transcript_url` — passed to it **exactly as `m365 ids` returned it** — and
-what it finds comes back as its outcome line: `"forbidden"` (a 403 —
-another organization's tenant owns the transcript, permanently),
-`no-transcript` (`transcripts_empty` — transcription was off), or a written
-note. Those outcomes are banked per batch in step 6. A recording that
-*failed* — a transport error — gets **no outcome line**, and neither does a
-cross-adapter duplicate deferred under `--unattended`: what is not settled
-is not recorded, and the occurrence surfaces again next run.
-
-An m365 recording's routing starts ahead of plaud's: the event **is** the
-calendar record. Pre-fill `calendar-subject`, `organizer`, `location`,
-`attendee-emails`, and `recurring` from the event, set
+An m365 recording's routing starts ahead of plaud's: the listing **is**
+the calendar record. Pre-fill `calendar-subject`, `organizer`, `location`,
+`attendee-emails`, and `recurring` from `m365_routing.json`, set
 `calendar_match: true`, and use `calendar-match-high` as the calendar
 reason — step 2 below is skipped for m365-sourced items. `source` is
-`teams`. Resolve attendees from the event's attendee list via
-`person ensure`; Teams transcripts carry no speaker names (a tenant
-setting most deployments have off), and its speech recognition garbles
-names and product terms — so attendees come from the calendar, never from
-the transcript, and transcript keywords stay the weakest routing signal
-(step 3 already ranks them last).
+`teams`. The listing carries attendees as bare **email addresses**, never
+names, so attendee slugs are not yours to produce here: the worker
+resolves them itself from the full event it fetches (`person ensure`, per
+`worker-contract.md`'s Attendees and confidence section) — Teams
+transcripts carry no speaker names besides (a tenant setting most
+deployments have off), and its speech recognition garbles names and
+product terms, so attendee resolution never touches the transcript either
+way. Pass `attendee-emails` in the worker's briefing (step 6); it derives
+the slugs, never you.
 
-**The dispatch gate.** A worker is dispatched only for an occurrence that
-survived triage (`sync m365-triage`) and dedup (`sync dedup`) — never to
-discover whether a transcript exists for anything else. Each worker makes
-exactly the connector calls for its one assigned recording, and a negative
-answer is its first tool call, costing a skip, not an extraction — that,
-plus triage, is what keeps a fleet of workers from ever being paid to learn
-"nothing to write". A worker **never writes the seen-events cache**: every
-settled outcome comes back as one line, and you bank each batch's lines in
-one `sync m365-record` call the moment the batch returns (step 6). An id
-`sync dedup` reported as already `synced` still gets a `written` outcome
-banked there — that is how the cache back-fills for meetings synced before
-it existed.
+**The dispatch gate.** A worker is dispatched for every occurrence that
+survived triage (`sync m365-triage`'s `fetch` list) — never to discover
+whether a transcript exists for anything else. The ledger dedup that used
+to run here, once, before dispatch now runs inside the worker instead, as
+its first move after it derives its own ids (`worker-contract.md`): an id
+already in the ledger stops there, before any transcript fetch, and
+reports `already-synced: <recording_id>` rather than costing an
+extraction — `meeting write`'s own already-synced refusal is the backstop
+behind that, not a second gate you maintain here. Each worker makes
+exactly the connector calls for its one assigned recording, and a
+negative answer (no transcript, forbidden, already-synced) is one of its
+first tool calls, costing a skip, not an extraction — that, plus triage,
+is what keeps a fleet of workers from ever being paid to learn "nothing to
+write". A worker **never writes the seen-events cache**: every settled
+outcome comes back as one line, and step 6 banks each batch's lines the
+moment it returns — including any `already-synced` lines, banked as
+`written`, which is how the cache back-fills for meetings synced before it
+existed.
 
 ### 2. Calendar enrichment (optional, honest about absence)
 
 This step is for recordings that arrived *without* a calendar record —
-inbox files and plaud recordings. An m365-sourced item skips it: its event
-read already is the match, stamped in step 1.
+inbox files and plaud recordings. An m365-sourced item skips it: its
+calendar record already is the match, stamped in step 1 straight from the
+listing.
 
 Calendar enrichment uses the M365 connector, so it is gated like an adapter:
 it runs only when `adapters.m365.enabled` is true, the calendar tool exists
@@ -468,17 +463,30 @@ attendee-name matches beat same-day-only. A match pre-fills
 
 ### 3. Route: projects, entities and attendees
 
+Pull the routing digest once, batched with nothing else it depends on:
+
+```bash
+python3 "$VAULTLIB" sync routing-signals --vault "$VAULT"
+```
+
+Its `projects` (slug, name, entity, status), `entities` (slugs), and
+`people` (slugs) replace listing `40-entities/*/` or
+`30-projects/*/index.md` by hand — judgment below runs on this digest,
+matched against each recording's own attendee data (`attendee-emails` from
+`m365_routing.json` for m365; the calendar or transcript for plaud and
+inbox).
+
 Judgment, with signals in this order — stop at the first confident match:
 
-1. External attendee email domains → entity: list `40-entities/*/`, match the
-   domain root against entity slugs, then link that entity's active projects
-   (`30-projects/*/index.md` where `entity` matches).
-2. Calendar subject keywords against project names and slugs.
-3. Transcript content keywords against project names and slugs (lower
-   confidence) — the worker's signal, not yours: no transcript exists in
-   this context. When signals 1–2 are inconclusive, the step-6 briefing
-   carries the project/entity slug catalog and the worker matches transcript
-   keywords against it itself.
+1. External attendee email domains → entity: match the domain root against
+   the digest's entity slugs, then link that entity's active projects
+   (the digest's `projects` where `entity` matches).
+2. Calendar subject keywords against the digest's project names and slugs.
+3. Transcript content keywords against the digest's project names and slugs
+   (lower confidence) — the worker's signal, not yours: no transcript
+   exists in this context. When signals 1–2 are inconclusive, the step-6
+   briefing carries the project/entity slug catalog and the worker matches
+   transcript keywords against it itself.
 
 An empty `projects: []` is fine — triage catches unassigned meetings. Never
 force a link.
@@ -499,8 +507,9 @@ with a prospect, for instance. That is the *only* way such a meeting reaches
 its entity's dossier, since the dossier's Meeting Log is a Dataview query
 over this field and Dataview sees just what the meeting note itself says.
 
-Attendees are **person slugs**. For each attendee named by the calendar or
-clearly identified in the transcript, ensure the note exists:
+Attendees are **person slugs**. For plaud, inbox, and capture recordings —
+where the calendar match (if any) or the transcript names people — ensure
+each attendee's note exists:
 
 ```bash
 python3 "$VAULTLIB" person ensure --vault "$VAULT" --name "<Full Name>"
@@ -509,6 +518,12 @@ python3 "$VAULTLIB" person ensure --vault "$VAULT" --name "<Full Name>"
 Use the returned slugs. The vault owner attends their own meetings — include
 them. Names only guessed from transcript audio are unreliable: leave them
 out of `attendees` and mention them in the debrief instead.
+
+**M365 is the exception.** The listing carries no attendee names, only
+emails, so this context cannot resolve slugs for an m365 recording at all —
+skip this paragraph for it entirely. The worker does its own `person
+ensure` from the full event it fetches (step 6 passes `attendee-emails` and
+the vault owner's person slug instead of resolved attendees).
 
 ### 4. Stamp confidence
 
@@ -525,6 +540,23 @@ A **capture** (`type: note`) is rated on a different axis, because it has no
 calendar to match: `medium` when the project link is `entity-domain-match`
 *and* `all-attendees-known`; `low` otherwise. `high` is unreachable for a
 capture by construction, and that is correct — nothing corroborated it.
+
+**M365 is the exception.** You never stamp a final `confidence` for an
+m365-sourced recording, and (per step 3) you never resolve its attendees
+either — only the worker knows the new-attendee count, because only it has
+attendee *names*. What you compute instead are the two `confidence-inputs`
+booleans the table above reduces to once attendee knownness is set aside:
+
+- `high-if-no-new-attendees` — `calendar-match-high` and a strong link
+  (`entity-domain-match` or `calendar-subject-match`)
+- `medium-if-at-most-one-new` — calendar match high or medium and any
+  project link
+
+Pass both, plus the calendar-group and project-link-group
+`confidence-reasons` entries, in the worker's briefing (step 6); the worker
+settles `high`/`medium`/`low` against its own new-attendee count and
+derives the attendees-group `confidence-reasons` entry that goes with it
+(`worker-contract.md`'s Attendees and confidence section).
 
 There is no auto-confirm: every synced meeting lands `needs-review`, and the
 reviewed checkbox in Meetings.base is the confirm path. The stamp is the data
@@ -589,20 +621,39 @@ Pass each worker *paths and decisions*, not content:
 - both contract paths above, `$VAULT`, `$SCRATCH`, the `$VAULTLIB` path,
   and the vault timezone;
 - its recording reference and scratch stem: Plaud — the file id and
-  `$SCRATCH/rec_N.meta.json`; M365 — `$SCRATCH/m365_event_<n>.json` and the
-  `transcript_url` from `m365 ids`, verbatim; inbox — the file's path, its
-  `recording_id` from `sync scan`, its date read from the file's own content
-  or header, and its scratch stem — the inbox file's own name stem (its
-  payload file `<stem>.payload.json` is swept by pattern like the rest);
-- the routing you decided: `projects`, attendee slugs, `confidence` +
-  `confidence-reasons`, `calendar_match`, `calendar-subject` (always
-  non-empty — the matched event's subject, or the item's own subject or a
-  short descriptive title), whichever of `organizer`/`location`/
-  `recurring`/`attendee-emails` are known, `source`,
-  `source-recording-id`, and the step-1 classification (`type: note` for a
-  capture; otherwise the worker picks the meeting subtype from the
-  transcript). `date` and `recording-duration` the worker derives from its
-  own `reassemble` result — pass them only for inbox items and captures;
+  `$SCRATCH/rec_N.meta.json`; M365 — the listing's own `uri` field, verbatim
+  (the URL-encoded `calendar:///events/<id>` form — never decoded or
+  rebuilt), from `m365_routing.json`, and the scratch stem
+  `m365_event_<n>`; there is no pre-read event file and no `transcript_url`
+  to pass — the worker fetches the event and derives both itself
+  (`worker-contract.md`'s Fetching — M365 section); inbox — the file's
+  path, its `recording_id` from `sync scan`, its date read from the file's
+  own content or header, and its scratch stem — the inbox file's own name
+  stem (its payload file `<stem>.payload.json` is swept by pattern like the
+  rest);
+- the routing you decided: `projects`, `calendar_match`, `calendar-subject`
+  (always non-empty — the matched event's subject, or the item's own
+  subject or a short descriptive title), whichever of
+  `organizer`/`location`/`recurring`/`attendee-emails` are known, `source`,
+  and the step-1 classification (`type: note` for a capture; otherwise the
+  worker picks the meeting subtype from the transcript). For plaud, inbox,
+  and captures this also includes attendee slugs, `confidence` +
+  `confidence-reasons`, and `source-recording-id`. **M365 is the
+  exception**: attendee slugs, the final `confidence`, and the
+  `confidence-reasons` attendees-group entry are not yours to pass — the
+  worker derives all three itself. Pass instead: `attendee-emails` straight
+  from `m365_routing.json` (never resolved to slugs here — the listing
+  carries no names), the `confidence-inputs` pair from step 4's M365
+  exception, the calendar-group and project-link-group
+  `confidence-reasons` entries verbatim (the worker copies these in
+  unchanged and derives only the attendees-group entry), and the vault
+  owner's person slug (`owner` from `config read`) for the worker to fold
+  straight into `attendees` — the worker never calls `person ensure` for
+  the owner, only for the event's other attendees. `source-recording-id`
+  is also not yours for M365: the worker derives it from its own ids call.
+  `date` and `recording-duration` the worker derives from its own
+  `reassemble` result for every adapter — pass them only for inbox items
+  and captures;
 - `entities`, but only when `projects` is empty (step 3);
 - when routing signals 1–2 were inconclusive: the project/entity slug
   catalog, for worker-side signal-3 matching.
@@ -621,32 +672,49 @@ never spawn in the background and then loop checking on it.
 
 **When a batch returns, act on each line, then bank.**
 
-- `written: <stem>` — count it; step 7 verifies from disk anyway. A
-  `written:` line that mentions a `confirmed-target` conflict counts under
-  **Possible duplicates**, not Processed: the CLI wrote a `-v2` sibling
-  carrying a `conflicts-with` edge instead of touching the confirmed note,
-  and it shows in triage under `⚠ Duplicate of`. A mentioned
-  `stem-collision` is just a `-2` filename suffix — nothing was at risk.
-- `no-transcript` / `forbidden` — settled negatives.
+- `written: <stem>` — count it; step 7 verifies from disk anyway. For an
+  m365 recording, the line carries a `(recording-id: m365:<hex>)` clause —
+  parse it for the banking call below; a missing or malformed clause is a
+  banking error to surface, never a silently dropped occurrence
+  (`worker-contract.md` says the same). It also carries a `(new-people:
+  <names>` or `none)` clause — fold the names into the summary's New
+  People count. A `written:` line that mentions a `confirmed-target`
+  conflict counts under **Possible duplicates**, not Processed: the CLI
+  wrote a `-v2` sibling carrying a `conflicts-with` edge instead of
+  touching the confirmed note, and it shows in triage under `⚠ Duplicate
+  of`. A mentioned `stem-collision` is just a `-2` filename suffix —
+  nothing was at risk.
+- `already-synced: <recording_id>` — the worker's own dedup call found the
+  id already in the ledger before it ever fetched a transcript; bank it as
+  `{"outcome": "written", "recording_id": <recording_id>}` alongside the
+  batch's other lines. This is how the cache back-fills for meetings
+  synced before it existed — there is no separate pre-dispatch call for it
+  any more, because every triage survivor gets a worker now.
+- `no-transcript` / `forbidden` — settled negatives, banked keyed by the
+  `id` and `start_utc` triage carried, same as always.
 - `fetch-error` — no outcome line is banked; it retries next run.
 - `auth-error` — stop dispatching that adapter's remaining recordings and
   report it; re-authentication belongs to the user.
-- `possible-duplicate-of: <stem> (payload at <path>)` — the ledger keys on
-  exact ids, so it cannot see one conversation captured twice across
-  adapters; the worker's window check can, and it drafted its payload
-  without writing. Interactively: show both notes and ask once — "write it
-  anyway" is `meeting write --vault "$VAULT" --note "<path>"` right here,
-  no re-extraction — then include a `written` entry for it (with its
-  `recording_id`) in the batch outcomes you bank below; "drop it" is
-  `sync skip --id m365:<hex> --reason "same
-  meeting already synced as <existing id>"`, which banks as a `"skipped"`
-  outcome. Under `--unattended`: neither — count it in the summary's
-  cross-adapter duplicates line; it defers until an interactive run
-  settles it, and that is the safe direction.
+- `possible-duplicate-of: <stem> (recording-id: m365:<hex>, payload at
+  <path>) (new-people: <names>` or `none)` — the ledger keys on exact ids,
+  so it cannot see one conversation captured twice across adapters; the
+  worker's window check can, and it drafted its payload without writing.
+  Parse the `recording-id:` clause — you need it whichever way the user
+  decides. Interactively: show both notes and ask once — "write it anyway"
+  is `meeting write --vault "$VAULT" --note "<path>"` right here, no
+  re-extraction — then include a `written` entry for it, keyed to that
+  parsed `recording_id`, in the batch outcomes you bank below, and fold
+  its `new-people` clause into the summary count; "drop it" is `sync skip
+  --id m365:<hex> --reason "same meeting already synced as <existing
+  id>"`, using that same parsed id, which banks as a `"skipped"` outcome.
+  Under `--unattended`: neither — count it in the summary's cross-adapter
+  duplicates line; it defers until an interactive run settles it, and that
+  is the safe direction.
 
 Then write the batch's settled lines — `written` (with each
-`recording_id`), `no-transcript`, `forbidden`, `skipped` — one entry per
-occurrence, keyed by the `id` and `start_utc` the triage result carried, to
+`recording_id`, including any `already-synced`-derived entries),
+`no-transcript`, `forbidden`, `skipped` — one entry per occurrence, keyed
+by the `id` and `start_utc` the triage result carried, to
 `$SCRATCH/m365_outcomes_batch.json`, and bank them before dispatching the
 next batch:
 
@@ -659,14 +727,12 @@ The cache merges across calls; Plaud and inbox outcomes have no cache and
 feed only the summary. Banking per batch keeps the maximum crash loss to
 one batch — one cheap worker-side re-fetch next run.
 
-The first banking call also carries the back-fill: one `written` entry (with
-its `recording_id`) for each id `sync dedup` reported as already `synced` in
-step 1 — those ids never reach a worker, so no batch line produces them, and
-this is how the cache warms for meetings synced before it existed. When
-every m365 candidate deduped away and no worker was dispatched at all, make
-this banking call anyway, with just the back-fill entries — a cold cache
-over an already-synced window must warm on this run, not re-pay the event
-reads forever.
+There is no separate pre-dispatch banking call any more, and no special
+case for "every candidate deduped away": dispatch happens for every triage
+survivor (the dispatch gate, above), so an already-synced occurrence still
+gets a worker, still returns an outcome line, and still gets banked through
+the ordinary batch flow above — the back-fill for meetings synced before
+the cache existed just rides along with everything else the batch banks.
 
 **Then sweep what you wrote.** For each inbox-sourced recording whose
 worker replied `written:` with a note verified on disk, move its inbox
@@ -732,7 +798,7 @@ Count what exists, not what you intended (a lab run once reported
 **Possible cross-adapter duplicates:** {N} — deferred; needs an interactive run
 **Skipped / errors:** {N} (will retry next run) · {N} tiny clips auto-skipped ({list each with its duration}) — permanent, not a retry
 **M365 fetches saved:** {N} of {N} listed occurrences answered from the seen-events cache ({N} held in the 6h recheck window) | cache cold (first run)
-**Workers dispatched:** {N} ({N} plaud · {N} m365 · {N} inbox) — m365 candidates not dispatched had no transcript URL yet ({N}), were already in the vault ({N}), were answered by the cache ({N}), or hadn't ended yet ({N}); worker outcomes: {N} written · {N} no-transcript · {N} forbidden · {N} fetch-error · {N} auth-error
+**Workers dispatched:** {N} ({N} plaud · {N} m365 · {N} inbox) — m365 candidates not dispatched were answered by the cache ({N}) or hadn't ended yet ({N}); worker outcomes: {N} written · {N} already-synced · {N} no-transcript · {N} forbidden · {N} fetch-error · {N} auth-error
 **Adapters:** inbox ok · plaud ok (window {N}d) | REFUSED — signed in as a different account (account-mismatch) | REFUSED — no account bound to this vault yet (no-account-hint) | disabled | unavailable | STOPPED mid-run — connector wants re-authentication (auth-error) · m365 ok (window {N}d) | REFUSED — signed in as a different account (account-mismatch) | REFUSED — no account bound to this vault yet (no-account-hint) | disabled | unavailable | STOPPED mid-run — connector wants re-authentication (auth-error)
 **Calendar enrichment:** ok | UNAVAILABLE
 **Warnings:** {verbatim} | none
@@ -747,6 +813,13 @@ Each adapter's `(window {N}d)` is that step-1 `dates window` call's
 `effective_days` — 7 on a cold or missing watermark, narrower once the
 watermark is doing its job. It is reported only for `ok`; a refused,
 disabled, or unavailable adapter never computed one.
+
+`New people` sums two sources, never just one: the orchestrator's own
+`person ensure` calls for plaud, inbox, and capture attendees (step 3), and
+the `new-people:` clause each m365 worker's `written` or
+`possible-duplicate-of` line carries — you never call `person ensure` for
+an m365 attendee yourself (step 6), so its count has to come from the
+worker.
 
 ## Scratch hygiene
 
@@ -766,7 +839,7 @@ plus `sentmail.sample.json`, `calendar.*.json` and `*.block.md` from
 Session-1 onboarding) directly inside `--dir`, never recursing — this is the whole reason it
 exists rather than `rm -f`. **Every scratch file this contract names you
 write already matches one of those patterns; name any other raw connector
-file to match one too** (`m365_events.json` fits `m365_*.json`,
+file to match one too** (`m365_routing.json` fits `m365_*.json`,
 `rec_42.blob.md` fits `*.blob.md`), so one sweep call always catches
 everything this run wrote, and it is the only deletion this skill ever
 performs. This is *why* every scratch write above uses those exact
