@@ -239,9 +239,22 @@ list already records the decision, so leaving them in the inbox only
 inflates the pending count. Ids are content hashes, so an archived file
 keeps its id and stays deduped.
 
-**Plaud** (when enabled, available, and account-verified): call `mcp__plaud__list_files` for the recent
-window — never a range that starts before `sync.start-date`. Write the raw
-JSON result to `$SCRATCH/plaud.list.json` with the Write tool
+**Plaud** (when enabled, available, and account-verified): compute the
+discovery window — the trailing **7 local days**, ending now, narrowed to
+whatever is left uncovered since this adapter's last successful run:
+
+```bash
+python3 "$VAULTLIB" dates window --vault "$VAULT" --trailing-days 7 --adapter plaud --timezone <tz>
+```
+
+The result's `effective_days` is the real span this run asks for — the
+summary's window figure below — and `watermark_used` says whether the
+narrowing applied at all. A missing or corrupt watermark fails open to the
+full 7, same as a cold cache anywhere else in this skill. Pass `date_from`
+as the local date of the window's `utc_from`, and `date_to` as today
+(local), to `mcp__plaud__list_files` — never a range that starts before
+`sync.start-date`, which the window's own clamp already enforces. Write the
+raw JSON result to `$SCRATCH/plaud.list.json` with the Write tool
 — never echo large JSON through Bash. Then dedup the ids,
 namespaced:
 
@@ -274,10 +287,11 @@ error's hint says to pass `--utc-offset` instead.
 **Microsoft 365** (when enabled, available, and account-verified): Teams
 transcribes meetings on the vault owner's calendar, and the calendar event is the
 key to its own transcript. Compute the discovery window — the trailing
-**7 local days**, ending now:
+**7 local days**, ending now, narrowed the same way Plaud's is, to whatever
+is left uncovered since this adapter's own last successful run:
 
 ```bash
-python3 "$VAULTLIB" dates window --vault "$VAULT" --trailing-days 7 --timezone <tz>
+python3 "$VAULTLIB" dates window --vault "$VAULT" --trailing-days 7 --adapter m365 --timezone <tz>
 ```
 
 Pass its `utc_from`/`utc_to` values to `outlook_calendar_search` as
@@ -649,6 +663,28 @@ M365 recordings have no inbox file to move.
 what still needs processing — that is what makes the folder answerable
 without running anything, and why no index note or state file exists.
 
+**Advance the watermark — only for an adapter whose status this run is
+`ok`.** Once an adapter's processing above is done, record how far this run
+actually reached, using that adapter's own step-1 window, never "now":
+
+```bash
+python3 "$VAULTLIB" sync watermark --vault "$VAULT" --adapter plaud --utc-to "<plaud window's utc_to>"
+python3 "$VAULTLIB" sync watermark --vault "$VAULT" --adapter m365 --utc-to "<m365 window's utc_to>"
+```
+
+Run it for whichever adapters finished `ok` — often just one. Skip it for an
+adapter that was `REFUSED`, `unavailable`, or stopped mid-run on
+`auth-error`: nothing past the point of failure was actually covered, and
+advancing the mark past that would hide what still needs listing next run.
+A batch's `fetch-error` outcomes do not hold this back — a persistently
+failing item (an oversized transcript, say) must not pin every future
+window wide open waiting on it; it keeps retrying inside `dates window`'s
+own 2-day floor regardless of where the watermark sits. Everything after the
+window's `utc_to` was never listed this run, so stamping "now" instead would
+silently skip whatever synced late between the window and the stamp. The
+write is monotonic — an earlier `utc_to` than what is already stored is a
+no-op — so a re-run or a resumed batch can never pull the mark backward.
+
 ### 7. Summarize — from disk, not from memory
 
 Count what exists, not what you intended (a lab run once reported
@@ -667,7 +703,7 @@ Count what exists, not what you intended (a lab run once reported
 **Skipped / errors:** {N} (will retry next run)
 **M365 fetches saved:** {N} of {N} listed occurrences answered from the seen-events cache ({N} held in the 6h recheck window) | cache cold (first run)
 **Workers dispatched:** {N} ({N} plaud · {N} m365 · {N} inbox) — m365 candidates not dispatched had no transcript URL yet ({N}), were already in the vault ({N}), were answered by the cache ({N}), or hadn't ended yet ({N}); worker outcomes: {N} written · {N} no-transcript · {N} forbidden · {N} fetch-error · {N} auth-error
-**Adapters:** inbox ok · plaud ok | REFUSED — signed in as a different account (account-mismatch) | REFUSED — no account bound to this vault yet (no-account-hint) | disabled | unavailable | STOPPED mid-run — connector wants re-authentication (auth-error) · m365 ok | REFUSED — signed in as a different account (account-mismatch) | REFUSED — no account bound to this vault yet (no-account-hint) | disabled | unavailable | STOPPED mid-run — connector wants re-authentication (auth-error)
+**Adapters:** inbox ok · plaud ok (window {N}d) | REFUSED — signed in as a different account (account-mismatch) | REFUSED — no account bound to this vault yet (no-account-hint) | disabled | unavailable | STOPPED mid-run — connector wants re-authentication (auth-error) · m365 ok (window {N}d) | REFUSED — signed in as a different account (account-mismatch) | REFUSED — no account bound to this vault yet (no-account-hint) | disabled | unavailable | STOPPED mid-run — connector wants re-authentication (auth-error)
 **Calendar enrichment:** ok | UNAVAILABLE
 **Warnings:** {verbatim} | none
 ```
@@ -676,6 +712,11 @@ Count what exists, not what you intended (a lab run once reported
 captures and parks alike, plus anything already synced — and reports the
 pending remainder — that remainder is the number the vault owner actually
 cares about. Count it from disk like everything else in this step.
+
+Each adapter's `(window {N}d)` is that step-1 `dates window` call's
+`effective_days` — 7 on a cold or missing watermark, narrower once the
+watermark is doing its job. It is reported only for `ok`; a refused,
+disabled, or unavailable adapter never computed one.
 
 ## Scratch hygiene
 
