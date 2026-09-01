@@ -23,6 +23,18 @@ REF_FILES = sorted(SKILLS_DIR.glob("*/references/*.md"))
 # (m365) — a class without them silently exempts those invocations.
 INVOCATION_RE = re.compile(r'(?:cli\.py|\$\{?VAULTLIB\}?)"?\s+([a-z0-9-]+)\s+([a-z0-9-]+)')
 
+# Issue #129 lever 1: the m365 worker's tools stay open (no `tools:`
+# allowlist — a per-deployment connector cannot be named on a fixed list),
+# but the tools it structurally never needs are named on disallowedTools
+# instead. A later PR reuses this exact list for the probe agent that
+# measures what each of these tools costs in base context.
+M365_WORKER_DISALLOWED_TOOLS = [
+    "Agent", "Workflow", "WebFetch", "WebSearch", "NotebookEdit", "Skill",
+    "SlashCommand", "TodoWrite", "Artifact", "ListAgents", "ReportFindings",
+    "ShareOnboardingGuide", "Monitor", "SendMessage", "PushNotification",
+    "RemoteTrigger", "TaskStop", "CronCreate", "CronDelete", "CronList",
+]
+
 
 def known_subcommands() -> set:
     """(group, action) pairs the CLI actually implements."""
@@ -293,6 +305,16 @@ def test_sync_recordings_dispatch_names_the_worker_agent_types():
     assert "tools:" not in m365_front, (
         "the m365 worker's tools must stay open — a fixed list cannot name "
         "a per-deployment connector, and a wrong list silently kills the fetch")
+    disallowed_lines = [
+        line for line in m365_front.splitlines()
+        if line.strip().startswith("disallowedTools:")]
+    assert disallowed_lines, "the m365 worker must declare disallowedTools"
+    disallowed = [
+        name.strip()
+        for name in disallowed_lines[0].split(":", 1)[1].split(",")]
+    assert disallowed == M365_WORKER_DISALLOWED_TOOLS, (
+        "the m365 worker's disallowedTools must match the issue #129 "
+        "lever-1 list exactly, existing 8 first")
 
     for content in (agent, m365):
         body = re.sub(r"\s+", " ", content.split("---", 2)[2])
