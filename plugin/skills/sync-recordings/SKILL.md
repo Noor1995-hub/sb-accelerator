@@ -316,7 +316,10 @@ permanently skipped, refused by another organization's tenant, or finally
 transcript-less. A `no-transcript` outcome
 stays provisional for 48 hours after the meeting ends — Teams delivers
 transcripts with delay — so those come back in `fetch` as
-`recheck-no-transcript` until the window passes. Occurrences whose meeting
+`recheck-no-transcript` until the window passes. A provisional occurrence
+checked within the last 6 hours comes back in `filtered.no_transcript_waiting`
+instead and is not fetched this run — the 48h horizon above is unchanged.
+Occurrences whose meeting
 has not yet ended come back in `deferred` (reason `not-ended`) — count them
 in the summary, bank nothing for them, and let them sync normally on the
 first run after they end. Only the occurrences in
@@ -662,7 +665,7 @@ Count what exists, not what you intended (a lab run once reported
 **Possible duplicates:** {N} ({list the stems}) — kept as separate notes; each would have overwritten a meeting you already confirmed
 **Possible cross-adapter duplicates:** {N} — deferred; needs an interactive run
 **Skipped / errors:** {N} (will retry next run)
-**M365 fetches saved:** {N} of {N} listed occurrences answered from the seen-events cache | cache cold (first run)
+**M365 fetches saved:** {N} of {N} listed occurrences answered from the seen-events cache ({N} held in the 6h recheck window) | cache cold (first run)
 **Workers dispatched:** {N} ({N} plaud · {N} m365 · {N} inbox) — m365 candidates not dispatched had no transcript URL yet ({N}), were already in the vault ({N}), were answered by the cache ({N}), or hadn't ended yet ({N}); worker outcomes: {N} written · {N} no-transcript · {N} forbidden · {N} fetch-error · {N} auth-error
 **Adapters:** inbox ok · plaud ok | REFUSED — signed in as a different account (account-mismatch) | REFUSED — no account bound to this vault yet (no-account-hint) | disabled | unavailable | STOPPED mid-run — connector wants re-authentication (auth-error) · m365 ok | REFUSED — signed in as a different account (account-mismatch) | REFUSED — no account bound to this vault yet (no-account-hint) | disabled | unavailable | STOPPED mid-run — connector wants re-authentication (auth-error)
 **Calendar enrichment:** ok | UNAVAILABLE
@@ -708,7 +711,7 @@ reaches disk.)
 
 ## Unattended mode
 
-`--unattended` is what scheduled runs and the evening pipeline pass. Three
+`--unattended` is what scheduled runs and the evening pipeline pass. Four
 rules, not negotiable:
 
 1. **Never ask a question.** A blocked prompt means the run exits having
