@@ -601,3 +601,162 @@ def test_cli_now_requires_trailing_mode():
         capture_output=True, text=True)
     payload = json.loads(proc.stdout)
     assert payload["ok"] is False
+
+
+# ---------------------------------------------------------------------------
+# trailing_window(watermark=...): narrow discovery to what a clean sync has
+# not already covered. Task 2.2.
+
+NOW = datetime(2026, 9, 1, 10, 0, 0)  # naive UTC
+
+
+def write_minimal_config(root, start_date=None) -> None:
+    """A config.json valid enough for config.read() — dates window's --vault
+    path reads sync.start-date through it even when no clamp is exercised."""
+    (root / "99-workflow-config" / "config.json").write_text(json.dumps({
+        "config-version": 1,
+        "timezone": "Europe/Brussels",
+        "owner": "morgan-ellery",
+        "adapters": {
+            "inbox": {"enabled": True},
+            "plaud": {"enabled": False, "account_hint": None},
+            "m365": {"enabled": False, "account_hint": None},
+        },
+        "feedback": {"repo": None},
+        "sync": {"start-date": start_date},
+    }), encoding="utf-8")
+
+
+def test_trailing_window_no_watermark_is_todays_behaviour_exactly():
+    result = dates.trailing_window(7, utc_offset="+02:00", now_utc=NOW)
+    assert result["effective_days"] == 7
+    assert result["watermark_used"] is False
+
+
+def test_trailing_window_watermark_a_few_hours_ago_clamps_to_the_floor():
+    watermark = NOW - timedelta(hours=3)
+    result = dates.trailing_window(7, utc_offset="+02:00", now_utc=NOW,
+                                   watermark=watermark)
+    assert result["effective_days"] == 2
+    assert result["watermark_used"] is True
+
+
+def test_trailing_window_watermark_four_days_ago_narrows_to_five():
+    watermark = NOW - timedelta(days=4)
+    result = dates.trailing_window(7, utc_offset="+02:00", now_utc=NOW,
+                                   watermark=watermark)
+    assert result["effective_days"] == 5
+
+
+def test_trailing_window_watermark_ten_days_ago_caps_at_days():
+    watermark = NOW - timedelta(days=10)
+    result = dates.trailing_window(7, utc_offset="+02:00", now_utc=NOW,
+                                   watermark=watermark)
+    assert result["effective_days"] == 7
+
+
+def test_trailing_window_future_watermark_clamps_to_the_floor_without_raising():
+    watermark = NOW + timedelta(days=3)  # clock skew
+    result = dates.trailing_window(7, utc_offset="+02:00", now_utc=NOW,
+                                   watermark=watermark)
+    assert result["effective_days"] == 2
+    assert result["watermark_used"] is True
+
+
+def test_trailing_window_watermark_narrows_utc_from():
+    # effective_days == 2 -> local midnight two days before Sep 1 = Aug 30,
+    # at +02:00 that's Aug 29 22:00 UTC.
+    watermark = NOW - timedelta(hours=3)
+    result = dates.trailing_window(7, utc_offset="+02:00", now_utc=NOW,
+                                   watermark=watermark)
+    assert result["utc_from"] == "2026-08-29T22:00:00"
+
+
+def test_trailing_window_start_date_clamp_still_applies_after_narrowing():
+    # effective_days narrows to 2 (Aug 30 local midnight -> Aug 29T22:00 UTC),
+    # but the start-date floor (Aug 31) is later still, so it wins.
+    watermark = NOW - timedelta(hours=3)
+    result = dates.trailing_window(7, utc_offset="+02:00", now_utc=NOW,
+                                   watermark=watermark, start_date="2026-08-31")
+    assert result["clamped"] is True
+    assert result["utc_from"] == "2026-08-30T22:00:00"
+    assert result["start_date"] == "2026-08-31"
+
+
+def test_cli_dates_window_adapter_requires_vault():
+    proc = subprocess.run(
+        [sys.executable, str(CLI), "dates", "window",
+         "--trailing-days", "7", "--utc-offset", "+02:00",
+         "--adapter", "m365"],
+        capture_output=True, text=True)
+    payload = json.loads(proc.stdout)
+    assert payload["ok"] is False
+    assert "--adapter" in payload["error"]
+
+
+def test_cli_dates_window_adapter_refused_with_start():
+    proc = subprocess.run(
+        [sys.executable, str(CLI), "dates", "window",
+         "--start", "2026-08-20T16:42", "--utc-offset", "+02:00",
+         "--adapter", "m365"],
+        capture_output=True, text=True)
+    payload = json.loads(proc.stdout)
+    assert payload["ok"] is False
+    assert "--adapter" in payload["error"]
+
+
+def test_cli_dates_window_adapter_narrows_the_window(tmp_path):
+    root = make_vault(tmp_path)
+    write_minimal_config(root)
+    from vaultlib import lastsync
+    lastsync.set_mark(root, "m365", "2026-08-29T22:00:00", NOW)
+    proc = subprocess.run(
+        [sys.executable, str(CLI), "dates", "window",
+         "--vault", str(root), "--trailing-days", "7",
+         "--utc-offset", "+02:00", "--adapter", "m365",
+         "--now", "2026-09-01T10:00:00"],
+        capture_output=True, text=True)
+    assert proc.returncode == 0, proc.stderr
+    payload = json.loads(proc.stdout)
+    assert payload["ok"] is True
+    result = payload["result"]
+    assert result["watermark_used"] is True
+    assert result["effective_days"] < result["trailing_days"]
+
+
+def test_cli_dates_window_no_watermark_stored_is_unnarrowed(tmp_path):
+    root = make_vault(tmp_path)
+    write_minimal_config(root)
+    proc = subprocess.run(
+        [sys.executable, str(CLI), "dates", "window",
+         "--vault", str(root), "--trailing-days", "7",
+         "--utc-offset", "+02:00", "--adapter", "m365",
+         "--now", "2026-09-01T10:00:00"],
+        capture_output=True, text=True)
+    assert proc.returncode == 0, proc.stderr
+    result = json.loads(proc.stdout)["result"]
+    assert result["watermark_used"] is False
+    assert result["effective_days"] == result["trailing_days"] == 7
+
+
+def test_cli_dates_window_corrupt_watermark_file_is_a_cold_cache(tmp_path):
+    """Mirrors test_a_corrupt_cache_is_a_cold_cache: a torn last-sync.json
+    fails open to the widest window, exactly as a missing one would —
+    lastsync.read() already answers None for it, dates.py adds no special
+    case."""
+    root = make_vault(tmp_path)
+    write_minimal_config(root)
+    from vaultlib import lastsync
+    path = root / lastsync.STATE_RELPATH
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("{torn", encoding="utf-8")
+    proc = subprocess.run(
+        [sys.executable, str(CLI), "dates", "window",
+         "--vault", str(root), "--trailing-days", "7",
+         "--utc-offset", "+02:00", "--adapter", "m365",
+         "--now", "2026-09-01T10:00:00"],
+        capture_output=True, text=True)
+    assert proc.returncode == 0, proc.stderr
+    result = json.loads(proc.stdout)["result"]
+    assert result["watermark_used"] is False
+    assert result["effective_days"] == 7

@@ -133,6 +133,10 @@ def build_parser() -> argparse.ArgumentParser:
     dates_window.add_argument(
         "--now", help="UTC ISO datetime override (tests); "
                       "--trailing-days only")
+    dates_window.add_argument(
+        "--adapter", choices=sorted(lastsync.ADAPTERS),
+        help="narrow the trailing window to this adapter's last-sync "
+             "watermark (read via --vault); --trailing-days only")
 
     dates_plan = dates_sub.add_parser(
         "plan", help="authoritative date block: today, next business day, recap window")
@@ -498,12 +502,22 @@ def _dispatch(args: argparse.Namespace) -> int:
                     raise dates.DatesError(
                         "--hours is the enrichment half-width; the trailing "
                         "window runs local midnight to now and takes none")
+                if args.adapter is not None and root is None:
+                    raise dates.DatesError(
+                        "--adapter requires --vault so the adapter's "
+                        "last-sync watermark can be read")
                 now_utc = (dates._parse_now(args.now)
                            if args.now is not None else None)
+                watermark = (lastsync.read(root, args.adapter)
+                            if args.adapter is not None else None)
                 return _ok(dates.trailing_window(
                     args.trailing_days, timezone=args.timezone,
                     utc_offset=args.utc_offset, start_date=start_date,
-                    now_utc=now_utc))
+                    now_utc=now_utc, watermark=watermark))
+            if args.adapter is not None:
+                raise dates.DatesError(
+                    "--adapter narrows --trailing-days discovery; --start "
+                    "does not take it")
             if args.now is not None:
                 raise dates.DatesError(
                     "--now applies to --trailing-days discovery only")
