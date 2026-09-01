@@ -763,6 +763,62 @@ def test_sync_m365_record_accepts_a_forbidden_outcome(capsys, tmp_path):
     assert payload["result"]["filtered"]["forbidden"] == 1
 
 
+def test_sync_watermark_round_trips_through_the_cli(capsys, tmp_path):
+    root = make_vault(tmp_path)
+    code, payload = run(capsys, [
+        "sync", "watermark", "--vault", str(root),
+        "--adapter", "m365", "--utc-to", "2026-08-30T14:00:00",
+    ])
+    assert code == 0
+    assert payload["ok"] is True
+    assert payload["result"] == {
+        "adapter": "m365", "advanced": True,
+        "last_utc_to": "2026-08-30T14:00:00",
+        "set_at": payload["result"]["set_at"],
+    }
+
+    from vaultlib import lastsync
+    from datetime import datetime
+    assert lastsync.read(root, "m365") == datetime(2026, 8, 30, 14, 0, 0)
+
+
+def test_sync_watermark_earlier_utc_to_is_a_no_op(capsys, tmp_path):
+    root = make_vault(tmp_path)
+    run(capsys, [
+        "sync", "watermark", "--vault", str(root),
+        "--adapter", "m365", "--utc-to", "2026-08-31T14:00:00",
+    ])
+    code, payload = run(capsys, [
+        "sync", "watermark", "--vault", str(root),
+        "--adapter", "m365", "--utc-to", "2026-08-30T14:00:00",
+    ])
+    assert code == 0
+    assert payload["result"]["advanced"] is False
+    assert payload["result"]["last_utc_to"] == "2026-08-31T14:00:00"
+
+
+def test_sync_watermark_rejects_an_unknown_adapter(capsys, tmp_path):
+    """--adapter choices means argparse itself refuses an unknown adapter
+    before dispatch ever calls into lastsync."""
+    root = make_vault(tmp_path)
+    with pytest.raises(SystemExit):
+        run(capsys, [
+            "sync", "watermark", "--vault", str(root),
+            "--adapter", "zoom", "--utc-to", "2026-08-30T14:00:00",
+        ])
+
+
+def test_sync_watermark_rejects_a_malformed_utc_to(capsys, tmp_path):
+    root = make_vault(tmp_path)
+    code, payload = run(capsys, [
+        "sync", "watermark", "--vault", str(root),
+        "--adapter", "m365", "--utc-to", "not-a-date",
+    ])
+    assert code == 1
+    assert payload["ok"] is False
+    assert payload["hint"]
+
+
 def test_dates_window_with_a_vault_clamps_to_the_config_start_date(
     capsys, tmp_path
 ):
