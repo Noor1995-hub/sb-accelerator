@@ -143,7 +143,10 @@ outcome line reports them (see the outcome table).
 ## Reassemble
 
 One call, matching your adapter — the meta/event and transcript files sit at
-the scratch paths you wrote them to above:
+the scratch paths you wrote them to above. On the **pre-fetched event
+variant**, the event file is not one of them — pass the path your briefing
+named instead; you never wrote it, and its stem is the dispatcher's
+(a probe's `m365_probe_<n>.event.json`, say), not `m365_event_<n>`:
 
 ```bash
 python3 "$VAULTLIB" plaud reassemble \

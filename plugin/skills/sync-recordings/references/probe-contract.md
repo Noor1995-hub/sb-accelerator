@@ -10,9 +10,10 @@ same way it banks a worker's.
 This contract is steps 1–2 of the worker contract's M365 fetch
 (`worker-contract.md`'s **Fetching — M365** section) with a
 classification tail in place of extraction — one protocol, two depths
-(design-review finding). Read that section for the fetch mechanics; this
-file only adds what a probe does once the fetch answers, and never
-duplicates the mechanics themselves.
+(design-review finding). Those two steps are restated below verbatim, by
+design — a cheap-model reader should never have to cross-reference another
+file mid-run for its own fetch mechanics — but `worker-contract.md` stays
+the authority: if the two ever disagree, its wording wins.
 
 ## Fetch your event (worker-contract.md steps 1–2, applied to your occurrence)
 
