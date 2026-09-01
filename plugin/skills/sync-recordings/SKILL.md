@@ -62,7 +62,11 @@ The JSON envelope and interpreter resolution are documented in the plugin's
    the only remedy is re-fetching the missing pages by cursor. Catching
    yourself editing those fields to satisfy the validator is a
    stop-and-report condition: stop that recording, say so in the summary,
-   let it retry next run. (A calendar listing is not a transcript — the
+   let it retry next run. The same verbatim rule covers **full-event JSON**:
+   every `$SCRATCH/m365_event_<n>.json` and the `m365_events.json` array
+   hold the tool results' content unchanged — a live run that re-typed
+   events "from memory" garbled three transcript URLs and two ids before
+   catching itself. (A calendar listing is not a transcript — the
    step 1 listing trim is fine.)
 9. **Batch independent CLI calls into one Bash call.** Every separate tool
    turn re-reads the whole session context. Calls with no data dependency —
@@ -269,12 +273,21 @@ error's hint says to pass `--utc-offset` instead.
 
 **Microsoft 365** (when enabled, available, and account-verified): Teams
 transcribes meetings on the vault owner's calendar, and the calendar event is the
-key to its own transcript. Search the trailing **7 local days**
-(`outlook_calendar_search`, passing the `utc_from`/`utc_to` values from
-`dates window --vault "$VAULT"` as `afterDateTime`/`beforeDateTime` — the
-clamp to `sync.start-date` rides along; a `window_empty: true` result means
-skip the search outright), drop cancelled and all-day events, and keep
-online meetings. The tool answers at most **25 events per call**: when a
+key to its own transcript. Compute the discovery window — the trailing
+**7 local days**, ending now:
+
+```bash
+python3 "$VAULTLIB" dates window --vault "$VAULT" --trailing-days 7 --timezone <tz>
+```
+
+Pass its `utc_from`/`utc_to` values to `outlook_calendar_search` as
+`afterDateTime`/`beforeDateTime` — the clamp to `sync.start-date` rides
+along, and the window ends at *now*, never in the future: M365 synthesizes
+a transcript URL even for meetings that have not happened yet, so a window
+that reaches forward lists events nothing can honestly sync. A
+`window_empty: true` result means skip the search outright. Drop cancelled
+and all-day events, and keep online meetings.
+The tool answers at most **25 events per call**: when a
 response carries `nextOffset`, call again with `offset` set to it until it
 stops. A trailing week routinely holds more than 25 events, and a
 first-page-only search silently drops the rest — nothing fails, those
@@ -303,7 +316,10 @@ permanently skipped, refused by another organization's tenant, or finally
 transcript-less. A `no-transcript` outcome
 stays provisional for 48 hours after the meeting ends — Teams delivers
 transcripts with delay — so those come back in `fetch` as
-`recheck-no-transcript` until the window passes. Only the occurrences in
+`recheck-no-transcript` until the window passes. Occurrences whose meeting
+has not yet ended come back in `deferred` (reason `not-ended`) — count them
+in the summary, bank nothing for them, and let them sync normally on the
+first run after they end. Only the occurrences in
 `fetch` proceed; surface any `warnings`. The cache is disposable by design
 (the vault ledger still dedups every write), so on the first run after
 upgrading everything fetches once and the outcomes recorded below make
@@ -647,7 +663,7 @@ Count what exists, not what you intended (a lab run once reported
 **Possible cross-adapter duplicates:** {N} — deferred; needs an interactive run
 **Skipped / errors:** {N} (will retry next run)
 **M365 fetches saved:** {N} of {N} listed occurrences answered from the seen-events cache | cache cold (first run)
-**Workers dispatched:** {N} ({N} plaud · {N} m365 · {N} inbox) — m365 candidates not dispatched had no transcript URL yet ({N}), were already in the vault ({N}), or were answered by the cache ({N}); worker outcomes: {N} written · {N} no-transcript · {N} forbidden · {N} fetch-error · {N} auth-error
+**Workers dispatched:** {N} ({N} plaud · {N} m365 · {N} inbox) — m365 candidates not dispatched had no transcript URL yet ({N}), were already in the vault ({N}), were answered by the cache ({N}), or hadn't ended yet ({N}); worker outcomes: {N} written · {N} no-transcript · {N} forbidden · {N} fetch-error · {N} auth-error
 **Adapters:** inbox ok · plaud ok | REFUSED — signed in as a different account (account-mismatch) | REFUSED — no account bound to this vault yet (no-account-hint) | disabled | unavailable | STOPPED mid-run — connector wants re-authentication (auth-error) · m365 ok | REFUSED — signed in as a different account (account-mismatch) | REFUSED — no account bound to this vault yet (no-account-hint) | disabled | unavailable | STOPPED mid-run — connector wants re-authentication (auth-error)
 **Calendar enrichment:** ok | UNAVAILABLE
 **Warnings:** {verbatim} | none

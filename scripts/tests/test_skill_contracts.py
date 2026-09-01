@@ -532,3 +532,74 @@ def test_evening_sync_states_unattended_catchup_behaviour():
         "unattended mode caps and flags rather than composing a mega-recap; "
         "finding F4 is that this mode has no coverage at all"
     )
+
+
+# The discovery-window regression: the skill used to prescribe a bare
+# `dates window --vault "$VAULT"` for step-1 discovery — an invocation that
+# does not parse (--start was required), so orchestrators improvised windows
+# that reached a week into the future. test_every_cli_invocation_named_by_a_
+# skill_exists only checks (group, action) pairs exist, which is exactly how
+# that shipped. Two pins close the hole: every fenced `dates window`
+# invocation must parse against the real argparse parser, and the M365
+# discovery paragraph must prescribe the trailing form as a fenced block,
+# not as prose.
+
+FENCED_BLOCK_RE = re.compile(r"```(?:bash)?\n(.*?)```", re.DOTALL)
+PLACEHOLDERS = {'"$VAULT"': "/placeholder/vault", "<tz>": "Europe/Brussels"}
+
+
+def fenced_dates_window_invocations(text: str):
+    import shlex
+    found = []
+    for block in FENCED_BLOCK_RE.findall(text):
+        for line in block.replace("\\\n", " ").splitlines():
+            if "dates window" not in line:
+                continue
+            command = line[line.index("dates window"):]
+            for token, value in PLACEHOLDERS.items():
+                command = command.replace(token, value)
+            found.append(shlex.split(command))
+    return found
+
+
+@pytest.mark.parametrize("path", SKILL_FILES + REF_FILES,
+                         ids=lambda p: p.parent.name)
+def test_every_fenced_dates_window_invocation_parses(path):
+    parser = cli.build_parser()
+    for tokens in fenced_dates_window_invocations(
+            path.read_text(encoding="utf-8")):
+        try:
+            parser.parse_args(tokens)
+        except SystemExit:
+            pytest.fail(
+                f"{path.parent.name} prescribes a dates window invocation "
+                f"argparse refuses: {' '.join(tokens)}")
+
+
+def test_sync_recordings_discovery_window_is_a_fenced_trailing_invocation():
+    text = read_skill("sync-recordings")
+    m365 = text.split("**Microsoft 365**")[1].split("### 2.")[0]
+    invocations = fenced_dates_window_invocations(m365)
+    assert invocations, (
+        "step 1 must prescribe the discovery window as a fenced invocation — "
+        "a prose-only mention is how a non-parsing call shipped")
+    assert any("--trailing-days" in tokens and "--vault" in tokens
+               for tokens in invocations), (
+        "the discovery window must be the trailing form, vault-clamped")
+
+
+def test_sync_recordings_reports_deferred_future_meetings():
+    text = read_skill("sync-recordings")
+    assert "not-ended" in text, (
+        "triage's deferred-future bucket must be surfaced, not lumped into "
+        "no-transcript outcomes")
+    assert text.index("not-ended") < text.index("### 2."), (
+        "the deferral is a step-1 triage fact")
+
+
+def test_sync_recordings_extends_verbatim_rule_to_event_json():
+    rules = read_skill("sync-recordings").split("## The three adapters")[0]
+    flat = re.sub(r"\s+", " ", rules)
+    assert "full-event JSON" in flat, (
+        "rule 8 must cover event reads — a live run re-typed events from "
+        "memory and garbled transcript URLs and ids before self-correcting")
