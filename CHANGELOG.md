@@ -15,6 +15,7 @@ delivers them.
 
 ## Unreleased
 
+- `/sync-recordings` workers now run as the plugin's own lightweight agent type with the model pinned — each worker starts from a fraction of the session's context, so multi-recording syncs cost noticeably less (#128)
 - `/sync-recordings` now fetches each transcript inside its per-recording worker instead of the main session — long-context cost and latency drop sharply on multi-recording syncs, and recordings process in parallel (#127)
 - **M365 calendar searches now reach the whole window, not just the first
   25 events.** The three skills that search the calendar (recording sync,

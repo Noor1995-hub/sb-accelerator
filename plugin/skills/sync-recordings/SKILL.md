@@ -508,8 +508,19 @@ there.
 ### 6. Extract and write
 
 For each recording that survived step 1 — **also when there is only one**
-(rule 7) — dispatch a worker, up to ~4 in parallel, blocking, spawned with
-`model: sonnet`. The worker fetches its own transcript, reassembles,
+(rule 7) — dispatch a worker, up to ~4 in parallel, blocking, as the
+plugin's own agent type: `subagent_type: second-brain:sync-worker` for
+plaud and inbox recordings, `subagent_type: second-brain:sync-worker-m365`
+for m365 ones (the M365 connector's tool names differ per deployment, so
+that worker's tool surface stays open where the other's is pinned). Both
+agent definitions pin `model: sonnet` structurally — the model is never a
+per-dispatch decision. On a harness where the plugin agent types do not
+resolve, fall back to a generic subagent spawned with `model: sonnet`
+passed explicitly — a live cost analysis found dispatches that omitted it
+silently inheriting the session's model, and generic workers each re-read
+the session's full base context on every request besides.
+
+The worker fetches its own transcript, reassembles,
 extracts, writes, and replies with one outcome line; its mechanics live in
 `${CLAUDE_PLUGIN_ROOT}/skills/sync-recordings/references/worker-contract.md`
 and the payload schema in
