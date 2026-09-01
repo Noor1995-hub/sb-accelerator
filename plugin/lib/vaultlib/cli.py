@@ -115,13 +115,23 @@ def build_parser() -> argparse.ArgumentParser:
              "sync.start-date, so no adapter is ever asked for a meeting "
              "from before the vault existed. Omit only for a deliberate, "
              "interactive backfill.")
-    dates_window.add_argument("--start", required=True,
-                              help="local ISO date or datetime")
+    dates_mode = dates_window.add_mutually_exclusive_group(required=True)
+    dates_mode.add_argument("--start",
+                            help="enrichment mode: local ISO date or datetime "
+                                 "the window centers on")
+    dates_mode.add_argument("--trailing-days", dest="trailing_days", type=int,
+                            help="discovery mode: the trailing N local days, "
+                                 "ending now — the window never reaches into "
+                                 "the future")
     dates_window.add_argument("--timezone", help="IANA timezone name")
     dates_window.add_argument("--utc-offset", dest="utc_offset",
                               help="explicit offset like -05:00")
-    dates_window.add_argument("--hours", type=float, default=2.0,
-                              help="half-width of the window (default 2)")
+    dates_window.add_argument("--hours", type=float, default=None,
+                              help="enrichment half-width (default 2); "
+                                   "not accepted with --trailing-days")
+    dates_window.add_argument(
+        "--now", help="UTC ISO datetime override (tests); "
+                      "--trailing-days only")
 
     dates_plan = dates_sub.add_parser(
         "plan", help="authoritative date block: today, next business day, recap window")
@@ -471,9 +481,25 @@ def _dispatch(args: argparse.Namespace) -> int:
         if args.action == "window":
             start_date = (config.read(root)["config"]["sync"]["start-date"]
                           if root is not None else None)
+            if args.trailing_days is not None:
+                if args.hours is not None:
+                    raise dates.DatesError(
+                        "--hours is the enrichment half-width; the trailing "
+                        "window runs local midnight to now and takes none")
+                now_utc = (dates._parse_now(args.now)
+                           if args.now is not None else None)
+                return _ok(dates.trailing_window(
+                    args.trailing_days, timezone=args.timezone,
+                    utc_offset=args.utc_offset, start_date=start_date,
+                    now_utc=now_utc))
+            if args.now is not None:
+                raise dates.DatesError(
+                    "--now applies to --trailing-days discovery only")
             return _ok(dates.window(args.start, timezone=args.timezone,
                                     utc_offset=args.utc_offset,
-                                    hours=args.hours, start_date=start_date))
+                                    hours=(2.0 if args.hours is None
+                                           else args.hours),
+                                    start_date=start_date))
         return _ok(dates.plan(root, args.today, timezone=args.timezone,
                               utc_offset=args.utc_offset,
                               catchup_threshold=args.catchup_threshold))
