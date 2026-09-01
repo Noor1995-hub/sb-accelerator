@@ -15,7 +15,7 @@ delivers them.
 
 ## Unreleased
 
-- `/sync-recordings` no longer trips over future meetings: the discovery window is computed by the CLI (the trailing 7 days, ending now — never reaching forward), and a meeting that hasn't ended yet is deferred until after it happens instead of being fetched — a run can no longer draft notes for meetings that haven't taken place (#TBD)
+- `/sync-recordings` no longer trips over future meetings: the discovery window is computed by the CLI (the trailing 7 days, ending now — never reaching forward), and a meeting that hasn't ended yet is deferred until after it happens instead of being fetched — a run can no longer draft notes for meetings that haven't taken place (#131)
 - `/sync-recordings` workers now run as the plugin's own lightweight agent type with the model pinned — each worker starts from a fraction of the session's context, so multi-recording syncs cost noticeably less (#128)
 - `/sync-recordings` now fetches each transcript inside its per-recording worker instead of the main session — long-context cost and latency drop sharply on multi-recording syncs, and recordings process in parallel (#127)
 - **M365 calendar searches now reach the whole window, not just the first
