@@ -342,6 +342,63 @@ def test_sync_recordings_dispatch_names_the_worker_agent_types():
             "not the agent definition")
 
 
+# Task 4.1: the haiku recheck probe. It reuses the m365 worker's exact
+# disallowedTools list (the constant above is shared for exactly this
+# reason) and its tool surface stays open for the same per-deployment
+# connector reason the worker's does — only the model and the contract it
+# reads differ.
+def test_sync_probe_m365_agent_frontmatter():
+    agents_dir = SKILLS_DIR.parent / "agents"
+    probe = (agents_dir / "sync-probe-m365.md").read_text(encoding="utf-8")
+    front = probe.split("---")[1]
+    assert "name: sync-probe-m365" in front
+    assert "model: haiku" in front, (
+        "the probe is a cheap recheck — the model mandate must be structural")
+    assert "tools:" not in front, (
+        "the probe's tools must stay open — same per-deployment connector "
+        "constraint as the m365 worker's read_resource")
+    disallowed_lines = [
+        line for line in front.splitlines()
+        if line.strip().startswith("disallowedTools:")]
+    assert disallowed_lines, "the probe must declare disallowedTools"
+    disallowed = [
+        name.strip()
+        for name in disallowed_lines[0].split(":", 1)[1].split(",")]
+    assert disallowed == M365_WORKER_DISALLOWED_TOOLS, (
+        "the probe's disallowedTools must equal the m365 worker's exactly "
+        "— it costs the same base-context tools, per issue #129 lever 1")
+
+    body = re.sub(r"\s+", " ", probe.split("---", 2)[2])
+    assert "probe contract" in body and "outcome line" in body
+    assert "dispatched without a briefing" in body, (
+        "the probe needs the same missing-briefing refusal as the worker"
+    )
+
+
+def test_sync_probe_m365_contract_exists_and_covers_outcomes():
+    ref = read_ref("sync-recordings", "probe-contract.md")
+    assert "still-no-transcript" in ref
+    assert "transcript-found" in ref
+    assert "forbidden" in ref
+    assert "fetch-error" in ref
+    assert "auth-error" in ref
+    assert "worker-contract.md" in ref, (
+        "the probe contract must defer to the worker contract for fetch "
+        "mechanics rather than duplicate them (one protocol, two depths)")
+    assert "Fetching" in ref and "M365" in ref, (
+        "the probe contract must point at the worker contract's M365 fetch "
+        "section, not just name the file")
+
+
+def test_sync_probe_m365_contract_never_extracts_or_touches_the_cache():
+    ref = read_ref("sync-recordings", "probe-contract.md")
+    assert "never" in ref.lower() and "meeting write" in ref, (
+        "the probe must state it never calls meeting write")
+    assert "seen-events cache" in ref, (
+        "rule-8's carve-out and the never-touch-the-cache rule must both be "
+        "stated explicitly, not implied")
+
+
 def test_sync_recordings_worker_outcomes_are_a_closed_vocabulary():
     text = read_skill("sync-recordings")
     for token in ("written:", "no-transcript", "forbidden",
