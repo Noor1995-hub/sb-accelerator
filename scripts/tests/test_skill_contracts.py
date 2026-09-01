@@ -409,6 +409,55 @@ def test_sync_recordings_worker_contract_m365_resolves_its_own_attendees():
     )
 
 
+# Review round 1: `meeting write` requires confidence-reasons whenever
+# confidence is set (meeting.py:105-109), one entry per closed-vocabulary
+# group including attendees (meeting.py:116-134) — a worker that computes
+# `confidence` itself must also compute the attendees-group reason itself,
+# or every m365 write refuses.
+def test_sync_recordings_worker_contract_m365_derives_the_attendees_reason():
+    ref = read_ref("sync-recordings", "worker-contract.md")
+    assert "confidence-reasons" in ref, (
+        "confidence and confidence-reasons travel together — a contract "
+        "that only computes confidence leaves meeting write refusing every "
+        "m365 payload"
+    )
+    assert "all-attendees-known" in ref
+    assert "new-attendees:{N}" in ref or "new-attendees:" in ref, (
+        "the parameterized attendees-group reason must be named, with its "
+        "N >= 1 floor"
+    )
+    section = ref.split("## Attendees and confidence")[1].split(
+        "## Reassemble")[0]
+    assert "confidence-reasons" in section, (
+        "the derivation belongs in the Attendees and confidence section, "
+        "next to the count it depends on"
+    )
+    extract = ref.split("## Extract and write")[1].split(
+        "```bash")[0]
+    assert "confidence-reasons" in extract, (
+        "the Extract and write exception clause must name the "
+        "confidence-reasons attendees entry as worker-derived too, not "
+        "just attendees and confidence"
+    )
+
+    payload_ref = read_ref("sync-recordings", "payload-contract.md")
+    assert "confidence-reasons" in payload_ref.split("```json")[0], (
+        "payload-contract.md's routing-fields paragraph must carry the "
+        "same M365 exception as worker-contract.md, or a worker reading "
+        "both files hits a direct contradiction"
+    )
+
+
+def test_sync_recordings_worker_contract_seenevents_citation_is_accurate():
+    ref = read_ref("sync-recordings", "worker-contract.md")
+    assert "seenevents.py:234-242" in ref, (
+        "the written/recording_id enforcement actually sits at "
+        "seenevents.py:234-242 (_validate_outcome's written branch), not "
+        "the outcome-vocabulary check above it"
+    )
+    assert "seenevents.py:214-223" not in ref
+
+
 def test_sync_recordings_states_the_start_date_bound():
     text = read_skill("sync-recordings")
     assert "sync.start-date" in text

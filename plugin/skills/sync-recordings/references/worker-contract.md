@@ -86,8 +86,10 @@ You make no other Graph call — not the calendar, not another occurrence.
 **Pre-fetched event variant.** Some briefings name an already-fetched event
 file plus its already-derived `recording_id` and a verbatim
 `transcript_url` instead of a URI to fetch — skip steps 1 and 2 and start
-at step 3 (dedup) with the ids you were given; everything else, including
-the two-Graph-call limit, stands as written.
+at step 3 (dedup) with the ids you were given. You make only the one
+Graph call step 4 makes (the transcript) — the event was never yours to
+fetch on this path; everything else, including that single-call ceiling,
+stands as written.
 
 ## Attendees and confidence (M365 only)
 
@@ -115,6 +117,18 @@ yourself against the count above:
 - `medium` — not `high`, and `medium-if-at-most-one-new` is true and the
   count is at most 1.
 - `low` — otherwise.
+
+`meeting write` requires `confidence-reasons` whenever `confidence` is
+set — they travel together — as exactly one entry per group (calendar,
+project-link, attendees; `references/payload-contract.md` has the closed
+vocabulary). Your prompt already carries the calendar-group and
+project-link-group entries verbatim — copy those in unchanged, as with any
+other routing field. The attendees-group entry is the one you derive
+yourself, from the same count: `all-attendees-known` when the count is 0,
+otherwise `new-attendees:{N}` with `N` set to the count (never 0 — the
+schema requires `N` ≥ 1). Assemble all three entries into the
+`confidence-reasons` list you write to the payload, alongside the
+`confidence` you just settled.
 
 Keep the names of everyone counted as new (`"created": true`) — your
 outcome line reports them (see the outcome table).
@@ -180,8 +194,11 @@ item has no blob: extract from the file you were given). Read
 `references/payload-contract.md` (its path is in your prompt) and draft
 the payload to `$SCRATCH/<stem>.payload.json`: content fields from the
 transcript; every routing field copied from your prompt unchanged — except
-for M365's `attendees` and `confidence`, which you computed yourself in
-Attendees and confidence above, not your prompt; `date` is
+for M365's `attendees`, `confidence`, and the `confidence-reasons`
+attendees-group entry, which you computed yourself in Attendees and
+confidence above, not your prompt (the `confidence-reasons`
+calendar-group and project-link-group entries still copy from your prompt
+unchanged); `date` is
 `recorded_local` unchanged and `recording-duration` is `duration_min`. When
 your prompt says routing signals 1–2 were inconclusive and carries the
 project/entity slug catalog, match transcript keywords against it yourself —
@@ -218,6 +235,6 @@ above.
 For an M365 recording, the orchestrator parses `recording-id:` out of your
 `written` and `possible-duplicate-of` lines to bank the outcome —
 `sync m365-record` **requires** a namespaced `recording_id` on every
-`written` outcome (`seenevents.py:214-223`). Get that clause right: a
+`written` outcome (`seenevents.py:234-242`). Get that clause right: a
 missing or malformed `recording-id:` must surface to the orchestrator as a
 banking error, never silently drop the occurrence from the ledger.
