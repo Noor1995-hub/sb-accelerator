@@ -257,6 +257,51 @@ def test_sync_recordings_dispatches_workers_only_after_triage_and_dedup():
         "batch outcomes are banked after workers return")
 
 
+# Cost round 2: workers run as the plugin's own agent types, which pin the
+# model and (for plaud/inbox) the tool surface structurally — a live run
+# measured 13 generic workers inheriting the session's full base context
+# and, silently, its model. The m365 worker's tools stay open because that
+# connector's server name differs per deployment and an agent allowlist
+# cannot name it (verified: ToolSearch cannot load past the allowlist, and
+# an unanchored mcp__* entry is ignored).
+def test_sync_recordings_dispatch_names_the_worker_agent_types():
+    text = read_skill("sync-recordings")
+    step6 = text.split("### 6.")[1].split("### 7.")[0]
+    step6_flat = re.sub(r"\s+", " ", step6)
+    assert "second-brain:sync-worker" in step6_flat, (
+        "step 6 must dispatch the plugin's worker agent type by name")
+    assert "second-brain:sync-worker-m365" in step6_flat, (
+        "m365 recordings need their own agent type — its tool surface differs")
+    assert "model: sonnet" in step6_flat, (
+        "the generic-subagent fallback must pass the model explicitly")
+
+    agents_dir = SKILLS_DIR.parent / "agents"
+    agent = (agents_dir / "sync-worker.md").read_text(encoding="utf-8")
+    front = agent.split("---")[1]
+    assert "name: sync-worker" in front
+    assert "model: sonnet" in front, "the model mandate must be structural"
+    assert "tools:" in front, "the plaud/inbox tool surface must be trimmed"
+    for tool in ("ToolSearch", "Bash", "Read", "Write",
+                 "mcp__plaud__get_transcript", "mcp__plaud__get_note"):
+        assert tool in front, f"worker tools must include {tool}"
+
+    m365 = (agents_dir / "sync-worker-m365.md").read_text(encoding="utf-8")
+    m365_front = m365.split("---")[1]
+    assert "name: sync-worker-m365" in m365_front
+    assert "model: sonnet" in m365_front, (
+        "the model mandate must be structural for the m365 worker too")
+    assert "tools:" not in m365_front, (
+        "the m365 worker's tools must stay open — a fixed list cannot name "
+        "a per-deployment connector, and a wrong list silently kills the fetch")
+
+    for content in (agent, m365):
+        body = re.sub(r"\s+", " ", content.split("---", 2)[2])
+        assert "worker contract" in body and "outcome line" in body
+        assert "next_cursor" not in content, (
+            "fetch mechanics live in references/worker-contract.md, "
+            "not the agent definition")
+
+
 def test_sync_recordings_worker_outcomes_are_a_closed_vocabulary():
     text = read_skill("sync-recordings")
     for token in ("written:", "no-transcript", "forbidden",
