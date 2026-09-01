@@ -118,13 +118,23 @@ def window(start_local: str, *, timezone: Optional[str] = None,
     }
     if start_date is None:
         return result
+    return _start_date_floor(result, lo - shift, hi - shift, start_date,
+                             timezone, utc_offset)
+
+
+def _start_date_floor(result: dict, lo_utc: datetime, hi_utc: datetime,
+                      start_date, timezone: Optional[str],
+                      utc_offset: Optional[str]) -> dict:
+    """Clamp a UTC [lo, hi] window to the vault's sync start date.
+
+    Shared by both window modes so the clamp cannot drift between them. The
+    offset is the one in force at the floor itself, not at the queried
+    timestamp — the two differ across a DST transition.
+    """
     floor_local = datetime.combine(_parse_date(start_date, "start-date"),
                                    datetime.min.time())
-    # The offset in force at the floor itself, not at the queried timestamp —
-    # the two differ across a DST transition.
     floor_offset, _ = resolve_offset_minutes(floor_local, timezone, utc_offset)
     floor_utc = floor_local - timedelta(minutes=floor_offset)
-    lo_utc, hi_utc = lo - shift, hi - shift
     result["start_date"] = str(start_date).strip()
     result["window_empty"] = hi_utc < floor_utc
     result["clamped"] = lo_utc < floor_utc
@@ -133,6 +143,63 @@ def window(start_local: str, *, timezone: Optional[str] = None,
     elif result["clamped"]:
         result["utc_from"] = floor_utc.strftime(_UTC_FMT)
     return result
+
+
+def _parse_now(text: str) -> datetime:
+    """A UTC ISO override (tests) -> naive UTC datetime."""
+    raw = str(text).strip()
+    if raw.endswith(("Z", "z")):
+        raw = raw[:-1]
+    try:
+        parsed = datetime.fromisoformat(raw)
+    except ValueError as exc:
+        raise DatesError(f"now {text!r} must be a UTC ISO datetime") from exc
+    if parsed.tzinfo is not None:
+        parsed = parsed.astimezone(_timezone.utc).replace(tzinfo=None)
+    return parsed
+
+
+def trailing_window(days: int, *, timezone: Optional[str] = None,
+                    utc_offset: Optional[str] = None,
+                    start_date: Optional[str] = None,
+                    now_utc: Optional[datetime] = None) -> dict:
+    """Discovery mode: the trailing `days` local days, ending exactly now.
+
+    `utc_to` is the UTC clock at call time — by construction the window
+    never reaches into the future, so a calendar search over it can never
+    list a meeting that has not happened yet. (A live run improvised a
+    ±168h window centered on now and searched a week forward; connectors
+    synthesize transcript URLs even for future meetings, so that nearly
+    dispatched extraction for meetings that had not occurred.) `utc_from`
+    is local midnight `days` days before today's local date: day-boundary
+    aligned because callers reason in "trailing N local days", and a
+    slightly generous window is harmless (dedup catches overlap) where
+    hour arithmetic would cut off a week-old meeting mid-day. The
+    `start_date` floor is exactly the clamp `window` applies.
+    """
+    if not isinstance(days, int) or isinstance(days, bool) or days < 1:
+        raise DatesError(f"trailing-days {days!r} must be a positive integer")
+    if now_utc is None:
+        now_utc = datetime.now(_timezone.utc).replace(tzinfo=None,
+                                                      microsecond=0)
+    local_now, source = utc_to_local(now_utc, timezone, utc_offset)
+    from_local = datetime.combine(local_now.date() - timedelta(days=days),
+                                  datetime.min.time())
+    from_offset, _ = resolve_offset_minutes(from_local, timezone, utc_offset)
+    lo_utc = from_local - timedelta(minutes=from_offset)
+    result = {
+        "trailing_days": days,
+        "now_utc": now_utc.strftime(_UTC_FMT),
+        "utc_from": lo_utc.strftime(_UTC_FMT),
+        "utc_to": now_utc.strftime(_UTC_FMT),
+        "offset": _format_offset(
+            round((local_now - now_utc).total_seconds() / 60)),
+        "offset_source": source,
+    }
+    if start_date is None:
+        return result
+    return _start_date_floor(result, lo_utc, now_utc, start_date,
+                             timezone, utc_offset)
 
 
 DAILY_NOTES_DIR = vault.DAILY_NOTES_DIR

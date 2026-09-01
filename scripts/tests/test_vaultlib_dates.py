@@ -506,3 +506,98 @@ def test_cli_plan_reports_the_catchup_block(tmp_path):
     assert result["business_days_missed"] == 49
     assert result["is_catchup"] is True
     assert result["recap_detail_from"] == "2026-08-17"
+
+
+# ---------------------------------------------------------------------------
+# trailing_window: the discovery mode. The live failure this pins: the skill
+# prescribed a bare `dates window --vault X` for step-1 discovery, argparse
+# refused it, and the improvised replacement centered a ±168h window on now —
+# so the calendar was searched a week into the future.
+
+
+def test_trailing_window_ends_now_and_starts_at_local_midnight():
+    # now: 2026-09-01T10:00 UTC = 12:00 local at +02:00; 7 local days back
+    # from Sep 1 is Aug 25; local midnight Aug 25 at +02:00 = Aug 24 22:00 UTC.
+    now = datetime(2026, 9, 1, 10, 0, 0)
+    result = dates.trailing_window(7, utc_offset="+02:00", now_utc=now)
+    assert result["utc_to"] == "2026-09-01T10:00:00"
+    assert result["utc_from"] == "2026-08-24T22:00:00"
+    assert result["trailing_days"] == 7
+    assert result["offset"] == "+02:00"
+    assert result["offset_source"] == "explicit"
+
+
+def test_trailing_window_never_reaches_past_now():
+    now = datetime(2026, 9, 1, 10, 0, 0)
+    result = dates.trailing_window(7, utc_offset="+02:00", now_utc=now)
+    assert result["utc_to"] <= "2026-09-01T10:00:00"
+
+
+def test_trailing_window_clamps_to_start_date():
+    now = datetime(2026, 9, 1, 10, 0, 0)
+    result = dates.trailing_window(7, utc_offset="+02:00", now_utc=now,
+                                   start_date="2026-08-28")
+    # floor: local midnight Aug 28 at +02:00 = Aug 27 22:00 UTC
+    assert result["utc_from"] == "2026-08-27T22:00:00"
+    assert result["utc_to"] == "2026-09-01T10:00:00"
+    assert result["clamped"] is True
+    assert result["window_empty"] is False
+    assert result["start_date"] == "2026-08-28"
+
+
+def test_trailing_window_entirely_before_a_future_start_date_is_empty():
+    now = datetime(2026, 9, 1, 10, 0, 0)
+    result = dates.trailing_window(7, utc_offset="+02:00", now_utc=now,
+                                   start_date="2026-09-15")
+    assert result["window_empty"] is True
+    assert result["utc_from"] == result["utc_to"]
+
+
+def test_trailing_window_rejects_a_nonpositive_day_count():
+    with pytest.raises(dates.DatesError, match="trailing-days"):
+        dates.trailing_window(0, utc_offset="+02:00")
+    with pytest.raises(dates.DatesError, match="trailing-days"):
+        dates.trailing_window(-3, utc_offset="+02:00")
+
+
+def test_cli_bare_window_call_fails_to_parse():
+    """The live failure: the skill used to prescribe `dates window --vault X`
+    with no mode flag. That must stay a parse error, never a guess."""
+    proc = subprocess.run(
+        [sys.executable, str(CLI), "dates", "window", "--vault", "/nowhere"],
+        capture_output=True, text=True)
+    assert proc.returncode != 0
+    assert "--start" in proc.stderr and "--trailing-days" in proc.stderr
+
+
+def test_cli_trailing_window_envelope():
+    proc = subprocess.run(
+        [sys.executable, str(CLI), "dates", "window",
+         "--trailing-days", "7", "--utc-offset", "+02:00",
+         "--now", "2026-09-01T10:00:00"],
+        capture_output=True, text=True)
+    assert proc.returncode == 0, proc.stderr
+    payload = json.loads(proc.stdout)
+    assert payload["ok"] is True
+    assert payload["result"]["utc_to"] == "2026-09-01T10:00:00"
+    assert payload["result"]["utc_from"] == "2026-08-24T22:00:00"
+
+
+def test_cli_trailing_window_refuses_hours():
+    proc = subprocess.run(
+        [sys.executable, str(CLI), "dates", "window",
+         "--trailing-days", "7", "--utc-offset", "+02:00", "--hours", "4"],
+        capture_output=True, text=True)
+    payload = json.loads(proc.stdout)
+    assert payload["ok"] is False
+    assert "hours" in payload["error"]
+
+
+def test_cli_now_requires_trailing_mode():
+    proc = subprocess.run(
+        [sys.executable, str(CLI), "dates", "window",
+         "--start", "2026-08-20T16:42", "--utc-offset", "+02:00",
+         "--now", "2026-09-01T10:00:00"],
+        capture_output=True, text=True)
+    payload = json.loads(proc.stdout)
+    assert payload["ok"] is False

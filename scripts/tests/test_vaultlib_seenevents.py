@@ -247,3 +247,77 @@ def test_record_prunes_occurrences_older_than_the_horizon(tmp_path):
 
 def test_final_after_hours_is_the_named_constant():
     assert seenevents.NO_TRANSCRIPT_FINAL_AFTER_HOURS == 48
+
+
+# ---------------------------------------------------------------------------
+# The not-ended guard. M365 synthesizes meetingTranscriptUrl for future
+# occurrences too (it is the base64-encoded join URL), so without this guard
+# a future meeting reaches dispatch — and on a recurring series the synthetic
+# URL can answer with *past* occurrences' transcripts: future-dated junk. A
+# live run nearly dispatched extraction workers for 34 such events.
+
+
+def test_triage_defers_an_occurrence_that_has_not_ended(tmp_path):
+    root = make_vault(tmp_path)
+    future = listing_event(start="2026-09-03T14:00:00.0000000",
+                           end="2026-09-03T15:00:00.0000000")
+    result = seenevents.triage(root, [future], NOW)
+    assert result["fetch"] == []
+    assert result["deferred"] == [{"id": "AAMkAGId1",
+                                   "start_utc": "2026-09-03T14:00:00",
+                                   "subject": "Weekly sync",
+                                   "reason": "not-ended"}]
+
+
+def test_triage_defers_a_meeting_still_in_progress(tmp_path):
+    # No transcript can exist before the meeting ends, so in-progress is
+    # deferred exactly like future.
+    root = make_vault(tmp_path)
+    running = listing_event(start="2026-08-31T17:30:00.0000000",
+                            end="2026-08-31T18:30:00.0000000")
+    result = seenevents.triage(root, [running], NOW)
+    assert result["fetch"] == []
+    assert [e["reason"] for e in result["deferred"]] == ["not-ended"]
+
+
+def test_triage_defers_a_future_start_with_no_end(tmp_path):
+    root = make_vault(tmp_path)
+    event = listing_event(start="2026-09-03T14:00:00.0000000")
+    del event["end"]
+    result = seenevents.triage(root, [event], NOW)
+    assert result["fetch"] == []
+    assert [e["reason"] for e in result["deferred"]] == ["not-ended"]
+
+
+def test_a_deferred_occurrence_fetches_normally_after_it_ends(tmp_path):
+    # Deferral is per-run and never recorded, so the occurrence must sync
+    # normally on the first run after the meeting happens.
+    root = make_vault(tmp_path)
+    event = listing_event(start="2026-09-03T14:00:00.0000000",
+                          end="2026-09-03T15:00:00.0000000")
+    assert seenevents.triage(root, [event], NOW)["fetch"] == []
+    later = datetime(2026, 9, 3, 16, 0, 0)
+    result = seenevents.triage(root, [event], later)
+    assert result["deferred"] == []
+    assert [e["reason"] for e in result["fetch"]] == ["unseen"]
+
+
+def test_the_not_ended_guard_outranks_the_cache(tmp_path):
+    # Nothing legitimate can record an outcome for an unfinished occurrence,
+    # so if one exists (clock skew, an improvised window) it must not
+    # resurrect the fetch — deferral is checked before the cache.
+    root = make_vault(tmp_path)
+    seenevents.record(root, [outcome(start_utc="2026-09-03T14:00:00")], NOW)
+    event = listing_event(start="2026-09-03T14:00:00.0000000",
+                          end="2026-09-03T15:00:00.0000000")
+    result = seenevents.triage(root, [event], NOW)
+    assert result["fetch"] == []
+    assert result["filtered"]["written"] == 0
+    assert [e["reason"] for e in result["deferred"]] == ["not-ended"]
+
+
+def test_past_events_are_never_deferred(tmp_path):
+    root = make_vault(tmp_path)
+    result = seenevents.triage(root, [listing_event()], NOW)
+    assert result["deferred"] == []
+    assert [e["reason"] for e in result["fetch"]] == ["unseen"]
