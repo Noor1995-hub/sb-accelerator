@@ -836,3 +836,85 @@ def test_sync_recordings_extends_verbatim_rule_to_event_json():
     assert "full-event JSON" in flat, (
         "rule 8 must cover event reads — a live run re-typed events from "
         "memory and garbled transcript URLs and ids before self-correcting")
+
+
+# Task 4.2: the triage split that routes a recheck-no-transcript survivor to
+# a probe instead of straight into the routing extract a normal survivor
+# gets.
+def test_sync_recordings_triage_splits_fetch_by_reason_for_probes():
+    text = read_skill("sync-recordings")
+    step1 = text.split("### 1.")[1].split("### 2.")[0]
+    assert '"unseen"' in step1 or "unseen" in step1
+    assert "unkeyed" in step1
+    assert "recheck-no-transcript" in step1
+    assert step1.index("sync m365-triage") < step1.index("recheck-no-transcript"), (
+        "the reason split is read off sync m365-triage's own fetch list")
+    flat = re.sub(r"\s+", " ", step1)
+    assert "probe dispatch" in flat.lower(), (
+        "a recheck-no-transcript survivor must be named as routed to the "
+        "probe dispatch list, not the ordinary routing extract"
+    )
+
+
+def test_sync_recordings_step6_dispatches_probes_before_worker_batches():
+    text = read_skill("sync-recordings")
+    step6 = text.split("### 6.")[1].split("### 7.")[0]
+    assert "second-brain:sync-probe-m365" in step6, (
+        "step 6 must dispatch the probe agent type by name")
+    probe_idx = step6.index("second-brain:sync-probe-m365")
+    worker_idx = step6.index("second-brain:sync-worker-m365")
+    assert probe_idx < worker_idx, (
+        "probes dispatch before the ordinary worker batches, per the brief")
+    flat = re.sub(r"\s+", " ", step6)
+    assert "references/probe-contract.md" in flat, (
+        "the probe briefing must point at its own contract file"
+    )
+    assert "m365_probe_<n>" in flat, (
+        "the probe's scratch stem must be named so scratch sweep catches it"
+    )
+    assert "up to ~4" in flat, (
+        "probes dispatch in the same bounded batch size as workers"
+    )
+
+
+def test_sync_recordings_probe_outcomes_are_handled():
+    text = read_skill("sync-recordings")
+    step6 = text.split("### 6.")[1].split("### 7.")[0]
+    flat = re.sub(r"\s+", " ", step6)
+    assert "still-no-transcript" in flat
+    assert "transcript-found" in flat
+    assert '"outcome": "no-transcript"' in flat, (
+        "a still-no-transcript probe reply banks as a no-transcript "
+        "outcome, refreshing checked_at and restarting the 6h hold"
+    )
+    assert "checked_at" in flat and "6h" in flat, (
+        "the still-no-transcript bank must be tied explicitly to refreshing "
+        "the recheck hold"
+    )
+    assert "pre-fetched event variant" in flat.lower(), (
+        "a transcript-found probe must hand its follow-up worker the "
+        "worker contract's pre-fetched event variant, not a fresh fetch"
+    )
+    assert "dedup" in flat, (
+        "the pre-fetched variant still starts the follow-up worker at "
+        "dedup — the dedup gate is never skipped"
+    )
+    # transcript-found is a real fetch survivor: it must still get the same
+    # routing extract and step 3-5 signals an unseen/unkeyed survivor gets.
+    found_clause = flat[flat.index("transcript-found"):]
+    assert "m365_routing.json" in found_clause
+    assert "like any" in found_clause or "same as any" in found_clause, (
+        "the brief requires this to read as 'route it like any fetch "
+        "survivor', not as a special case"
+    )
+
+
+def test_sync_recordings_probes_summary_line():
+    text = read_skill("sync-recordings")
+    summary = text.split("### 7.")[1]
+    assert "probes (" in summary, (
+        "the workers-dispatched line must report the probe batch: N probes "
+        "(N still-no-transcript · N transcript-found)"
+    )
+    assert "still-no-transcript" in summary
+    assert "transcript-found" in summary
