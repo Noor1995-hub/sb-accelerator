@@ -346,7 +346,7 @@ def test_sync_recordings_worker_outcomes_are_a_closed_vocabulary():
     text = read_skill("sync-recordings")
     for token in ("written:", "no-transcript", "forbidden",
                   "fetch-error", "auth-error", "possible-duplicate-of",
-                  "already-synced"):
+                  "already-synced", "skip-listed"):
         assert token in text, f"outcome vocabulary is missing {token}"
     assert "never writes the seen-events cache" in text, (
         "the single-writer rule must be stated")
@@ -402,6 +402,34 @@ def test_sync_recordings_worker_contract_m365_fetches_its_own_event():
         'read_resource` call on the `transcript_url`'), (
         "dedup must gate the transcript fetch — an already-synced id stops "
         "before the transcript is ever read")
+
+
+# PR review, round 2: `sync dedup` returns THREE buckets — new, synced, and
+# skipped (syncjob.py:294-307) — but the contract only ever defined a reply
+# for `synced`. An id on the permanent skip list that reached dedup got no
+# settled outcome at all, so skip-list enforcement silently vanished once
+# dedup moved worker-side.
+def test_sync_recordings_worker_contract_m365_settles_the_skip_list_bucket():
+    ref = read_ref("sync-recordings", "worker-contract.md")
+    assert "skip-listed:" in ref, (
+        "the worker must reply to a dedup `skipped` id with its own "
+        "settled outcome, not silently drop the skip-list check")
+    m365_fetch = ref.split("## Fetching — M365")[1].split(
+        "## Attendees and confidence")[0]
+    assert "skip-listed:" in m365_fetch, (
+        "the skip-listed reply belongs in the fetch section, next to the "
+        "already-synced reply it parallels")
+    assert m365_fetch.index("sync dedup") < m365_fetch.index(
+        "skip-listed:"), "skip-listed must follow the dedup call that finds it"
+    outcomes_section = ref.split("## The outcome line")[1]
+    assert "skip-listed:" in outcomes_section, (
+        "the outcome table must list skip-listed as a real reply")
+    assert '"skipped"' in outcomes_section, (
+        "the contract must say a skip-listed line banks as a \"skipped\" "
+        "outcome, the value seenevents.py's OUTCOMES actually accepts")
+    assert "no `recording_id`" in outcomes_section, (
+        "banking a skip-listed line must not require a recording_id — "
+        "seenevents.py only requires one for a written outcome")
     assert "no-transcript-url" in m365_fetch, (
         "m365 ids skipping an event for no-transcript-url must map to the "
         "same no-transcript outcome as a transcript that came back empty")

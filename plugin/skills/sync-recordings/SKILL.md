@@ -422,7 +422,7 @@ reports `already-synced: <recording_id>` rather than costing an
 extraction — `meeting write`'s own already-synced refusal is the backstop
 behind that, not a second gate you maintain here. Each worker makes
 exactly the connector calls for its one assigned recording, and a
-negative answer (no transcript, forbidden, already-synced) is one of its
+negative answer (no transcript, forbidden, already-synced, skip-listed) is one of its
 first tool calls, costing a skip, not an extraction — that, plus triage,
 is what keeps a fleet of workers from ever being paid to learn "nothing to
 write". A worker **never writes the seen-events cache**: every settled
@@ -612,8 +612,29 @@ python3 "$VAULTLIB" sync park --vault "$VAULT" \
   --reason "user dropped it: <what they said>"
 ```
 
-A `plaud:` or `m365:` id has no inbox file, so `skip` is the whole story
-there.
+A `plaud:` id has no inbox file, so `sync skip` — with its recording id
+already known at step 5 — is the whole story there.
+
+An m365 row is different: there is no recording id for it yet at step 5
+(that only exists once the worker derives it from the full event, per
+`worker-contract.md`), so there is nothing to hand `sync skip` and no file
+to hand `sync park`. Dropping an m365 row banks it straight into the
+seen-events cache instead, keyed the same way triage keys everything else
+— the `id` and `start_utc` that row's triage result carried:
+
+```
+[{"id": "<event id>", "start_utc": "<triage start_utc>", "outcome": "skipped"}]
+```
+
+Fold that entry into step 6's next banking call rather than reaching for
+`sync skip` — the cache accepts a `"skipped"` outcome with no
+`recording_id` at all, and the seen-events cache has no separate
+never-propose-again list the way the plaud/inbox ledger does. Say so
+honestly, not as a permanent suppression: this one is cache-backed, so it
+can resurface if the cache entry is later pruned (its own retention
+horizon) *and* a wide-enough window still lists the occurrence — in which
+case the user just drops it once more. No worker is dispatched for a row
+dropped this way.
 
 ### 6. Extract and write
 
@@ -713,6 +734,12 @@ never spawn in the background and then loop checking on it.
   batch's other lines. This is how the cache back-fills for meetings
   synced before it existed — there is no separate pre-dispatch call for it
   any more, because every triage survivor gets a worker now.
+- `skip-listed: <recording_id>` — the worker's own dedup call found the id
+  already on the permanent skip list before it ever fetched a transcript;
+  bank it as `{"outcome": "skipped"}`, keyed by the `id` and `start_utc`
+  triage carried — no `recording_id` required (`sync m365-record` only
+  demands one for `written`). The skip list already recorded why; there is
+  nothing left to decide here.
 - `no-transcript` / `forbidden` — settled negatives, banked keyed by the
   `id` and `start_utc` triage carried, same as always.
 - `fetch-error` — no outcome line is banked; it retries next run.
@@ -736,10 +763,11 @@ never spawn in the background and then loop checking on it.
 
 Then write the batch's settled lines — `written` (with each
 `recording_id`, including any `already-synced`-derived entries),
-`no-transcript`, `forbidden`, `skipped` — one entry per occurrence, keyed
-by the `id` and `start_utc` the triage result carried, to
-`$SCRATCH/m365_outcomes_batch.json`, and bank them before dispatching the
-next batch:
+`no-transcript`, `forbidden`, `skipped` (including any
+`skip-listed`-derived entries, plus the step-5 drop-path entries described
+above) — one entry per occurrence, keyed by the `id` and `start_utc` the
+triage result carried, to `$SCRATCH/m365_outcomes_batch.json`, and bank
+them before dispatching the next batch:
 
 ```bash
 python3 "$VAULTLIB" sync m365-record --vault "$VAULT" \
@@ -821,7 +849,7 @@ Count what exists, not what you intended (a lab run once reported
 **Possible cross-adapter duplicates:** {N} — deferred; needs an interactive run
 **Skipped / errors:** {N} (will retry next run) · {N} tiny clips auto-skipped ({list each with its duration}) — permanent, not a retry
 **M365 fetches saved:** {N} of {N} listed occurrences answered from the seen-events cache ({N} held in the 6h recheck window) | cache cold (first run)
-**Workers dispatched:** {N} ({N} plaud · {N} m365 · {N} inbox) — m365 candidates not dispatched were answered by the cache ({N}) or hadn't ended yet ({N}); worker outcomes: {N} written · {N} already-synced · {N} no-transcript · {N} forbidden · {N} fetch-error · {N} auth-error
+**Workers dispatched:** {N} ({N} plaud · {N} m365 · {N} inbox) — m365 candidates not dispatched were answered by the cache ({N}) or hadn't ended yet ({N}); worker outcomes: {N} written · {N} already-synced · {N} skip-listed · {N} no-transcript · {N} forbidden · {N} fetch-error · {N} auth-error
 **Adapters:** inbox ok · plaud ok (window {N}d) | REFUSED — signed in as a different account (account-mismatch) | REFUSED — no account bound to this vault yet (no-account-hint) | disabled | unavailable | STOPPED mid-run — connector wants re-authentication (auth-error) · m365 ok (window {N}d) | REFUSED — signed in as a different account (account-mismatch) | REFUSED — no account bound to this vault yet (no-account-hint) | disabled | unavailable | STOPPED mid-run — connector wants re-authentication (auth-error)
 **Calendar enrichment:** ok | UNAVAILABLE
 **Warnings:** {verbatim} | none

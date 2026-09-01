@@ -66,7 +66,11 @@ event and derive your own ids before you touch a transcript:
    ```
 
    Your id in `synced` → reply `already-synced: <recording_id>` and stop —
-   no transcript fetch, no payload. Only a `new` id proceeds.
+   no transcript fetch, no payload. Your id in `skipped` → reply
+   `skip-listed: <recording_id>` and stop too — the skip list already
+   recorded why this id must never sync (`sync skip`, on an earlier run or
+   an interactive drop), so there is nothing left for you to decide; no
+   transcript fetch, no payload. Only a `new` id proceeds.
 4. One `read_resource` call on the `transcript_url` `m365 ids` returned in
    step 2, **exactly as given** — never rebuild or re-scope the URL; a
    recurring series answers a rebuilt, unscoped URL with other occurrences'
@@ -233,6 +237,7 @@ above.
 | `fetch-error: <one clause why>` | transport failure, incomplete page set, oversized result — retries next run |
 | `auth-error` | connector wants re-authentication — the adapter should stop |
 | `already-synced: <recording_id>` | M365 only: `sync dedup` already reports your derived id `synced` — stop before the transcript read; no payload |
+| `skip-listed: <recording_id>` | M365 only: `sync dedup` already reports your derived id `skipped` — stop before the transcript read; no payload |
 | `possible-duplicate-of: <stem> (payload at <path>)` | collision found; payload drafted, nothing written (M365 additionally appends `(recording-id: m365:<hex>, ...)` and `(new-people: ...)` — see the collision section) |
 
 For an M365 recording, the orchestrator parses `recording-id:` out of your
@@ -240,4 +245,7 @@ For an M365 recording, the orchestrator parses `recording-id:` out of your
 `sync m365-record` **requires** a namespaced `recording_id` on every
 `written` outcome (`seenevents.py:234-242`). Get that clause right: a
 missing or malformed `recording-id:` must surface to the orchestrator as a
-banking error, never silently drop the occurrence from the ledger.
+banking error, never silently drop the occurrence from the ledger. A
+`skip-listed:` line banks as a plain `"skipped"` outcome instead — it
+needs no `recording_id` (`seenevents.py`'s `OUTCOMES` only requires one for
+`written`).
