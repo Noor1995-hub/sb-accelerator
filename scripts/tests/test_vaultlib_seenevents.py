@@ -54,6 +54,7 @@ def test_fresh_cache_sends_every_event_to_fetch(tmp_path):
     assert [e["id"] for e in result["fetch"]] == ["AAMkAGId1", "AAMkAGId2"]
     assert all(e["reason"] == "unseen" for e in result["fetch"])
     assert result["filtered"] == {"written": 0, "no_transcript_final": 0,
+                                  "no_transcript_waiting": 0,
                                   "skipped": 0, "forbidden": 0}
 
 
@@ -68,6 +69,7 @@ def test_triage_filters_written_and_skipped_occurrences(tmp_path):
     result = seenevents.triage(root, events, NOW)
     assert [e["id"] for e in result["fetch"]] == ["AAMkAGId3"]
     assert result["filtered"] == {"written": 1, "no_transcript_final": 0,
+                                  "no_transcript_waiting": 0,
                                   "skipped": 1, "forbidden": 0}
 
 
@@ -89,7 +91,10 @@ def test_no_transcript_inside_48h_is_rechecked(tmp_path):
     """Teams transcripts arrive with delay: a no-transcript answer is
     provisional until the meeting has been over for 48 hours."""
     root = make_vault(tmp_path)
-    seenevents.record(root, [outcome(kind="no-transcript")], NOW)
+    # checked well outside the 6h recheck hold, so only the 48h final
+    # window is under test here
+    checked_at = datetime(2026, 8, 28, 16, 0, 0)  # 1h after the meeting ends
+    seenevents.record(root, [outcome(kind="no-transcript")], checked_at)
     # meeting ended 2026-08-28T15:00; 47h59m later it is still provisional
     almost = datetime(2026, 8, 30, 14, 59, 0)
     result = seenevents.triage(root, [listing_event()], almost)
@@ -103,6 +108,101 @@ def test_no_transcript_after_48h_is_final(tmp_path):
     result = seenevents.triage(root, [listing_event()], past)
     assert result["fetch"] == []
     assert result["filtered"]["no_transcript_final"] == 1
+
+
+def test_recent_recheck_is_filtered_as_waiting(tmp_path):
+    """A recheck costs a dispatch; three runs a day must not pay three
+    times. A no-transcript answer checked minutes ago stays held."""
+    root = make_vault(tmp_path)
+    ev = listing_event("ev1", "2026-08-31T10:00:00", "2026-08-31T11:00:00",
+                       "Weekly")
+    seenevents.record(
+        root, [outcome("ev1", "2026-08-31T10:00:00", "no-transcript")], NOW)
+    result = seenevents.triage(root, [ev], NOW + timedelta(hours=3))
+    assert result["fetch"] == []
+    assert result["filtered"]["no_transcript_waiting"] == 1
+
+
+def test_recheck_boundary_is_inclusive_at_6h(tmp_path):
+    # checked_at exactly 6h old -> fetch (>=6h re-checks); 5h59m -> waiting
+    root = make_vault(tmp_path)
+    ev = listing_event("ev1", "2026-08-31T10:00:00", "2026-08-31T11:00:00",
+                       "Weekly")
+    seenevents.record(
+        root, [outcome("ev1", "2026-08-31T10:00:00", "no-transcript")], NOW)
+    exactly_6h = seenevents.triage(root, [ev], NOW + timedelta(hours=6))
+    assert [e["reason"] for e in exactly_6h["fetch"]] == \
+        ["recheck-no-transcript"]
+    almost_6h = seenevents.triage(
+        root, [ev], NOW + timedelta(hours=5, minutes=59))
+    assert almost_6h["fetch"] == []
+    assert almost_6h["filtered"]["no_transcript_waiting"] == 1
+
+
+def test_stale_recheck_still_fetches(tmp_path):
+    # 7h since check, <48h since end -> fetch, reason recheck-no-transcript
+    root = make_vault(tmp_path)
+    ev = listing_event("ev1", "2026-08-31T10:00:00", "2026-08-31T11:00:00",
+                       "Weekly")
+    seenevents.record(
+        root, [outcome("ev1", "2026-08-31T10:00:00", "no-transcript")], NOW)
+    result = seenevents.triage(root, [ev], NOW + timedelta(hours=7))
+    assert [e["reason"] for e in result["fetch"]] == \
+        ["recheck-no-transcript"]
+
+
+def test_final_wins_over_waiting(tmp_path):
+    # end + 49h AND checked 1h ago -> filtered["no_transcript_final"], not
+    # waiting: the 48h final horizon is checked before the recheck hold.
+    root = make_vault(tmp_path)
+    ev = listing_event("ev1", "2026-08-31T10:00:00", "2026-08-31T11:00:00",
+                       "Weekly")
+    checked_at = datetime(2026, 9, 2, 11, 0, 0)  # end + 48h
+    seenevents.record(
+        root, [outcome("ev1", "2026-08-31T10:00:00", "no-transcript")],
+        checked_at)
+    now = checked_at + timedelta(hours=1)  # end + 49h, checked 1h ago
+    result = seenevents.triage(root, [ev], now)
+    assert result["fetch"] == []
+    assert result["filtered"]["no_transcript_final"] == 1
+    assert result["filtered"]["no_transcript_waiting"] == 0
+
+
+def test_refresh_restarts_the_hold(tmp_path):
+    # record() no-transcript again at T+7h -> triage at T+8h -> waiting
+    root = make_vault(tmp_path)
+    ev = listing_event("ev1", "2026-08-31T10:00:00", "2026-08-31T11:00:00",
+                       "Weekly")
+    seenevents.record(
+        root, [outcome("ev1", "2026-08-31T10:00:00", "no-transcript")], NOW)
+    seenevents.record(
+        root, [outcome("ev1", "2026-08-31T10:00:00", "no-transcript")],
+        NOW + timedelta(hours=7))
+    result = seenevents.triage(root, [ev], NOW + timedelta(hours=8))
+    assert result["fetch"] == []
+    assert result["filtered"]["no_transcript_waiting"] == 1
+
+
+def test_missing_or_malformed_checked_at_fails_open(tmp_path):
+    # an entry without checked_at, and one with "not-a-date" -> both fetch
+    root = make_vault(tmp_path)
+    cache_path = root / seenevents.CACHE_RELPATH
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    cache_path.write_text(json.dumps({
+        "version": seenevents.CACHE_VERSION,
+        "events": {
+            "ev1|2026-08-31T10:00:00": {"outcome": "no-transcript"},
+            "ev2|2026-08-31T10:00:00": {"outcome": "no-transcript",
+                                        "checked_at": "not-a-date"},
+        },
+    }), encoding="utf-8")
+    ev1 = listing_event("ev1", "2026-08-31T10:00:00", "2026-08-31T11:00:00",
+                        "Weekly")
+    ev2 = listing_event("ev2", "2026-08-31T10:00:00", "2026-08-31T11:00:00",
+                        "Weekly")
+    result = seenevents.triage(root, [ev1, ev2], NOW)
+    assert [e["reason"] for e in result["fetch"]] == \
+        ["recheck-no-transcript", "recheck-no-transcript"]
 
 
 def test_forbidden_is_terminal_immediately(tmp_path):

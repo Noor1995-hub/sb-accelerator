@@ -38,6 +38,11 @@ OUTCOMES = ("written", "no-transcript", "skipped", "forbidden")
 # late. Two days is the horizon after which "no transcript" stops being
 # "not yet" and becomes the answer.
 NO_TRANSCRIPT_FINAL_AFTER_HOURS = 48
+# A recheck costs a dispatch — the full event fetch, transcript fetch, and a
+# worker to process it. Three /sync-recordings runs a day must not pay for
+# the same still-transcript-less occurrence three times, so a provisional
+# no-transcript answer holds for this long before it is worth re-checking.
+RECHECK_MIN_INTERVAL_HOURS = 6
 # "forbidden" is a cross-tenant 403 on the transcript fetch: the ACL never
 # heals, so — unlike "no-transcript" — it is terminal the moment it is
 # recorded, same as "skipped".
@@ -139,8 +144,8 @@ def triage(root: Path, events, now_utc: datetime) -> dict:
     fetch: List[dict] = []
     deferred: List[dict] = []
     warnings: List[str] = []
-    filtered = {"written": 0, "no_transcript_final": 0, "skipped": 0,
-                "forbidden": 0}
+    filtered = {"written": 0, "no_transcript_final": 0,
+                "no_transcript_waiting": 0, "skipped": 0, "forbidden": 0}
     for event in events:
         if not isinstance(event, dict):
             raise SeenEventsError(
@@ -186,7 +191,21 @@ def triage(root: Path, events, now_utc: datetime) -> dict:
                     hours=NO_TRANSCRIPT_FINAL_AFTER_HOURS):
                 filtered["no_transcript_final"] += 1
             else:
-                fetch.append({**candidate, "reason": "recheck-no-transcript"})
+                checked = None
+                raw = seen.get("checked_at") if isinstance(seen, dict) \
+                    else None
+                if isinstance(raw, str):
+                    try:
+                        checked = datetime.strptime(raw, _KEY_FMT)
+                    except ValueError:
+                        checked = None  # fail open: an unreadable stamp
+                                         # never blocks a fetch
+                if checked is not None and now_utc - checked < timedelta(
+                        hours=RECHECK_MIN_INTERVAL_HOURS):
+                    filtered["no_transcript_waiting"] += 1
+                else:
+                    fetch.append(
+                        {**candidate, "reason": "recheck-no-transcript"})
         else:
             # Unseen — or an outcome value this version does not know, which
             # re-checks rather than trusts (fail open).
