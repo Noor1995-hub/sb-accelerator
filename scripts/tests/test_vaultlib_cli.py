@@ -819,6 +819,34 @@ def test_sync_watermark_rejects_a_malformed_utc_to(capsys, tmp_path):
     assert payload["hint"]
 
 
+def test_sync_routing_signals_returns_the_digest(capsys, tmp_path):
+    root = make_vault(tmp_path)
+    project_dir = root / "30-projects" / "yard-automation"
+    project_dir.mkdir(parents=True)
+    (project_dir / "index.md").write_text(
+        '---\ntype: project\nproject-name: "Yard Automation"\n'
+        "entity: meridian-freight-holdings\nstatus: active\n---\n",
+        encoding="utf-8")
+    (root / "40-entities" / "meridian-freight-holdings").mkdir(
+        parents=True, exist_ok=True)
+    (root / "50-people" / "morgan-ellery.md").write_text(
+        "---\ntype: person\n---\n", encoding="utf-8")
+
+    code, payload = run(capsys, [
+        "sync", "routing-signals", "--vault", str(root),
+    ])
+    assert code == 0
+    assert payload["ok"] is True
+    assert payload["result"] == {
+        "projects": [{"slug": "yard-automation", "name": "Yard Automation",
+                      "entity": "meridian-freight-holdings",
+                      "status": "active"}],
+        "entities": ["meridian-freight-holdings"],
+        "people": ["morgan-ellery"],
+        "warnings": [],
+    }
+
+
 def test_dates_window_with_a_vault_clamps_to_the_config_start_date(
     capsys, tmp_path
 ):

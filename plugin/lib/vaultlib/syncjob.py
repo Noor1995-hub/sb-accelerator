@@ -27,6 +27,9 @@ from . import markdown, project, scancache, vault
 
 INBOX_DIR = vault.INBOX_DIR
 MEETINGS_DIR = vault.MEETINGS_DIR
+PROJECTS_DIR = vault.PROJECTS_DIR
+ENTITIES_DIR = vault.ENTITIES_DIR
+PEOPLE_DIR = vault.PEOPLE_DIR
 NAMESPACES = ("inbox", "plaud", "m365")
 SKIP_FILE_RELPATH = Path("99-workflow-config") / "sync-state" / "skipped-recordings.txt"
 ARCHIVE_DIR = vault.ARCHIVE_DIR
@@ -488,6 +491,49 @@ def rederive_entities(root: Path) -> dict:
         "unresolved": unresolved,
         "warnings": warnings,
     }
+
+
+def routing_signals(root: Path) -> dict:
+    """Compact digest of what exists, for a model deciding where a new
+    recording routes — values only, never note bodies or free text, so the
+    digest stays small.
+
+    Projects come from `30-projects/*/index.md` frontmatter
+    (`project-name`, `entity`, `status`); a folder with no index.md is not a
+    project and is skipped. Malformed frontmatter is reported as a warning
+    and the project comes back with null fields rather than dropping it or
+    failing the whole call — one mangled index.md must not blind routing to
+    every other project. Entities are `40-entities/*/` directory names;
+    people are `50-people/*.md` stems.
+    """
+    projects: List[dict] = []
+    warnings: List[str] = []
+    projects_dir = root / PROJECTS_DIR
+    if projects_dir.is_dir():
+        for folder in sorted(p for p in projects_dir.iterdir() if p.is_dir()):
+            index = folder / "index.md"
+            if not index.is_file():
+                continue
+            slug = folder.name
+            try:
+                data, _ = markdown.split_frontmatter(
+                    index.read_text(encoding="utf-8"))
+                projects.append({
+                    "slug": slug,
+                    "name": data.get("project-name"),
+                    "entity": data.get("entity"),
+                    "status": data.get("status"),
+                })
+            except (ValueError, OSError):
+                projects.append({"slug": slug, "name": None, "entity": None,
+                                 "status": None})
+                warnings.append(f"{slug}: unparseable frontmatter")
+    entities = vault.list_dir_names(root / ENTITIES_DIR)
+    people_dir = root / PEOPLE_DIR
+    people = sorted(p.stem for p in people_dir.glob("*.md")) \
+        if people_dir.is_dir() else []
+    return {"projects": projects, "entities": entities, "people": people,
+            "warnings": warnings}
 
 
 def _free_target(folder: Path, name: str) -> Path:

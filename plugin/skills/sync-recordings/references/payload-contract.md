@@ -7,7 +7,13 @@ your scratch path and call `meeting write` yourself, and your reply is one
 outcome line — never the payload, transcript, or blob text. The routing
 fields (projects, attendees, confidence, calendar fields, source, ids, and —
 when the prompt names one — entities) were decided for you and arrive in
-your prompt: copy them in unchanged. `date` and `recording-duration` come
+your prompt: copy them in unchanged. **Exception — M365 only:**
+`attendees`, `confidence`, and the `confidence-reasons` attendees-group
+entry are not in your prompt; you derive them yourself from your own
+`person ensure` calls, per `worker-contract.md`'s Attendees and confidence
+section. Every other routing field — including the `confidence-reasons`
+calendar-group and project-link-group entries — still arrives in your
+prompt and still copies unchanged. `date` and `recording-duration` come
 from your own `reassemble` result — except for inbox items and captures,
 where the prompt carries them. Your job is the content fields: `title`,
 `type` (unless the prompt says this is a `type: note` capture, in which case

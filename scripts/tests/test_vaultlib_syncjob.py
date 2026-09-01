@@ -978,3 +978,68 @@ def test_rederive_is_idempotent(tmp_path):
     second = syncjob.rederive_entities(root)
     assert second["changed"] == 0
     assert second["changed_files"] == []
+
+
+# --- routing_signals: the compact routing digest ---
+
+def make_routing_project(root: Path, slug: str, *, name: str, entity: str,
+                         status: str) -> None:
+    folder = root / "30-projects" / slug
+    folder.mkdir(parents=True, exist_ok=True)
+    body = (f'---\ntype: project\nproject-name: "{name}"\n'
+            f"entity: {entity}\nstatus: {status}\n---\n")
+    (folder / "index.md").write_text(body, encoding="utf-8")
+
+
+def make_routing_entity(root: Path, slug: str) -> None:
+    (root / "40-entities" / slug).mkdir(parents=True, exist_ok=True)
+
+
+def make_routing_person(root: Path, slug: str) -> None:
+    people_dir = root / "50-people"
+    people_dir.mkdir(parents=True, exist_ok=True)
+    (people_dir / f"{slug}.md").write_text("---\ntype: person\n---\n",
+                                           encoding="utf-8")
+
+
+def test_routing_signals_returns_the_exact_digest_with_a_mangled_project(tmp_path):
+    root = make_vault(tmp_path)
+    make_routing_project(root, "yard-automation", name="Yard Automation",
+                         entity="meridian-freight-holdings", status="active")
+    mangled = root / "30-projects" / "mangled"
+    mangled.mkdir(parents=True)
+    (mangled / "index.md").write_text("no frontmatter here", encoding="utf-8")
+    make_routing_entity(root, "meridian-freight-holdings")
+    make_routing_entity(root, "acme-industries")
+    make_routing_person(root, "morgan-ellery")
+    make_routing_person(root, "jordan-price")
+    make_routing_person(root, "avery-quinn")
+
+    result = syncjob.routing_signals(root)
+    assert result == {
+        "projects": [
+            {"slug": "mangled", "name": None, "entity": None, "status": None},
+            {"slug": "yard-automation", "name": "Yard Automation",
+             "entity": "meridian-freight-holdings", "status": "active"},
+        ],
+        "entities": ["acme-industries", "meridian-freight-holdings"],
+        "people": ["avery-quinn", "jordan-price", "morgan-ellery"],
+        "warnings": ["mangled: unparseable frontmatter"],
+    }
+
+
+def test_routing_signals_on_an_empty_vault_is_all_empty_lists(tmp_path):
+    root = make_vault(tmp_path)
+    assert syncjob.routing_signals(root) == {
+        "projects": [], "entities": [], "people": [], "warnings": [],
+    }
+
+
+def test_routing_signals_stays_compact(tmp_path):
+    root = make_vault(tmp_path)
+    make_routing_project(root, "yard-automation", name="Yard Automation",
+                         entity="meridian-freight-holdings", status="active")
+    make_routing_entity(root, "meridian-freight-holdings")
+    make_routing_person(root, "morgan-ellery")
+    result = syncjob.routing_signals(root)
+    assert len(json.dumps(result)) < 1024

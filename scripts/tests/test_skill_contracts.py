@@ -242,31 +242,49 @@ def test_sync_summaries_speak_plainly(name):
 # #110: dedup must run BEFORE the fetch (the measured $8/run failure was
 # full event reads for candidates the ledger then discarded), and no adapter
 # may reach before the vault's own start date.
+#
+# Task 3.3: the orchestrator no longer fetches the full event or derives
+# ids itself — that moved into the worker (`m365 ids` then `sync dedup`,
+# per `worker-contract.md`'s Fetching — M365 section). So SKILL.md's own
+# ordering claim shrinks to "triage gates dispatch", and the ids-before-dedup
+# ordering is asserted against the file that now owns it.
 def test_sync_recordings_triages_m365_before_the_fetch():
     text = read_skill("sync-recordings")
     assert "sync m365-triage" in text, "the pre-fetch cache gate is missing"
     assert "sync m365-record" in text, (
         "outcomes must be recorded back or every run re-fetches")
-    assert text.index("sync m365-triage") < text.index("m365 ids"), (
-        "triage must gate the full event reads, not follow them")
+    assert text.index("sync m365-triage") < text.index("### 6."), (
+        "triage must gate dispatch, not follow it")
+    ref = read_ref("sync-recordings", "worker-contract.md")
+    assert ref.index("m365 ids") < ref.index("sync dedup"), (
+        "the worker contract must still derive ids before it dedups — "
+        "SKILL.md no longer makes either call itself")
 
 
 # The #122 failure shape — a fleet of extraction subagents each paid ~62k
-# tokens to learn "nothing to write" — is prevented by triage + dedup gating
+# tokens to learn "nothing to write" — is prevented by triage gating
 # dispatch and by workers fetching FIRST (a negative is a first-tool-call
 # exit), not by centralizing fetches. The orchestrator stays the seen-events
 # cache's only writer.
+#
+# Task 3.3: dedup used to be a second orchestrator-side gate, run once
+# across the whole batch before dispatch. It is now the worker's own first
+# move after deriving ids (one occurrence at a time), so there is no longer
+# a pre-dispatch `sync m365-record` call to pin — the settled-outcomes
+# banking it used to feed was deleted; workers surface everything, including
+# already-synced, via outcome lines the batch banks after the fact.
 def test_sync_recordings_dispatches_workers_only_after_triage_and_dedup():
     text = read_skill("sync-recordings")
     assert "survived triage" in text, (
-        "the dispatch gate must condition dispatch on triage + dedup")
+        "the dispatch gate must condition dispatch on triage")
     assert '"forbidden"' in text, (
         "a cross-tenant 403 needs a recorded outcome or it refetches forever")
     dispatch = text.index("### 6.")
-    assert text.index("sync m365-record") < dispatch, (
-        "no-transcript-url and skipped outcomes are banked before dispatch")
-    assert text.rindex("sync m365-record") > dispatch, (
-        "batch outcomes are banked after workers return")
+    assert text.index("sync m365-triage") < dispatch, (
+        "triage must run before dispatch")
+    assert text.index("sync m365-record") > dispatch, (
+        "there is no pre-dispatch settled-outcomes banking any more — "
+        "every sync m365-record call happens after workers return")
 
 
 # Cost round 2: workers run as the plugin's own agent types, which pin the
@@ -327,7 +345,8 @@ def test_sync_recordings_dispatch_names_the_worker_agent_types():
 def test_sync_recordings_worker_outcomes_are_a_closed_vocabulary():
     text = read_skill("sync-recordings")
     for token in ("written:", "no-transcript", "forbidden",
-                  "fetch-error", "auth-error", "possible-duplicate-of"):
+                  "fetch-error", "auth-error", "possible-duplicate-of",
+                  "already-synced", "skip-listed"):
         assert token in text, f"outcome vocabulary is missing {token}"
     assert "never writes the seen-events cache" in text, (
         "the single-writer rule must be stated")
@@ -349,6 +368,141 @@ def test_sync_recordings_worker_contract_carries_the_fetch_mechanics():
                    "m365 reassemble", "sync collide", "meeting write",
                    "payload-contract.md", "verbatim"):
         assert phrase in ref, f"worker contract is missing {phrase}"
+
+
+# Task 3.2: workers fetch their own M365 event and derive their own ids —
+# the orchestrator no longer hands a worker a pre-read event file or a
+# transcript_url by default.
+def test_sync_recordings_worker_contract_m365_fetches_its_own_event():
+    ref = read_ref("sync-recordings", "worker-contract.md")
+    assert "calendar:///" in ref, (
+        "the M365 fetch section must name the event URI form the worker "
+        "reads verbatim")
+    assert "already-synced:" in ref, (
+        "a worker that dedups its own id must be able to settle as "
+        "already-synced without fetching a transcript"
+    )
+    assert "recording-id:" in ref, (
+        "written/possible-duplicate-of lines must carry the recording id "
+        "the orchestrator banks against the seen-events ledger"
+    )
+    assert "Pre-fetched event variant" in ref, (
+        "a briefing that already carries the event file and ids (PR 4's "
+        "probe flow) must still be a documented variant, not dropped"
+    )
+    m365_fetch = ref.split("## Fetching — M365")[1].split(
+        "## Attendees and confidence")[0]
+    assert 'm365 ids --events "$SCRATCH/m365_event_<n>.ids-in.json"' in m365_fetch, (
+        "ids must be derived from a one-element array, not the batch "
+        "m365_events.json the orchestrator used to build"
+    )
+    assert m365_fetch.index("m365 ids") < m365_fetch.index("sync dedup"), (
+        "ids must be derived before the dedup check")
+    assert m365_fetch.index("sync dedup") < m365_fetch.index(
+        'read_resource` call on the `transcript_url`'), (
+        "dedup must gate the transcript fetch — an already-synced id stops "
+        "before the transcript is ever read")
+
+
+# PR review, round 2: `sync dedup` returns THREE buckets — new, synced, and
+# skipped (syncjob.py:294-307) — but the contract only ever defined a reply
+# for `synced`. An id on the permanent skip list that reached dedup got no
+# settled outcome at all, so skip-list enforcement silently vanished once
+# dedup moved worker-side.
+def test_sync_recordings_worker_contract_m365_settles_the_skip_list_bucket():
+    ref = read_ref("sync-recordings", "worker-contract.md")
+    assert "skip-listed:" in ref, (
+        "the worker must reply to a dedup `skipped` id with its own "
+        "settled outcome, not silently drop the skip-list check")
+    m365_fetch = ref.split("## Fetching — M365")[1].split(
+        "## Attendees and confidence")[0]
+    assert "skip-listed:" in m365_fetch, (
+        "the skip-listed reply belongs in the fetch section, next to the "
+        "already-synced reply it parallels")
+    assert m365_fetch.index("sync dedup") < m365_fetch.index(
+        "skip-listed:"), "skip-listed must follow the dedup call that finds it"
+    outcomes_section = ref.split("## The outcome line")[1]
+    assert "skip-listed:" in outcomes_section, (
+        "the outcome table must list skip-listed as a real reply")
+    assert '"skipped"' in outcomes_section, (
+        "the contract must say a skip-listed line banks as a \"skipped\" "
+        "outcome, the value seenevents.py's OUTCOMES actually accepts")
+    assert "no `recording_id`" in outcomes_section, (
+        "banking a skip-listed line must not require a recording_id — "
+        "seenevents.py only requires one for a written outcome")
+    assert "no-transcript-url" in m365_fetch, (
+        "m365 ids skipping an event for no-transcript-url must map to the "
+        "same no-transcript outcome as a transcript that came back empty")
+
+
+def test_sync_recordings_worker_contract_m365_resolves_its_own_attendees():
+    ref = read_ref("sync-recordings", "worker-contract.md")
+    assert "person ensure" in ref, (
+        "the worker must resolve attendees itself, not just copy a "
+        "pre-resolved list from its prompt")
+    assert "confidence-inputs" in ref, (
+        "the briefing carries the two precomputed booleans, never a final "
+        "confidence, for m365")
+    assert "high-if-no-new-attendees" in ref
+    assert "medium-if-at-most-one-new" in ref
+    assert '"created"' in ref, (
+        "the worker must read person ensure's own created field to count "
+        "new people, not invent knownness semantics"
+    )
+    assert "new-people" in ref, (
+        "settled outcome lines for a drafted m365 payload must report new "
+        "people so the orchestrator can total them without reading the "
+        "worker's scratch files"
+    )
+
+
+# Review round 1: `meeting write` requires confidence-reasons whenever
+# confidence is set (meeting.py:105-109), one entry per closed-vocabulary
+# group including attendees (meeting.py:116-134) — a worker that computes
+# `confidence` itself must also compute the attendees-group reason itself,
+# or every m365 write refuses.
+def test_sync_recordings_worker_contract_m365_derives_the_attendees_reason():
+    ref = read_ref("sync-recordings", "worker-contract.md")
+    assert "confidence-reasons" in ref, (
+        "confidence and confidence-reasons travel together — a contract "
+        "that only computes confidence leaves meeting write refusing every "
+        "m365 payload"
+    )
+    assert "all-attendees-known" in ref
+    assert "new-attendees:{N}" in ref or "new-attendees:" in ref, (
+        "the parameterized attendees-group reason must be named, with its "
+        "N >= 1 floor"
+    )
+    section = ref.split("## Attendees and confidence")[1].split(
+        "## Reassemble")[0]
+    assert "confidence-reasons" in section, (
+        "the derivation belongs in the Attendees and confidence section, "
+        "next to the count it depends on"
+    )
+    extract = ref.split("## Extract and write")[1].split(
+        "```bash")[0]
+    assert "confidence-reasons" in extract, (
+        "the Extract and write exception clause must name the "
+        "confidence-reasons attendees entry as worker-derived too, not "
+        "just attendees and confidence"
+    )
+
+    payload_ref = read_ref("sync-recordings", "payload-contract.md")
+    assert "confidence-reasons" in payload_ref.split("```json")[0], (
+        "payload-contract.md's routing-fields paragraph must carry the "
+        "same M365 exception as worker-contract.md, or a worker reading "
+        "both files hits a direct contradiction"
+    )
+
+
+def test_sync_recordings_worker_contract_seenevents_citation_is_accurate():
+    ref = read_ref("sync-recordings", "worker-contract.md")
+    assert "seenevents.py:234-242" in ref, (
+        "the written/recording_id enforcement actually sits at "
+        "seenevents.py:234-242 (_validate_outcome's written branch), not "
+        "the outcome-vocabulary check above it"
+    )
+    assert "seenevents.py:214-223" not in ref
 
 
 def test_sync_recordings_states_the_start_date_bound():
