@@ -265,9 +265,9 @@ python3 "$VAULTLIB" sync dedup --vault "$VAULT" --ids "$SCRATCH/ids.json"
 
 Before writing meta files, drop the throwaway ones: for each `new` id, read
 its listing entry's `duration` (milliseconds). One that is a number
-**strictly under 60000 ms** is a tiny clip — a pocket recording, a false
-start — so write no `rec_N.meta.json` for it and dispatch nothing; skip it
-instead:
+**greater than 0 and strictly under 60000 ms** is a tiny clip — a pocket
+recording, a false start — so write no `rec_N.meta.json` for it and
+dispatch nothing; skip it instead:
 
 ```bash
 python3 "$VAULTLIB" sync skip --vault "$VAULT" --id "plaud:<id>" \
@@ -276,10 +276,11 @@ python3 "$VAULTLIB" sync skip --vault "$VAULT" --id "plaud:<id>" \
 
 `<N>` is `duration` divided by 1000, rounded. Count these under **Skipped /
 errors** in the summary with the duration visible, not folded anonymously
-into the generic retry count. A missing, null, or non-numeric `duration`
-**fails open — dispatch that recording normally**: losing a recording to a
-parsing edge case is the one wrong answer here, same doctrine as the
-seen-events cache. Interactively, this is an information line, not a
+into the generic retry count. A missing, null, zero, or non-numeric
+`duration` **fails open — dispatch normally**: `duration: 0` is plaud.py's
+own unknown-duration sentinel, indistinguishable from absent, so losing a
+recording to a parsing edge case is the one wrong answer here, same doctrine
+as the seen-events cache. Interactively, this is an information line, not a
 question — the skip list already records the reversal path if the
 auto-skip turns out to be wrong.
 
@@ -697,14 +698,22 @@ Run it for whichever adapters finished `ok` — often just one. Skip it for an
 adapter that was `REFUSED`, `unavailable`, or stopped mid-run on
 `auth-error`: nothing past the point of failure was actually covered, and
 advancing the mark past that would hide what still needs listing next run.
-A batch's `fetch-error` outcomes do not hold this back — a persistently
-failing item (an oversized transcript, say) must not pin every future
-window wide open waiting on it; it keeps retrying inside `dates window`'s
-own 2-day floor regardless of where the watermark sits. Everything after the
-window's `utc_to` was never listed this run, so stamping "now" instead would
-silently skip whatever synced late between the window and the stamp. The
-write is monotonic — an earlier `utc_to` than what is already stored is a
-no-op — so a re-run or a resumed batch can never pull the mark backward.
+Skip it too for an adapter that deferred one or more cross-adapter
+duplicates under `--unattended` this run: that recording settled nothing —
+no note, no seen-events entry, no skip-list line, its payload swept with the
+rest of scratch — so it is still sitting there unsettled next run, and it
+needs the window open wide enough for an interactive run to reach it. A
+batch's `fetch-error` outcomes do not hold this back — a persistently
+failing item (an oversized transcript, say) retries itself next run inside
+`dates window`'s own 2-day floor regardless of where the watermark sits — but
+a deferred cross-adapter duplicate waits on a human, not on a retry, so the
+watermark has to hold for it too. Everything after the window's `utc_to` was
+never listed this run, so stamping "now" instead would silently skip
+whatever synced late between the window and the stamp. The write is
+monotonic — an earlier `utc_to` than what is already stored is a no-op — so
+holding it back only widens the next run's window, day by day back toward
+the full 7, until an interactive run settles the duplicate and the hold
+lifts.
 
 ### 7. Summarize — from disk, not from memory
 
