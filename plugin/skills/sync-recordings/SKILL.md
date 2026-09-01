@@ -64,14 +64,19 @@ The JSON envelope and interpreter resolution are documented in the plugin's
    stop-and-report condition: stop that recording, say so in the summary,
    let it retry next run. The same verbatim rule covers this context's own
    listing writes — `$SCRATCH/m365_search.json` and
-   `$SCRATCH/m365_routing.json` hold the calendar search's own field values
-   unchanged — and calendar enrichment's per-match **full-event JSON**
-   (step 2): a live run that re-typed an event "from memory" garbled three
-   transcript URLs and two ids before catching itself. The m365 adapter's
-   own full-event and transcript reads no longer happen here at all — the
-   worker fetches and writes its own `$SCRATCH/m365_event_<n>.json`, per
-   `worker-contract.md`. (A calendar listing is not a transcript — the
-   step 1 trim to `m365_search.json`'s four fields, and to
+   `$SCRATCH/m365_routing.json` hold the calendar search's own field
+   values unchanged, never rebuilt or retyped. The **full-event JSON**
+   verbatim obligation is not this context's problem any more: the m365
+   adapter's own full-event and transcript reads happen inside the worker
+   now, which writes its own `$SCRATCH/m365_event_<n>.json` under the same
+   doctrine, stated in its own contract (`worker-contract.md`) — a live run
+   once re-typed an event "from memory" there and garbled three transcript
+   URLs and two ids before catching itself, back when that read still
+   happened in this context. Calendar enrichment (step 2) never reaches a
+   full event either: it scores candidates and pre-fills fields straight
+   off the calendar-search listing already in context, so there is nothing
+   there to spill to scratch. (A calendar listing is not a transcript —
+   the step 1 trim to `m365_search.json`'s four fields, and to
    `m365_routing.json`'s nine, is fine.)
 9. **Batch independent CLI calls into one Bash call.** Every separate tool
    turn re-reads the whole session context. Calls with no data dependency —
@@ -568,8 +573,26 @@ Skipped entirely under `--unattended`. Show one table — title, date,
 projects, new people, confidence — and ask once: proceed / edit / skip
 items. The title column is provisional: the real title is a step-6
 subagent output, decided from the transcript, not yet drafted here — show
-the source filename or the calendar subject in its place. For a recording
-the user says to permanently drop:
+the source filename or the calendar subject in its place.
+
+**M365 rows carry two more provisional columns, for the same reason.**
+Neither the attendee count nor the final confidence exists yet at step 5
+for an m365 recording — the worker settles both at dispatch (step 4's
+M365 exception, step 6). Show what step 4 actually computed, honestly,
+never a resolved value that doesn't exist yet:
+
+- **New people** — show "resolves at dispatch ({N} attendee emails)",
+  `{N}` being the length of that row's `attendee-emails` in
+  `m365_routing.json`; the email count is real, the new-person count is
+  not knowable until the worker runs `person ensure`.
+- **Confidence** — show the pre-computed component, not a guessed final
+  rating: `high-if-no-new-attendees` true → `"≤high — final at
+  dispatch"`; otherwise `medium-if-at-most-one-new` true → `"≤medium —
+  final at dispatch"`; otherwise `"low"` outright — when neither component
+  is true no new-attendee count could raise it, so `low` is already final
+  and needs no caveat.
+
+For a recording the user says to permanently drop:
 
 ```bash
 python3 "$VAULTLIB" sync skip --vault "$VAULT" --id plaud:abc123 \
