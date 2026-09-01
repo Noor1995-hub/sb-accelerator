@@ -366,6 +366,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--utc-to", dest="utc_to", required=True,
         help="UTC ISO datetime the sync run covered through")
 
+    sync_routing = sync_sub.add_parser(
+        "routing-signals",
+        help="compact digest of projects/entities/people for routing a "
+             "recording — values only, never note bodies")
+    _add_vault_argument(sync_routing)
+
     meetings = top.add_parser("meeting", help="meeting notes")
     meetings_sub = meetings.add_subparsers(dest="action", required=True)
     meeting_write = meetings_sub.add_parser(
@@ -639,6 +645,8 @@ def _dispatch(args: argparse.Namespace) -> int:
                 tzinfo=None, microsecond=0)
             return _ok(lastsync.set_mark(root, args.adapter, args.utc_to,
                                          now_utc))
+        if args.action == "routing-signals":
+            return _ok(syncjob.routing_signals(root))
     if args.group == "meeting":
         payload = (json.load(sys.stdin) if args.note == "-"
                    else json.loads(Path(args.note).read_text(encoding="utf-8")))
