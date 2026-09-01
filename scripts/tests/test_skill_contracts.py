@@ -351,6 +351,64 @@ def test_sync_recordings_worker_contract_carries_the_fetch_mechanics():
         assert phrase in ref, f"worker contract is missing {phrase}"
 
 
+# Task 3.2: workers fetch their own M365 event and derive their own ids —
+# the orchestrator no longer hands a worker a pre-read event file or a
+# transcript_url by default.
+def test_sync_recordings_worker_contract_m365_fetches_its_own_event():
+    ref = read_ref("sync-recordings", "worker-contract.md")
+    assert "calendar:///" in ref, (
+        "the M365 fetch section must name the event URI form the worker "
+        "reads verbatim")
+    assert "already-synced:" in ref, (
+        "a worker that dedups its own id must be able to settle as "
+        "already-synced without fetching a transcript"
+    )
+    assert "recording-id:" in ref, (
+        "written/possible-duplicate-of lines must carry the recording id "
+        "the orchestrator banks against the seen-events ledger"
+    )
+    assert "Pre-fetched event variant" in ref, (
+        "a briefing that already carries the event file and ids (PR 4's "
+        "probe flow) must still be a documented variant, not dropped"
+    )
+    m365_fetch = ref.split("## Fetching — M365")[1].split(
+        "## Attendees and confidence")[0]
+    assert 'm365 ids --events "$SCRATCH/m365_event_<n>.ids-in.json"' in m365_fetch, (
+        "ids must be derived from a one-element array, not the batch "
+        "m365_events.json the orchestrator used to build"
+    )
+    assert m365_fetch.index("m365 ids") < m365_fetch.index("sync dedup"), (
+        "ids must be derived before the dedup check")
+    assert m365_fetch.index("sync dedup") < m365_fetch.index(
+        'read_resource` call on the `transcript_url`'), (
+        "dedup must gate the transcript fetch — an already-synced id stops "
+        "before the transcript is ever read")
+    assert "no-transcript-url" in m365_fetch, (
+        "m365 ids skipping an event for no-transcript-url must map to the "
+        "same no-transcript outcome as a transcript that came back empty")
+
+
+def test_sync_recordings_worker_contract_m365_resolves_its_own_attendees():
+    ref = read_ref("sync-recordings", "worker-contract.md")
+    assert "person ensure" in ref, (
+        "the worker must resolve attendees itself, not just copy a "
+        "pre-resolved list from its prompt")
+    assert "confidence-inputs" in ref, (
+        "the briefing carries the two precomputed booleans, never a final "
+        "confidence, for m365")
+    assert "high-if-no-new-attendees" in ref
+    assert "medium-if-at-most-one-new" in ref
+    assert '"created"' in ref, (
+        "the worker must read person ensure's own created field to count "
+        "new people, not invent knownness semantics"
+    )
+    assert "new-people" in ref, (
+        "settled outcome lines for a drafted m365 payload must report new "
+        "people so the orchestrator can total them without reading the "
+        "worker's scratch files"
+    )
+
+
 def test_sync_recordings_states_the_start_date_bound():
     text = read_skill("sync-recordings")
     assert "sync.start-date" in text
