@@ -15,6 +15,7 @@ delivers them.
 
 ## Unreleased
 
+- `/sync-recordings` now scans only since its last successful run (2-day floor, 7-day cap after a gap) instead of re-listing a full week daily, and auto-skips Plaud clips under 60 seconds with the reason recorded (#135)
 - `/sync-recordings` no longer re-checks an untranscribed Teams meeting more than once per 6 hours — repeated same-day runs stop paying a full worker per silent meeting (#134)
 - `/sync-recordings` no longer trips over future meetings: the discovery window is computed by the CLI (the trailing 7 days, ending now — never reaching forward), and a meeting that hasn't ended yet is deferred until after it happens instead of being fetched — a run can no longer draft notes for meetings that haven't taken place (#131)
 - `/sync-recordings` workers now run as the plugin's own lightweight agent type with the model pinned — each worker starts from a fraction of the session's context, so multi-recording syncs cost noticeably less (#128)

@@ -23,6 +23,7 @@ import argparse
 import json
 import re
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, Sequence
 
@@ -31,7 +32,7 @@ if __package__ in (None, ""):
     # the skills invoke it.
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from vaultlib import config, dailynote, dates, decision, entity, feedback, health, m365, meeting, migrate, person, plaud, project, runlog, scratch, schema, seenevents, syncjob, updatequeue, vault  # noqa: E402
+from vaultlib import config, dailynote, dates, decision, entity, feedback, health, lastsync, m365, meeting, migrate, person, plaud, project, runlog, scratch, schema, seenevents, syncjob, updatequeue, vault  # noqa: E402
 
 
 def _emit(payload: dict) -> None:
@@ -132,6 +133,10 @@ def build_parser() -> argparse.ArgumentParser:
     dates_window.add_argument(
         "--now", help="UTC ISO datetime override (tests); "
                       "--trailing-days only")
+    dates_window.add_argument(
+        "--adapter", choices=sorted(lastsync.ADAPTERS),
+        help="narrow the trailing window to this adapter's last-sync "
+             "watermark (read via --vault); --trailing-days only")
 
     dates_plan = dates_sub.add_parser(
         "plan", help="authoritative date block: today, next business day, recap window")
@@ -350,6 +355,17 @@ def build_parser() -> argparse.ArgumentParser:
              "was written")
     _add_vault_argument(sync_rederive)
 
+    sync_watermark = sync_sub.add_parser(
+        "watermark",
+        help="advance an adapter's last-successful-sync mark; monotonic — "
+             "a --utc-to earlier than the stored mark is a no-op")
+    _add_vault_argument(sync_watermark)
+    sync_watermark.add_argument("--adapter", required=True,
+                                choices=lastsync.ADAPTERS)
+    sync_watermark.add_argument(
+        "--utc-to", dest="utc_to", required=True,
+        help="UTC ISO datetime the sync run covered through")
+
     meetings = top.add_parser("meeting", help="meeting notes")
     meetings_sub = meetings.add_subparsers(dest="action", required=True)
     meeting_write = meetings_sub.add_parser(
@@ -486,12 +502,22 @@ def _dispatch(args: argparse.Namespace) -> int:
                     raise dates.DatesError(
                         "--hours is the enrichment half-width; the trailing "
                         "window runs local midnight to now and takes none")
+                if args.adapter is not None and root is None:
+                    raise dates.DatesError(
+                        "--adapter requires --vault so the adapter's "
+                        "last-sync watermark can be read")
                 now_utc = (dates._parse_now(args.now)
                            if args.now is not None else None)
+                watermark = (lastsync.read(root, args.adapter)
+                            if args.adapter is not None else None)
                 return _ok(dates.trailing_window(
                     args.trailing_days, timezone=args.timezone,
                     utc_offset=args.utc_offset, start_date=start_date,
-                    now_utc=now_utc))
+                    now_utc=now_utc, watermark=watermark))
+            if args.adapter is not None:
+                raise dates.DatesError(
+                    "--adapter narrows --trailing-days discovery; --start "
+                    "does not take it")
             if args.now is not None:
                 raise dates.DatesError(
                     "--now applies to --trailing-days discovery only")
@@ -608,6 +634,11 @@ def _dispatch(args: argparse.Namespace) -> int:
             return _ok(seenevents.record(root, payload, seenevents.parse_now(args.now)))
         if args.action == "rederive-entities":
             return _ok(syncjob.rederive_entities(root))
+        if args.action == "watermark":
+            now_utc = datetime.now(timezone.utc).replace(
+                tzinfo=None, microsecond=0)
+            return _ok(lastsync.set_mark(root, args.adapter, args.utc_to,
+                                         now_utc))
     if args.group == "meeting":
         payload = (json.load(sys.stdin) if args.note == "-"
                    else json.loads(Path(args.note).read_text(encoding="utf-8")))
@@ -703,6 +734,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         return _fail(str(exc), "Fix the named id or argument and retry.")
     except seenevents.SeenEventsError as exc:
         return _fail(str(exc), "Fix the named listing or outcome entry and retry.")
+    except lastsync.LastSyncError as exc:
+        return _fail(str(exc), "Fix --adapter or --utc-to and retry.")
     except plaud.PlaudError as exc:
         return _fail(str(exc), "Check the raw MCP JSON files named in the error.")
     except m365.M365Error as exc:

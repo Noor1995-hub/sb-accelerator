@@ -159,10 +159,21 @@ def _parse_now(text: str) -> datetime:
     return parsed
 
 
+# The floor a watermark-narrowed window may never shrink below: it covers the
+# 48h no-transcript recheck horizon (a meeting whose transcript was not ready
+# yet gets rechecked for two days after it happened). An unbanked fetch error
+# only retries while the failing recording is still inside the discovery
+# window it was first listed in — narrowing below that horizon would drop the
+# retry silently. An accepted trade-off; see the oversized-transcript issue
+# for the retry-window discussion.
+WATERMARK_FLOOR_DAYS = 2
+
+
 def trailing_window(days: int, *, timezone: Optional[str] = None,
                     utc_offset: Optional[str] = None,
                     start_date: Optional[str] = None,
-                    now_utc: Optional[datetime] = None) -> dict:
+                    now_utc: Optional[datetime] = None,
+                    watermark: Optional[datetime] = None) -> dict:
     """Discovery mode: the trailing `days` local days, ending exactly now.
 
     `utc_to` is the UTC clock at call time — by construction the window
@@ -176,19 +187,38 @@ def trailing_window(days: int, *, timezone: Optional[str] = None,
     slightly generous window is harmless (dedup catches overlap) where
     hour arithmetic would cut off a week-old meeting mid-day. The
     `start_date` floor is exactly the clamp `window` applies.
+
+    `watermark` (naive UTC, from `lastsync.read`) narrows the window to
+    what has not been covered by a clean sync yet: effective days become
+    `min(days, max(WATERMARK_FLOOR_DAYS, (now_utc.date() -
+    watermark.date()).days + 1))`. A future watermark (clock skew) makes
+    that day count negative, which `max` clamps to the floor rather than
+    letting it fall through to the `days < 1` guard above. `None` (no
+    adapter, or a cold/corrupt cache — `lastsync.read` already fails open)
+    leaves `effective_days` equal to `days`: today's behaviour exactly.
     """
     if not isinstance(days, int) or isinstance(days, bool) or days < 1:
         raise DatesError(f"trailing-days {days!r} must be a positive integer")
     if now_utc is None:
         now_utc = datetime.now(_timezone.utc).replace(tzinfo=None,
                                                       microsecond=0)
+    effective_days = days
+    watermark_used = False
+    if watermark is not None:
+        floor_days = max(WATERMARK_FLOOR_DAYS,
+                         (now_utc.date() - watermark.date()).days + 1)
+        effective_days = min(days, floor_days)
+        watermark_used = True
     local_now, source = utc_to_local(now_utc, timezone, utc_offset)
-    from_local = datetime.combine(local_now.date() - timedelta(days=days),
-                                  datetime.min.time())
+    from_local = datetime.combine(
+        local_now.date() - timedelta(days=effective_days),
+        datetime.min.time())
     from_offset, _ = resolve_offset_minutes(from_local, timezone, utc_offset)
     lo_utc = from_local - timedelta(minutes=from_offset)
     result = {
         "trailing_days": days,
+        "effective_days": effective_days,
+        "watermark_used": watermark_used,
         "now_utc": now_utc.strftime(_UTC_FMT),
         "utc_from": lo_utc.strftime(_UTC_FMT),
         "utc_to": now_utc.strftime(_UTC_FMT),
