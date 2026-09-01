@@ -100,9 +100,12 @@ stands as written.
 Once your transcript fetch has succeeded — not `no-transcript`, not
 `forbidden`, not `fetch-error` — you are going to draft a payload: resolve
 the meeting's people before anything else, from the event you fetched,
-never from the transcript (Teams speech recognition garbles names). For
-every attendee **name** in your fetched event, batch one call per name
-into a single Bash invocation:
+never from the transcript (Teams speech recognition garbles names). On the
+pre-fetched event variant this is the event file your briefing named, not
+one you fetched yourself — its `attendees[].name` array is already sitting
+in that file verbatim, whichever way it got there. For every attendee
+**name** in your fetched event, batch one call per name into a single Bash
+invocation:
 
 ```bash
 python3 "$VAULTLIB" person ensure --vault "$VAULT" --name "<name>"
@@ -143,7 +146,10 @@ outcome line reports them (see the outcome table).
 ## Reassemble
 
 One call, matching your adapter — the meta/event and transcript files sit at
-the scratch paths you wrote them to above:
+the scratch paths you wrote them to above. On the **pre-fetched event
+variant**, the event file is not one of them — pass the path your briefing
+named instead; you never wrote it, and its stem is the dispatcher's
+(a probe's `m365_probe_<n>.event.json`, say), not `m365_event_<n>`:
 
 ```bash
 python3 "$VAULTLIB" plaud reassemble \

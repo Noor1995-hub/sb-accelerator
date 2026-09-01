@@ -374,8 +374,22 @@ first run after they end. Only the occurrences in
 upgrading everything dispatches once and the outcomes recorded below make
 every later run cheap.
 
-For each `fetch` survivor, match its `id` back against the calendar-search
-pages you already hold and write one compact array,
+**Split `fetch` by its own `reason` field before doing anything else with
+it.** An entry reasoned `unseen` or `unkeyed` is a first look — it proceeds
+through the routing extract below and gets an ordinary worker in step 6, no
+different from any run before this one. An entry reasoned
+`recheck-no-transcript` is not: a transcript already failed to exist for it
+once, so paying for a full worker (routing extract, attendee resolution,
+extraction) to ask the same fetch a second time would be paying sonnet
+prices to relearn "still nothing" most of the time. Hold those entries
+aside as the **probe dispatch list** instead — step 6 dispatches a cheap
+haiku probe for each one, before its ordinary worker batches, and only
+promotes an entry back into the routing extract and a full worker if its
+probe actually finds a transcript. Nothing below this point in Step 1
+applies to a `recheck-no-transcript` entry until that promotion happens.
+
+For each `unseen`/`unkeyed` `fetch` survivor, match its `id` back against
+the calendar-search pages you already hold and write one compact array,
 `$SCRATCH/m365_routing.json`, with — per event, **values verbatim from the
 listing, never rebuilt** — `id`, `subject`, `start`, `end`, `organizer`,
 `attendees`, `location`, `recurrence`, and `uri` (the URL-encoded
@@ -397,6 +411,12 @@ banked per batch in step 6. A recording that *failed* — a transport error
 deferred under `--unattended`: what is not settled is not recorded, and
 the occurrence surfaces again next run.
 
+A `recheck-no-transcript` entry's row still lives in the calendar-search
+pages you hold this run (rechecks come from the same triage `fetch` list,
+so they were always in the listing) — it is just not extracted into
+`m365_routing.json` yet. Keep its `id`, `start_utc`, and `uri` on the probe
+dispatch list step 6 needs; nothing else about it is decided here.
+
 An m365 recording's routing starts ahead of plaud's: the listing **is**
 the calendar record. Pre-fill `calendar-subject`, `organizer`, `location`,
 `attendee-emails`, and `recurring` from `m365_routing.json`, set
@@ -412,9 +432,12 @@ product terms, so attendee resolution never touches the transcript either
 way. Pass `attendee-emails` in the worker's briefing (step 6); it derives
 the slugs, never you.
 
-**The dispatch gate.** A worker is dispatched for every occurrence that
-survived triage (`sync m365-triage`'s `fetch` list) — never to discover
-whether a transcript exists for anything else. The ledger dedup that used
+**The dispatch gate.** A worker is dispatched for every `unseen`/`unkeyed`
+occurrence that survived triage (`sync m365-triage`'s `fetch` list) — never
+to discover whether a transcript exists for anything else. A
+`recheck-no-transcript` survivor gets a probe instead, per the split above;
+it only gets a worker if that probe replies `transcript-found` (step 6).
+The ledger dedup that used
 to run here, once, before dispatch now runs inside the worker instead, as
 its first move after it derives its own ids (`worker-contract.md`): an id
 already in the ledger stops there, before any transcript fetch, and
@@ -638,6 +661,68 @@ dropped this way.
 
 ### 6. Extract and write
 
+**Probe the recheck list first, before any worker batch.** For each
+`recheck-no-transcript` entry the step-1 split held aside, dispatch a
+recheck probe, up to ~4 in parallel, blocking, as the plugin's own agent
+type: `subagent_type: second-brain:sync-probe-m365`. Pass each probe: the
+`references/probe-contract.md` path (`references/worker-contract.md` too —
+the probe contract defers to it), `$VAULT`, `$SCRATCH`, `$VAULTLIB`, the
+vault timezone, the entry's `uri` (verbatim, from the calendar-search pages
+step 1 still holds), and its scratch stem, `m365_probe_<n>`. A probe never
+gets routing, confidence, or attendee data — it has not earned that cost
+yet.
+
+When a probe batch returns, act on each line:
+
+- `still-no-transcript` — settles as `{"id": <id>, "start_utc":
+  <start_utc>, "outcome": "no-transcript"}`, keyed by the `id`/`start_utc`
+  triage carried for that entry. This refreshes the cached entry's
+  `checked_at`, which restarts the 6h recheck-window hold — the next probe
+  for this occurrence waits another 6 hours, exactly like a worker's first
+  `no-transcript` reply does.
+- `forbidden` — settles as `{"id": <id>, "start_utc": <start_utc>,
+  "outcome": "forbidden"}`, same as a worker's `forbidden` reply.
+- `transcript-found: <recording_id> (event at <path>, transcript-url:
+  <url>)` — not settled by this probe wave at all: the recheck paid off, so
+  route this entry **like any fetch survivor** instead — extract its row
+  into `$SCRATCH/m365_routing.json` from the calendar-search pages (same
+  fields, same verbatim rule, as step 1's ordinary extract), then run
+  steps 3–5 (routing signals, confidence inputs, the interactive plan row)
+  for it, same as an `unseen` survivor. Only then dispatch a full
+  `second-brain:sync-worker-m365` for it, using the worker contract's
+  **pre-fetched event variant**: the probe's event file and its verbatim
+  `recording_id`/`transcript_url` in place of a URI to fetch — the worker
+  starts at dedup (worker-contract.md), so the dedup gate still runs, it is
+  never skipped. Carry everything the ordinary M365 briefing list below
+  requires (confidence-inputs, the calendar-group and project-link-group
+  confidence-reasons entries, `attendee-emails`, the owner's person slug,
+  and so on) — the pre-fetched path changes how the worker fetches, not
+  what its briefing must contain. This occurrence's outcome banks with
+  that worker's own batch below, once it returns, exactly like any other
+  survivor's — not with the probe wave.
+- `fetch-error` / `auth-error` — handled exactly as for workers: a
+  `fetch-error` banks no outcome line and retries next run; an `auth-error`
+  stops dispatching that adapter's remaining probes (and workers) and
+  reports it, re-authentication belonging to the user.
+
+**Bank the probe wave's own settled lines immediately, in their own call —
+never deferred to the worker-batch banking below.** A recheck-only pass can
+dispatch probes and zero worker batches, and the worker-batch banking call
+only ever runs after a worker batch returns; delegating a probe's outcome
+to it would mean nothing ever banks on that pass, `checked_at` never
+refreshes, and the 6h hold never restarts. So as soon as this probe batch
+settles, write its `still-no-transcript` and `forbidden` lines — never a
+`transcript-found` line, which is not settled yet — to
+`$SCRATCH/m365_probe_outcomes.json` and bank them right here:
+
+```bash
+python3 "$VAULTLIB" sync m365-record --vault "$VAULT" \
+  --outcomes "$SCRATCH/m365_probe_outcomes.json"
+```
+
+Same per-batch banking doctrine as the worker batches below: crash loss is
+bounded to one probe wave, one cheap re-probe next run.
+
 For each recording that survived step 1 — **also when there is only one**
 (rule 7) — dispatch a worker, up to ~4 in parallel, blocking, as the
 plugin's own agent type: `subagent_type: second-brain:sync-worker` for
@@ -849,7 +934,7 @@ Count what exists, not what you intended (a lab run once reported
 **Possible cross-adapter duplicates:** {N} — deferred; needs an interactive run
 **Skipped / errors:** {N} (will retry next run) · {N} tiny clips auto-skipped ({list each with its duration}) — permanent, not a retry
 **M365 fetches saved:** {N} of {N} listed occurrences answered from the seen-events cache ({N} held in the 6h recheck window) | cache cold (first run)
-**Workers dispatched:** {N} ({N} plaud · {N} m365 · {N} inbox) — m365 candidates not dispatched were answered by the cache ({N}) or hadn't ended yet ({N}); worker outcomes: {N} written · {N} already-synced · {N} skip-listed · {N} no-transcript · {N} forbidden · {N} fetch-error · {N} auth-error
+**Workers dispatched:** {N} ({N} plaud · {N} m365 · {N} inbox) — m365 candidates not dispatched were answered by the cache ({N}) or hadn't ended yet ({N}); worker outcomes: {N} written · {N} already-synced · {N} skip-listed · {N} no-transcript · {N} forbidden · {N} fetch-error · {N} auth-error · {N} probes ({N} still-no-transcript · {N} transcript-found)
 **Adapters:** inbox ok · plaud ok (window {N}d) | REFUSED — signed in as a different account (account-mismatch) | REFUSED — no account bound to this vault yet (no-account-hint) | disabled | unavailable | STOPPED mid-run — connector wants re-authentication (auth-error) · m365 ok (window {N}d) | REFUSED — signed in as a different account (account-mismatch) | REFUSED — no account bound to this vault yet (no-account-hint) | disabled | unavailable | STOPPED mid-run — connector wants re-authentication (auth-error)
 **Calendar enrichment:** ok | UNAVAILABLE
 **Warnings:** {verbatim} | none

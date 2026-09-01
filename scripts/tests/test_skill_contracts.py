@@ -342,6 +342,63 @@ def test_sync_recordings_dispatch_names_the_worker_agent_types():
             "not the agent definition")
 
 
+# Task 4.1: the haiku recheck probe. It reuses the m365 worker's exact
+# disallowedTools list (the constant above is shared for exactly this
+# reason) and its tool surface stays open for the same per-deployment
+# connector reason the worker's does — only the model and the contract it
+# reads differ.
+def test_sync_probe_m365_agent_frontmatter():
+    agents_dir = SKILLS_DIR.parent / "agents"
+    probe = (agents_dir / "sync-probe-m365.md").read_text(encoding="utf-8")
+    front = probe.split("---")[1]
+    assert "name: sync-probe-m365" in front
+    assert "model: haiku" in front, (
+        "the probe is a cheap recheck — the model mandate must be structural")
+    assert "tools:" not in front, (
+        "the probe's tools must stay open — same per-deployment connector "
+        "constraint as the m365 worker's read_resource")
+    disallowed_lines = [
+        line for line in front.splitlines()
+        if line.strip().startswith("disallowedTools:")]
+    assert disallowed_lines, "the probe must declare disallowedTools"
+    disallowed = [
+        name.strip()
+        for name in disallowed_lines[0].split(":", 1)[1].split(",")]
+    assert disallowed == M365_WORKER_DISALLOWED_TOOLS, (
+        "the probe's disallowedTools must equal the m365 worker's exactly "
+        "— it costs the same base-context tools, per issue #129 lever 1")
+
+    body = re.sub(r"\s+", " ", probe.split("---", 2)[2])
+    assert "probe contract" in body and "outcome line" in body
+    assert "dispatched without a briefing" in body, (
+        "the probe needs the same missing-briefing refusal as the worker"
+    )
+
+
+def test_sync_probe_m365_contract_exists_and_covers_outcomes():
+    ref = read_ref("sync-recordings", "probe-contract.md")
+    assert "still-no-transcript" in ref
+    assert "transcript-found" in ref
+    assert "forbidden" in ref
+    assert "fetch-error" in ref
+    assert "auth-error" in ref
+    assert "worker-contract.md" in ref, (
+        "the probe contract must defer to the worker contract for fetch "
+        "mechanics rather than duplicate them (one protocol, two depths)")
+    assert "Fetching" in ref and "M365" in ref, (
+        "the probe contract must point at the worker contract's M365 fetch "
+        "section, not just name the file")
+
+
+def test_sync_probe_m365_contract_never_extracts_or_touches_the_cache():
+    ref = read_ref("sync-recordings", "probe-contract.md")
+    assert "never" in ref.lower() and "meeting write" in ref, (
+        "the probe must state it never calls meeting write")
+    assert "seen-events cache" in ref, (
+        "rule-8's carve-out and the never-touch-the-cache rule must both be "
+        "stated explicitly, not implied")
+
+
 def test_sync_recordings_worker_outcomes_are_a_closed_vocabulary():
     text = read_skill("sync-recordings")
     for token in ("written:", "no-transcript", "forbidden",
@@ -779,3 +836,85 @@ def test_sync_recordings_extends_verbatim_rule_to_event_json():
     assert "full-event JSON" in flat, (
         "rule 8 must cover event reads — a live run re-typed events from "
         "memory and garbled transcript URLs and ids before self-correcting")
+
+
+# Task 4.2: the triage split that routes a recheck-no-transcript survivor to
+# a probe instead of straight into the routing extract a normal survivor
+# gets.
+def test_sync_recordings_triage_splits_fetch_by_reason_for_probes():
+    text = read_skill("sync-recordings")
+    step1 = text.split("### 1.")[1].split("### 2.")[0]
+    assert '"unseen"' in step1 or "unseen" in step1
+    assert "unkeyed" in step1
+    assert "recheck-no-transcript" in step1
+    assert step1.index("sync m365-triage") < step1.index("recheck-no-transcript"), (
+        "the reason split is read off sync m365-triage's own fetch list")
+    flat = re.sub(r"\s+", " ", step1)
+    assert "probe dispatch" in flat.lower(), (
+        "a recheck-no-transcript survivor must be named as routed to the "
+        "probe dispatch list, not the ordinary routing extract"
+    )
+
+
+def test_sync_recordings_step6_dispatches_probes_before_worker_batches():
+    text = read_skill("sync-recordings")
+    step6 = text.split("### 6.")[1].split("### 7.")[0]
+    assert "second-brain:sync-probe-m365" in step6, (
+        "step 6 must dispatch the probe agent type by name")
+    probe_idx = step6.index("second-brain:sync-probe-m365")
+    worker_idx = step6.index("second-brain:sync-worker-m365")
+    assert probe_idx < worker_idx, (
+        "probes dispatch before the ordinary worker batches, per the brief")
+    flat = re.sub(r"\s+", " ", step6)
+    assert "references/probe-contract.md" in flat, (
+        "the probe briefing must point at its own contract file"
+    )
+    assert "m365_probe_<n>" in flat, (
+        "the probe's scratch stem must be named so scratch sweep catches it"
+    )
+    assert "up to ~4" in flat, (
+        "probes dispatch in the same bounded batch size as workers"
+    )
+
+
+def test_sync_recordings_probe_outcomes_are_handled():
+    text = read_skill("sync-recordings")
+    step6 = text.split("### 6.")[1].split("### 7.")[0]
+    flat = re.sub(r"\s+", " ", step6)
+    assert "still-no-transcript" in flat
+    assert "transcript-found" in flat
+    assert '"outcome": "no-transcript"' in flat, (
+        "a still-no-transcript probe reply banks as a no-transcript "
+        "outcome, refreshing checked_at and restarting the 6h hold"
+    )
+    assert "checked_at" in flat and "6h" in flat, (
+        "the still-no-transcript bank must be tied explicitly to refreshing "
+        "the recheck hold"
+    )
+    assert "pre-fetched event variant" in flat.lower(), (
+        "a transcript-found probe must hand its follow-up worker the "
+        "worker contract's pre-fetched event variant, not a fresh fetch"
+    )
+    assert "dedup" in flat, (
+        "the pre-fetched variant still starts the follow-up worker at "
+        "dedup — the dedup gate is never skipped"
+    )
+    # transcript-found is a real fetch survivor: it must still get the same
+    # routing extract and step 3-5 signals an unseen/unkeyed survivor gets.
+    found_clause = flat[flat.index("transcript-found"):]
+    assert "m365_routing.json" in found_clause
+    assert "like any" in found_clause or "same as any" in found_clause, (
+        "the brief requires this to read as 'route it like any fetch "
+        "survivor', not as a special case"
+    )
+
+
+def test_sync_recordings_probes_summary_line():
+    text = read_skill("sync-recordings")
+    summary = text.split("### 7.")[1]
+    assert "probes (" in summary, (
+        "the workers-dispatched line must report the probe batch: N probes "
+        "(N still-no-transcript · N transcript-found)"
+    )
+    assert "still-no-transcript" in summary
+    assert "transcript-found" in summary

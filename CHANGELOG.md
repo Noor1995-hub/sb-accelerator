@@ -15,6 +15,7 @@ delivers them.
 
 ## Unreleased
 
+- `/sync-recordings` re-checks untranscribed Teams meetings with a lightweight probe instead of a full sync worker — the recurring cost of silent meetings drops to a fraction (#137)
 - `/sync-recordings` starts minutes faster: each Teams recording's worker now fetches its own meeting data (and resolves its own attendees), and routing reads a compact vault digest instead of every project file — the main session no longer re-types calendar payloads (#136)
 - `/sync-recordings` now scans only since its last successful run (2-day floor, 7-day cap after a gap) instead of re-listing a full week daily, and auto-skips Plaud clips under 60 seconds with the reason recorded (#135)
 - `/sync-recordings` no longer re-checks an untranscribed Teams meeting more than once per 6 hours — repeated same-day runs stop paying a full worker per silent meeting (#134)
