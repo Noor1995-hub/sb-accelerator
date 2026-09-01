@@ -122,6 +122,14 @@ def triage(root: Path, events, now_utc: datetime) -> dict:
     event is the one wrong answer a cache is never allowed to give. An entry
     with no id at all cannot even be fetched, so it is warned about and
     surfaced, never silently dropped.
+
+    One class is refused outright rather than fetched: an occurrence that
+    has not ended yet comes back in `deferred` (reason `not-ended`), never
+    in `fetch`. M365 synthesizes meetingTranscriptUrl for future occurrences
+    too, and on a recurring series that URL can answer with *past*
+    occurrences' transcripts — future-dated junk. Deferral is per-run and
+    never recorded, so the occurrence syncs normally on the first run after
+    the meeting ends.
     """
     if not isinstance(events, list):
         raise SeenEventsError(
@@ -129,6 +137,7 @@ def triage(root: Path, events, now_utc: datetime) -> dict:
     cache = load(root)
     entries = cache["events"]
     fetch: List[dict] = []
+    deferred: List[dict] = []
     warnings: List[str] = []
     filtered = {"written": 0, "no_transcript_final": 0, "skipped": 0,
                 "forbidden": 0}
@@ -155,6 +164,14 @@ def triage(root: Path, events, now_utc: datetime) -> dict:
         start_utc = start.strftime(_KEY_FMT)
         candidate = {"id": event_id, "start_utc": start_utc,
                      "subject": subject}
+        # A meeting that has not ended cannot have a transcript. Checked
+        # before the cache so no recorded outcome (clock skew, an improvised
+        # window) can resurrect the fetch; with no end field the start
+        # decides, which still defers anything future.
+        end = _occurrence_dt(event, "end") or start
+        if end > now_utc:
+            deferred.append({**candidate, "reason": "not-ended"})
+            continue
         seen = entries.get(f"{event_id}|{start_utc}")
         outcome = seen.get("outcome") if isinstance(seen, dict) else None
         if outcome == "written":
@@ -174,7 +191,8 @@ def triage(root: Path, events, now_utc: datetime) -> dict:
             # Unseen — or an outcome value this version does not know, which
             # re-checks rather than trusts (fail open).
             fetch.append({**candidate, "reason": "unseen"})
-    return {"fetch": fetch, "filtered": filtered, "warnings": warnings}
+    return {"fetch": fetch, "deferred": deferred, "filtered": filtered,
+            "warnings": warnings}
 
 
 def _validate_outcome(entry) -> Tuple[str, dict]:
