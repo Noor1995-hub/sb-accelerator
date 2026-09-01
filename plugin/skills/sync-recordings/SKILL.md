@@ -674,20 +674,21 @@ yet.
 
 When a probe batch returns, act on each line:
 
-- `still-no-transcript` — bank `{"id": <id>, "start_utc": <start_utc>,
-  "outcome": "no-transcript"}`, keyed by the `id`/`start_utc` triage
-  carried for that entry, in the same `sync m365-record` call the batch's
-  workers bank through below. This refreshes the cached entry's
+- `still-no-transcript` — settles as `{"id": <id>, "start_utc":
+  <start_utc>, "outcome": "no-transcript"}`, keyed by the `id`/`start_utc`
+  triage carried for that entry. This refreshes the cached entry's
   `checked_at`, which restarts the 6h recheck-window hold — the next probe
   for this occurrence waits another 6 hours, exactly like a worker's first
   `no-transcript` reply does.
+- `forbidden` — settles as `{"id": <id>, "start_utc": <start_utc>,
+  "outcome": "forbidden"}`, same as a worker's `forbidden` reply.
 - `transcript-found: <recording_id> (event at <path>, transcript-url:
-  <url>)` — the recheck paid off: this entry is a real fetch survivor now,
-  so route it **like any fetch survivor** — extract its row into
-  `$SCRATCH/m365_routing.json` from the calendar-search pages (same fields,
-  same verbatim rule, as step 1's ordinary extract), then run steps 3–5
-  (routing signals, confidence inputs, the interactive plan row) for it,
-  same as an `unseen` survivor. Only then dispatch a full
+  <url>)` — not settled by this probe wave at all: the recheck paid off, so
+  route this entry **like any fetch survivor** instead — extract its row
+  into `$SCRATCH/m365_routing.json` from the calendar-search pages (same
+  fields, same verbatim rule, as step 1's ordinary extract), then run
+  steps 3–5 (routing signals, confidence inputs, the interactive plan row)
+  for it, same as an `unseen` survivor. Only then dispatch a full
   `second-brain:sync-worker-m365` for it, using the worker contract's
   **pre-fetched event variant**: the probe's event file and its verbatim
   `recording_id`/`transcript_url` in place of a URI to fetch — the worker
@@ -696,13 +697,31 @@ When a probe batch returns, act on each line:
   requires (confidence-inputs, the calendar-group and project-link-group
   confidence-reasons entries, `attendee-emails`, the owner's person slug,
   and so on) — the pre-fetched path changes how the worker fetches, not
-  what its briefing must contain.
-- `forbidden` — bank `{"id": <id>, "start_utc": <start_utc>, "outcome":
-  "forbidden"}`, same as a worker's `forbidden` reply.
+  what its briefing must contain. This occurrence's outcome banks with
+  that worker's own batch below, once it returns, exactly like any other
+  survivor's — not with the probe wave.
 - `fetch-error` / `auth-error` — handled exactly as for workers: a
   `fetch-error` banks no outcome line and retries next run; an `auth-error`
   stops dispatching that adapter's remaining probes (and workers) and
   reports it, re-authentication belonging to the user.
+
+**Bank the probe wave's own settled lines immediately, in their own call —
+never deferred to the worker-batch banking below.** A recheck-only pass can
+dispatch probes and zero worker batches, and the worker-batch banking call
+only ever runs after a worker batch returns; delegating a probe's outcome
+to it would mean nothing ever banks on that pass, `checked_at` never
+refreshes, and the 6h hold never restarts. So as soon as this probe batch
+settles, write its `still-no-transcript` and `forbidden` lines — never a
+`transcript-found` line, which is not settled yet — to
+`$SCRATCH/m365_probe_outcomes.json` and bank them right here:
+
+```bash
+python3 "$VAULTLIB" sync m365-record --vault "$VAULT" \
+  --outcomes "$SCRATCH/m365_probe_outcomes.json"
+```
+
+Same per-batch banking doctrine as the worker batches below: crash loss is
+bounded to one probe wave, one cheap re-probe next run.
 
 For each recording that survived step 1 — **also when there is only one**
 (rule 7) — dispatch a worker, up to ~4 in parallel, blocking, as the
