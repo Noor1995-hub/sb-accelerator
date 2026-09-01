@@ -263,10 +263,31 @@ printf '%s' '["plaud:abc123", "plaud:def456"]' > "$SCRATCH/ids.json"
 python3 "$VAULTLIB" sync dedup --vault "$VAULT" --ids "$SCRATCH/ids.json"
 ```
 
-For each `new` id, write its `list_files` entry — the object exactly as the
-listing carried it — to `$SCRATCH/rec_N.meta.json`. `plaud reassemble`
-cross-checks the transcript's timeline against this meta's `duration`, so it
-must be the connector's own record, never reconstructed.
+Before writing meta files, drop the throwaway ones: for each `new` id, read
+its listing entry's `duration` (milliseconds). One that is a number
+**strictly under 60000 ms** is a tiny clip — a pocket recording, a false
+start — so write no `rec_N.meta.json` for it and dispatch nothing; skip it
+instead:
+
+```bash
+python3 "$VAULTLIB" sync skip --vault "$VAULT" --id "plaud:<id>" \
+  --reason "tiny clip: <N>s recording, under the 60s auto-skip threshold"
+```
+
+`<N>` is `duration` divided by 1000, rounded. Count these under **Skipped /
+errors** in the summary with the duration visible, not folded anonymously
+into the generic retry count. A missing, null, or non-numeric `duration`
+**fails open — dispatch that recording normally**: losing a recording to a
+parsing edge case is the one wrong answer here, same doctrine as the
+seen-events cache. Interactively, this is an information line, not a
+question — the skip list already records the reversal path if the
+auto-skip turns out to be wrong.
+
+For each `new` id that cleared the tiny-clip check, write its `list_files`
+entry — the object exactly as the listing carried it — to
+`$SCRATCH/rec_N.meta.json`. `plaud reassemble` cross-checks the
+transcript's timeline against this meta's `duration`, so it must be the
+connector's own record, never reconstructed.
 
 That is where this context's Plaud work ends. **Never call
 `mcp__plaud__get_transcript` or `mcp__plaud__get_note` yourself** — the
@@ -700,7 +721,7 @@ Count what exists, not what you intended (a lab run once reported
 **Meetings you ticked as reviewed:** {N} now confirmed
 **Possible duplicates:** {N} ({list the stems}) — kept as separate notes; each would have overwritten a meeting you already confirmed
 **Possible cross-adapter duplicates:** {N} — deferred; needs an interactive run
-**Skipped / errors:** {N} (will retry next run)
+**Skipped / errors:** {N} (will retry next run) · {N} tiny clips auto-skipped ({list each with its duration}) — permanent, not a retry
 **M365 fetches saved:** {N} of {N} listed occurrences answered from the seen-events cache ({N} held in the 6h recheck window) | cache cold (first run)
 **Workers dispatched:** {N} ({N} plaud · {N} m365 · {N} inbox) — m365 candidates not dispatched had no transcript URL yet ({N}), were already in the vault ({N}), were answered by the cache ({N}), or hadn't ended yet ({N}); worker outcomes: {N} written · {N} no-transcript · {N} forbidden · {N} fetch-error · {N} auth-error
 **Adapters:** inbox ok · plaud ok (window {N}d) | REFUSED — signed in as a different account (account-mismatch) | REFUSED — no account bound to this vault yet (no-account-hint) | disabled | unavailable | STOPPED mid-run — connector wants re-authentication (auth-error) · m365 ok (window {N}d) | REFUSED — signed in as a different account (account-mismatch) | REFUSED — no account bound to this vault yet (no-account-hint) | disabled | unavailable | STOPPED mid-run — connector wants re-authentication (auth-error)
