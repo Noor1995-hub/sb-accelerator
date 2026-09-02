@@ -798,6 +798,39 @@ def test_evening_sync_states_unattended_catchup_behaviour():
     )
 
 
+def test_evening_sync_stage4_dispatch_is_a_blocking_batch_cap():
+    # A live run dispatched a 4th subagent within 30 seconds of narrating
+    # "dispatching the first 3", then spawned the batch in the background and
+    # polled it for ~12 minutes despite this skill's prior "never poll"
+    # warning. The cap now has to be structural: one message of blocking
+    # calls IS the batch, and the batch returning IS the only signal to send
+    # the next one. Anchored on the operative sentence, not just "blocking"
+    # or "batch", which both already appear elsewhere in this stage.
+    text = _normalized(_evening_sync())
+    stage4 = text.split("## Stage 4", 1)[1].split("## Stage 5", 1)[0]
+    assert "at most 3" in stage4 and "blocking Agent calls" in stage4, (
+        "stage 4 must say the batch is capped at 3 blocking Agent calls, "
+        "not just that dispatch happens 'up to 3 in parallel'"
+    )
+    assert "no background mode for this fan-out" in stage4, (
+        "the instruction must foreclose background dispatch outright, not "
+        "just warn against polling it afterward"
+    )
+
+
+def test_sync_recordings_step6_dispatch_is_a_blocking_batch_cap():
+    text = _normalized(read_skill("sync-recordings"))
+    step6 = text.split("### 6.", 1)[1].split("### 7.", 1)[0]
+    assert "at most ~4" in step6 and "blocking Agent calls" in step6, (
+        "step 6 must say the worker/probe batches are capped at ~4 blocking "
+        "Agent calls, mirroring evening-sync stage 4's restructuring"
+    )
+    assert "no background mode for this fan-out" in step6, (
+        "the instruction must foreclose background dispatch outright, not "
+        "just warn against polling it afterward"
+    )
+
+
 # The discovery-window regression: the skill used to prescribe a bare
 # `dates window --vault "$VAULT"` for step-1 discovery — an invocation that
 # does not parse (--start was required), so orchestrators improvised windows

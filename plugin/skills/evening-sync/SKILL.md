@@ -162,9 +162,21 @@ lines — into the final summary verbatim.
 ## Stage 4 — Project-state updates
 
 If the queue is empty, record "no projects to update" and skip to stage 6.
-Otherwise, per queued project, dispatch a subagent (up to 3 in parallel,
-each with `model: sonnet`) with the queue entry, the harvest jottings that
-mention the project, today's date, and these instructions:
+Otherwise, dispatch one subagent per queued project (each with `model:
+sonnet`), each carrying the queue entry, the harvest jottings that mention
+the project, today's date, and these instructions.
+
+**Dispatch in blocking batches of at most 3 — this is the cap, not a
+suggestion layered on top of it.** Send ONE message containing at most 3
+blocking Agent calls (`run_in_background: false`); only once every call in
+that message has returned do you send the next message with the next batch
+of up to 3, repeating until every queued project has been dispatched. There
+is no background mode for this fan-out: a blocking call already returns
+exactly when its subagent finishes, so a batch's completion is the signal to
+send the next one — never a separate check. `/sync-recordings`'s own fan-out
+in step 6 dispatches its worker batches the same shape.
+
+The instructions each subagent gets:
 
 1. Read the `newFiles` meetings end-to-end — Key Takeaways, Debrief, Action
    Items.
@@ -204,26 +216,33 @@ the named meetings, rewrite five bullets and an open-items list, apply the
 material-decision test. `/sync-recordings`'s own fan-out in stage 3 pins the
 same way.
 
-**Never poll a batch with no-op Bash.** A live cost analysis of this pipeline
-found 362 of 423 requests in one run were idle `Bash(true)` / `sleep` /
-`echo waiting` polls babysitting a background subagent batch, re-reading the
-full session context on every idle turn — most of that run's bill. Spawn the
-"up to 3 in parallel" batch as **blocking** subagent calls, or spawn them one
-at a time: a blocking call returns exactly when the subagent finishes, so
-there is nothing to poll for and nothing gained by trying. Never spawn in
-the background and loop checking on it. This applies to stage 3's fan-out
-too (`/sync-recordings` step 6 carries the same rule).
+**Why this is a hard batching rule and not a warning.** A live cost analysis
+of this pipeline found a run whose orchestrator dispatched a 4th subagent
+within seconds of narrating "dispatching the first 3", then spawned that
+batch in the background and spent roughly 80 extra calls — polling tools and
+idle `Bash(true)` checks — babysitting it over twelve minutes; each idle
+check re-reads the full session context, and that alone was most of the
+run's bill. A prose warning against exactly this ("dispatch as blocking
+calls, never poll") was already in this skill at the time, and did not
+bind. The batching instruction above replaces that warning with a shape
+that leaves no room for the same reading: a batch is at most 3, sent as one
+message of blocking calls, and the only thing that ever triggers the next
+batch is that message returning — there is no step where "send one more"
+or "check on it" is even an available move.
 
-**Before declaring any subagent stuck, scale patience to its workload.**
-Step 6 of `/sync-recordings` states the rule for sync workers — a straggler
-only after max(10 minutes, half the recording's duration), because a live
-run wrote off a worker at a flat "10+ minutes" while it was extracting a
-42-minute meeting and nearly lost the recording. The same reasoning holds
-here: a stage-4 subagent with many `newFiles` reads longer than its
-batchmates, and comparing against their finish times proves nothing. A
-subagent genuinely given up on becomes a ⚠ warning in the final summary
-naming the project (or recording id, for stage 3) so the next run picks it
-up deliberately — never a silently dropped item.
+**A subagent that never returns is a warning, never a silently dropped
+item — but there is nothing to check on while a batch is in flight.**
+Because stage-4 dispatch is strictly blocking, you cannot "notice" a
+straggler mid-batch — the message you sent returns when every call in it is
+done, full stop. This differs from `/sync-recordings` step 6, which states a
+duration-scaled patience rule (a worker is a straggler only after
+max(10 minutes, half the recording's duration)) because that fan-out has a
+concrete per-item duration to scale against and a documented incident of a
+42-minute-transcript worker being written off too early. Stage-4 projects
+have no equivalent duration signal, so no such formula applies here; if the
+harness itself reports a dispatch as failed or timed out, name the project
+in the final summary as a ⚠ warning rather than silently dropping it — that
+is the only patience judgment stage 4 makes.
 
 Projects with only `needs-review` meetings never reach the queue — do not
 "help" one by confirming meetings yourself.
