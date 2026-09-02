@@ -43,6 +43,25 @@ def test_sweep_deletes_only_known_patterns(tmp_path):
         assert name in result["deleted"]
 
 
+def test_sweep_covers_project_qualified_decision_payloads(tmp_path):
+    # /log-decision qualifies the payload filename with the project slug so
+    # concurrent evening-sync subagents cannot race on one shared file. The
+    # qualified names must still be swept — a decision payload can carry
+    # confidential meeting content and must never outlive the run.
+    for name in ("decision.json",
+                 "decision-meridian-yard-automation-program.json",
+                 "decision-atlas-vendor-consolidation.json"):
+        (tmp_path / name).write_text("{}", encoding="utf-8")
+
+    result = scratch.sweep(str(tmp_path))
+
+    for name in ("decision.json",
+                 "decision-meridian-yard-automation-program.json",
+                 "decision-atlas-vendor-consolidation.json"):
+        assert not (tmp_path / name).exists(), f"{name} should have been swept"
+        assert name in result["deleted"]
+
+
 def test_sweep_covers_the_session_1_onboarding_files(tmp_path):
     # /setup-my-brain writes these during the live interview; its deletion
     # points are the same full sweep, so they must be in the pattern list.

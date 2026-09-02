@@ -381,10 +381,20 @@ def utc_to_local(utc_dt: datetime, timezone: Optional[str],
     return local.replace(tzinfo=None), "zoneinfo"
 
 
+# A run before this local hour, on a business day whose note is missing, is
+# suggested as a for-today catch-up: the vault owner opened a laptop that was
+# closed for last night's run, and the note worth writing is today's. After
+# the cutoff most of the day's meetings have happened — prep loses its value
+# and the standard next-business-day frame is the honest one.
+FOR_TODAY_CUTOFF_HOUR = 12
+
+
 def plan(root: Path, today: Optional[str] = None, *,
          timezone: Optional[str] = None,
          utc_offset: Optional[str] = None,
-         catchup_threshold: int = 5) -> dict:
+         catchup_threshold: int = 5,
+         for_today: bool = False,
+         now_utc: Optional[datetime] = None) -> dict:
     """The authoritative date block for the evening run.
 
     Everything downstream consumes these values verbatim — the model never
@@ -399,7 +409,22 @@ def plan(root: Path, today: Optional[str] = None, *,
     the window's width. Above catchup_threshold, recap_detail_from bounds how
     far back the caller should recap in detail (decision 17) — the caller
     does no arithmetic, only prose.
+
+    `for_today` is the missed-evening run executed late: the laptop was
+    closed for last night's run, so today's note does not exist and today's
+    meetings were never prepped. The frame shifts one day back —
+    `next_business_day`/`note_to_write` point at **today**, the recap ends
+    **yesterday** — and every key keeps its meaning, so callers consume the
+    same fields either way. (A live catch-up run without this mode planned
+    tomorrow's note at 10:28 and the skipped day never got a note at all.)
+    The standard plan reports `for_today_available` (today is a business day
+    and its note is missing) and `for_today_suggested` (also before the
+    local cutoff above) so the caller can offer — or, unattended, take —
+    this mode without doing clock arithmetic itself. `now_utc` is the test
+    override for that clock; a caller passing `--today` has no clock, so the
+    suggestion stays False.
     """
+    local_now = None
     if today is not None:
         today_date = _parse_date(today, "today")
     else:
@@ -408,7 +433,9 @@ def plan(root: Path, today: Optional[str] = None, *,
                 "pass --today, or --timezone/--utc-offset so today can be "
                 "derived from the clock"
             )
-        now_utc = datetime.now(_timezone.utc).replace(tzinfo=None, microsecond=0)
+        if now_utc is None:
+            now_utc = datetime.now(_timezone.utc).replace(tzinfo=None,
+                                                          microsecond=0)
         local_now, _ = utc_to_local(now_utc, timezone, utc_offset)
         today_date = local_now.date()
 
@@ -421,27 +448,55 @@ def plan(root: Path, today: Optional[str] = None, *,
     # A note dated in the future is not "the last daily note" — but it is
     # still evidence that a run happened, which is why `missed_runs` reads
     # the unnarrowed set.
-    existing = [noted for noted in _daily_note_dates(root)
-                if noted <= today_date]
+    on_disk = _daily_note_dates(root)
+    existing = [noted for noted in on_disk if noted <= today_date]
     last = max(existing) if existing else None
 
-    nxt = next_business_day(today_date)
-    recap_from = last or today_date
+    today_note_exists = today_date in on_disk
+    available = today_date.weekday() < 5 and not today_note_exists
+    suggested = (available and local_now is not None
+                 and local_now.hour < FOR_TODAY_CUTOFF_HOUR)
+
+    if for_today:
+        if today_date.weekday() >= 5:
+            raise DatesError(
+                f"--for-today: today ({DAY_NAMES[today_date.weekday()]}) is "
+                "not a business day — the pipeline writes business-day "
+                "notes only")
+        if today_note_exists:
+            raise DatesError(
+                "--for-today: today's note already exists — there is "
+                "nothing to catch up; run the standard plan, which writes "
+                "the next business day's note")
+        target = today_date
+        recap_to = today_date - timedelta(days=1)
+        # Today's note is absent, so `last` is at most yesterday already;
+        # the min guards the degenerate weekend-dated-note edge.
+        recap_from = min(last, recap_to) if last else recap_to
+    else:
+        target = next_business_day(today_date)
+        recap_to = today_date
+        recap_from = last or today_date
+
     missed = missed_runs(root, recap_from, today_date)
     over_threshold = missed > catchup_threshold
     detail_from = (max(recap_from,
-                       _walk_back_business_days(today_date, catchup_threshold))
+                       _walk_back_business_days(recap_to, catchup_threshold))
                    if over_threshold else recap_from)
     return {
         "today": today_date.isoformat(),
         "today_day_name": DAY_NAMES[today_date.weekday()],
-        "next_business_day": nxt.isoformat(),
-        "next_day_name": DAY_NAMES[nxt.weekday()],
-        "note_to_write": f"{DAILY_NOTES_DIR}/{nxt.isoformat()}.md",
+        "plan_for": "today" if for_today else "next-business-day",
+        "next_business_day": target.isoformat(),
+        "next_day_name": DAY_NAMES[target.weekday()],
+        "note_to_write": f"{DAILY_NOTES_DIR}/{target.isoformat()}.md",
         "last_daily_note": (f"{DAILY_NOTES_DIR}/{last.isoformat()}.md"
                             if last else None),
+        "today_note_exists": today_note_exists,
+        "for_today_available": available,
+        "for_today_suggested": suggested,
         "recap_from": recap_from.isoformat(),
-        "recap_to": today_date.isoformat(),
+        "recap_to": recap_to.isoformat(),
         "business_days_missed": missed,
         "is_catchup": missed > 0,
         "catchup_threshold": catchup_threshold,

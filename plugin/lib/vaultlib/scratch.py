@@ -32,7 +32,12 @@ SWEEP_PATTERNS = (
     "*.blob.md",
     "ids.json",
     "*.payload.json",
+    # /log-decision qualifies the payload with the project slug
+    # (decision-<slug>.json) so evening-sync's concurrent per-project
+    # subagents cannot race on one shared file; the bare name stays for
+    # payloads left behind by older plugin versions.
     "decision.json",
+    "decision-*.json",
     # Session-1 onboarding (/setup-my-brain): a sent-mail sample, raw
     # calendar reads, and drafted context blocks. A block file is written
     # only when it is about to be consumed by `context write` — the sweep
