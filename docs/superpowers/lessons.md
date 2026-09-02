@@ -575,3 +575,35 @@ against a string literal. The test that now guards this imports
 output against both, so the three cannot drift apart again. A skill
 instruction that reformats one CLI's output for another CLI is the smell —
 fix the producer instead.
+
+## 2026-09-02 — a fresh probe profile silently boots in Restricted Mode
+
+**What went wrong.** In a new worktree (new per-worktree probe home), the
+first `up` printed the fresh-profile notice and everything *looked* fine:
+doctor green, tours captured, Bases rendered. But both Dataview render tests
+failed with `dataviewTables: 0, dataviewErrors: 0` — the block wasn't
+erroring, it wasn't being processed at all. The known first-open lesson
+(down/up, capture on the second open) didn't fix it, because the cause was
+upstream: the Restricted Mode consent was never given in this profile, so
+community plugins never *load* even though `community-plugins.json` lists
+them as enabled. The cloaked window meant nobody ever saw the trust dialog.
+
+**How to tell.** Over CDP, `Object.keys(app.plugins.plugins)` is empty while
+`app.plugins.manifests` is populated, and
+`localStorage.getItem('enable-plugin-' + app.appId)` is null. That triple is
+Restricted Mode, not an indexing delay.
+
+**The remedy.** `eval_js("app.plugins.setEnable(true); 'ok'")` — the same
+state transition as clicking *trust author and enable plugins*, performed by
+the operator in the throwaway probe profile. This does not soften the design
+rule: consent still cannot ship as files, and nothing in the repo pre-grants
+it; it is the one click per probe home, made scriptable when no human is at
+the keyboard.
+
+**The photobomb that follows.** The moment plugins first load, Notebook
+Navigator pops its "What's new" release-notes modal, which then sits in front
+of *every* surface the tour captures (the DOM assertions still pass — only
+the PNGs are ruined). Dismiss it once via its own button so it persists:
+`(() => { const c = document.querySelector('.modal-container'); const b =
+c && (c.querySelector('button.mod-cta') || c.querySelector('button'));
+if (b) b.click(); })()` — then recapture.

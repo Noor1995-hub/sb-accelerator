@@ -15,6 +15,7 @@ delivers them.
 
 ## Unreleased
 
+- The Projects view's Active tab now shows each project's meeting counts — last 30 days and last 7 days — as default columns, sized so they stay on screen on a 13" laptop. The counts are the ones the evening sync maintains; a project with a silent month is now visible at a glance (#139)
 - Project slugs now carry the entity: `/new-project` composes them as `{entity}-{name-slug}` (the project *name* stays entity-free), so typing a slug during meeting triage picks entity and project in one gesture, and two clients can each have an "AI Transformation" project without colliding — `--slug` overrides when needed (#138)
 - The meeting triage and All Meetings views gain a read-only **↗ Project** column that links straight to each assigned project's index — the editable Projects column stays the typing surface (#138)
 - The evening sync now repairs a `projects:` entry hand-written as a `[[wikilink]]` instead of a bare slug — the link form dangles in Obsidian and hid the meeting from its entity's dossier; unwrappable entries are fixed in place, unresolvable ones reported (#138)
