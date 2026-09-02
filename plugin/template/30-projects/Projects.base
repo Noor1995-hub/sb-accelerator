@@ -23,6 +23,10 @@ properties:
     displayName: Due
   note.last-updated:
     displayName: Updated
+  note.meetings-30d:
+    displayName: 30d
+  note.meetings-7d:
+    displayName: 7d
 views:
   - type: table
     name: Active
@@ -39,7 +43,15 @@ views:
       - next-milestone
       - next-milestone-date
       - last-updated
+      - meetings-30d
+      - meetings-7d
       - project-type
+    columnSize:
+      note.next-milestone: 210
+      note.next-milestone-date: 110
+      note.last-updated: 110
+      note.meetings-30d: 60
+      note.meetings-7d: 60
     sort:
       - property: last-updated
         direction: DESC
