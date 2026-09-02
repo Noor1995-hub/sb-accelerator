@@ -121,7 +121,21 @@ def test_project_scaffold_through_the_cli(capsys, tmp_path):
         "--today", "2026-08-23",
     ])
     assert code == 0
-    assert payload["result"]["slug"] == "yard-automation-program"
+    assert payload["result"]["slug"] == \
+        "meridian-freight-holdings-yard-automation-program"
+
+
+def test_project_scaffold_slug_override_through_the_cli(capsys, tmp_path):
+    from test_vaultlib_project import vault_with_entity
+    root = vault_with_entity(tmp_path)
+    code, payload = run(capsys, [
+        "project", "scaffold", "--vault", str(root),
+        "--name", "Yard Automation Program", "--type", "initiative",
+        "--entity", "meridian-freight-holdings", "--owner", "morgan-ellery",
+        "--slug", "mfh-yard-automation", "--today", "2026-08-23",
+    ])
+    assert code == 0
+    assert payload["result"]["slug"] == "mfh-yard-automation"
 
 
 def test_project_scaffold_rejects_a_retired_type_at_the_parser(tmp_path):

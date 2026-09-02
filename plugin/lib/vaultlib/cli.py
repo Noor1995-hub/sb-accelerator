@@ -166,6 +166,9 @@ def build_parser() -> argparse.ArgumentParser:
     scaffold.add_argument("--type", dest="project_type", required=True,
                           choices=schema.enum_values("project", "project-type"))
     scaffold.add_argument("--entity", required=True, help="entity slug (join key)")
+    scaffold.add_argument(
+        "--slug",
+        help="explicit slug override; default is {entity}-{name-slug}")
     scaffold.add_argument("--owner", required=True, help="owner person slug")
     scaffold.add_argument("--parent", help="parent project slug (initiatives only)")
     scaffold.add_argument("--today", help="ISO date; defaults to today")
@@ -578,6 +581,7 @@ def _dispatch(args: argparse.Namespace) -> int:
             entity=args.entity, owner=args.owner, today=today,
             parent=args.parent, stage=args.stage,
             contacts=args.contacts, source=args.source,
+            slug=args.slug,
         ))
     if args.group == "entity":
         if args.action == "ensure":

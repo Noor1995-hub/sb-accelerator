@@ -35,6 +35,42 @@ def _load_project(root: Path, slug: str) -> Optional[dict]:
     return data
 
 
+def _compose_slug(entity: str, name: str) -> str:
+    """Entity-prefixed slug: `{entity}-{name-slug}`.
+
+    The slug is the triage typing surface — an EA typing `colr` in a meeting's
+    `projects[]` must land on Colruyt's project — and the join namespace is one
+    flat folder, so two clients' "AI Transformation" projects must not collide.
+    The entity prefix buys both. The name itself stays entity-free (the
+    Projects base shows `entity` as its own column); only the slug carries it.
+
+    Truncation comes off the *name* half, never the entity: a slug whose
+    entity got cut would break the very disambiguation it exists for.
+    """
+    try:
+        naming.validate_slug(entity)
+    except ValueError as exc:
+        raise ProjectError(
+            f"entity {entity!r} is not an entity slug: {exc}. "
+            f"entity joins to {ENTITIES_DIR}/<slug>/dossier.md"
+        ) from exc
+    name_budget = naming.MAX_SLUG_LENGTH - len(entity) - 1
+    if name_budget < 1:
+        raise ProjectError(
+            f"entity slug {entity!r} leaves no room for a project name within "
+            f"{naming.MAX_SLUG_LENGTH} characters"
+        )
+    try:
+        name_slug = naming.slugify(name, max_length=name_budget)
+    except ValueError as exc:
+        raise ProjectError(f"name {name!r} is unusable: {exc}") from exc
+    # A name that already carries the entity ("Colruyt AI Transformation" for
+    # entity `colruyt`) must not double up as colruyt-colruyt-ai-transformation.
+    if name_slug == entity or name_slug.startswith(entity + "-"):
+        return naming.slugify(name)
+    return f"{entity}-{name_slug}"
+
+
 def _validate_inputs(root: Path, slug: str, project_type: str,
                      entity: str, parent: Optional[str]) -> None:
     allowed_types = schema.enum_values("project", "project-type")
@@ -136,10 +172,23 @@ def _display_date(iso: str) -> str:
 def scaffold(root: Path, *, name: str, project_type: str, entity: str,
              owner: str, today: str, parent: Optional[str] = None,
              stage: Optional[str] = None, contacts: Optional[str] = None,
-             source: Optional[str] = None) -> dict:
-    """Create 30-projects/{slug}/index.md and its decisions/ folder."""
-    slug = naming.slugify(name)
-    naming.validate_slug(slug)
+             source: Optional[str] = None,
+             slug: Optional[str] = None) -> dict:
+    """Create 30-projects/{slug}/index.md and its decisions/ folder.
+
+    The slug defaults to `{entity}-{name-slug}` (see `_compose_slug`); an
+    explicit `slug` overrides the composition for the rare case where the
+    composed form is unwieldy, but is validated and collision-checked the
+    same way.
+    """
+    if slug is not None:
+        slug = str(slug).strip()
+        try:
+            naming.validate_slug(slug)
+        except ValueError as exc:
+            raise ProjectError(f"slug {slug!r} is not usable: {exc}") from exc
+    else:
+        slug = _compose_slug(entity, name)
     # owner is a join key to 50-people/{slug}.md, so it gets the same
     # validation as slug. Unvalidated, a display name like "Jordan Reyes,
     # VP: Ops" emits frontmatter that no YAML parser accepts.

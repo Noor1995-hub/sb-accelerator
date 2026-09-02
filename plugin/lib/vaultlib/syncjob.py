@@ -437,6 +437,26 @@ def _entities_list(value) -> List[str]:
     return []
 
 
+# `projects[]` holds bare slugs — but a hand edit during triage occasionally
+# writes a wikilink instead (`[[colruyt-ai-transformation]]`), which resolves
+# to nothing: the project is a *folder*, so the link dangles (clicking it
+# creates a stray note in the vault root) and `derive_entities` can't follow
+# it, leaving the meeting invisible to its entity's dossier. Shipped as a real
+# bug 2026-09-02.
+_PROJECT_WIKILINK_RE = re.compile(r"\A\[\[([^\]|]+)(?:\|[^\]]*)?\]\]\Z")
+
+
+def _normalize_project_entry(entry: str) -> str:
+    """Bare slug from a projects[] entry: strip `[[...]]` (alias form takes
+    the target), then whitespace. Anything else passes through untouched —
+    an entry this can't fix is `derive_entities`'s to refuse."""
+    text = str(entry).strip()
+    match = _PROJECT_WIKILINK_RE.match(text)
+    if match:
+        text = match.group(1).strip()
+    return text
+
+
 def rederive_entities(root: Path) -> dict:
     """Fold pass: re-derive `entities` from `projects` on every meeting note.
 
@@ -451,9 +471,18 @@ def rederive_entities(root: Path) -> dict:
     reported under `unresolved` and left byte-identical — the same
     all-or-nothing refusal `derive_entities` and migration 001 both use, so a
     partial list is never written over a stale-but-honest one.
+
+    Hand edits also drift in *form*, not just assignment: a wikilink written
+    where a bare slug belongs (see `_normalize_project_entry`). Entries are
+    normalized before deriving, and when normalization changed anything *and*
+    the normalized list fully resolves, `projects` is rewritten alongside
+    `entities` and the file reported under `normalized_files`. A wikilink
+    that still doesn't resolve after unwrapping stays byte-identical and is
+    reported under `unresolved`, like any other bad entry.
     """
     checked = 0
     changed: List[str] = []
+    normalized_files: List[str] = []
     unresolved: List[dict] = []
     warnings: List[str] = []
     meetings = root / MEETINGS_DIR
@@ -469,25 +498,35 @@ def rederive_entities(root: Path) -> dict:
         if not projects:
             continue
         checked += 1
+        normalized = [_normalize_project_entry(entry) for entry in projects]
         try:
-            derived = project.derive_entities(root, projects)
+            derived = project.derive_entities(root, normalized)
         except project.ProjectError as exc:
             unresolved.append({"file": rel, "reason": str(exc)})
             continue
-        if _entities_list(data.get("entities")) == derived:
+        projects_drifted = normalized != projects
+        entities_stale = _entities_list(data.get("entities")) != derived
+        if not projects_drifted and not entities_stale:
             continue
-        rendered = "[" + ", ".join(derived) + "]"
         try:
-            updated = markdown.upsert_scalar_field(text, "entities", rendered)
+            updated = text
+            if projects_drifted:
+                updated = markdown.upsert_scalar_field(
+                    updated, "projects", "[" + ", ".join(normalized) + "]")
+            updated = markdown.upsert_scalar_field(
+                updated, "entities", "[" + ", ".join(derived) + "]")
         except ValueError as exc:
             warnings.append(f"{rel}: {exc}")
             continue
         vault.atomic_write(path, updated)
         changed.append(rel)
+        if projects_drifted:
+            normalized_files.append(rel)
     return {
         "checked": checked,
         "changed": len(changed),
         "changed_files": changed,
+        "normalized_files": normalized_files,
         "unresolved": unresolved,
         "warnings": warnings,
     }

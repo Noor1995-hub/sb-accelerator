@@ -1033,7 +1033,7 @@ def test_meeting_write_output_satisfies_migration_001_verify(tmp_path):
         "calendar-subject": "Fresh Initiative — kickoff",
         "calendar_match": True,
         "attendees": ["morgan-ellery"],
-        "projects": ["fresh-initiative"],
+        "projects": ["fresh-holdings-fresh-initiative"],
         "recording-duration": 30,
         "source": "teams",
         "source-recording-id": "m365:fresh0001",
