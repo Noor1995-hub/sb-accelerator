@@ -4,9 +4,12 @@ filters:
     - file.ext == "md"
 formulas:
   open: link(file.path, "→")
+  project-links: projects.map(link("30-projects/" + value + "/index.md", value))
 properties:
   formula.open:
     displayName: " "
+  formula.project-links:
+    displayName: "↗ Project"
   note.date:
     displayName: Date
   note.type:
@@ -48,6 +51,7 @@ views:
       - archived
       - calendar_match
       - projects
+      - formula.project-links
       - attendees
     sort:
       - property: date
@@ -62,6 +66,7 @@ views:
       - type
       - attendees
       - projects
+      - formula.project-links
       - review_status
       - recording-duration
     sort:

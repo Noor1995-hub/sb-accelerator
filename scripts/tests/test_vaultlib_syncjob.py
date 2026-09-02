@@ -980,6 +980,70 @@ def test_rederive_is_idempotent(tmp_path):
     assert second["changed_files"] == []
 
 
+def test_rederive_unwraps_a_wikilink_projects_entry(tmp_path):
+    # The live 2026-09-02 drift: a hand edit wrote `[[slug]]` where a bare
+    # slug belongs. The link dangles (the project is a folder) and blocks
+    # entity derivation, so the fold repairs the form, not just the value.
+    root = make_vault(tmp_path)
+    make_project(root, "colruyt-ai-transformation", "colruyt")
+    write_meeting_with(root, "01-09-26-wikilinked",
+                       projects=['"[[colruyt-ai-transformation]]"'])
+    result = syncjob.rederive_entities(root)
+    assert result["changed"] == 1
+    assert result["normalized_files"] == ["20-meetings/01-09-26-wikilinked.md"]
+    assert result["unresolved"] == []
+    text = (root / "20-meetings" / "01-09-26-wikilinked.md").read_text(
+        encoding="utf-8")
+    assert "projects: [colruyt-ai-transformation]" in text
+    assert "entities: [colruyt]" in text
+    assert "[[" not in text.split("---")[1]
+
+
+def test_rederive_unwraps_an_aliased_wikilink_to_its_target(tmp_path):
+    root = make_vault(tmp_path)
+    make_project(root, "colruyt-ai-transformation", "colruyt")
+    write_meeting_with(root, "01-09-26-aliased",
+                       projects=['"[[colruyt-ai-transformation|Colruyt AI]]"'])
+    result = syncjob.rederive_entities(root)
+    assert result["changed"] == 1
+    text = (root / "20-meetings" / "01-09-26-aliased.md").read_text(
+        encoding="utf-8")
+    assert "projects: [colruyt-ai-transformation]" in text
+    assert "entities: [colruyt]" in text
+
+
+def test_rederive_refuses_a_wikilink_that_still_does_not_resolve(tmp_path):
+    root = make_vault(tmp_path)
+    write_meeting_with(root, "01-09-26-badlink",
+                       projects=['"[[no-such-project]]"'])
+    before = (root / "20-meetings" / "01-09-26-badlink.md").read_text(
+        encoding="utf-8")
+    result = syncjob.rederive_entities(root)
+    assert result["changed"] == 0
+    assert result["normalized_files"] == []
+    assert len(result["unresolved"]) == 1
+    assert "no-such-project" in result["unresolved"][0]["reason"]
+    after = (root / "20-meetings" / "01-09-26-badlink.md").read_text(
+        encoding="utf-8")
+    assert after == before
+
+
+def test_rederive_rewrites_projects_even_when_entities_were_already_right(tmp_path):
+    # entities being correct must not leave the malformed projects[] in place —
+    # the dangling link is itself the bug.
+    root = make_vault(tmp_path)
+    make_project(root, "colruyt-ai-transformation", "colruyt")
+    write_meeting_with(root, "01-09-26-halfright",
+                       projects=['"[[colruyt-ai-transformation]]"'],
+                       entities=["colruyt"])
+    result = syncjob.rederive_entities(root)
+    assert result["changed"] == 1
+    assert result["normalized_files"] == ["20-meetings/01-09-26-halfright.md"]
+    text = (root / "20-meetings" / "01-09-26-halfright.md").read_text(
+        encoding="utf-8")
+    assert "projects: [colruyt-ai-transformation]" in text
+
+
 # --- routing_signals: the compact routing digest ---
 
 def make_routing_project(root: Path, slug: str, *, name: str, entity: str,

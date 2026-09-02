@@ -24,6 +24,11 @@ BASE = dict(
     today="2026-08-23",
 )
 
+# scaffold composes the slug as {entity}-{name-slug}: the slug is the triage
+# typing surface and the join namespace is flat, so it must carry the entity
+# even though the name never does.
+BASE_SLUG = "meridian-freight-holdings-yard-automation-program"
+
 
 def vault_with_entity(tmp_path, slug="meridian-freight-holdings"):
     root = make_vault(tmp_path)
@@ -39,8 +44,8 @@ def vault_with_entity(tmp_path, slug="meridian-freight-holdings"):
 def test_scaffold_writes_a_conformant_index(tmp_path):
     root = vault_with_entity(tmp_path)
     result = project.scaffold(root, **BASE)
-    assert result["slug"] == "yard-automation-program"
-    assert result["path"] == "30-projects/yard-automation-program/index.md"
+    assert result["slug"] == BASE_SLUG
+    assert result["path"] == f"30-projects/{BASE_SLUG}/index.md"
     data, _ = md.split_frontmatter(
         (root / result["path"]).read_text(encoding="utf-8"))
     assert schema.validate("project", data) == []
@@ -55,7 +60,7 @@ def test_scaffold_creates_the_decisions_directory(tmp_path):
     root = vault_with_entity(tmp_path)
     result = project.scaffold(root, **BASE)
     assert (root / result["decisions_dir"]).is_dir()
-    assert result["decisions_dir"] == "30-projects/yard-automation-program/decisions"
+    assert result["decisions_dir"] == f"30-projects/{BASE_SLUG}/decisions"
 
 
 def test_body_carries_the_three_ontology_sections(tmp_path):
@@ -72,7 +77,7 @@ def test_decisions_dataview_hardcodes_this_project_slug(tmp_path):
     text = (root / result["path"]).read_text(encoding="utf-8")
     # Dataview does not reliably accept this.file.folder as a FROM source, so
     # the slug is substituted rather than derived at query time.
-    assert 'FROM "30-projects/yard-automation-program/decisions"' in text
+    assert f'FROM "30-projects/{BASE_SLUG}/decisions"' in text
 
 
 def test_related_meetings_dataview_matches_on_this_slug(tmp_path):
@@ -113,7 +118,7 @@ def test_absent_context_falls_back_to_placeholders(tmp_path):
 
 def test_collision_is_refused_case_insensitively(tmp_path):
     root = vault_with_entity(tmp_path)
-    (root / "30-projects" / "Yard-Automation-Program").mkdir(parents=True)
+    (root / "30-projects" / "Meridian-Freight-Holdings-Yard-Automation-Program").mkdir(parents=True)
     with pytest.raises(project.ProjectError, match="already exists"):
         project.scaffold(root, **BASE)
 
@@ -125,7 +130,7 @@ def test_an_owner_that_is_not_a_person_slug_is_refused(tmp_path):
     root = vault_with_entity(tmp_path)
     with pytest.raises(project.ProjectError, match="person slug"):
         project.scaffold(root, **dict(BASE, owner="Jordan Reyes, VP: Ops"))
-    assert not (root / "30-projects" / "yard-automation-program").exists()
+    assert not (root / "30-projects" / BASE_SLUG).exists()
 
 
 def test_unknown_project_type_is_refused(tmp_path):
@@ -146,7 +151,7 @@ def test_area_of_responsibility_refuses_a_parent(tmp_path):
     project.scaffold(root, **dict(BASE, name="Pipeline Governance"))
     args = dict(BASE, name="Nested Area",
                 project_type="area-of-responsibility",
-                parent="pipeline-governance")
+                parent="meridian-freight-holdings-pipeline-governance")
     with pytest.raises(project.ProjectError, match="always top-level"):
         project.scaffold(root, **args)
 
@@ -160,17 +165,79 @@ def test_missing_parent_is_refused(tmp_path):
 def test_parent_is_recorded_when_valid(tmp_path):
     root = vault_with_entity(tmp_path)
     project.scaffold(root, **dict(BASE, name="Warehouse Pilot"))
-    result = project.scaffold(root, **dict(BASE, parent="warehouse-pilot"))
+    result = project.scaffold(root, **dict(BASE, parent="meridian-freight-holdings-warehouse-pilot"))
     data, _ = md.split_frontmatter((root / result["path"]).read_text(encoding="utf-8"))
-    assert data["parent"] == "warehouse-pilot"
+    assert data["parent"] == "meridian-freight-holdings-warehouse-pilot"
 
 
 def test_grandchildren_are_refused(tmp_path):
     root = vault_with_entity(tmp_path)
     project.scaffold(root, **dict(BASE, name="Top Level"))
-    project.scaffold(root, **dict(BASE, name="Middle", parent="top-level"))
+    project.scaffold(root, **dict(BASE, name="Middle", parent="meridian-freight-holdings-top-level"))
     with pytest.raises(project.ProjectError, match="two levels"):
-        project.scaffold(root, **dict(BASE, name="Bottom", parent="middle"))
+        project.scaffold(root, **dict(BASE, name="Bottom", parent="meridian-freight-holdings-middle"))
+
+
+# --- slug composition: {entity}-{name-slug} ---
+
+
+def test_slug_is_not_double_prefixed_when_name_carries_the_entity(tmp_path):
+    # "Colruyt AI Transformation" for entity `colruyt` must not become
+    # colruyt-colruyt-ai-transformation.
+    root = vault_with_entity(tmp_path, slug="colruyt")
+    result = project.scaffold(root, **dict(
+        BASE, name="Colruyt AI Transformation", entity="colruyt"))
+    assert result["slug"] == "colruyt-ai-transformation"
+
+
+def test_slug_equal_to_the_entity_alone_is_not_prefixed(tmp_path):
+    root = vault_with_entity(tmp_path, slug="colruyt")
+    result = project.scaffold(root, **dict(BASE, name="Colruyt", entity="colruyt"))
+    assert result["slug"] == "colruyt"
+
+
+def test_same_name_under_two_entities_does_not_collide(tmp_path):
+    # The failure that motivated the convention: a second client's
+    # "AI Transformation" was unreachable in a flat name-derived namespace.
+    root = vault_with_entity(tmp_path, slug="colruyt")
+    dossier = root / "40-entities" / "cortes" / "dossier.md"
+    dossier.parent.mkdir(parents=True)
+    dossier.write_text(
+        '---\ntype: entity\nentity-name: "C"\nslug: cortes\nstatus: active\n---\n',
+        encoding="utf-8")
+    first = project.scaffold(root, **dict(
+        BASE, name="AI Transformation", entity="colruyt"))
+    second = project.scaffold(root, **dict(
+        BASE, name="AI Transformation", entity="cortes"))
+    assert first["slug"] == "colruyt-ai-transformation"
+    assert second["slug"] == "cortes-ai-transformation"
+
+
+def test_truncation_trims_the_name_half_never_the_entity(tmp_path):
+    root = vault_with_entity(tmp_path)  # 25-char entity slug
+    long_name = "An Exceptionally Long Programme Title That Overruns The Cap"
+    result = project.scaffold(root, **dict(BASE, name=long_name))
+    slug = result["slug"]
+    assert slug.startswith("meridian-freight-holdings-")
+    assert len(slug) <= 60
+    # slugify's own truncation contract: never cut inside a word segment.
+    assert not slug.endswith("-")
+
+
+def test_explicit_slug_override_is_used_verbatim(tmp_path):
+    root = vault_with_entity(tmp_path)
+    result = project.scaffold(root, **BASE, slug="mfh-yard-automation")
+    assert result["slug"] == "mfh-yard-automation"
+    assert (root / "30-projects" / "mfh-yard-automation" / "index.md").is_file()
+
+
+def test_explicit_slug_override_is_still_validated_and_collision_checked(tmp_path):
+    root = vault_with_entity(tmp_path)
+    with pytest.raises(project.ProjectError, match="not usable"):
+        project.scaffold(root, **BASE, slug="Not A Slug")
+    (root / "30-projects" / "taken").mkdir(parents=True)
+    with pytest.raises(project.ProjectError, match="already exists"):
+        project.scaffold(root, **BASE, slug="taken")
 
 
 def test_folder_name_equals_the_slug(tmp_path):
@@ -376,7 +443,7 @@ def test_cli_touch_refusal_is_still_one_json_object(tmp_path):
 def test_derive_entities_single_project(tmp_path):
     root = vault_with_entity(tmp_path)
     project.scaffold(root, **BASE)
-    assert project.derive_entities(root, ["yard-automation-program"]) == \
+    assert project.derive_entities(root, [BASE_SLUG]) == \
         ["meridian-freight-holdings"]
 
 
@@ -385,7 +452,7 @@ def test_derive_entities_dedupes_multiple_projects_same_entity(tmp_path):
     project.scaffold(root, **BASE)
     project.scaffold(root, **dict(BASE, name="Yard Automation Program 2"))
     result = project.derive_entities(
-        root, ["yard-automation-program", "yard-automation-program-2"])
+        root, [BASE_SLUG, BASE_SLUG + "-2"])
     assert result == ["meridian-freight-holdings"]
 
 
@@ -400,7 +467,7 @@ def test_derive_entities_preserves_first_occurrence_order(tmp_path):
     project.scaffold(root, **dict(
         BASE, name="Northwind Rollout", entity="northwind-holdings"))
     result = project.derive_entities(
-        root, ["northwind-rollout", "yard-automation-program"])
+        root, ["northwind-holdings-northwind-rollout", BASE_SLUG])
     assert result == ["northwind-holdings", "meridian-freight-holdings"]
 
 
@@ -412,7 +479,7 @@ def test_derive_entities_refuses_when_a_project_has_no_entity_field(tmp_path):
     fieldless.write_text("---\ntype: project\nslug: fieldless\n---\n",
                          encoding="utf-8")
     with pytest.raises(project.ProjectError, match="fieldless"):
-        project.derive_entities(root, ["yard-automation-program", "fieldless"])
+        project.derive_entities(root, [BASE_SLUG, "fieldless"])
 
 
 def test_derive_entities_refuses_when_a_project_index_is_missing(tmp_path):

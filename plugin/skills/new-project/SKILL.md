@@ -44,6 +44,12 @@ Ask only for what is missing, one question at a time.
 - **Name** — the human-readable project name. Keep the entity out of it: the
   `entity` field already carries that, and the Projects base shows it as its
   own column. "Yard Automation Program", not "Meridian — Yard Automation".
+  The **slug** is different: the CLI composes it as `{entity}-{name-slug}`
+  (e.g. `meridian-freight-holdings-yard-automation-program`), so typing in a
+  meeting's `projects[]` during triage selects entity and project at once,
+  and two entities can each have an "AI Transformation" project without
+  colliding. You never build the slug yourself; pass `--slug` only when the
+  user explicitly wants a different one.
 - **Type** — `initiative` (timeboxed work with an end) or
   `area-of-responsibility` (standing, no end date). Default to `initiative`
   without asking when the name plainly describes bounded work.
@@ -132,10 +138,13 @@ python3 "$VAULTLIB" project scaffold --vault "$VAULT" \
   --source "Forwarded renewal email, 2026-08-21"
 ```
 
-The CLI derives the slug, refuses collisions, checks the entity exists,
-validates the frontmatter against the ontology, writes `index.md`, and creates
-`decisions/`. If it refuses, relay the reason — several of its errors name the
-exact command that fixes them.
+The CLI composes the slug as `{entity}-{name-slug}` (here
+`meridian-freight-holdings-yard-automation-program`), refuses collisions,
+checks the entity exists, validates the frontmatter against the ontology,
+writes `index.md`, and creates `decisions/`. If it refuses, relay the reason —
+several of its errors name the exact command that fixes them. A name that
+already starts with the entity is not double-prefixed. `--slug` overrides the
+composition entirely; use it only on the user's explicit ask.
 
 ### 5. Link it into the dossier
 
@@ -144,7 +153,7 @@ and pass it, so quoting cannot mangle the payload:
 
 ```bash
 cat > /tmp/engagement.json <<'JSON'
-{"engagements": [{"project": "yard-automation-program",
+{"engagements": [{"project": "meridian-freight-holdings-yard-automation-program",
                   "status": "Active",
                   "one_liner": "Three-yard automation rollout"}]}
 JSON
@@ -177,6 +186,7 @@ Report, briefly:
    sit beside it.
 3. **Do not invent context.** A placeholder is better than a plausible
    fabrication — this vault is read as a record.
-4. **Do not put the entity name in the project name.** It is already a field
-   and a column.
+4. **Do not put the entity name in the project name** — it is already a field
+   and a column. The *slug* is the opposite: the CLI prefixes it with the
+   entity on its own, and you never counteract that.
 5. **Dossier failures never fail the project.**

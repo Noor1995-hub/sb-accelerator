@@ -15,6 +15,9 @@ delivers them.
 
 ## Unreleased
 
+- Project slugs now carry the entity: `/new-project` composes them as `{entity}-{name-slug}` (the project *name* stays entity-free), so typing a slug during meeting triage picks entity and project in one gesture, and two clients can each have an "AI Transformation" project without colliding — `--slug` overrides when needed (#138)
+- The meeting triage and All Meetings views gain a read-only **↗ Project** column that links straight to each assigned project's index — the editable Projects column stays the typing surface (#138)
+- The evening sync now repairs a `projects:` entry hand-written as a `[[wikilink]]` instead of a bare slug — the link form dangles in Obsidian and hid the meeting from its entity's dossier; unwrappable entries are fixed in place, unresolvable ones reported (#138)
 - `/sync-recordings` re-checks untranscribed Teams meetings with a lightweight probe instead of a full sync worker — the recurring cost of silent meetings drops to a fraction (#137)
 - `/sync-recordings` starts minutes faster: each Teams recording's worker now fetches its own meeting data (and resolves its own attendees), and routing reads a compact vault digest instead of every project file — the main session no longer re-types calendar payloads (#136)
 - `/sync-recordings` now scans only since its last successful run (2-day floor, 7-day cap after a gap) instead of re-listing a full week daily, and auto-skips Plaud clips under 60 seconds with the reason recorded (#135)

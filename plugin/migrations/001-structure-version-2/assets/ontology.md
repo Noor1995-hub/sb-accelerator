@@ -67,6 +67,14 @@ confidence_reasons:
   disposal; the file stays).
 - Write-once; only triage fields (`attendees`, `projects`, `review_status`,
   `reviewed`, `archived`) are edited later.
+- **`projects[]` and `attendees[]` hold bare slugs, never wikilinks.** A
+  hand-typed `[[slug]]` dangles (the project is a folder, so the link
+  resolves to nothing and clicking it spawns a stray note in the vault
+  root) and blocks the entity derivation below. The evening fold's
+  `sync rederive-entities` unwraps a wikilink whose target resolves and
+  repairs the note; one that still doesn't resolve is reported, not fixed.
+  Click-through in `Meetings.base` is the read-only `↗ Project` formula
+  column, not the editable `projects` cells.
 - `entities[]` holds entity slugs: the organizations the meeting was
   **about** — not only the ones in the room. An internal 1:1 reviewing a
   client account carries that client, the same way the daily note's prep
@@ -162,6 +170,12 @@ body_sections: [Decisions, Open Items, Related Meetings]
   `state-updated`.
   **Index extras:** `next-milestone`, `next-milestone-date`.
 - `entity` is a slug string joining to an Entity's `slug` (and folder name).
+- **Slug convention: `{entity}-{name-slug}`**, composed by `project scaffold`
+  (never re-prefixed when the name already starts with the entity; explicit
+  `--slug` overrides). `project-name` stays entity-free — the Projects base
+  shows `entity` as its own column — but the slug carries it, so slugs are
+  unique across entities and typing one during meeting triage selects entity
+  and project in a single gesture.
 - Example: `30-projects/acme-industries-operating-model/index.md`
 - `state-updated` is a full ISO timestamp (`YYYY-MM-DDTHH:MM`) written by
   `project touch` alongside `last-updated`. `last-updated` stays the
