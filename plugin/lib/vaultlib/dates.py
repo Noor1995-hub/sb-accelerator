@@ -417,10 +417,12 @@ def plan(root: Path, today: Optional[str] = None, *,
     **yesterday** — and every key keeps its meaning, so callers consume the
     same fields either way. (A live catch-up run without this mode planned
     tomorrow's note at 10:28 and the skipped day never got a note at all.)
-    The standard plan reports `for_today_available` (today is a business day
-    and its note is missing) and `for_today_suggested` (also before the
-    local cutoff above) so the caller can offer — or, unattended, take —
-    this mode without doing clock arithmetic itself. `now_utc` is the test
+    The standard plan reports `for_today_available` (today is a business
+    day, its note is missing, and at least one daily note exists — a vault
+    with zero notes is the normal Session-1 state and a first run has
+    nothing to catch up) and `for_today_suggested` (also before the local
+    cutoff above) so the caller can offer — or, unattended, take — this
+    mode without doing clock arithmetic itself. `now_utc` is the test
     override for that clock; a caller passing `--today` has no clock, so the
     suggestion stays False.
     """
@@ -453,7 +455,8 @@ def plan(root: Path, today: Optional[str] = None, *,
     last = max(existing) if existing else None
 
     today_note_exists = today_date in on_disk
-    available = today_date.weekday() < 5 and not today_note_exists
+    available = (last is not None and today_date.weekday() < 5
+                 and not today_note_exists)
     suggested = (available and local_now is not None
                  and local_now.hour < FOR_TODAY_CUTOFF_HOUR)
 
@@ -497,6 +500,12 @@ def plan(root: Path, today: Optional[str] = None, *,
         "for_today_suggested": suggested,
         "recap_from": recap_from.isoformat(),
         "recap_to": recap_to.isoformat(),
+        # The window bounds' own day names: in the --for-today frame
+        # today_day_name and next_day_name both resolve to the note's day,
+        # and callers may never derive day-of-week from an ISO date — so the
+        # recapped days' names must be handed over too.
+        "recap_from_day_name": DAY_NAMES[recap_from.weekday()],
+        "recap_to_day_name": DAY_NAMES[recap_to.weekday()],
         "business_days_missed": missed,
         "is_catchup": missed > 0,
         "catchup_threshold": catchup_threshold,

@@ -538,6 +538,43 @@ def test_plan_never_offers_for_today_on_a_weekend(tmp_path):
     assert result["for_today_available"] is False
 
 
+def test_plan_never_offers_for_today_on_a_fresh_vault(tmp_path):
+    # Zero daily notes is the guaranteed state during /setup-my-brain's first
+    # /evening-sync — a first run has nothing to catch up, so the offer (and
+    # the before-noon suggestion) must not fire in front of a client.
+    root = make_vault(tmp_path)
+    result = dates.plan(root, None, utc_offset="+02:00",
+                        now_utc=datetime(2026, 9, 2, 8, 30))  # Wed, 10:30 local
+    assert result["for_today_available"] is False
+    assert result["for_today_suggested"] is False
+
+
+def test_plan_day_names_cover_the_recap_bounds(tmp_path):
+    # In the --for-today frame today_day_name and next_day_name both resolve
+    # to the note's own day, so the recapped day needs its own key — the
+    # skill forbids deriving day-of-week from an ISO date.
+    root = make_vault(tmp_path)
+    note(root, "2026-09-01")
+    result = dates.plan(root, "2026-09-02", for_today=True)
+    assert result["recap_from_day_name"] == "Tuesday"
+    assert result["recap_to_day_name"] == "Tuesday"
+
+    (tmp_path / "monday").mkdir()
+    root2 = make_vault(tmp_path / "monday")
+    note(root2, "2026-09-04")
+    monday = dates.plan(root2, "2026-09-07", for_today=True)
+    assert monday["recap_from_day_name"] == "Friday"
+    assert monday["recap_to_day_name"] == "Sunday"
+
+
+def test_plan_standard_frame_recap_day_names_match_the_old_meaning(tmp_path):
+    root = make_vault(tmp_path)
+    note(root, "2026-06-12")
+    result = dates.plan(root, "2026-06-12")                   # Friday
+    assert result["recap_from_day_name"] == "Friday"
+    assert result["recap_to_day_name"] == result["today_day_name"]
+
+
 def test_plan_suggests_for_today_before_the_cutoff(tmp_path):
     root = make_vault(tmp_path)
     note(root, "2026-09-01")

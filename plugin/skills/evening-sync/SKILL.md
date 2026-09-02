@@ -85,8 +85,10 @@ morning, sees no note for today, and triggers the sync by hand. Running the
 standard plan then writes *tomorrow's* note and today never gets one (a live
 catch-up at 10:28 did exactly that: the skipped day's meetings were never
 prepped). `dates plan` reports the state instead of leaving it to you:
-`for_today_available` — today is a business day and today's note is missing —
-and `for_today_suggested`, which adds "and it is before noon local". When
+`for_today_available` — today is a business day, today's note is missing,
+and at least one daily note exists (a brand-new vault has nothing to catch
+up, so Session-1's first run never sees this offer) — and
+`for_today_suggested`, which adds "and it is before noon local". When
 `for_today_available` is true:
 
 - **interactive** — ask once, here, before any work: catch up **today's**
@@ -289,10 +291,14 @@ inside the recap window — from the note's vantage that is **yesterday** (or
 earlier), and "today" is the day being prepped. **"Tomorrow" never belongs in a recap at all**: from
 inside the note it means the day *after* the note, which is not a day this
 run knows anything about. Safest is to skip relative words and use the day
-names `dates plan` already handed you (`today_day_name`, `next_day_name`) or
-the ISO date — those cannot point at the wrong day. This is the one error a
-reader always catches, because they are reading it on the day it is wrong
-about.
+names `dates plan` already handed you — `next_day_name` for the day being
+prepped, `recap_from_day_name`/`recap_to_day_name` for the recapped window's
+bounds — or the ISO date; those cannot point at the wrong day.
+(`today_day_name` is the run day: in the `--for-today` frame that is the
+note's own day, not the recapped one, so a recapped meeting's day name comes
+from the recap-bound keys, never from `today_day_name`.) This is the one
+error a reader always catches, because they are reading it on the day it is
+wrong about.
 
 **A flat list of meetings is not a recap.** Required shape, in order:
 
