@@ -509,6 +509,186 @@ def test_cli_plan_reports_the_catchup_block(tmp_path):
 
 
 # ---------------------------------------------------------------------------
+# plan --for-today: the missed-evening run executed the morning after. The
+# live failure this pins: the laptop was closed for the 1 Sept evening run, a
+# manual catch-up at 10:28 the next morning planned the 3 Sept note — so the
+# 2 Sept note never existed and that day's meetings were never prepped.
+
+
+def test_plan_reports_todays_note_state(tmp_path):
+    root = make_vault(tmp_path)
+    note(root, "2026-09-01")
+    result = dates.plan(root, "2026-09-02")            # Wednesday, note missing
+    assert result["plan_for"] == "next-business-day"
+    assert result["today_note_exists"] is False
+    assert result["for_today_available"] is True
+
+
+def test_plan_on_a_healthy_day_offers_no_for_today(tmp_path):
+    root = make_vault(tmp_path)
+    note(root, "2026-09-02")                           # written last evening
+    result = dates.plan(root, "2026-09-02")
+    assert result["today_note_exists"] is True
+    assert result["for_today_available"] is False
+    assert result["for_today_suggested"] is False
+
+
+def test_plan_never_offers_for_today_on_a_weekend(tmp_path):
+    result = dates.plan(make_vault(tmp_path), "2026-09-05")   # Saturday
+    assert result["for_today_available"] is False
+
+
+def test_plan_never_offers_for_today_on_a_fresh_vault(tmp_path):
+    # Zero daily notes is the guaranteed state during /setup-my-brain's first
+    # /evening-sync — a first run has nothing to catch up, so the offer (and
+    # the before-noon suggestion) must not fire in front of a client.
+    root = make_vault(tmp_path)
+    result = dates.plan(root, None, utc_offset="+02:00",
+                        now_utc=datetime(2026, 9, 2, 8, 30))  # Wed, 10:30 local
+    assert result["for_today_available"] is False
+    assert result["for_today_suggested"] is False
+
+
+def test_plan_day_names_cover_the_recap_bounds(tmp_path):
+    # In the --for-today frame today_day_name and next_day_name both resolve
+    # to the note's own day, so the recapped day needs its own key — the
+    # skill forbids deriving day-of-week from an ISO date.
+    root = make_vault(tmp_path)
+    note(root, "2026-09-01")
+    result = dates.plan(root, "2026-09-02", for_today=True)
+    assert result["recap_from_day_name"] == "Tuesday"
+    assert result["recap_to_day_name"] == "Tuesday"
+
+    (tmp_path / "monday").mkdir()
+    root2 = make_vault(tmp_path / "monday")
+    note(root2, "2026-09-04")
+    monday = dates.plan(root2, "2026-09-07", for_today=True)
+    assert monday["recap_from_day_name"] == "Friday"
+    assert monday["recap_to_day_name"] == "Sunday"
+
+
+def test_plan_standard_frame_recap_day_names_match_the_old_meaning(tmp_path):
+    root = make_vault(tmp_path)
+    note(root, "2026-06-12")
+    result = dates.plan(root, "2026-06-12")                   # Friday
+    assert result["recap_from_day_name"] == "Friday"
+    assert result["recap_to_day_name"] == result["today_day_name"]
+
+
+def test_plan_suggests_for_today_before_the_cutoff(tmp_path):
+    root = make_vault(tmp_path)
+    note(root, "2026-09-01")
+    # 08:30 UTC at +02:00 is 10:30 local on Wednesday 2 Sept — a morning run.
+    result = dates.plan(root, None, utc_offset="+02:00",
+                        now_utc=datetime(2026, 9, 2, 8, 30))
+    assert result["today"] == "2026-09-02"
+    assert result["for_today_available"] is True
+    assert result["for_today_suggested"] is True
+
+
+def test_plan_does_not_suggest_for_today_after_the_cutoff(tmp_path):
+    root = make_vault(tmp_path)
+    note(root, "2026-09-01")
+    # 16:30 UTC at +02:00 is 18:30 local — a normal evening run whose
+    # predecessor happened to be missed; the recap window widens instead.
+    result = dates.plan(root, None, utc_offset="+02:00",
+                        now_utc=datetime(2026, 9, 2, 16, 30))
+    assert result["for_today_available"] is True
+    assert result["for_today_suggested"] is False
+
+
+def test_plan_with_an_explicit_today_never_suggests(tmp_path):
+    # --today carries no clock, and the suggestion needs one.
+    root = make_vault(tmp_path)
+    note(root, "2026-09-01")
+    assert dates.plan(root, "2026-09-02")["for_today_suggested"] is False
+
+
+def test_plan_for_today_targets_today_and_recaps_yesterday(tmp_path):
+    root = make_vault(tmp_path)
+    note(root, "2026-09-01")
+    result = dates.plan(root, "2026-09-02", for_today=True)
+    assert result["plan_for"] == "today"
+    assert result["today"] == "2026-09-02"             # stage 4 still stamps today
+    assert result["next_business_day"] == "2026-09-02"
+    assert result["next_day_name"] == "Wednesday"
+    assert result["note_to_write"] == "60-daily-notes/2026-09-02.md"
+    assert result["recap_from"] == "2026-09-01"
+    assert result["recap_to"] == "2026-09-01"
+    assert result["business_days_missed"] == 1         # 1 Sept left no 2 Sept note
+    assert result["is_catchup"] is True
+
+
+def test_plan_for_today_on_a_monday_recaps_through_the_weekend(tmp_path):
+    root = make_vault(tmp_path)
+    note(root, "2026-09-04")                           # Friday's note exists
+    # Friday's evening run missed; manual catch-up Monday morning.
+    result = dates.plan(root, "2026-09-07", for_today=True)
+    assert result["note_to_write"] == "60-daily-notes/2026-09-07.md"
+    assert result["recap_from"] == "2026-09-04"
+    assert result["recap_to"] == "2026-09-06"          # weekend meetings stay in
+    assert result["business_days_missed"] == 1
+
+
+def test_plan_for_today_refuses_a_weekend(tmp_path):
+    with pytest.raises(dates.DatesError, match="business day"):
+        dates.plan(make_vault(tmp_path), "2026-09-05", for_today=True)
+
+
+def test_plan_for_today_refuses_when_todays_note_exists(tmp_path):
+    root = make_vault(tmp_path)
+    note(root, "2026-09-02")
+    with pytest.raises(dates.DatesError, match="already exists"):
+        dates.plan(root, "2026-09-02", for_today=True)
+
+
+def test_plan_for_today_on_a_fresh_vault_collapses_the_window(tmp_path):
+    # No notes at all: the window is just yesterday, and yesterday's missing
+    # run is the one being caught up — a catch-up by definition.
+    result = dates.plan(make_vault(tmp_path), "2026-09-02", for_today=True)
+    assert result["recap_from"] == "2026-09-01"
+    assert result["recap_to"] == "2026-09-01"
+    assert result["is_catchup"] is True
+
+
+def test_plan_for_today_details_from_the_recapped_day(tmp_path):
+    # The detail walk starts at recap_to (the last recapped day), not at the
+    # run day — in the for-today frame those differ by one.
+    root = make_vault(tmp_path)
+    note(root, "2026-06-15")
+    result = dates.plan(root, "2026-08-21", for_today=True)
+    assert result["over_threshold"] is True
+    assert result["recap_to"] == "2026-08-20"
+    assert result["recap_detail_from"] == "2026-08-14"
+
+
+def test_cli_plan_for_today(tmp_path):
+    root = make_vault(tmp_path)
+    note(root, "2026-09-01")
+    proc = subprocess.run(
+        [sys.executable, str(CLI), "dates", "plan", "--vault", str(root),
+         "--today", "2026-09-02", "--for-today"],
+        capture_output=True, text=True)
+    assert proc.returncode == 0, proc.stderr
+    result = json.loads(proc.stdout)["result"]
+    assert result["plan_for"] == "today"
+    assert result["note_to_write"] == "60-daily-notes/2026-09-02.md"
+
+
+def test_cli_plan_accepts_a_now_override(tmp_path):
+    root = make_vault(tmp_path)
+    note(root, "2026-09-01")
+    proc = subprocess.run(
+        [sys.executable, str(CLI), "dates", "plan", "--vault", str(root),
+         "--utc-offset", "+02:00", "--now", "2026-09-02T08:30:00"],
+        capture_output=True, text=True)
+    assert proc.returncode == 0, proc.stderr
+    result = json.loads(proc.stdout)["result"]
+    assert result["today"] == "2026-09-02"
+    assert result["for_today_suggested"] is True
+
+
+# ---------------------------------------------------------------------------
 # trailing_window: the discovery mode. The live failure this pins: the skill
 # prescribed a bare `dates window --vault X` for step-1 discovery, argparse
 # refused it, and the improvised replacement centered a ±168h window on now —

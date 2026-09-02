@@ -144,7 +144,7 @@ it supersedes if anything — and let the user confirm, edit, or drop it. Then
 write the accepted ones, one call each:
 
 ```bash
-cat > "$SCRATCH/decision.json" <<'JSON'
+cat > "$SCRATCH/decision-meridian-yard-automation-program.json" <<'JSON'
 {
   "title": "single vendor strategy adopted",
   "summary": "Consolidate on a single automation vendor across all three yards to simplify integration and reduce total cost of ownership.",
@@ -157,15 +157,22 @@ cat > "$SCRATCH/decision.json" <<'JSON'
 JSON
 python3 "$VAULTLIB" decision write --vault "$VAULT" \
   --project meridian-yard-automation-program \
-  --date 2026-05-20 --note "$SCRATCH/decision.json" --foreground
+  --date 2026-05-20 --note "$SCRATCH/decision-meridian-yard-automation-program.json" --foreground
 ```
 
-Build the payload into `$SCRATCH`, never a hardcoded system temp directory:
-this skill runs in background mode from evening-sync's per-project
-subagents, where a fixed path outside the session scratch directory is not
-guaranteed to be writable or private, and `$SCRATCH/decision.json` matches
-the `decision.json` pattern `scratch sweep` already clears at the end of the
-calling run.
+Build the payload into `$SCRATCH`, never a hardcoded system temp directory,
+and qualify the filename with the project slug — `decision-<slug>.json`,
+never a bare `decision.json`. This skill runs in background mode from
+evening-sync's per-project subagents, which all share one session scratch
+directory: in a live run, two concurrent invocations racing on the one
+generic name made `decision write` read the *other* project's payload and
+publish it, misattributed, into the wrong project's decision log — with two
+clients' projects in flight, a confidentiality breach, not just a wrong
+file. The slug makes the collision structurally impossible (the evening run
+dispatches one subagent per project), a fixed path outside `$SCRATCH` is
+not guaranteed writable or private, and `decision-<slug>.json` matches the
+`decision-*.json` pattern `scratch sweep` clears at the end of the calling
+run.
 
 Build the payload as a **file**, never inline — shell quoting mangles
 apostrophes and em dashes. One decision per call: a failure then names exactly

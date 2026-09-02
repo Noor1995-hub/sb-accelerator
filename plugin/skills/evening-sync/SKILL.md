@@ -11,6 +11,8 @@ The engine of the daily loop. One run harvests today's jottings, syncs new
 recordings, refreshes project metrics, updates the state of projects with new
 confirmed meetings, captures decisions for review, and writes **tomorrow's**
 daily note — a recap of today plus a prepared section per upcoming meeting.
+(On a morning catch-up after a missed run, the note is **today's** — stage 1
+decides, never you.)
 Deterministic stages are CLI subcommands; judgment (recap prose, themes,
 project-state synthesis, decision candidates) is yours.
 
@@ -76,6 +78,33 @@ Detail the window from `recap_detail_from` onward and let
   `detailed_from` in stage 6 only if the answer was to cap.
 - **unattended** — always cap, never ask, and carry the catch-up window into
   the Warnings block so a human reviews it.
+
+**The missed-evening run (`--for-today`).** Sometimes the evening run cannot
+happen at all — the laptop was closed. The vault owner opens it the next
+morning, sees no note for today, and triggers the sync by hand. Running the
+standard plan then writes *tomorrow's* note and today never gets one (a live
+catch-up at 10:28 did exactly that: the skipped day's meetings were never
+prepped). `dates plan` reports the state instead of leaving it to you:
+`for_today_available` — today is a business day, today's note is missing,
+and at least one daily note exists (a brand-new vault has nothing to catch
+up, so Session-1's first run never sees this offer) — and
+`for_today_suggested`, which adds "and it is before noon local". When
+`for_today_available` is true:
+
+- **interactive** — ask once, here, before any work: catch up **today's**
+  missing note, or prepare **tomorrow's** as usual? Recommend the answer
+  `for_today_suggested` gives. If the answer is today, re-run `dates plan`
+  with `--for-today` and consume that result verbatim instead.
+- **unattended** — never ask. When `for_today_suggested` is true, re-run
+  with `--for-today` and continue on that plan; otherwise keep the standard
+  plan. Name the choice in the summary either way.
+
+The `--for-today` frame is last night's run executed late: the same keys,
+shifted — `next_business_day` and `note_to_write` point at **today**, the
+recap ends **yesterday**. Nothing downstream changes: stage 5 already pulls
+`next_business_day`'s events, so it preps today's remaining calendar, and
+stage 6 writes today's note. The clock heuristic and the frame arithmetic
+live in the CLI; whether to ask is the only judgment here.
 
 Every number above is read, never computed. If you find yourself counting
 days, you are re-introducing the bug `dates plan` exists to prevent.
@@ -256,16 +285,20 @@ language and depth preferences in
 `99-workflow-config/context/preferences-and-constraints.md`.
 
 **Write from the note's date, not from the day you are running.** The note is
-dated `next_business_day` and it is read on that morning, so every relative
-word resolves against *that* day. The meetings you are recapping happened on
-`today` — from the note's vantage that is **yesterday**, and "today" is the
-day being prepped. **"Tomorrow" never belongs in a recap at all**: from
+dated `next_business_day` and it is read on that day, so every relative
+word resolves against *that* day. The meetings you are recapping happened
+inside the recap window — from the note's vantage that is **yesterday** (or
+earlier), and "today" is the day being prepped. **"Tomorrow" never belongs in a recap at all**: from
 inside the note it means the day *after* the note, which is not a day this
 run knows anything about. Safest is to skip relative words and use the day
-names `dates plan` already handed you (`today_day_name`, `next_day_name`) or
-the ISO date — those cannot point at the wrong day. This is the one error a
-reader always catches, because they are reading it on the day it is wrong
-about.
+names `dates plan` already handed you — `next_day_name` for the day being
+prepped, `recap_from_day_name`/`recap_to_day_name` for the recapped window's
+bounds — or the ISO date; those cannot point at the wrong day.
+(`today_day_name` is the run day: in the `--for-today` frame that is the
+note's own day, not the recapped one, so a recapped meeting's day name comes
+from the recap-bound keys, never from `today_day_name`.) This is the one
+error a reader always catches, because they are reading it on the day it is
+wrong about.
 
 **A flat list of meetings is not a recap.** Required shape, in order:
 
@@ -356,7 +389,7 @@ reported "Processed: 0" after writing a meeting correctly):
 **Possible duplicates:** {N} ({list the stems}) — kept as separate notes; each would have overwritten a meeting you already confirmed
 **Metrics refreshed:** {P} projects · {Q} people
 **Projects updated:** {N} ({slugs}) — {M} decisions captured for review, {K} candidates skipped
-**Tomorrow's note:** `60-daily-notes/{date}.md` ({DayName}) — {N} meetings prepped | calendar unavailable | calendar REFUSED — signed in as a different account (account-mismatch) | calendar REFUSED — no account bound to this vault yet (no-account-hint) | m365 disabled
+**Next note:** `60-daily-notes/{date}.md` ({DayName}, {tomorrow | today — for-today catch-up}) — {N} meetings prepped | calendar unavailable | calendar REFUSED — signed in as a different account (account-mismatch) | calendar REFUSED — no account bound to this vault yet (no-account-hint) | m365 disabled
 **Recap window:** {recap_from} → {recap_to} — {catch-up: N business days missed, detailed from {date}} | current
 **Recap:** regenerated | unchanged since the last run (inputs identical)
 **Warnings:** {verbatim, including SELF-CHECK lines} | none

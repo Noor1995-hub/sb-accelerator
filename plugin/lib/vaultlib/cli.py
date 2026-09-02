@@ -148,6 +148,12 @@ def build_parser() -> argparse.ArgumentParser:
     dates_plan.add_argument(
         "--catchup-threshold", dest="catchup_threshold", type=int, default=5,
         help="business days missed before the recap is bounded (default 5)")
+    dates_plan.add_argument(
+        "--for-today", dest="for_today", action="store_true",
+        help="plan the missed-evening run executed late: the note lands on "
+             "today and the recap ends yesterday")
+    dates_plan.add_argument(
+        "--now", help="UTC ISO datetime override (tests); defaults to now")
 
     people = top.add_parser("person", help="person notes")
     people_sub = people.add_subparsers(dest="action", required=True)
@@ -537,7 +543,10 @@ def _dispatch(args: argparse.Namespace) -> int:
                                     start_date=start_date))
         return _ok(dates.plan(root, args.today, timezone=args.timezone,
                               utc_offset=args.utc_offset,
-                              catchup_threshold=args.catchup_threshold))
+                              catchup_threshold=args.catchup_threshold,
+                              for_today=args.for_today,
+                              now_utc=(dates._parse_now(args.now)
+                                       if args.now is not None else None)))
     if args.group == "identity":
         return _ok({"identity": vault.read_identity_block(root)})
     if args.group == "context":
