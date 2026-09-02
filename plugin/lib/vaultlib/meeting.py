@@ -270,34 +270,49 @@ def write(root: Path, payload: dict) -> dict:
 
     prefix = _date_prefix(payload["date"])
     title_slug = naming.slugify(str(payload["title"]))
-    stem = f"{prefix}-{title_slug}"
-    naming.validate_slug(stem, max_length=naming.MAX_STEM_LENGTH)
+    base_stem = f"{prefix}-{title_slug}"
+    naming.validate_slug(base_stem, max_length=naming.MAX_STEM_LENGTH)
 
-    stem, review_status, conflicts_with, conflict = _resolve_target(
-        root, stem, payload)
-
-    frontmatter = _frontmatter(payload, review_status, conflicts_with, entities)
-    problems = schema.validate("meeting", frontmatter)
-    if problems:
-        raise MeetingError(
-            "refusing to write non-conformant meeting frontmatter: "
-            + "; ".join(problems)
-        )
     quote_keys = set(_QUOTE_KEYS)
     if ":" in str(payload["type"]):
         quote_keys.add("type")   # unquoted 1:1 is YAML for the integer 61
 
-    target = root / MEETINGS_DIR / f"{stem}.md"
-    vault.atomic_write(
-        target, markdown.emit_frontmatter(frontmatter, quote_keys)
-        + _render_body(payload))
-    return {
-        "stem": stem,
-        "path": target.relative_to(root).as_posix(),
-        "review_status": review_status,
-        "recording_id": payload.get("source-recording-id"),
-        "conflict": conflict,
-    }
+    # The collision guards look, then write — and concurrent sync workers can
+    # both look before either writes (one meeting captured by two sources in
+    # the same run derives one stem in both workers). atomic_create makes the
+    # write refuse a name that appeared in between; the loser re-resolves and
+    # lands on the collision path it would have taken had it looked later.
+    for _ in range(3):
+        stem, review_status, conflicts_with, conflict = _resolve_target(
+            root, base_stem, payload)
+
+        frontmatter = _frontmatter(
+            payload, review_status, conflicts_with, entities)
+        problems = schema.validate("meeting", frontmatter)
+        if problems:
+            raise MeetingError(
+                "refusing to write non-conformant meeting frontmatter: "
+                + "; ".join(problems)
+            )
+
+        target = root / MEETINGS_DIR / f"{stem}.md"
+        try:
+            vault.atomic_create(
+                target, markdown.emit_frontmatter(frontmatter, quote_keys)
+                + _render_body(payload))
+        except FileExistsError:
+            continue
+        return {
+            "stem": stem,
+            "path": target.relative_to(root).as_posix(),
+            "review_status": review_status,
+            "recording_id": payload.get("source-recording-id"),
+            "conflict": conflict,
+        }
+    raise MeetingError(
+        f"could not claim a free stem for {base_stem!r} — concurrent writers "
+        "kept taking every resolved name; re-run this recording"
+    )
 
 
 def _find_stem(folder: Path, stem: str) -> Optional[Path]:
@@ -319,8 +334,13 @@ def _first_free(folder: Path, pattern: str) -> str:
     raise MeetingError(f"more than 98 collisions for {pattern!r} — clean up first")
 
 
+def _namespace(recording_id) -> Optional[str]:
+    text = str(recording_id or "")
+    return text.split(":", 1)[0] if ":" in text else None
+
+
 def _resolve_target(root: Path, stem: str, payload: dict):
-    """Apply the three collision guards, in order. Never overwrites."""
+    """Apply the collision guards, in order. Never overwrites."""
     rid = payload.get("source-recording-id")
     if rid is not None:
         known, _ = syncjob.known_recording_ids(root)
@@ -337,9 +357,9 @@ def _resolve_target(root: Path, stem: str, payload: dict):
 
     try:
         data, _ = markdown.split_frontmatter(existing.read_text(encoding="utf-8"))
-        status = data.get("review_status")
     except (ValueError, OSError):
-        status = None   # unreadable counts as not-confirmed: suffix, don't touch
+        data = {}   # unreadable counts as not-confirmed: suffix, don't touch
+    status = data.get("review_status")
 
     if status == "confirmed":
         # An ordinary needs-review note: the conflicts-with edge below is the
@@ -347,6 +367,21 @@ def _resolve_target(root: Path, stem: str, payload: dict):
         # while it is present.
         sibling = _first_free(folder, stem + "-v{n}")
         conflict = {"kind": "confirmed-target", "conflicts_with": existing.stem}
+        return sibling, "needs-review", existing.stem, conflict
+
+    mine = _namespace(rid)
+    theirs = _namespace(data.get("source-recording-id"))
+    if mine and theirs and mine != theirs:
+        # Same stem, different source namespace: almost certainly one
+        # conversation captured twice in the same run (a Plaud recording plus
+        # the meeting's own Teams transcript) — the ledger keys on exact ids
+        # and cannot see it, and a sibling worker's in-flight write is
+        # invisible to the dispatch-time dedup. Flag it like a
+        # confirmed-target sibling so triage shows the pair and
+        # reconcile_reviews refuses to fold a tick until a human settles it.
+        sibling = _first_free(folder, stem + "-v{n}")
+        conflict = {"kind": "cross-source-duplicate",
+                    "conflicts_with": existing.stem}
         return sibling, "needs-review", existing.stem, conflict
 
     suffixed = _first_free(folder, stem + "-{n}")

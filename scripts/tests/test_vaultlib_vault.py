@@ -78,6 +78,23 @@ def test_atomic_write_overwrites(tmp_path):
     assert target.read_text(encoding="utf-8") == "second\n"
 
 
+def test_atomic_create_writes_when_the_target_is_free(tmp_path):
+    target = tmp_path / "20-meetings" / "note.md"
+    vault.atomic_create(target, "first\n")
+    assert target.read_text(encoding="utf-8") == "first\n"
+
+
+def test_atomic_create_refuses_an_existing_target(tmp_path):
+    """Two concurrent writers that both saw no file must not last-write-wins
+    each other — the loser gets FileExistsError, the winner's bytes stay."""
+    target = tmp_path / "note.md"
+    vault.atomic_create(target, "first\n")
+    with pytest.raises(FileExistsError):
+        vault.atomic_create(target, "second\n")
+    assert target.read_text(encoding="utf-8") == "first\n"
+    assert [p.name for p in tmp_path.iterdir()] == ["note.md"]
+
+
 def test_read_identity_block_returns_the_delimited_content(tmp_path):
     root = make_vault(tmp_path)
     block = vault.read_identity_block(root)

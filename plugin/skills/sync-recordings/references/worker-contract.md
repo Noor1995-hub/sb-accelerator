@@ -190,7 +190,7 @@ flagged `imprecise: true` — means a probable duplicate. **Draft the payload
 anyway** (next section), but do **not** call `meeting write`: reply
 
 ```
-possible-duplicate-of: <existing stem> (recording-id: <your recording_id>, payload at $SCRATCH/<stem>.payload.json) (new-people: <comma-separated names>)
+possible-duplicate-of: <existing stem> (recording-id: <your recording_id>, payload at $SCRATCH/<scratch stem>.payload.json) (new-people: <comma-separated names>)
 ```
 
 and stop — for M365, append `(new-people: none)` in place of the names
@@ -205,13 +205,18 @@ transcript files you wrote to scratch: the M365 one is unparsed WEBVTT, and
 for a recurring series it may carry other occurrences' transcripts (an inbox
 item has no blob: extract from the file you were given). Read
 `references/payload-contract.md` (its path is in your prompt) and draft
-the payload to `$SCRATCH/<stem>.payload.json`: content fields from the
+the payload to `$SCRATCH/<scratch stem>.payload.json`: content fields from the
 transcript; every routing field copied from your prompt unchanged — except
 for M365's `attendees`, `confidence`, and the `confidence-reasons`
 attendees-group entry, which you computed yourself in Attendees and
 confidence above, not your prompt (the `confidence-reasons`
 calendar-group and project-link-group entries still copy from your prompt
-unchanged); `date` is
+unchanged). `<scratch stem>` is the scratch stem your briefing carries
+(`rec_N` / `m365_event_<n>` / the inbox file's name stem) — **never a stem
+you derive from the meeting itself**: two workers in one run can capture
+the same meeting from two sources and derive the same name, and the
+briefing stem is the one name that is yours alone (it still matches the
+`*.payload.json` sweep pattern). `date` is
 `recorded_local` unchanged and `recording-duration` is `duration_min`. When
 your prompt says routing signals 1–2 were inconclusive and carries the
 project/entity slug catalog, match transcript keywords against it yourself —
@@ -219,16 +224,18 @@ it is the weakest signal, so a match adds the project with the lower
 confidence your prompt already stamped, and no match means `projects: []`.
 
 ```bash
-python3 "$VAULTLIB" meeting write --vault "$VAULT" --note "$SCRATCH/<stem>.payload.json"
+python3 "$VAULTLIB" meeting write --vault "$VAULT" --note "$SCRATCH/<scratch stem>.payload.json"
 ```
 
 If `meeting write` refuses, fix the payload per the `error` and `hint` and
 retry — the contract names every rule. The one refusal you never retry is
 an `error` naming an already-synced id: dedup was bypassed upstream — stop
 and reply `fetch-error: already-synced id (dedup bypassed)` so a human sees
-it. Read the result: `conflict` of kind
-`confirmed-target` or `stem-collision` still counts as written — mention it
-in your outcome line. Verify the result's `path` exists on disk before
+it. Read the result: `conflict` of kind `confirmed-target`,
+`cross-source-duplicate` (a sibling worker in this run — or an earlier run —
+already wrote this meeting's note from another source; the CLI wrote your
+note as a flagged sibling instead), or `stem-collision` still counts as
+written — mention the kind in your outcome line. Verify the result's `path` exists on disk before
 replying `written:` — for M365, append `(recording-id: <your recording_id>)`
 and the same `(new-people: ...)` clause described in the collision section
 above.
