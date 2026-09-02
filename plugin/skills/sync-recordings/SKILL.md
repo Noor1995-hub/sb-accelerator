@@ -663,8 +663,13 @@ dropped this way.
 
 **Probe the recheck list first, before any worker batch.** For each
 `recheck-no-transcript` entry the step-1 split held aside, dispatch a
-recheck probe, up to ~4 in parallel, blocking, as the plugin's own agent
-type: `subagent_type: second-brain:sync-probe-m365`. Pass each probe: the
+recheck probe as the plugin's own agent type: `subagent_type:
+second-brain:sync-probe-m365`. **Dispatch in blocking batches of at most
+~4 — this is the cap, not a suggestion on top of it:** send ONE message
+containing at most ~4 blocking Agent calls (`run_in_background: false`);
+only once every call in that message has returned do you send the next
+message with the next batch, until every recheck entry has a probe. There
+is no background mode for this fan-out. Pass each probe: the
 `references/probe-contract.md` path (`references/worker-contract.md` too —
 the probe contract defers to it), `$VAULT`, `$SCRATCH`, `$VAULTLIB`, the
 vault timezone, the entry's `uri` (verbatim, from the calendar-search pages
@@ -724,17 +729,26 @@ Same per-batch banking doctrine as the worker batches below: crash loss is
 bounded to one probe wave, one cheap re-probe next run.
 
 For each recording that survived step 1 — **also when there is only one**
-(rule 7) — dispatch a worker, up to ~4 in parallel, blocking, as the
-plugin's own agent type: `subagent_type: second-brain:sync-worker` for
-plaud and inbox recordings, `subagent_type: second-brain:sync-worker-m365`
-for m365 ones (the M365 connector's tool names differ per deployment, so
-that worker's tool surface stays open where the other's is pinned). Both
-agent definitions pin `model: sonnet` structurally — the model is never a
-per-dispatch decision. On a harness where the plugin agent types do not
-resolve, fall back to a generic subagent spawned with `model: sonnet`
-passed explicitly — a live cost analysis found dispatches that omitted it
-silently inheriting the session's model, and generic workers each re-read
-the session's full base context on every request besides.
+(rule 7) — dispatch a worker as the plugin's own agent type: `subagent_type:
+second-brain:sync-worker` for plaud and inbox recordings, `subagent_type:
+second-brain:sync-worker-m365` for m365 ones (the M365 connector's tool
+names differ per deployment, so that worker's tool surface stays open where
+the other's is pinned). Both agent definitions pin `model: sonnet`
+structurally — the model is never a per-dispatch decision. On a harness
+where the plugin agent types do not resolve, fall back to a generic
+subagent spawned with `model: sonnet` passed explicitly — a live cost
+analysis found dispatches that omitted it silently inheriting the session's
+model, and generic workers each re-read the session's full base context on
+every request besides.
+
+**Dispatch in blocking batches of at most ~4 — this is the cap, not a
+suggestion on top of it.** Send ONE message containing at most ~4 blocking
+Agent calls (`run_in_background: false`); only once every call in that
+message has returned do you send the next message with the next batch of up
+to ~4, until every survivor has a worker. There is no background mode for
+this fan-out: a blocking call already returns exactly when its worker
+finishes, so a batch's completion is the signal to send the next one —
+never a separate check.
 
 The worker fetches its own transcript, reassembles,
 extracts, writes, and replies with one outcome line; its mechanics live in
@@ -791,13 +805,19 @@ Extraction is structured work — takeaways, debrief, action items **from the
 transcript**; enrichment summaries are supporting context only, never the
 source of record.
 
-**Never poll a batch with no-op Bash.** A live cost analysis of the evening
-pipeline found 362 of 423 requests in one run were idle `Bash(true)` /
-`sleep` / `echo waiting` polls babysitting a background subagent batch —
-each poll re-reads the entire session context, and that alone was most of
-that run's bill. A **blocking** spawn already returns when the worker
-finishes. Spawn each batch (up to ~4) as blocking calls, or sequentially —
-never spawn in the background and then loop checking on it.
+**Why the batch dispatched above is blocking, never background-and-poll.**
+A live cost analysis of the evening pipeline (which fans out this same way,
+by project instead of by recording) found a run whose orchestrator
+dispatched over its own stated cap, then spawned the batch in the
+background and spent roughly 80 extra calls — `ScheduleWakeup`, `ListAgents`,
+and idle `Bash(true)` checks — babysitting it for twelve minutes; each idle
+check re-reads the entire session context, and that alone was most of the
+run's bill. A prose warning against exactly this was already in both
+skills at the time, and did not bind. The dispatch instruction above is
+written so there is no room for that reading: a batch is at most ~4, sent
+as one message of blocking calls, and the only thing that ever triggers the
+next batch is that message returning — there is no step where "send one
+more" or "check on it" is an available move.
 
 **Patience scales with the recording; "stuck" is a warning, never a silent
 drop.** A worker's runtime tracks its transcript's length, so a flat clock
