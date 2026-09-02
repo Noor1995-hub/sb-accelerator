@@ -492,6 +492,37 @@ def test_sync_recordings_worker_contract_m365_settles_the_skip_list_bucket():
         "same no-transcript outcome as a transcript that came back empty")
 
 
+# Intra-run stem-collision race: two workers in one run can capture the SAME
+# meeting from two sources (a Plaud recording plus the meeting's own Teams
+# transcript) and derive the same meeting-note stem. The payload filename is
+# therefore keyed by the briefing's scratch stem — unique per worker by
+# construction — never the meeting-note stem; the vault-note side of the race
+# is settled inside `meeting write` (exclusive create + the
+# cross-source-duplicate conflict), which both contract layers must surface.
+def test_sync_recordings_payload_files_are_keyed_by_scratch_stem():
+    ref = read_ref("sync-recordings", "worker-contract.md")
+    assert "$SCRATCH/<stem>.payload.json" not in ref, (
+        "the payload filename must never be the meeting-note stem — two "
+        "workers syncing one meeting from two sources derive the same stem "
+        "and race on the shared file")
+    assert "$SCRATCH/<scratch stem>.payload.json" in ref, (
+        "the payload file is keyed by the briefing's scratch stem, which "
+        "the orchestrator makes unique per worker")
+    assert "cross-source-duplicate" in ref, (
+        "the worker must know a write can come back flagged "
+        "cross-source-duplicate and mention the conflict kind in its "
+        "outcome line")
+
+
+def test_sync_recordings_counts_cross_source_duplicates():
+    text = read_skill("sync-recordings")
+    step6 = text.split("### 6.")[1].split("### 7.")[0]
+    assert "cross-source-duplicate" in step6, (
+        "step 6 must count a written cross-source-duplicate conflict under "
+        "Possible duplicates, like confirmed-target — it is the same "
+        "one-conversation-twice failure, caught at write time")
+
+
 def test_sync_recordings_worker_contract_m365_resolves_its_own_attendees():
     ref = read_ref("sync-recordings", "worker-contract.md")
     assert "person ensure" in ref, (

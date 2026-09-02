@@ -62,6 +62,23 @@ def test_sweep_covers_project_qualified_decision_payloads(tmp_path):
         assert name in result["deleted"]
 
 
+def test_sweep_covers_worker_qualified_payload_names(tmp_path):
+    # Workers key payload files by their briefing's scratch stem, never the
+    # meeting-note stem (two workers syncing one meeting from two sources
+    # derive the same note stem and would race on a shared file, per
+    # worker-contract.md). The qualified names must still match the sweep.
+    names = ("rec_3.payload.json", "m365_event_7.payload.json",
+             "REC-2026-0520-1103.payload.json")
+    for name in names:
+        (tmp_path / name).write_text("{}", encoding="utf-8")
+
+    result = scratch.sweep(str(tmp_path))
+
+    for name in names:
+        assert not (tmp_path / name).exists(), f"{name} should have been swept"
+        assert name in result["deleted"]
+
+
 def test_sweep_covers_the_session_1_onboarding_files(tmp_path):
     # /setup-my-brain writes these during the live interview; its deletion
     # points are the same full sweep, so they must be in the pattern list.

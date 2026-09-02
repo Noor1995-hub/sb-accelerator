@@ -297,6 +297,59 @@ def test_unconfirmed_stem_collision_suffixes_instead_of_overwriting(tmp_path):
     assert (root / first["path"]).is_file() and (root / result["path"]).is_file()
 
 
+def test_cross_source_stem_collision_gets_a_flagged_sibling(tmp_path):
+    """One conversation captured by two sources in the same run — a Plaud
+    recording plus the same meeting's Teams transcript — derives one stem.
+    Distinct ids in *different namespaces* at the same stem are a probable
+    duplicate, not a coincidence: the sibling carries the conflicts-with
+    edge so triage shows it and reconcile-reviews refuses to fold a tick."""
+    root = make_vault(tmp_path)
+    first = meeting.write(
+        root, payload(**{"source-recording-id": "plaud:abc123"}))
+    result = meeting.write(
+        root, payload(**{"source-recording-id": "m365:def456"}))
+    assert result["stem"] == "20-05-26-vendor-strategy-brainstorm-v2"
+    assert result["review_status"] == "needs-review"
+    assert result["conflict"] == {
+        "kind": "cross-source-duplicate",
+        "conflicts_with": "20-05-26-vendor-strategy-brainstorm",
+    }
+    text = (root / result["path"]).read_text(encoding="utf-8")
+    assert 'conflicts-with: "[[20-05-26-vendor-strategy-brainstorm]]"' in text
+    # The first note was not touched.
+    assert "plaud:abc123" in (root / first["path"]).read_text(encoding="utf-8")
+
+
+def test_lost_write_race_lands_on_a_sibling_never_a_clobber(
+        tmp_path, monkeypatch):
+    """Two concurrent workers can both see a free stem before either writes —
+    the lookup in _resolve_target is a snapshot. Simulate the loser: its
+    first stem lookup answers None even though the winner's note exists by
+    then; the exclusive create must refuse, and the retry must re-resolve to
+    the flagged sibling instead of replacing the winner's note."""
+    root = make_vault(tmp_path)
+    first = meeting.write(
+        root, payload(**{"source-recording-id": "plaud:abc123"}))
+    first_text = (root / first["path"]).read_text(encoding="utf-8")
+
+    real_find = meeting._find_stem
+    calls = {"n": 0}
+
+    def stale_once(folder, stem):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return None   # the loser's pre-write snapshot: nothing there yet
+        return real_find(folder, stem)
+
+    monkeypatch.setattr(meeting, "_find_stem", stale_once)
+    result = meeting.write(
+        root, payload(**{"source-recording-id": "m365:def456"}))
+    assert result["stem"] == "20-05-26-vendor-strategy-brainstorm-v2"
+    assert result["conflict"]["kind"] == "cross-source-duplicate"
+    # The winner's note is byte-identical — never last-write-wins clobbered.
+    assert (root / first["path"]).read_text(encoding="utf-8") == first_text
+
+
 def note_payload(**overrides) -> dict:
     """A forwarded email: a capture, not a meeting. No calendar was ever
     consulted and nothing was recorded — but it is still filed under its

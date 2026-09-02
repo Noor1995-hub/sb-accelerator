@@ -758,8 +758,8 @@ Pass each worker *paths and decisions*, not content:
   (`worker-contract.md`'s Fetching — M365 section); inbox — the file's
   path, its `recording_id` from `sync scan`, its date read from the file's
   own content or header, and its scratch stem — the inbox file's own name
-  stem (its payload file `<stem>.payload.json` is swept by pattern like the
-  rest);
+  stem (its payload file `<scratch stem>.payload.json` is swept by pattern
+  like the rest);
 - the routing you decided: `projects`, `calendar_match`, `calendar-subject`
   (always non-empty — the matched event's subject, or the item's own
   subject or a short descriptive title), whichever of
@@ -833,8 +833,12 @@ and settles it as already synced.
   conflict counts under **Possible duplicates**, not Processed: the CLI
   wrote a `-v2` sibling carrying a `conflicts-with` edge instead of
   touching the confirmed note, and it shows in triage under `⚠ Duplicate
-  of`. A mentioned `stem-collision` is just a `-2` filename suffix —
-  nothing was at risk.
+  of`. A mentioned `cross-source-duplicate` counts there too, the same
+  way: a sibling worker in this run (or an earlier run) had already
+  written this meeting's note from another source — one conversation,
+  captured twice — so the CLI wrote a flagged `-v2` sibling rather than a
+  second bare copy, and triage settles the pair. A mentioned
+  `stem-collision` is just a `-2` filename suffix — nothing was at risk.
 - `already-synced: <recording_id>` — the worker's own dedup call found the
   id already in the ledger before it ever fetched a transcript; bank it as
   `{"outcome": "written", "recording_id": <recording_id>}` alongside the
@@ -952,7 +956,7 @@ Count what exists, not what you intended (a lab run once reported
 **Inbox swept:** {N} files → `90-archive/inbox/{YYYY-MM}/` · {N} left pending in `10-inbox/`
 **New people:** {N} created in `50-people/`
 **Meetings you ticked as reviewed:** {N} now confirmed
-**Possible duplicates:** {N} ({list the stems}) — kept as separate notes; each would have overwritten a meeting you already confirmed
+**Possible duplicates:** {N} ({list the stems}) — kept as separate notes; each landed on a meeting that already had a note (one you confirmed, or one written from another source this run), so nothing was overwritten
 **Possible cross-adapter duplicates:** {N} — deferred; needs an interactive run
 **Skipped / errors:** {N} (will retry next run) · {N} tiny clips auto-skipped ({list each with its duration}) — permanent, not a retry
 **M365 fetches saved:** {N} of {N} listed occurrences answered from the seen-events cache ({N} held in the 6h recheck window) | cache cold (first run)

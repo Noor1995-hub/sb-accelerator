@@ -82,6 +82,25 @@ def atomic_write(path: Path, text: str) -> None:
         raise
 
 
+def atomic_create(path: Path, text: str) -> None:
+    """atomic_write, but refuse to replace a file that already exists.
+
+    Two concurrent writers that both looked and saw no file at `path` must
+    not last-write-wins each other — /sync-recordings runs its per-recording
+    workers in parallel, and one meeting captured by two sources in the same
+    run derives the same note stem in both workers. The name is claimed with
+    O_EXCL (atomic on every platform Python supports), then the durable
+    temp+replace of atomic_write lands the content over the caller's own
+    claim. The loser gets FileExistsError and re-resolves. A crash between
+    claim and replace leaves an empty file, which a later writer treats as
+    an existing unreadable note — suffixed around, never overwritten.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(str(path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+    os.close(fd)
+    atomic_write(path, text)
+
+
 def _context_path(root: Path, stem: str) -> Path:
     if stem not in CONTEXT_FILES:
         raise VaultError(
