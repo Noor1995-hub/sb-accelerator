@@ -799,6 +799,28 @@ that run's bill. A **blocking** spawn already returns when the worker
 finishes. Spawn each batch (up to ~4) as blocking calls, or sequentially —
 never spawn in the background and then loop checking on it.
 
+**Patience scales with the recording; "stuck" is a warning, never a silent
+drop.** A worker's runtime tracks its transcript's length, so a flat clock
+misjudges exactly the recordings that matter most. A live run declared a
+worker stuck at "10+ minutes vs ~2–3 for comparable workers" while it was
+extracting a 42-minute meeting — after noting, earlier in the same run, that
+the long transcript would naturally take longer — and moved on with nothing
+banked; the worker finished 7 seconds later, and only that accident stood
+between the vault and a lost note plus a duplicate re-extraction next run.
+Treat a worker as a straggler only after
+**max(10 minutes, half the recording's duration)** — the duration is already
+in this context from discovery (the plaud listing's `duration`, the m365
+occurrence's start/end, an inbox item's stated length; when none is known,
+the 10-minute floor alone applies). Batchmates finishing in 2–3 minutes
+proves nothing about the long one: their recordings were short. When the
+deadline genuinely passes, two obligations: bank **no outcome** for that
+recording — unbanked means it retries next run, exactly like `fetch-error` —
+and report it in the summary as a ⚠ warning naming the recording id and the
+elapsed time, so the retry is deliberate, never a silent "moved on". An
+abandoned worker may still finish and write after you do; that is safe
+precisely because nothing was banked — the next run's dedup finds the note
+and settles it as already synced.
+
 **When a batch returns, act on each line, then bank.**
 
 - `written: <stem>` — count it; step 7 verifies from disk anyway. For an

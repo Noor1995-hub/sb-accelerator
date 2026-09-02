@@ -214,6 +214,17 @@ there is nothing to poll for and nothing gained by trying. Never spawn in
 the background and loop checking on it. This applies to stage 3's fan-out
 too (`/sync-recordings` step 6 carries the same rule).
 
+**Before declaring any subagent stuck, scale patience to its workload.**
+Step 6 of `/sync-recordings` states the rule for sync workers — a straggler
+only after max(10 minutes, half the recording's duration), because a live
+run wrote off a worker at a flat "10+ minutes" while it was extracting a
+42-minute meeting and nearly lost the recording. The same reasoning holds
+here: a stage-4 subagent with many `newFiles` reads longer than its
+batchmates, and comparing against their finish times proves nothing. A
+subagent genuinely given up on becomes a ⚠ warning in the final summary
+naming the project (or recording id, for stage 3) so the next run picks it
+up deliberately — never a silently dropped item.
+
 Projects with only `needs-review` meetings never reach the queue — do not
 "help" one by confirming meetings yourself.
 
