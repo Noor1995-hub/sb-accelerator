@@ -147,12 +147,18 @@ resolves to a Microsoft Store alias that opens the Store instead of running.
 - **Writes are UTF-8 with `newline="\n"`.** A write from a Windows host must
   not inject CRLF into markdown that syncs to a Mac.
 
+`${CLAUDE_PLUGIN_ROOT}` is substituted inline into skill text at load time;
+it is exported to the environment only for hook subprocesses, so
+`echo $CLAUDE_PLUGIN_ROOT` in a skill's Bash is empty by design (source:
+code.claude.com/docs/en/plugins.md).
+
 ## Surfaces
 
 | Surface | Skills load | Shell | Object writes |
 |---|---|---|---|
 | Chat + filesystem or Obsidian MCP | no | none | not supported |
 | Cowork | yes | Linux VM | yes |
+| Cowork cloud session ("Run new tasks in the cloud") | yes | Anthropic sandbox | not supported — the vault is not a filesystem there |
 | Claude Code CLI | yes | host OS | yes |
 
 Plugins are not used in Chat, so a skill cannot run there at all. Every

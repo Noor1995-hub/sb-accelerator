@@ -20,6 +20,10 @@ Platform requirements verified against Anthropic's documentation on
       each user installing by hand.
 - [ ] Seats for the vault owner **and** the assistant. The assistant runs the
       operational surface; an owner-only seat means owner-as-operator.
+- [ ] **Cloud sessions disabled for the deployment's users at org level, or
+      both users keep the cloud toggle off.** v1 runs local only, because the
+      vault is a local folder — a Cowork cloud session ("Run new tasks in the
+      cloud") cannot see it.
 
 ## 2. Device capability — qualifying
 
@@ -104,6 +108,9 @@ the questions to settle before you get that far.
       outside `95-private/`. Name what that includes out loud, with the vault
       owner, before any content lands.
 - [ ] Data-flow one-pager signed off by whoever owns information security.
+- [ ] Confirm the client org's conversation retention setting with their
+      Claude admin (Anthropic default is 6 years for Cowork session
+      transcripts) and record it in the data-flow one-pager.
 - [ ] Feedback repo `sb-client-<slug>` created; client can raise issues into
       it via `/report-feedback`.
 - [ ] Deployment registered in `registry.yaml`.
@@ -120,3 +127,4 @@ When an item above fails, the honest fallback rather than a silent downgrade:
 | No assistant seat | Owner-as-operator. Materially worse; say so before selling it. |
 | No recording consent | Capture narrows to Teams transcripts, forwarded mail, and typed input. |
 | No Obsidian permitted | Vault still works through Cowork and Chat; the browse tier is gone. |
+| Cloud sessions cannot be disabled org-wide | Agree the toggle-off norm with both users instead; a cloud session that opens the vault anyway sees a missing-path error, not silent corruption. |
