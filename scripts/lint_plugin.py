@@ -23,6 +23,16 @@ per-occurrence exemption, not a whole-line one: any other "busdev" mention
 riding along on the same line still flags, as do other terms on that line and
 bare "busdev" anywhere else (including filenames).
 
+Exemption: plugin/vendor/ is exempt from the CONTENT scans (denylist and
+slash-command references), never from the filename check. It holds the
+unmodified upstream release assets and licence texts of the Obsidian
+community plugins the vault expects (#164) — third-party code and its
+authors' copyright notices, not delaware content. The clean-room rule is
+about what delaware wrote; a maintainer's name in an upstream manifest.json or
+a `/path` inside minified JavaScript is neither a client leak nor our prose.
+A denylisted term in a vendored FILENAME still flags: the directory names are
+ours, and a file we chose to put there is ours to name.
+
 Exit 0 with no output on success; print problems and exit 1 otherwise.
 """
 import json
@@ -52,6 +62,18 @@ SLASH_COMMAND_RE = re.compile(r"`/([a-z][a-z0-9]*(?:-[a-z0-9]+)*)`")
 BARE_COMMAND_RE = re.compile(r"(?<![\w/`.])/([a-z][a-z0-9]*(?:-[a-z0-9]+)+)(?![\w/-])")
 
 SHIPPED_TREES = ("plugin", "fixtures")
+
+# Root-relative path prefix of the vendored third-party tree. Compared against
+# `path.relative_to(root).parts`, so it holds for the source tree (root = repo)
+# and for a built dist tree (root = the dist directory, which build_dist.py's
+# verify_tree() scans with the same function) alike.
+VENDOR_PREFIX = ("plugin", "vendor")
+
+
+def is_vendored(rel: Path) -> bool:
+    """True for a path under plugin/vendor/ — third-party content whose text
+    is exempt from the clean-room and slash-command scans (see module doc)."""
+    return tuple(rel.parts[:len(VENDOR_PREFIX)]) == VENDOR_PREFIX
 
 
 def load_denylist(root: Path) -> list[str]:
@@ -130,6 +152,8 @@ def _scan_file(path: Path, root: Path, terms: list[str]) -> list[str]:
     for term in terms:
         if term in path.name.lower():
             problems.append(f"{path.relative_to(root)}: clean-room violation in filename: {term!r}")
+    if is_vendored(path.relative_to(root)):
+        return problems  # upstream bytes — filename checked, content is theirs
     try:
         text = path.read_text(encoding="utf-8")
     except (UnicodeDecodeError, ValueError):
@@ -172,7 +196,8 @@ def scan_skill_references(root: Path, shipped: set[str]) -> list[str]:
     Covers plugin/ (which now carries the template at plugin/template/) and
     fixtures/: a SKILL.md pointing at a deleted sibling skill is the same
     defect one step further from the vault owner.
-    Directories named .obsidian are skipped — machine config, not prose.
+    Directories named .obsidian are skipped — machine config, not prose — and
+    so is plugin/vendor/, the upstream plugins' own code (see module doc).
 
     Known boundaries, all deliberate:
 
@@ -201,7 +226,7 @@ def scan_skill_references(root: Path, shipped: set[str]) -> list[str]:
             # Relative to root, not path.parts: a checkout that happens to sit
             # inside a directory named .obsidian would otherwise skip the lot.
             rel = path.relative_to(root)
-            if ".obsidian" in rel.parts:
+            if ".obsidian" in rel.parts or is_vendored(rel):
                 continue
             try:
                 text = path.read_text(encoding="utf-8")

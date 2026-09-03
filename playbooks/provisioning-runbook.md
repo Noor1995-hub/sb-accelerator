@@ -65,22 +65,37 @@ no repo checkout, same as step 1:
 python3 "${CLAUDE_PLUGIN_ROOT}/lib/provision_plugins.py" <vault>
 ```
 
-That installs the pinned, checksum-verified releases listed in the plugin's
-own `lib/plugin-pins.json` into the vault's `.obsidian/plugins/` and
-`.obsidian/themes/Minimal/`. The vault's first open then needs only the one
-**"trust author and enable plugins"** click — turning off Restricted Mode is
-the one step that can never ship as files.
+That installs the pinned releases listed in the plugin's own
+`lib/plugin-pins.json` into the vault's `.obsidian/plugins/` and
+`.obsidian/themes/Minimal/`, from the copies vendored inside the plugin at
+`vendor/obsidian/` — each file verified against its pinned sha256 before it
+is written. **No network is involved**, so Cowork's network-egress setting
+is not a prerequisite for this step: do not ask a client's IT to enable it
+for provisioning (it is an org-wide admin switch their console flags as a
+security risk, and even with it on, GitHub's release-asset host stays
+blocked). A fresh vault reports `14 installed, 0 already ok, 0 problem(s).`;
+a re-run reports `0 installed, 14 already ok`. The vault's first open then
+needs only the one **"trust author and enable plugins"** click — turning off
+Restricted Mode is the one step that can never ship as files.
+
+A `vendored copy sha256 mismatch` error means the plugin shipped a wrong
+file; the script refuses to install it and will not download a replacement.
+File it as a plugin defect and use the by-hand fallback below for that
+plugin only.
 
 ### Fallback: no plugin cache, or install fully by hand
 
 If you have an accelerator repo checkout but no plugin installed, run the
-same script directly: `python plugin/lib/provision_plugins.py <vault>`.
+same script directly: `python plugin/lib/provision_plugins.py <vault>` — the
+checkout carries the same vendored tree.
 
 If neither is available, install by hand from within Obsidian. The list the
 vault expects is in its own `.obsidian/community-plugins.json`, so you do
 not need this runbook in front of you to recover it: Dataview, Minimal
 Theme Settings, Style Settings, Notebook Navigator — plus the **Minimal**
-theme via Settings → Appearance.
+theme via Settings → Appearance. **Installing Dataview by hand, pick 0.5.68
+explicitly** — the community browser's newer 0.5.70 is a mislabeled beta
+with a broken manifest (see `plugin-pins.json`'s `_readme`).
 
 ## 3. Create the `.claude → claude` symlink
 

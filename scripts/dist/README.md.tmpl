@@ -30,10 +30,13 @@ These are two different mechanisms, and conflating them is the easy mistake:
   the `/provision-vault` skill (or by copying it manually) — a consultant
   step, done once per machine at provisioning.
 
-The Obsidian community plugins and theme the vault expects are also not here:
-they are fetched from their own upstream releases, pinned and
-checksum-verified, by `scripts/provision_plugins.py` in the product
-repository. `plugin/template/.obsidian/plugins/` carries their *settings*, not their
+The Obsidian community plugins and theme the vault expects ship inside the
+plugin too, as their unmodified upstream release files under
+`plugin/vendor/obsidian/` (licences: `plugin/vendor/obsidian/LICENSES.md`).
+`/provision-vault` step 2 installs them into the vault from there, verifying
+each file against the pinned sha256 in `plugin/lib/plugin-pins.json`, so no
+network access is needed on the client machine.
+`plugin/template/.obsidian/plugins/` carries their *settings*, not their
 code.
 
 ## Verifying a deployment

@@ -15,6 +15,8 @@ delivers them.
 
 ## Unreleased
 
+- `/provision-vault` step 2 now installs the Obsidian plugins and Minimal theme from copies that ship inside the plugin itself, verified against the same pinned checksums as before — so provisioning works on a machine with no network access to GitHub (Cowork's sandbox blocks release downloads by default), and the consultant no longer needs to ask a client's IT to open network egress. The by-hand fallback stays, now with the explicit instruction to pick Dataview 0.5.68 (#164)
+
 ## v0.10.28 — 2026-09-03
 
 - The vault opens cleaner: every note's Properties block starts collapsed (click the heading to expand; a note you expanded stays that way), the Meetings **Triage** view carries the new default layout — Date, Cal, Subject, Attendees, ✓, Projects, then a narrow ↗ arrow that opens the project — Decisions sits directly under Projects in the sidebar shortcuts, and decision notes plus *Start here* now use the same reading width as every other note instead of wrapping at a fixed column (#158)

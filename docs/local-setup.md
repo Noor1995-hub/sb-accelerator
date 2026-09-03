@@ -48,7 +48,7 @@ It lives in that engagement's own folder, outside the repo entirely, never
 under `fixtures/` (fictional and potentially shipping) or `playbooks/`
 (generic runbooks, not client content).
 
-Add `--with-plugins` to also download the pinned Obsidian community plugins and the Minimal theme into the vault (network required — pins and checksums live in `plugin/lib/plugin-pins.json`):
+Add `--with-plugins` to also install the pinned Obsidian community plugins and the Minimal theme into the vault (no network needed — the files are vendored at `plugin/vendor/obsidian/`; pins and checksums live in `plugin/lib/plugin-pins.json`):
 
 ```bash
 python scripts/make_test_vault.py /tmp/sb-test-vault --with-plugins
