@@ -15,7 +15,7 @@ delivers them.
 
 ## Unreleased
 
-- `/provision-vault` step 2 now installs the Obsidian plugins and Minimal theme from copies that ship inside the plugin itself, verified against the same pinned checksums as before — so provisioning works on a machine with no network access to GitHub (Cowork's sandbox blocks release downloads by default), and the consultant no longer needs to ask a client's IT to open network egress. The by-hand fallback stays, now with the explicit instruction to pick Dataview 0.5.68 (#164)
+- `/provision-vault` step 2 now installs the Obsidian plugins and Minimal theme from copies that ship inside the plugin itself, verified against the same pinned checksums as before — so provisioning works on a machine with no network access to GitHub (Cowork's sandbox blocks release downloads by default), and the consultant no longer needs to ask a client's IT to open network egress. The by-hand fallback stays, now with the explicit instruction to pick Dataview 0.5.68 (#164, #166)
 
 ## v0.10.28 — 2026-09-03
 
