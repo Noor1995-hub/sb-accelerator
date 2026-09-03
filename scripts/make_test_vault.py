@@ -76,6 +76,19 @@ def build_vault(target: Path, repo_root: Path, fresh: bool,
             warnings.append(
                 f"could not create .claude symlink ({e}); create it by hand: ln -s claude {link}"
             )
+
+    # plugin/lib/ is where the shipped vaultlib package lives, not next to
+    # this script — same seam provision_into() uses above. record_provision
+    # never raises; a "failed — ..." status is surfaced as a warning rather
+    # than aborting a test vault that otherwise built fine.
+    lib_dir = str(repo_root / "plugin" / "lib")
+    if lib_dir not in sys.path:
+        sys.path.insert(0, lib_dir)
+    from vaultlib import provenance
+
+    status = provenance.record_provision(target, repo_root / "plugin" / "template")
+    if status.startswith("failed"):
+        warnings.append(f"provenance not recorded ({status})")
     return warnings
 
 

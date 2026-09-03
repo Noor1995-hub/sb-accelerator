@@ -11,6 +11,7 @@ import pytest
 
 from make_test_vault import TargetNotEmptyError, build_vault, main
 from redate import discover_anchor, weekday_aligned_shift
+from vaultlib import provenance
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 FIXTURE_ROOT = REPO_ROOT / "fixtures" / "demo-vault"
@@ -40,6 +41,29 @@ def test_fresh_copies_template_only(tmp_path):
     build_vault(target, REPO_ROOT, fresh=True)
     assert (target / "CLAUDE.md").is_file()
     assert not (target / "40-entities" / "nordbridge-components").exists()
+
+
+def test_fresh_records_provenance_for_all_34_template_files(tmp_path):
+    target = tmp_path / "vault"
+    build_vault(target, REPO_ROOT, fresh=True)
+    data = provenance.read(target)
+    assert data is not None
+    assert data["events"][-1]["event"] == "provision"
+    assert len(data["template_files"]) == 34
+
+
+def test_default_overlay_still_records_provenance_for_unchanged_files(tmp_path):
+    """The demo fixture overlays some template files (identity.md, for
+    instance) with different bytes — those are simply absent from
+    template_files, never a reason to fail the whole record."""
+    target = tmp_path / "vault"
+    build_vault(target, REPO_ROOT, fresh=False)
+    data = provenance.read(target)
+    assert data is not None
+    assert data["events"][-1]["event"] == "provision"
+    # Meetings.base is untouched by the demo overlay (a Base file, not a
+    # fixture-owned markdown note), so it still matches the template.
+    assert "20-meetings/Meetings.base" in data["template_files"]
 
 
 def test_default_overlays_fixtures(tmp_path):
