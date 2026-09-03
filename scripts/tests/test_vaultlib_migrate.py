@@ -101,6 +101,43 @@ def test_run_with_nothing_pending_never_touches_provenance(tmp_path, migrations_
     assert provenance.read(root) is None
 
 
+def test_run_records_an_upgrade_event_on_a_partial_chain_failure(
+        tmp_path, migrations_dir):
+    """Reviewer finding #2: when the second of three migrations fails,
+    structure-version was already bumped on disk by the first, so
+    provenance must reflect that intermediate version too — not silently
+    keep reading the pre-upgrade state until some later successful run."""
+    write_migration(migrations_dir, 1, "first", 2, "m1")
+    write_migration(migrations_dir, 2, "boom", 3, "m2", fail_apply=True)
+    write_migration(migrations_dir, 3, "third", 4, "m3")
+    root = versioned_vault(tmp_path, version="1")
+
+    with pytest.raises(migrate.MigrateError):
+        migrate.run(root, "2026-08-25", stamp="2026-08-25-101500")
+
+    assert vault.structure_version(root) == "2"
+    data = provenance.read(root)
+    assert data is not None
+    assert len(data["events"]) == 1
+    assert data["events"][-1]["event"] == "upgrade"
+    assert data["events"][-1]["structure_version"] == "2"
+    assert data["events"][-1]["from_structure_version"] == "1"
+
+
+def test_run_records_no_upgrade_event_when_the_first_migration_fails(
+        tmp_path, migrations_dir):
+    """No migration landed, so structure-version never moved off disk — an
+    upgrade event here would misreport a change that never happened."""
+    write_migration(migrations_dir, 1, "boom", 2, "m1", fail_apply=True)
+    root = versioned_vault(tmp_path, version="1")
+
+    with pytest.raises(migrate.MigrateError):
+        migrate.run(root, "2026-08-25", stamp="2026-08-25-101500")
+
+    assert vault.structure_version(root) == "1"
+    assert provenance.read(root) is None
+
+
 def test_run_reports_a_provenance_failure_without_failing_the_migration(
         tmp_path, migrations_dir, monkeypatch):
     write_migration(migrations_dir, 1, "first", 2, "m1")

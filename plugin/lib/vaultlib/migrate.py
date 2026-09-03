@@ -195,6 +195,19 @@ def run(root: Path, today: str, stamp: str = None) -> dict:
             if needs_human:
                 outcome += " · needs a human: " + "; ".join(needs_human)
             _log(root, today, from_version, target, snapshot_name, outcome)
+            # A migration earlier in this same chain may have already
+            # bumped structure-version on disk before this one failed — in
+            # its own try, same as the success path below, so a provenance
+            # failure never masks the MigrateError about to be raised.
+            # `applied` empty means nothing landed and structure-version
+            # never moved, so no event is recorded in that case.
+            if applied:
+                try:
+                    provenance.record_event(
+                        root, "upgrade", structure_version=from_version,
+                        from_structure_version=str(current))
+                except Exception:  # noqa: BLE001 — never masks the re-raise below
+                    pass
             raise MigrateError(
                 f"migration {number:03d}-{slug} failed after snapshot "
                 f"{snapshot_name}: {exc}",
