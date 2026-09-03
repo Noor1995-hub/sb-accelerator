@@ -359,8 +359,8 @@ python3 "$VAULTLIB" sync m365-triage --vault "$VAULT" \
 
 Everything the cache already answers is filtered out here, before any
 dispatch: `filtered` counts occurrences already written into the vault,
-permanently skipped, refused by another organization's tenant, or finally
-transcript-less. A `no-transcript` outcome
+permanently skipped, organised by someone else (`no-access`), refused by
+another organization's tenant (`forbidden`), or finally transcript-less. A `no-transcript` outcome
 stays provisional for 48 hours after the meeting ends — Teams delivers
 transcripts with delay — so those come back in `fetch` as
 `recheck-no-transcript` until the window passes. A provisional occurrence
@@ -408,8 +408,10 @@ call found no `meetingTranscriptUrl`, or the transcript read answered
 `transcripts_empty`), `"no-access"` (a 403 whose body carries Graph code
 3003 / "does not have access to lookup meeting" — the meeting was
 organised by someone else; this connector resolves transcripts through the
-organiser-only online-meeting lookup), `"forbidden"` (any other 403 —
-another tenant owns the transcript, permanently), or a written note. Those outcomes are
+organiser-only online-meeting lookup — or whose body is unreadable / carries
+no readable Graph error code at all, the safer default), `"forbidden"` (a
+403 whose body positively names a different cause — another tenant owns
+the transcript, permanently), or a written note. Those outcomes are
 banked per batch in step 6. A recording that *failed* — a transport error
 — gets **no outcome line**, and neither does a cross-adapter duplicate
 deferred under `--unattended`: what is not settled is not recorded, and
@@ -691,9 +693,12 @@ When a probe batch returns, act on each line:
   `no-transcript` reply does.
 - `no-access` — settles as `{"id": <id>, "start_utc": <start_utc>,
   "outcome": "no-access"}`, same as a worker's `no-access` reply — the
-  meeting was organised by someone else (Graph code 3003).
+  meeting was organised by someone else (Graph code 3003), or the 403 body
+  was unreadable / carried no readable Graph error code at all (the safer
+  default).
 - `forbidden` — settles as `{"id": <id>, "start_utc": <start_utc>,
-  "outcome": "forbidden"}`, same as a worker's `forbidden` reply.
+  "outcome": "forbidden"}`, same as a worker's `forbidden` reply — a 403
+  body that positively names a different cause.
 - `transcript-found: <recording_id> (event at <path>, transcript-url:
   <url>)` — not settled by this probe wave at all: the recheck paid off, so
   route this entry **like any fetch survivor** instead — extract its row
@@ -882,7 +887,10 @@ and settles it as already synced.
   keyed by the `id` and `start_utc` triage carried, same as always. A worker
   replies `no-access` when the transcript read's 403 body carries Graph
   code 3003 / "does not have access to lookup meeting" (meeting organised
-  by someone else) and `forbidden` for any other 403 (another tenant).
+  by someone else), or when the body is unreadable / carries no readable
+  Graph error code at all (the safer default — not-the-organizer is the
+  majority class), and `forbidden` only when the body positively names a
+  different cause (another tenant).
 - `fetch-error` — no outcome line is banked; it retries next run.
 - `auth-error` — stop dispatching that adapter's remaining recordings and
   report it; re-authentication belongs to the user.
@@ -1010,9 +1018,13 @@ When the `no-access` count is greater than 0, the summary gains a standing
 sentence right after the `Workers dispatched` line: "N meetings this run
 were organised by others; their Teams transcripts are not readable by this
 connector. Use the recorder for those, or ask IT about transcript access."
-Per event, list the worker's `no-access` reply by the meeting's subject and
-date in the in-session summary — that is calendar metadata already on
-screen, and it is never written to a note.
+Once transcript access is granted, the consultant forces a re-check with
+`python3 "$VAULTLIB" sync m365-forget --vault "$VAULT" --outcome no-access`
+— name it right there, in the same sentence, so it is discoverable from the
+summary that surfaces the problem rather than only from `cli.py`. Per event,
+list both a worker's and a probe's `no-access` reply by the meeting's
+subject and date in the in-session summary — that is calendar metadata
+already on screen, and it is never written to a note.
 
 `New people` sums two sources, never just one: the orchestrator's own
 `person ensure` calls for plaud, inbox, and capture attendees (step 3), and
