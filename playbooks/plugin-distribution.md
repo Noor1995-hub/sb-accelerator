@@ -28,9 +28,12 @@ depends on is done:
 - The `DIST_PUSH_TOKEN` secret is set on this repo: one fine-grained PAT,
   resource owner the org, repository access scoped to those two repos,
   Contents read/write. Minted 2026-09-03 — **check its expiry before the
-  next quarterly release**; when it lapses, the `publish` job fails at its
-  own `DIST_PUSH_TOKEN` check with a message pointing back here, loudly
-  rather than silently.
+  next quarterly release**; the `DIST_PUSH_TOKEN` check in the `publish` job
+  is presence-only, so an expired-but-still-set token slips past it and
+  fails opaquely on the next line's `git clone` with a generic git auth
+  error ("Repository not found" / "Authentication failed"), with no
+  annotation pointing back here. A `publish` job that dies at the clone step
+  means the token, not the dist repo.
 - 0.10.28 was the first version published to the client channel
   (`sb-dist@05d5e8e`), the same day the dryrun channel got it.
 
