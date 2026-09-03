@@ -3,6 +3,7 @@ same pattern as test_lint_plugin.py's use of the shipped denylist — a
 synthetic fixture tree would defeat the point of testing the actual
 instantiation."""
 import os
+import shutil
 import tempfile
 from datetime import date
 from pathlib import Path
@@ -11,6 +12,7 @@ import pytest
 
 from make_test_vault import TargetNotEmptyError, build_vault, main
 from redate import discover_anchor, weekday_aligned_shift
+from test_instantiate_vault import chmod_tree, user_writable_paths
 from vaultlib import provenance
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -112,6 +114,29 @@ def test_default_overlays_fixtures(tmp_path):
     identity_text = (target / "99-workflow-config" / "context" / "identity.md").read_text()
     assert "Placeholder." not in identity_text
     assert "Morgan Ellery" in identity_text
+
+
+def test_read_only_template_source_yields_a_writable_dev_vault(tmp_path):
+    """Same copytree, same inherited modes as instantiate_vault.py (#163):
+    a checkout or cache presenting 0o500/0o400 must not produce a test
+    vault nobody can write into. Built against a scratch repo root whose
+    plugin/template is a read-only copy of the shipped one."""
+    fake_repo = tmp_path / "repo"
+    fake_template = fake_repo / "plugin" / "template"
+    shutil.copytree(REPO_ROOT / "plugin" / "template", fake_template)
+    chmod_tree(fake_template, 0o500, 0o400)
+    target = tmp_path / "vault"
+    try:
+        warnings = build_vault(target, fake_repo, fresh=True)
+        assert user_writable_paths(target) == []
+        (target / "99-workflow-config" / "note.md").write_text("a note\n")
+        assert not any("provenance" in w for w in warnings)
+    finally:
+        # Restore before pytest's retained tmp dir has to be removed —
+        # Windows refuses to unlink a read-only file.
+        chmod_tree(fake_repo, 0o700, 0o600)
+        if target.is_dir():
+            chmod_tree(target, 0o700, 0o600)
 
 
 def test_refuses_nonempty_target(tmp_path):

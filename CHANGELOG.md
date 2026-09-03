@@ -15,6 +15,8 @@ delivers them.
 
 ## Unreleased
 
+- `/provision-vault` no longer hands over a vault nobody can write into. Provisioning from Cowork (or any machine whose plugin cache is read-only) used to copy the cache's read-only permissions onto every file and folder of the new vault, reporting success with two soft warnings while the client could not add a single note; the copy is now made writable before anything else is written, and a vault location that still refuses writes fails provisioning with a clear error and hint instead (#165)
+
 ## v0.10.28 — 2026-09-03
 
 - The vault opens cleaner: every note's Properties block starts collapsed (click the heading to expand; a note you expanded stays that way), the Meetings **Triage** view carries the new default layout — Date, Cal, Subject, Attendees, ✓, Projects, then a narrow ↗ arrow that opens the project — Decisions sits directly under Projects in the sidebar shortcuts, and decision notes plus *Start here* now use the same reading width as every other note instead of wrapping at a fixed column (#158)

@@ -59,12 +59,26 @@ def build_vault(target: Path, repo_root: Path, fresh: bool,
     before calling this, so this function itself never defaults to today."""
     if target.exists() and (not target.is_dir() or any(target.iterdir())):
         raise TargetNotEmptyError(f"{target} already exists and is not empty")
+
+    # plugin/lib/ is where the shipped copy primitive and vaultlib live, not
+    # next to this script — same seam provision_into() uses above.
+    lib_dir = str(repo_root / "plugin" / "lib")
+    if lib_dir not in sys.path:
+        sys.path.insert(0, lib_dir)
+    from instantiate_vault import make_user_writable
+    from vaultlib import provenance
+
     target.mkdir(parents=True, exist_ok=True)
     shutil.copytree(repo_root / "plugin" / "template", target, dirs_exist_ok=True)
     if not fresh:
         shutil.copytree(repo_root / "fixtures" / "demo-vault", target, dirs_exist_ok=True)
-        if demo_day is not None:
-            redate.redate_vault(target, demo_day)
+    # copytree copies the source's modes onto the vault (copystat on every
+    # directory, copy2 on every file), so a read-only checkout or cache
+    # yields a vault nobody can write into — the same normalisation the
+    # shipped instantiate_vault.py performs, shared so the two cannot drift.
+    make_user_writable(target)
+    if not fresh and demo_day is not None:
+        redate.redate_vault(target, demo_day)
     warnings: list[str] = []
     link = target / ".claude"
     if (target / "claude").is_dir() and not link.exists():
@@ -77,15 +91,9 @@ def build_vault(target: Path, repo_root: Path, fresh: bool,
                 f"could not create .claude symlink ({e}); create it by hand: ln -s claude {link}"
             )
 
-    # plugin/lib/ is where the shipped vaultlib package lives, not next to
-    # this script — same seam provision_into() uses above. record_provision
-    # never raises; a "failed — ..." status is surfaced as a warning rather
-    # than aborting a test vault that otherwise built fine.
-    lib_dir = str(repo_root / "plugin" / "lib")
-    if lib_dir not in sys.path:
-        sys.path.insert(0, lib_dir)
-    from vaultlib import provenance
-
+    # record_provision never raises; a "failed — ..." status is surfaced as
+    # a warning rather than aborting a test vault that otherwise built fine.
+    #
     # A demo-day build's provenance.json must be just as deterministic as
     # the rest of the re-dated fixture overlay — otherwise two builds of the
     # same demo day differ only in record_provision()'s wall-clock "at",

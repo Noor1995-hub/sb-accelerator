@@ -11,12 +11,17 @@ shipped template just to exercise a failure path would be worse than not
 testing it.
 """
 import json
+import os
+import shutil
+import stat
 from pathlib import Path
 
 import pytest
 
 import instantiate_vault
-from instantiate_vault import EXPECTED_STRUCTURE_VERSION, InstantiateError, instantiate
+from instantiate_vault import (
+    EXPECTED_STRUCTURE_VERSION, PROBE_RELPATH, InstantiateError, instantiate,
+    make_user_writable)
 from vaultlib import provenance
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -29,12 +34,58 @@ def make_fake_template(tmp_path, *, structure_version=EXPECTED_STRUCTURE_VERSION
     src.mkdir()
     (src / "CLAUDE.md").write_text("stub\n", encoding="utf-8")
     (src / "structure-version").write_text(f"{structure_version}\n", encoding="utf-8")
+    (src / "99-workflow-config").mkdir()
     if with_obsidian:
         (src / ".obsidian").mkdir()
         (src / ".obsidian" / "app.json").write_text("{}\n", encoding="utf-8")
     if with_claude:
         (src / "claude" / "skills").mkdir(parents=True)
     return src
+
+
+def chmod_tree(root: Path, dir_mode: int, file_mode: int) -> None:
+    """chmod every directory and regular file under root (root included).
+    Bottom-up, so restoring a read-only tree never has to list a directory
+    it has just locked. Symlinks are skipped — chmod would follow them."""
+    for dirpath, _dirnames, filenames in os.walk(root, topdown=False):
+        for name in filenames:
+            path = Path(dirpath) / name
+            if not path.is_symlink():
+                path.chmod(file_mode)
+        os.chmod(dirpath, dir_mode)
+
+
+def user_writable_paths(root: Path) -> list:
+    """Every directory and regular file under root (root included) whose
+    mode lacks u+w, or — for directories — u+x. Empty means all good."""
+    bad = []
+    for dirpath, _dirnames, filenames in os.walk(root):
+        mode = stat.S_IMODE(os.stat(dirpath).st_mode)
+        if mode & 0o300 != 0o300:
+            bad.append((dirpath, oct(mode)))
+        for name in filenames:
+            path = Path(dirpath) / name
+            if path.is_symlink():
+                continue
+            mode = stat.S_IMODE(path.stat().st_mode)
+            if not mode & 0o200:
+                bad.append((str(path), oct(mode)))
+    return bad
+
+
+@pytest.fixture
+def read_only_template(tmp_path):
+    """A fake template presenting exactly what Cowork's read-only plugin
+    cache presents: 0o500 directories and 0o400 files. Modes are restored
+    on teardown so pytest's retained tmp dirs stay removable (Windows
+    refuses to unlink a read-only file)."""
+    src = make_fake_template(tmp_path)
+    chmod_tree(src, 0o500, 0o400)
+    yield src
+    chmod_tree(src, 0o700, 0o600)
+    for leftover in tmp_path.iterdir():
+        if leftover.is_dir() and not leftover.is_symlink():
+            chmod_tree(leftover, 0o700, 0o600)
 
 
 # --- Happy path, against the real shipped template ---
@@ -126,6 +177,100 @@ def test_missing_obsidian_directory_is_refused(tmp_path):
     target = tmp_path / "vault"
     with pytest.raises(InstantiateError, match=r"\.obsidian"):
         instantiate(target, template_root=src)
+
+
+# --- Guardrail: the vault must be writable (#163) ---
+
+
+def test_copytree_alone_carries_read_only_modes_onto_the_copy(read_only_template, tmp_path):
+    """The mechanism the guardrail exists for, pinned so the fixture is
+    known to exercise it: copytree calls copystat on every directory and
+    copy2 on every file, so a read-only source yields a read-only copy."""
+    plain_copy = tmp_path / "plain-copy"
+    shutil.copytree(read_only_template, plain_copy)
+    assert user_writable_paths(plain_copy)
+
+
+def test_read_only_template_yields_a_user_writable_vault(read_only_template, tmp_path):
+    """Cowork's plugin cache is a read-only FUSE mount presenting 0o500
+    directories and 0o400 files; before the fix the vault inherited them,
+    provenance and the symlink both came back "failed — Permission denied",
+    and the envelope still read ok: true over a vault nobody could add a
+    note to."""
+    target = tmp_path / "vault"
+    result = instantiate(target, template_root=read_only_template)
+
+    assert user_writable_paths(target) == []
+    (target / "99-workflow-config" / "note.md").write_text("a note\n", encoding="utf-8")
+    assert result["provenance"] == "99-workflow-config/provenance.json"
+    assert result["symlink"] == "created"
+
+
+@pytest.mark.skipif(
+    os.name == "nt",
+    reason="Windows has a single read-only attribute, no group/other bits: "
+           "chmod(0o444) reads back as 0o666 once the attribute is cleared",
+)
+def test_normalisation_only_widens_the_user_bits(tmp_path):
+    src = make_fake_template(tmp_path)
+    (src / "CLAUDE.md").chmod(0o444)
+    (src / ".obsidian").chmod(0o555)
+    make_user_writable(src)
+    assert stat.S_IMODE((src / "CLAUDE.md").stat().st_mode) & 0o077 == 0o044
+    assert stat.S_IMODE((src / ".obsidian").stat().st_mode) & 0o077 == 0o055
+    assert user_writable_paths(src) == []
+
+
+def test_probe_file_does_not_survive_a_successful_run(tmp_path):
+    target = tmp_path / "vault"
+    instantiate(target)
+    assert not (target / PROBE_RELPATH).exists()
+
+
+def test_unwritable_target_is_refused(tmp_path, monkeypatch):
+    """A target that still refuses writes after normalisation is exactly as
+    broken as one missing .obsidian/: a refusal, not a soft warning."""
+    src = make_fake_template(tmp_path)
+    target = tmp_path / "vault"
+
+    def refuse(path):
+        raise PermissionError(13, "Permission denied", str(path))
+
+    monkeypatch.setattr(instantiate_vault, "_probe_write", refuse)
+    with pytest.raises(InstantiateError, match="not writable") as exc_info:
+        instantiate(target, template_root=src)
+    assert "99-workflow-config/.write-probe.tmp" in str(exc_info.value)
+    assert "read-only plugin cache" in exc_info.value.hint
+    # Refused before anything wrote: no provenance, no symlink.
+    assert not (target / "99-workflow-config" / "provenance.json").exists()
+    assert not (target / ".claude").exists()
+
+
+def test_failed_normalisation_is_refused_not_a_traceback(tmp_path, monkeypatch):
+    src = make_fake_template(tmp_path)
+    target = tmp_path / "vault"
+
+    def refuse(_root):
+        raise PermissionError(1, "Operation not permitted")
+
+    monkeypatch.setattr(instantiate_vault, "make_user_writable", refuse)
+    with pytest.raises(InstantiateError, match="user-writable"):
+        instantiate(target, template_root=src)
+
+
+def test_cli_reports_ok_false_json_on_an_unwritable_target(tmp_path, capsys, monkeypatch):
+    def refuse(path):
+        raise PermissionError(13, "Permission denied", str(path))
+
+    monkeypatch.setattr(instantiate_vault, "_probe_write", refuse)
+    exit_code = instantiate_vault.main([str(tmp_path / "vault")])
+    assert exit_code == 1
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ok"] is False
+    assert "not writable" in payload["error"]
+    assert "Permission denied" in payload["error"]
+    assert "read-only plugin cache" in payload["hint"]
+    assert "remove the partial copy" in payload["hint"]
 
 
 # --- The .claude -> claude symlink ---
