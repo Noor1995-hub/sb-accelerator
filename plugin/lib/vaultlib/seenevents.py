@@ -282,6 +282,9 @@ def record(root: Path, outcomes, now_utc: datetime) -> dict:
             "cached_total": len(cache["events"])}
 
 
+FORGET_ALLOWED_OUTCOMES = ("no-access", "forbidden", "no-transcript")
+
+
 def forget(root: Path, outcome: str) -> dict:
     """Drop every cached entry with one outcome, so triage re-checks those
     occurrences on the next run.
@@ -291,10 +294,22 @@ def forget(root: Path, outcome: str) -> dict:
     a re-check after client IT changes a permission is to make the cache
     forget what it settled — one outcome at a time, never the whole cache,
     which would also cost a re-check on every unrelated occurrence.
+
+    `written` and `skipped` are refused outright, not just left undocumented:
+    forgetting `written` would silently drop up to 30 days of write history
+    and re-trigger a paid dispatch wave for meetings already synced, and
+    `skipped` is a deliberate human decision the skip list already recorded
+    a reason for — forgetting it would undo that decision by side effect.
     """
     if outcome not in OUTCOMES:
         raise SeenEventsError(
             f"outcome {outcome!r} must be one of {list(OUTCOMES)}")
+    if outcome not in FORGET_ALLOWED_OUTCOMES:
+        raise SeenEventsError(
+            f"outcome {outcome!r} cannot be forgotten — forgetting "
+            f"{outcome!r} would re-trigger a paid dispatch wave or undo a "
+            "deliberate decision, not force a re-check of a stale denial; "
+            f"forgettable outcomes are {list(FORGET_ALLOWED_OUTCOMES)}")
     cache = load(root)
     forgotten = 0
     for key in list(cache["events"]):

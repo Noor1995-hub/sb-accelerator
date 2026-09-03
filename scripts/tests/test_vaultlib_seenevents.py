@@ -504,3 +504,67 @@ def test_forgetting_no_access_lets_the_occurrence_be_fetched_again(tmp_path):
     seenevents.forget(root, "no-access")
     after_forget = seenevents.triage(root, [listing_event()], NOW)
     assert [e["reason"] for e in after_forget["fetch"]] == ["unseen"]
+
+
+# Review finding #4 (minor, round 1): forget("written") would silently drop
+# up to 30 days of written history and re-trigger a paid dispatch wave for
+# meetings already synced; forget("skipped") would undo a deliberate human
+# decision the skip list already recorded why for. Both are refused. Only
+# the outcomes that never heal on their own — no-access, forbidden,
+# no-transcript — are legitimate forget targets.
+
+
+def test_forget_refuses_written(tmp_path):
+    root = make_vault(tmp_path)
+    seenevents.record(root, [outcome(kind="written")], NOW)
+    with pytest.raises(seenevents.SeenEventsError, match="written"):
+        seenevents.forget(root, "written")
+    # refused before anything is dropped
+    cache = json.loads(
+        (root / seenevents.CACHE_RELPATH).read_text(encoding="utf-8"))
+    assert len(cache["events"]) == 1
+
+
+def test_forget_refuses_skipped(tmp_path):
+    root = make_vault(tmp_path)
+    seenevents.record(root, [{
+        "id": "AAMkAGId1", "start_utc": "2026-08-28T14:00:00",
+        "outcome": "skipped",
+    }], NOW)
+    with pytest.raises(seenevents.SeenEventsError, match="skipped"):
+        seenevents.forget(root, "skipped")
+
+
+@pytest.mark.parametrize("allowed", ["no-access", "forbidden", "no-transcript"])
+def test_forget_allows_the_outcomes_that_never_heal_on_their_own(
+    tmp_path, allowed
+):
+    root = make_vault(tmp_path)
+    seenevents.record(root, [outcome(kind=allowed)], NOW)
+    result = seenevents.forget(root, allowed)
+    assert result["forgotten"] == 1
+
+
+# Review finding #5 (minor, round 1): the fail-open branch in triage() (an
+# outcome value this version does not know) was only ever exercised
+# indirectly, through record()'s own validation rejecting it first. Writing
+# the unknown value straight into the cache file bypasses record() and
+# proves triage() itself refuses to trust an outcome it cannot recognise.
+
+
+def test_triage_fails_open_on_an_unrecognized_outcome_value_on_disk(tmp_path):
+    root = make_vault(tmp_path)
+    cache_path = root / seenevents.CACHE_RELPATH
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    cache_path.write_text(json.dumps({
+        "version": seenevents.CACHE_VERSION,
+        "events": {
+            "AAMkAGId1|2026-08-28T14:00:00": {
+                "outcome": "some-future-outcome-this-version-never-shipped",
+                "checked_at": "2026-08-28T18:00:00",
+            },
+        },
+    }), encoding="utf-8")
+    result = seenevents.triage(root, [listing_event()], NOW)
+    assert [e["id"] for e in result["fetch"]] == ["AAMkAGId1"]
+    assert result["fetch"][0]["reason"] == "unseen"

@@ -848,6 +848,30 @@ def test_sync_m365_forget_rejects_an_unknown_outcome(capsys, tmp_path):
     assert "outcome" in payload["error"]
 
 
+def test_sync_m365_forget_rejects_written_through_the_cli(capsys, tmp_path):
+    """Review finding #4 (round 1): forgetting `written` would silently
+    drop write history and re-trigger a paid dispatch wave for meetings
+    already synced — refused, not just undocumented."""
+    root = make_vault(tmp_path)
+    outcomes = tmp_path / "outcomes.json"
+    outcomes.write_text(json.dumps([{
+        "id": "AAMkAGId1", "start_utc": "2026-08-25T14:00:00",
+        "outcome": "written", "recording_id": "m365:0123456789abcdef",
+    }]), encoding="utf-8")
+    code, payload = run(capsys, [
+        "sync", "m365-record", "--vault", str(root),
+        "--outcomes", str(outcomes), "--now", "2026-08-25T19:00:00",
+    ])
+    assert code == 0
+
+    code, payload = run(capsys, [
+        "sync", "m365-forget", "--vault", str(root), "--outcome", "written",
+    ])
+    assert code == 1
+    assert payload["ok"] is False
+    assert "written" in payload["error"]
+
+
 def test_sync_watermark_round_trips_through_the_cli(capsys, tmp_path):
     root = make_vault(tmp_path)
     code, payload = run(capsys, [

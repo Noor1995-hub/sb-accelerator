@@ -366,7 +366,10 @@ def build_parser() -> argparse.ArgumentParser:
     _add_vault_argument(sync_forget)
     sync_forget.add_argument(
         "--outcome", required=True,
-        help="the outcome to drop, e.g. no-access or forbidden")
+        help="the outcome to drop — no-access, forbidden, or no-transcript; "
+             "written and skipped are refused (they would re-trigger a paid "
+             "dispatch wave or undo a deliberate decision, not a stale "
+             "denial)")
 
     sync_rederive = sync_sub.add_parser(
         "rederive-entities",
