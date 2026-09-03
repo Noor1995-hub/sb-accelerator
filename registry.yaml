@@ -16,4 +16,15 @@
 #     notes: ""
 # No `machines` field — two machines per deployment is the runbook invariant;
 # note any deviation in `notes` instead.
-clients: []
+clients:
+- client: dryrun
+  owner: MB
+  plugin_version: 0.10.24
+  structure_version: '2'
+  archetype: commercial-leader
+  care_package: active
+  delivery_path: E
+  feedback_repo: DLW-INT-BTA-BELUX/sb-client-dryrun
+  dist_channel: dryrun
+  provisioned: '2026-09-03'
+  notes: internal DryRunVault
