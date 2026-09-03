@@ -34,6 +34,20 @@ refuses to touch a target directory that already exists and has files in
 it — it fails fast (exit 1) instead of overwriting. Delete the directory
 first when you want a clean rebuild.
 
+**The fictional cast is load-bearing and stays fictional.** Morgan Ellery
+and Cascadia Intermodal Group are not disposable scaffolding to swap for a
+real client's facts before a demo — they are fixture content the product
+depends on for its own tests (`scripts/tests/test_bases_views.py`, the
+probe's cross-check against `scripts/basesim.py`) as well as for hand
+testing. Extend `fixtures/demo-vault/` when it needs more to show; never
+replace its cast with a real engagement's people or organizations.
+
+Real per-client demo-prep material — the notes, slides, or data you'd
+actually show a specific prospect or client — has no home in this repo.
+It lives in that engagement's own folder, outside the repo entirely, never
+under `fixtures/` (fictional and potentially shipping) or `playbooks/`
+(generic runbooks, not client content).
+
 Add `--with-plugins` to also download the pinned Obsidian community plugins and the Minimal theme into the vault (network required — pins and checksums live in `plugin/lib/plugin-pins.json`):
 
 ```bash
