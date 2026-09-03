@@ -34,8 +34,10 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-from lint_plugin import lint_skills, load_denylist, scan_cleanroom
-
+# lint_plugin (imported lazily, inside verify_tree()) pulls in PyYAML. `notes`
+# — the subcommand `github_release` runs — must work without it: that job has
+# no reason to install PyYAML, and importing lint_plugin at module scope made
+# every `notes` invocation depend on a dependency only the lint path needs.
 DEFAULT_REPO_ROOT = Path(__file__).resolve().parents[1]
 
 # The dryrun repo's own README carried this paragraph from the start (it was
@@ -218,7 +220,13 @@ def _root_file_scan(out: Path) -> list[str]:
 def verify_tree(out: Path, repo_root: Path) -> list[str]:
     """Runs the real, product-repo clean-room linter over a *built* dist
     tree — not the source tree lint_plugin.py normally checks. `out` has no
-    fixtures/ sibling, so only the plugin tree is scanned."""
+    fixtures/ sibling, so only the plugin tree is scanned.
+
+    Imports lint_plugin here, not at module scope: lint_plugin imports
+    PyYAML, and notes() (below) must keep working in a job that never
+    installs it — only the lint path needs it."""
+    from lint_plugin import lint_skills, load_denylist, scan_cleanroom
+
     problems: list[str] = []
     problems.extend(lint_skills(out))
     problems.extend(scan_cleanroom(out, load_denylist(repo_root), trees=("plugin",)))
@@ -229,7 +237,14 @@ def verify_tree(out: Path, repo_root: Path) -> list[str]:
 
 # --- notes() ---
 
-_SECTION_RE = re.compile(r"^## (.+?)\s*$", re.MULTILINE)
+# The negative lookahead excludes a line like "## #stray" from matching as a
+# heading at all — without it, its captured heading text would be "#stray",
+# a heading whose own text starts with "#" and so reads ambiguously next to
+# a real "### " sub-heading one level down. Sub-headings themselves (three or
+# more leading "#") never matched this pattern regardless — the mandatory
+# literal space right after exactly two "#" characters already rejects them
+# — but the lookahead removes the one adjacent case that did slip through.
+_SECTION_RE = re.compile(r"^## (?!#)(.+?)\s*$", re.MULTILINE)
 
 
 def _sections(text: str) -> list[tuple[str, str]]:
