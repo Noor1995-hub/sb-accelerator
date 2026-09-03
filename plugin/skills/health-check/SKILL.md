@@ -82,6 +82,14 @@ object; the counts carry the whole story:
   the vault-local Claude Code files. Flag that one by name; hand it to the
   consultant rather than trying to repair it — this skill never touches
   the filesystem to fix it.
+- `template`: `.base` views, `.obsidian` settings, and the other
+  plugin-owned template files, as counts only — never a filename. Read out
+  `managed` against `current` (how many already match what this plugin
+  ships), and separately flag `needs_consent` and `missing` if either is
+  non-zero — that's what `/upgrade-vault`'s template-refresh step (5) would
+  act on at the next visit. `baseline: "unknown"` means this vault predates
+  the feature entirely, so every managed file will need consent the first
+  time someone runs a refresh.
 
 Then name the report file so the user can open it themselves:
 

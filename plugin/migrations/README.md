@@ -80,3 +80,18 @@ never relative to the vault root or the current working directory.
 - **Stop on the first failure.** If `apply` or `verify` raises, the chain
   stops there. The snapshot taken at the start of the run is the way back to
   the pre-migration state; the log line names it.
+
+## Interaction with the template refresh (#117)
+
+`vaultlib/template.py`'s managed-file tiers (`plugin/lib/vaultlib/template.py`)
+diff a vault's copy against `provenance.json`'s recorded baseline, not
+against the *previous* shipped template — so a migration that edits a
+managed file in place (rewriting `ontology.md`, say, or a `.base` file's
+frontmatter) leaves that file's vault-recorded digest stale. The next
+`template status` reports it as `needs-consent` / `locally-edited` even
+though nothing a consultant did caused the drift; it will read that way
+until the vault is next rebaselined (a `template refresh` naming that
+file with `--consent` folds it back to `current`, whether or not the
+refresh actually rewrites its bytes). A migration that touches a managed
+file should say so in its own module doc, so the consultant is not
+surprised by a "locally-edited" reason with no local edit behind it.
