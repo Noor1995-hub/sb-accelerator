@@ -18,15 +18,23 @@ them (`test_every_shipped_file_is_classified_exactly_once` is the pin):
   without `--consent`, even when the vault's copy is untouched since the
   last baseline.
 - `SEEDED_ONCE` — laid down once at provision and never refreshed again
-  (`config.json`, `lessons.md`, the five `context/*.md`). `template.refresh`
-  refuses any relpath in this tier outright, `--consent` included — the
-  vault's own copy is authoritative from the moment it is provisioned.
+  (`config.json`, `lessons.md`, the five `context/*.md`). The vault's own
+  copy is authoritative from the moment it is provisioned, so this tier is
+  outside `MANAGED` entirely: `status()` never lists one of these files (a
+  consultant would otherwise see `config.json` and every `context/*.md`
+  permanently stuck at `needs-consent`, since they are never expected to
+  match the shipped default again) and `diff()`/`refresh()` both treat a
+  seeded-once relpath as unmanaged. `refresh()` additionally names the tier
+  explicitly in its own refusal message when one is passed via `--file`
+  (defence in depth, in case a future caller builds its own selection
+  straight from `tier_of()` rather than going through `status()`).
 - `IGNORED` — Obsidian's own UI state, the structure-version marker, and
   every `.gitkeep`. Never reported, never refreshed.
 
-`template.status` still reports on `SEEDED_ONCE` files (drift against the
-shipped template is real information — "what was laid down" is detectable
-even though refresh will never act on it), but `refresh` hard-refuses them.
+`MANAGED` (this module's status()/refresh() surface) is `MANAGED_SILENT |
+MANAGED_CONSENT_ALWAYS` — 19 files. `ALL_TIERED` (used only to pin that
+every shipped file is classified exactly once) is `MANAGED | SEEDED_ONCE |
+IGNORED` — all 34.
 """
 from __future__ import annotations
 
@@ -94,8 +102,8 @@ IGNORED = frozenset({
     "structure-version",
 })
 
-MANAGED = MANAGED_SILENT | MANAGED_CONSENT_ALWAYS | SEEDED_ONCE
-ALL_TIERED = MANAGED | IGNORED
+MANAGED = MANAGED_SILENT | MANAGED_CONSENT_ALWAYS
+ALL_TIERED = MANAGED | SEEDED_ONCE | IGNORED
 
 _SELECTABLE_STATES = ("refresh", "needs-consent", "missing")
 
@@ -131,14 +139,26 @@ def _now_stamp() -> str:
 
 def _line_delta(vault_text: Optional[str], template_text: str) -> tuple:
     """(lines_added, lines_removed) a refresh from `vault_text` (None when
-    the vault has no copy) to `template_text` would make, via difflib on
-    each side's own line splitting (which already treats \\r\\n, \\r and
-    \\n uniformly, so a CRLF vault copy is compared fairly)."""
+    the vault has no copy) to `template_text` would make, via each side's
+    own line splitting (which already treats \\r\\n, \\r and \\n uniformly,
+    so a CRLF vault copy is compared fairly).
+
+    `SequenceMatcher.get_opcodes()` rather than `difflib.ndiff` (review
+    finding #9, round 1): `status()` now runs this for every managed file on
+    every `health report`, and `ndiff` is quadratic in the input size where
+    `get_opcodes()`'s underlying comparison is not. Tallying opcodes gives
+    the same two counts ndiff's "+ "/"- " prefixes did, over the same
+    underlying comparison.
+    """
     vault_lines = vault_text.splitlines() if vault_text is not None else []
     template_lines = template_text.splitlines()
-    opcodes = list(difflib.ndiff(vault_lines, template_lines))
-    added = sum(1 for line in opcodes if line.startswith("+ "))
-    removed = sum(1 for line in opcodes if line.startswith("- "))
+    matcher = difflib.SequenceMatcher(a=vault_lines, b=template_lines)
+    added = removed = 0
+    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+        if tag in ("replace", "delete"):
+            removed += i2 - i1
+        if tag in ("replace", "insert"):
+            added += j2 - j1
     return added, removed
 
 
@@ -281,19 +301,26 @@ def refresh(root, *, files: Optional[Iterable[str]] = None,
 
     if files is not None:
         selected = list(files)
-        unknown = [rel for rel in selected if rel not in by_rel]
-        if unknown:
-            raise TemplateError(
-                "not a managed template file: " + ", ".join(sorted(unknown)))
+        # Checked before the generic "unknown" test below, and by tier_of()
+        # rather than by "in MANAGED" — MANAGED no longer contains
+        # SEEDED_ONCE relpaths at all (#117 review finding #2), so without
+        # this ordering a seeded-once file would fall into the generic
+        # "not a managed template file" branch and lose the clearer,
+        # tier-specific message. Kept even though `by_rel` alone would
+        # already reject it, as defence in depth: `tier_of()` recognises
+        # the tier independently of whatever `selected` was built from.
         seeded = [rel for rel in selected if tier_of(rel) == "seeded_once"]
         if seeded:
             raise TemplateError(
                 "seeded-once files are never refreshed, with or without "
                 "consent: " + ", ".join(sorted(seeded)))
+        unknown = [rel for rel in selected if rel not in by_rel]
+        if unknown:
+            raise TemplateError(
+                "not a managed template file: " + ", ".join(sorted(unknown)))
     elif all_pending:
         selected = [rel for rel, entry in by_rel.items()
-                    if entry["state"] in _SELECTABLE_STATES
-                    and tier_of(rel) != "seeded_once"]
+                    if entry["state"] in _SELECTABLE_STATES]
     else:
         selected = [rel for rel, entry in by_rel.items()
                     if entry["state"] == "refresh"]
@@ -310,19 +337,53 @@ def refresh(root, *, files: Optional[Iterable[str]] = None,
         raise TemplateError(
             "consent required for: " + ", ".join(needing_consent))
 
+    # Resolved once, before any write (review finding #7, round 1): a vault
+    # missing the structure-version marker must fail here, not partway
+    # through the write loop having already replaced some files.
+    structure_version = vault.structure_version(root)
+
+    write_rels = sorted(rel for rel in selected if by_rel[rel]["state"] != "current")
+    selected_current_rels = sorted(
+        rel for rel in selected if by_rel[rel]["state"] == "current")
+    # The baseline_stale repair pass runs over every managed file, not just
+    # `selected` (review finding #3, round 1): `selected` only ever contains
+    # a "current" entry when a --file explicitly names one, so the default
+    # (silent-refresh) and --all-pending selections never repaired a stale
+    # baseline on a file that otherwise needed no content change at all.
+    stale_rels = sorted(
+        rel for rel, entry in by_rel.items()
+        if entry["state"] == "current" and entry["reason"] == "baseline_stale")
+
+    if not write_rels and not stale_rels:
+        # Nothing to write and nothing to repair — a pure status check (or a
+        # --file naming an already-current, non-stale file). RULING (review
+        # finding #1, round 1): no backup dir, no provenance event, no
+        # migration-log line. /upgrade-vault's step 5 runs this every visit;
+        # without this early return, three no-op visits in a row would
+        # rotate away the one real backup a genuinely edited file needed.
+        return {
+            "refreshed": [], "restored": [], "backup": None, "baselined": [],
+            "skipped": [], "structure_version": structure_version,
+        }
+
     today = vault.today_iso(today)
     stamp = stamp or _now_stamp()
     backup_relpath = SNAPSHOT_DIR / f"template-refresh-{stamp}"
     backup_dir = root / backup_relpath
-    backup_dir.mkdir(parents=True, exist_ok=True)
 
-    refreshed, restored, skipped = [], [], []
-    write_rels = sorted(rel for rel in selected if by_rel[rel]["state"] != "current")
-    current_rels = sorted(rel for rel in selected if by_rel[rel]["state"] == "current")
-
+    refreshed, restored = [], []
+    # backup_dir is created lazily, on the first file that actually needs a
+    # copy (review finding #1, round 1) — a selection made entirely of
+    # `missing` files (pure restores) has nothing to back up, and creating
+    # an empty backup dir just to rotate it away next run is the same bug
+    # the no-op case above fixes, one level down.
+    backed_up_anything = False
     for rel in write_rels:
         vault_path = root / rel
         if vault_path.is_file():
+            if not backed_up_anything:
+                backup_dir.mkdir(parents=True, exist_ok=True)
+                backed_up_anything = True
             backup_target = backup_dir / rel
             backup_target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(vault_path, backup_target)
@@ -333,24 +394,32 @@ def refresh(root, *, files: Optional[Iterable[str]] = None,
             restored.append(rel)
         else:
             refreshed.append(rel)
-    skipped = current_rels
+    skipped = selected_current_rels
 
-    existing_dirs = sorted((root / SNAPSHOT_DIR).glob("template-refresh-*"),
-                           key=lambda p: p.name)
-    for stale in existing_dirs[:-KEEP_SNAPSHOTS]:
-        shutil.rmtree(stale)
+    if backed_up_anything:
+        # Filter to directories before rmtree (review finding #8, round 1):
+        # glob("template-refresh-*") only ever matches directories this
+        # module itself creates, but a hand-placed file of the same name
+        # pattern must not make shutil.rmtree raise mid-rotation.
+        existing_dirs = sorted(
+            (p for p in (root / SNAPSHOT_DIR).glob("template-refresh-*") if p.is_dir()),
+            key=lambda p: p.name)
+        for stale in existing_dirs[:-KEEP_SNAPSHOTS]:
+            shutil.rmtree(stale)
 
-    rebaseline_result = provenance.rebaseline(root, write_rels + current_rels)
+    rebaseline_targets = sorted(set(write_rels) | set(selected_current_rels)
+                                | set(stale_rels))
+    rebaseline_result = provenance.rebaseline(root, rebaseline_targets)
     provenance.record_event(
-        root, "template-refresh", structure_version=vault.structure_version(root),
+        root, "template-refresh", structure_version=structure_version,
         refreshed=len(refreshed), restored=len(restored))
     _log(root, today, stamp, len(refreshed), len(restored), len(skipped))
 
     return {
         "refreshed": sorted(refreshed),
         "restored": sorted(restored),
-        "backup": backup_relpath.as_posix(),
+        "backup": backup_relpath.as_posix() if backed_up_anything else None,
         "baselined": rebaseline_result["baselined"],
         "skipped": sorted(skipped),
-        "structure_version": vault.structure_version(root),
+        "structure_version": structure_version,
     }
