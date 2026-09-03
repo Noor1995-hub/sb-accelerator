@@ -31,7 +31,7 @@ from datetime import date, timedelta
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-from . import markdown, provenance, schema, syncjob, vault
+from . import markdown, provenance, schema, syncjob, template, vault
 
 MEETINGS_DIR = vault.MEETINGS_DIR
 PROJECTS_DIR = vault.PROJECTS_DIR
@@ -305,8 +305,6 @@ def _provenance_block(root: Path) -> dict:
         (e for e in events if e.get("event") == "provision"), None)
     last_event = events[-1] if events else None
     recorded_version = last_event.get("plugin_version") if last_event else None
-    drift = (provenance.compare_versions(recorded_version, vault.plugin_version())
-             if recorded_version else "unknown")
     return {
         "recorded": True,
         "malformed": False,
@@ -316,7 +314,36 @@ def _provenance_block(root: Path) -> dict:
         "last_event": last_event.get("event") if last_event else None,
         "last_event_at": last_event.get("at") if last_event else None,
         "recorded_plugin_version": recorded_version,
-        "plugin_drift": drift,
+        "plugin_drift": provenance.drift(data),
+    }
+
+
+_EMPTY_TEMPLATE_BLOCK = {
+    "managed": 0, "current": 0, "refresh": 0, "needs_consent": 0,
+    "missing": 0, "blocked": 0, "baseline": "unknown",
+}
+
+
+def _template_block(root: Path) -> dict:
+    """template.status() folded to counts only — no relpaths, per the
+    content-free contract this module keeps for every block. A malformed
+    provenance.json (template.status reads it via provenance.read) or a
+    managed relpath missing from the shipped template both fold to the
+    empty block rather than raising: health must never fail because the
+    provenance or template state underneath it is broken."""
+    try:
+        result = template.status(root)
+    except (provenance.ProvenanceError, template.TemplateError):
+        return dict(_EMPTY_TEMPLATE_BLOCK)
+    counts = result["counts"]
+    return {
+        "managed": len(result["files"]),
+        "current": counts.get("current", 0),
+        "refresh": counts.get("refresh", 0),
+        "needs_consent": counts.get("needs-consent", 0),
+        "missing": counts.get("missing", 0),
+        "blocked": counts.get("blocked", 0),
+        "baseline": result["baseline"],
     }
 
 
@@ -378,6 +405,7 @@ def report(root: Path, today: str, window: int = DEFAULT_WINDOW_DAYS) -> dict:
         "unparsed": unparsed.value,
         "provenance": _provenance_block(root),
         "claude_link": provenance.claude_link_state(root),
+        "template": _template_block(root),
     }
     return result
 
@@ -450,6 +478,16 @@ def render(data: dict) -> str:
         ("plugin_drift", data["provenance"]["plugin_drift"]),
         ("claude_link_is_symlink", data["claude_link"]["is_symlink"]),
         ("claude_link_state", data["claude_link"]["state"]),
+    ])
+    lines += ["", "## Template files"]
+    lines += _table([
+        ("managed", data["template"]["managed"]),
+        ("current", data["template"]["current"]),
+        ("refresh", data["template"]["refresh"]),
+        ("needs_consent", data["template"]["needs_consent"]),
+        ("missing", data["template"]["missing"]),
+        ("blocked", data["template"]["blocked"]),
+        ("baseline", data["template"]["baseline"]),
     ])
     lines.append("")
     return "\n".join(lines) + "\n"
