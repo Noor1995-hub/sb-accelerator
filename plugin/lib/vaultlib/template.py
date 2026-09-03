@@ -259,7 +259,7 @@ def _log(root: Path, today: str, stamp: str, refreshed: int, restored: int,
 
 def refresh(root, *, files: Optional[Iterable[str]] = None,
             all_pending: bool = False, consent: bool = False,
-            today: Optional[str] = None, stamp: Optional[str] = None) -> dict:
+            today, stamp: Optional[str] = None) -> dict:
     """Replace managed files with the shipped template.
 
     Selection: default (files is None and not all_pending) = every file

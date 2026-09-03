@@ -770,7 +770,8 @@ def _dispatch(args: argparse.Namespace) -> int:
             return _ok({"relpath": args.file, "diff": template.diff(root, args.file)})
         return _ok(template.refresh(
             root, files=args.files, all_pending=args.all_pending,
-            consent=args.consent, today=args.today, stamp=args.stamp))
+            consent=args.consent, today=vault.today_iso(args.today),
+            stamp=args.stamp))
     if args.group == "health":
         window = args.window if args.window is not None else health.DEFAULT_WINDOW_DAYS
         data = health.report(root, vault.today_iso(args.today), window=window)
