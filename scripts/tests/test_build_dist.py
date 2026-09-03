@@ -405,3 +405,53 @@ def test_sections_does_not_treat_a_hash_prefixed_heading_text_as_a_section():
     assert "### a real sub-heading" in body
     assert "## #ambiguous" in body
     assert "- y" in body
+
+
+# --- #164: the vendored Obsidian assets ship, and verify_tree inherits the exemption ---
+
+
+def test_build_ships_the_vendored_obsidian_assets(tmp_path):
+    """The vendored tree is the whole reason provisioning works offline on a
+    client machine; a dist tree without it would silently reinstate the
+    download path there."""
+    out = tmp_path / "out"
+    build_dist.build("client", out, REPO_ROOT)
+    src = REPO_ROOT / "plugin" / "vendor" / "obsidian"
+    for path in src.rglob("*"):
+        if path.is_file():
+            shipped = out / "plugin" / "vendor" / "obsidian" / path.relative_to(src)
+            assert shipped.is_file(), shipped
+            assert shipped.read_bytes() == path.read_bytes(), shipped
+
+
+def test_verify_tree_inherits_the_vendor_content_exemption(tmp_path):
+    """verify_tree() calls the same scan_cleanroom() with the dist root as
+    `root`, so the plugin/vendor/ prefix has to resolve the same way there.
+    The real tree already exercises this (dataview's manifest.json names its
+    maintainer), but a planted hit makes the dependency explicit."""
+    out = tmp_path / "out"
+    build_dist.build("client", out, REPO_ROOT, lint=False)
+    planted = out / "plugin" / "vendor" / "obsidian" / "some-plugin" / "manifest.json"
+    planted.parent.mkdir(parents=True)
+    planted.write_text('{"author": "Michael Somebody"}\n', encoding="utf-8")
+    assert not any("michael" in p.lower() for p in build_dist.verify_tree(out, REPO_ROOT))
+
+
+def test_verify_tree_still_flags_a_vendored_filename(tmp_path):
+    out = tmp_path / "out"
+    build_dist.build("client", out, REPO_ROOT, lint=False)
+    (out / "plugin" / "vendor" / "obsidian" / "michael.txt").write_text("x\n", encoding="utf-8")
+    problems = build_dist.verify_tree(out, REPO_ROOT)
+    assert any("michael" in p.lower() and "filename" in p.lower() for p in problems)
+
+
+def test_verify_tree_still_scans_the_vendor_licence_index(tmp_path):
+    """The dist tree carries LICENSES.md too, and it is ours: a violation
+    planted there must be caught by the release gate, not waved through
+    with the upstream files beside it."""
+    out = tmp_path / "out"
+    build_dist.build("client", out, REPO_ROOT, lint=False)
+    index = out / "plugin" / "vendor" / "obsidian" / "LICENSES.md"
+    index.write_text(index.read_text(encoding="utf-8") + "\nReviewed with Michael.\n", encoding="utf-8")
+    problems = build_dist.verify_tree(out, REPO_ROOT)
+    assert any("michael" in p.lower() and "LICENSES.md" in p for p in problems)

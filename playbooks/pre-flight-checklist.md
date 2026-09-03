@@ -68,10 +68,15 @@ the questions to settle before you get that far.
       Windows this needs `mklink /D` from an elevated shell or Developer
       Mode; if that is off the table the vault still works on a degraded
       path — runbook §3.
-- [ ] The client machines can reach GitHub releases, so
-      `plugin/lib/provision_plugins.py` can fetch the pinned Obsidian plugins.
-      On a locked-down fleet, agree the by-hand install fallback instead —
-      runbook §2.
+- [ ] **Not** a prerequisite: network egress from Cowork, or reachability
+      of GitHub releases. The pinned Obsidian plugins and theme ship inside
+      the plugin itself (`plugin/vendor/obsidian/`) and
+      `plugin/lib/provision_plugins.py` installs them from there — offline,
+      checksum-verified. Do not ask the client's IT to enable Cowork's
+      *Allow network egress* for provisioning; it is an org-wide admin
+      setting their console flags as a security risk, and it would not help
+      (GitHub's release-asset host is blocked even with it on). The by-hand
+      install remains the fallback if the script itself fails — runbook §2.
 - [ ] Vault folder connected in Cowork on both machines. Confirm Cowork
       picks up the vault's `CLAUDE.md` as folder instructions — it does so by
       default, and it should appear in Cowork's context panel as

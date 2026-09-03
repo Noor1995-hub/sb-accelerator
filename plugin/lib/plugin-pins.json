@@ -1,5 +1,5 @@
 {
-  "_readme": "Pinned Obsidian plugin/theme releases. To bump: edit the tag, rerun the checksum snippet in docs/superpowers/plans/2026-08-23-plugin-provisioning.md Task 2 (or blank the sha256s and read the mismatch digests provision_plugins.py reports), and update sha256. dataview is deliberately pinned to 0.5.68 — 0.5.70 is a mislabeled beta with a broken manifest asset. obsidian-style-settings' canonical repo is community-archive/... (renamed from obsidian-community/..., which still redirects).",
+  "_readme": "Pinned Obsidian plugin/theme releases. The exact bytes these pins verify against ship inside the plugin at plugin/vendor/obsidian/<id>/ (theme: plugin/vendor/obsidian/Minimal/), so provision_plugins.py installs offline; the GitHub download is only a fallback for an asset missing from the vendored tree. To bump a pin: edit the tag, run scripts/refresh_vendor.py --record (downloads the assets, records their sha256 here, rewrites plugin/vendor/), read the diff, update plugin/vendor/obsidian/LICENSES.md if the licence or tag changed, commit. Never edit plugin/vendor/ by hand. license_file is the licence text's path in the upstream repo at the pinned tag; refresh_vendor.py vendors it as LICENSE next to the assets. dataview is deliberately pinned to 0.5.68 — 0.5.70 is a mislabeled beta with a broken manifest asset. obsidian-style-settings' canonical repo is community-archive/... (renamed from obsidian-community/..., which still redirects).",
   "plugins": [
     {
       "id": "dataview",
@@ -11,6 +11,7 @@
         "styles.css"
       ],
       "license": "MIT",
+      "license_file": "LICENSE.txt",
       "sha256": {
         "main.js": "794e9eaede73920bb8d54b0eda4f5de2182d698cc638774500f24f14bcd4da0b",
         "manifest.json": "9235db47112da81b85591c79ecb9ae2574e5e72207056e976472f90616286185",
@@ -27,6 +28,7 @@
         "styles.css"
       ],
       "license": "MIT",
+      "license_file": "LICENSE",
       "sha256": {
         "main.js": "f754e0ce6523e433bff8e7995a848f7d7fac205399f9ab3b1258430261fd90c4",
         "manifest.json": "2038f9c1f5ca026ebc1f3e156bad97c671d2c401a20718384508ef72071e8c5f",
@@ -43,6 +45,7 @@
         "styles.css"
       ],
       "license": "GPL-3.0",
+      "license_file": "LICENSE.md",
       "sha256": {
         "main.js": "1828abaacdab4c5578b705a625c585b30512f8efad4c7cfc5a18e70cc3557468",
         "manifest.json": "9cffdc20cf2aa1354820e0050b694b0f9b576446e3d5d44a36ae8b0187e5bfb8",
@@ -59,6 +62,7 @@
         "styles.css"
       ],
       "license": "GPL-3.0",
+      "license_file": "LICENSE",
       "sha256": {
         "main.js": "9ddacbcf2878344122dbbab9c716c077fed459dea0b4853f1c5336683ba13802",
         "manifest.json": "59e701c41497a24b1b1f4d89fe0b11f559ae43cb99f0050cc9ae25cbfd46946b",
@@ -75,6 +79,7 @@
       "manifest.json"
     ],
     "license": "MIT",
+    "license_file": "LICENSE",
     "sha256": {
       "theme.css": "8974d84fa5c6e6c82879eab5b0411bd57c7c868ea8beeab69d28b994657f7a5f",
       "manifest.json": "22ca939102aa2eae4ad57b4d77933572bc055d4fee096b9bc00fd8e890680536"

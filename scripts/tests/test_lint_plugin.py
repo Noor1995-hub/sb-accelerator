@@ -292,3 +292,77 @@ def test_obsidian_config_is_not_scanned_as_prose(tmp_path):
     write_prose(root, "plugin/template/.obsidian/plugins/some-plugin/README.md",
                 "Upstream docs mention `/some-other-command`.")
     assert main(root) == []
+
+
+# --- #164: plugin/vendor/ is upstream content — text exempt, filenames not. ---
+
+
+def test_vendored_upstream_text_is_exempt_from_the_denylist(tmp_path):
+    """dataview's manifest.json names its maintainer, and its LICENSE carries
+    that copyright line — both trip the `michael` term, and neither is
+    delaware content. The exemption is what lets the vendored tree exist."""
+    root = make_repo(tmp_path)
+    write_prose(root, "plugin/vendor/obsidian/dataview/manifest.json",
+                '{"id": "dataview", "author": "Michael Brenan <blacksmithgu@gmail.com>"}')
+    write_prose(root, "plugin/vendor/obsidian/dataview/LICENSE",
+                "MIT License", "", "Copyright (c) 2021 Michael Brenan")
+    assert main(root) == []
+
+
+def test_vendored_filename_still_flags(tmp_path):
+    """The directory layout under plugin/vendor/ is ours, so a denylisted
+    term in a filename there is still a clean-room violation."""
+    root = make_repo(tmp_path)
+    write_prose(root, "plugin/vendor/obsidian/michael-notes.md", "anything")
+    problems = main(root)
+    assert any("michael" in p.lower() and "filename" in p.lower() for p in problems)
+    assert not any("clean-room violation:" in p for p in problems)  # content not scanned
+
+
+def test_vendored_code_is_not_scanned_for_slash_commands(tmp_path):
+    """Minified upstream JavaScript is not prose; a backticked `/name` inside
+    it is a template literal, not a reference to one of our skills."""
+    root = make_repo(tmp_path)
+    a_skill(root, "evening-sync")
+    write_prose(root, "plugin/vendor/obsidian/some-plugin/main.js",
+                'const help=`/morning-brief`;')
+    assert main(root) == []
+
+
+def test_vendor_exemption_is_anchored_at_plugin_vendor_only(tmp_path):
+    """A directory merely NAMED vendor elsewhere under plugin/ gets no
+    exemption — the prefix is root-relative, not a path component match."""
+    root = make_repo(tmp_path)
+    write_prose(root, "plugin/skills/evening-sync/vendor/notes.md", "Ping Michael.")
+    write_prose(root, "plugin/template/vendor/README.md", "Ask Michael.")
+    problems = main(root)
+    assert sum(1 for p in problems if "michael" in p.lower()) == 2
+
+
+def test_fixtures_get_no_vendor_exemption(tmp_path):
+    root = make_repo(tmp_path)
+    write_prose(root, "fixtures/vendor/leak.md", "Ping Michael.")
+    assert any("michael" in p.lower() for p in main(root))
+
+
+def test_hand_written_licence_index_at_the_vendor_root_is_still_scanned(tmp_path):
+    """plugin/vendor/obsidian/LICENSES.md is delaware-authored prose that
+    happens to live under the vendor prefix; refresh_vendor.py never writes
+    it. The exemption stops at the project directory, so a name or a stale
+    command slipping into the index during a pin bump is still caught."""
+    root = make_repo(tmp_path)
+    a_skill(root, "evening-sync")
+    write_prose(root, "plugin/vendor/obsidian/LICENSES.md",
+                "| `dataview/` | pinned for Michael's demo |",
+                "Installed by `/morning-brief`.")
+    problems = main(root)
+    assert any("LICENSES.md:1" in p and "michael" in p.lower() for p in problems)
+    assert any("LICENSES.md:2" in p and "morning-brief" in p for p in problems)
+
+
+def test_a_file_at_the_vendor_root_itself_is_still_scanned(tmp_path):
+    root = make_repo(tmp_path)
+    write_prose(root, "plugin/vendor/README.md", "Ask Michael which pins to bump.")
+    # Problem lines carry the OS-native path (backslashes on Windows CI), so
+    # match on the filename and line, not on a slash-joined fragment.
+    assert any("README.md:1" in p and "michael" in p.lower() for p in main(root))

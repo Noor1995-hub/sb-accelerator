@@ -118,22 +118,34 @@ interactive backfill run later — never a reason to backdate this value.
 python3 "${CLAUDE_PLUGIN_ROOT}/lib/provision_plugins.py" "$VAULT"
 ```
 
-This installs the pinned, checksum-verified releases from the plugin's own
-`lib/plugin-pins.json` into `.obsidian/plugins/` and
-`.obsidian/themes/Minimal/` — same zero-checkout path as step 1. Exit 0
-means done; report any `error: ...` lines on stderr verbatim, and the
-summary line (`N installed, N already ok, N problem(s).`) either way.
+This installs the pinned releases from the plugin's own vendored copies
+(`vendor/obsidian/`) into `.obsidian/plugins/` and
+`.obsidian/themes/Minimal/`, verifying each file against the sha256 in
+`lib/plugin-pins.json` before it is written — same zero-checkout path as
+step 1, and **no network needed**: the bytes travel inside the plugin
+cache, so a Cowork sandbox with egress off installs exactly what a
+machine with egress on would. Exit 0 means done; report any `error: ...`
+lines on stderr verbatim, and the summary line
+(`N installed, N already ok, N problem(s).`) either way. A fresh vault
+reports `14 installed`; a re-run reports `14 already ok`.
+
+A `vendored copy sha256 mismatch` error means the plugin itself shipped a
+wrong file — the script refuses to install it and does not try to download
+a replacement. That is a plugin defect to report through the feedback
+channel, not something to route around on setup day.
 
 The vault's first open then needs only the one **"trust author and enable
 plugins"** click — turning off Restricted Mode is the one step that can
 never ship as files.
 
-**Fallback if this step fails or there is no network:** install by hand
-from within Obsidian. The vault's own `.obsidian/community-plugins.json`
-names exactly what it expects, so you do not need this skill or the runbook
-in front of you to recover it: Dataview, Minimal Theme Settings, Style
-Settings, Notebook Navigator — plus the **Minimal** theme via Settings →
-Appearance.
+**Fallback if this step fails:** install by hand from within Obsidian. The
+vault's own `.obsidian/community-plugins.json` names exactly what it
+expects, so you do not need this skill or the runbook in front of you to
+recover it: Dataview, Minimal Theme Settings, Style Settings, Notebook
+Navigator — plus the **Minimal** theme via Settings → Appearance. If you
+install Dataview by hand, **pick version 0.5.68 explicitly** (the
+community browser offers a newer 0.5.70 that is a mislabeled beta with a
+broken manifest); the other three and the theme can take their latest.
 
 ## Step 3 — Confirm the symlink
 

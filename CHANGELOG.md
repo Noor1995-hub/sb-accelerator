@@ -15,6 +15,7 @@ delivers them.
 
 ## Unreleased
 
+- `/provision-vault` step 2 now installs the Obsidian plugins and Minimal theme from copies that ship inside the plugin itself, verified against the same pinned checksums as before — so provisioning works on a machine with no network access to GitHub (Cowork's sandbox blocks release downloads by default), and the consultant no longer needs to ask a client's IT to open network egress. The by-hand fallback stays, now with the explicit instruction to pick Dataview 0.5.68 (#164, #166)
 - `/provision-vault` no longer hands over a vault nobody can write into. Provisioning from Cowork (or any machine whose plugin cache is read-only) used to copy the cache's read-only permissions onto every file and folder of the new vault, reporting success with two soft warnings while the client could not add a single note; the copy is now made writable before anything else is written, and a vault location that still refuses writes fails provisioning with a clear error and hint instead (#165)
 
 ## v0.10.28 — 2026-09-03
