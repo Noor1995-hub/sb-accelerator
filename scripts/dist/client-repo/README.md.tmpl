@@ -1,0 +1,42 @@
+# $repo_name
+
+This repository exists for one purpose: feedback about your Second Brain
+Accelerator — the AI system delaware set up for you and your assistant.
+
+## What lands here
+
+- **Feedback reports** — something that broke, confused you, or an idea for
+  something better — opened by `/report-feedback`, always after showing you
+  the exact text and asking first.
+- **Health reports** — periodic, content-free status snapshots (plugin and
+  structure versions, sync health, counts) — opened by `/health-check` when
+  you choose to share one.
+
+Every issue opened here goes through a deterministic scrub check before it
+is sent. It contains zero personal or business content: no note text, no
+names of people or organizations, no meeting titles. The only identifying
+fact is which deployment it came from, which is what makes it actionable.
+Nothing is ever sent without your explicit approval — the skill shows you
+the exact text first.
+
+## What you see
+
+This repository is yours. It is the only place your reports go: feedback
+from other delaware clients is never visible here, and nothing you write
+here is visible to them.
+
+## What delaware does with issues opened here
+
+delaware's product team triages each issue using the labels below, and
+folds anything accepted back into the product for every deployment, not
+only yours. Closing an issue here never removes it from delaware's own
+record of your engagement.
+
+| Label | Meaning |
+|---|---|
+| `feedback` | A report opened by `/report-feedback` |
+| `health-report` | A status snapshot opened by `/health-check` |
+| `triage:new` | Not yet reviewed |
+| `triage:accepted` | Confirmed, going into the product |
+| `triage:productized` | Shipped in a plugin release |
+| `triage:declined` | Reviewed, not going forward, with a reason on the issue |
