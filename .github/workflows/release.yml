@@ -252,13 +252,20 @@ jobs:
             dist/CHANGELOG.md \
             dist/RELEASE.json \
             dist/plugin/.claude-plugin/plugin.json \
-            dist/plugin/template/structure-version \
-            dist/plugin/template/.obsidian/app.json; do
+            dist/plugin/template/structure-version; do
             if [ ! -e "$f" ]; then
               echo "::error::downloaded dist-tree artifact is missing $f"
               missing=1
             fi
           done
+          # Checked as a directory, not a specific file by name, so a
+          # template rename inside .obsidian/ can't produce a false
+          # "hidden files dropped" diagnosis — only the directory's own
+          # (hidden) presence is what include-hidden-files actually governs.
+          if [ ! -d dist/plugin/template/.obsidian ]; then
+            echo "::error::downloaded dist-tree artifact is missing dist/plugin/template/.obsidian/"
+            missing=1
+          fi
           if [ "$missing" -ne 0 ]; then
             echo "::error::dist-tree artifact looks truncated (hidden files likely dropped on upload) — refusing to touch the dist repo"
             exit 1

@@ -304,7 +304,16 @@ def test_notes_on_the_real_changelog_falls_back_to_the_real_unreleased_bullets(t
     """Sanity check against the actual repo CHANGELOG.md, not a synthetic
     one: a version that has never been released must report fell_back=True
     and the text must be the real Unreleased section's own bullets, not
-    merely some non-empty string."""
+    merely some non-empty string.
+
+    Deliberately does NOT also assert the section is non-empty: the
+    documented release-PR step (CONTRIBUTING.md's "Cutting a release")
+    renames Unreleased to a dated `## v<version> —` section and leaves a
+    fresh, empty Unreleased behind — exactly the state of the repo right
+    after that PR merges and right before the next tag. An emptiness
+    assertion here would fail on the very PR that cuts a release. The
+    byte-equality check above already carries the sharpening this test
+    exists for."""
     real_text = (REPO_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
     expected = dict(build_dist._sections(real_text))["Unreleased"].strip() + "\n"
 
@@ -312,7 +321,6 @@ def test_notes_on_the_real_changelog_falls_back_to_the_real_unreleased_bullets(t
 
     assert fell_back is True
     assert text == expected
-    assert text.strip() != ""
 
 
 # --- #4: notes() must not require PyYAML; only the lint path does ---
