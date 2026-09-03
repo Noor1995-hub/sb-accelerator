@@ -37,8 +37,6 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-from vaultlib import provenance
-
 TEMPLATE_ROOT = Path(__file__).resolve().parents[1] / "template"
 
 # The structure-version a freshly instantiated vault must carry. Mirrors
@@ -98,9 +96,17 @@ def instantiate(target: Path, template_root: Optional[Path] = None) -> dict:
             f"{EXPECTED_STRUCTURE_VERSION!r} — the copied template is stale "
             "or the plugin cache is corrupt")
 
-    # Never raises (provenance.record_provision's own contract) — a
-    # provenance failure must not fail a provision that otherwise landed.
-    provenance_status = provenance.record_provision(target, template_root)
+    # Imported here, not at module load, so a plugin cache that is somehow
+    # missing vaultlib (or has it broken) fails this one step — reported
+    # through record_provision's own never-raises "failed — ..." contract —
+    # rather than killing the whole primitive with an import traceback and
+    # no JSON envelope at all before instantiate() even starts.
+    try:
+        from vaultlib import provenance
+    except Exception as exc:  # noqa: BLE001 — never raises, by design
+        provenance_status = f"failed — {exc}"
+    else:
+        provenance_status = provenance.record_provision(target, template_root)
 
     return {
         "target": str(target),

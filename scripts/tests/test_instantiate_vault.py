@@ -139,6 +139,32 @@ def test_symlink_created_on_success(tmp_path):
     assert (target / ".claude").is_symlink()
 
 
+def test_provenance_import_failure_is_reported_not_raised(tmp_path, monkeypatch):
+    """Reviewer finding #3: a module-level `from vaultlib import provenance`
+    would die with an import traceback (no ok envelope at all) if vaultlib
+    were ever absent from a plugin cache. The import must happen inside
+    instantiate()'s provenance step, so a failure lands in record_provision's
+    own never-raises "failed — ..." path instead of killing the primitive."""
+    import builtins
+    real_import = builtins.__import__
+
+    def fake_import(name, *args, **kwargs):
+        if name == "vaultlib":
+            raise ImportError("vaultlib package is missing from this plugin cache")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+    target = tmp_path / "vault"
+
+    result = instantiate(target)
+
+    assert result["provenance"].startswith("failed — ")
+    assert "missing from this plugin cache" in result["provenance"]
+    # The rest of the vault is still complete — only provenance is missing.
+    assert result["obsidian_present"] is True
+    assert (target / "CLAUDE.md").is_file()
+
+
 def test_provenance_recorded_against_an_injected_template_root(tmp_path):
     """record_provision must use the passed-in template_root, not the
     module default — the same guardrail contract as the copy itself."""
