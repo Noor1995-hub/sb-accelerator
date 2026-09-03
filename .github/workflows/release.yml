@@ -1,0 +1,274 @@
+# Release — tag-triggered publish to the client-facing marketplace (#10).
+#
+# Two ways in:
+#   - `git push` a tag matching `plugin-v*` — always channel=dryrun (the
+#     dryrun repair path and the client promotion are always explicit acts,
+#     never implied by a tag push).
+#   - `workflow_dispatch` with `tag` (required) and `channel`
+#     (dryrun|client, default client) — re-running dryrun for a given tag is
+#     the repair path when a prior run left it out of sync; dispatching
+#     channel=client is how a tag is promoted after the dryrun run is green.
+#
+# One job chain, channel resolved up front in `resolve` so every later job
+# reads it from `needs.resolve.outputs` rather than re-deriving it.
+name: Release
+
+on:
+  push:
+    tags:
+      - 'plugin-v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to release, e.g. plugin-v0.10.24'
+        required: true
+      channel:
+        description: 'Distribution channel'
+        required: true
+        default: 'client'
+        type: choice
+        options:
+          - dryrun
+          - client
+
+permissions: {}
+
+# One release train per channel at a time; never cancel a running publish
+# mid-push. A tag push is always channel=dryrun for grouping purposes even
+# though the job below is what actually enforces the value.
+concurrency:
+  group: release-${{ github.event_name == 'push' && 'dryrun' || inputs.channel }}
+  cancel-in-progress: false
+
+jobs:
+  resolve:
+    name: resolve release parameters
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.set.outputs.tag }}
+      channel: ${{ steps.set.outputs.channel }}
+      version: ${{ steps.set.outputs.version }}
+      dist_repo: ${{ steps.set.outputs.dist_repo }}
+      marketplace: ${{ steps.set.outputs.marketplace }}
+    steps:
+      - name: resolve tag, channel, version, dist repo, marketplace
+        id: set
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "push" ]; then
+            tag="${GITHUB_REF#refs/tags/}"
+            channel="dryrun"
+          else
+            tag="${{ inputs.tag }}"
+            channel="${{ inputs.channel }}"
+          fi
+
+          if ! [[ "$tag" =~ ^plugin-v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::tag '$tag' does not match ^plugin-v\\d+\\.\\d+\\.\\d+\$ — refusing"
+            exit 1
+          fi
+          version="${tag#plugin-v}"
+
+          case "$channel" in
+            dryrun) dist_repo="sb-dist-dryrun"; marketplace="sb-accelerator-dryrun" ;;
+            client) dist_repo="sb-dist"; marketplace="sb-accelerator" ;;
+            *) echo "::error::channel '$channel' must be 'dryrun' or 'client'"; exit 1 ;;
+          esac
+
+          echo "Releasing $tag (version $version) to channel=$channel -> $dist_repo"
+          {
+            echo "tag=$tag"
+            echo "channel=$channel"
+            echo "version=$version"
+            echo "dist_repo=$dist_repo"
+            echo "marketplace=$marketplace"
+          } >> "$GITHUB_OUTPUT"
+
+  verify:
+    name: verify tag (${{ needs.resolve.outputs.channel }})
+    needs: resolve
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refs/tags/${{ needs.resolve.outputs.tag }}
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: install deps
+        run: pip install pytest pyyaml
+      - name: plugin.json version must match the tag
+        run: |
+          set -euo pipefail
+          version=$(python3 -c "import json; print(json.load(open('plugin/.claude-plugin/plugin.json'))['version'])")
+          expected="${{ needs.resolve.outputs.version }}"
+          if [ "$version" != "$expected" ]; then
+            echo "::error::plugin.json version ($version) != tag version ($expected)"
+            exit 1
+          fi
+      - name: refuse a tag that is not on main (no side-branch releases)
+        run: |
+          set -euo pipefail
+          git fetch origin main --quiet
+          if ! git merge-base --is-ancestor "${{ needs.resolve.outputs.tag }}" origin/main; then
+            echo "::error::${{ needs.resolve.outputs.tag }} is not an ancestor of origin/main"
+            exit 1
+          fi
+      - name: skill lint + clean-room scan
+        run: python scripts/lint_plugin.py
+      - name: template structure validation
+        run: python scripts/validate_template.py
+      - name: validator unit tests
+        run: python -m pytest scripts/tests -q
+
+  build:
+    name: build dist tree (${{ needs.resolve.outputs.channel }})
+    needs: [resolve, verify]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refs/tags/${{ needs.resolve.outputs.tag }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: install deps
+        run: pip install pyyaml
+      - name: build the dist tree (runs the real clean-room linter on the output)
+        run: |
+          python scripts/build_dist.py build \
+            --channel "${{ needs.resolve.outputs.channel }}" \
+            --out dist \
+            --source-ref "${{ needs.resolve.outputs.tag }}" \
+            --source-sha "$GITHUB_SHA"
+      - name: zip the plugin package
+        run: |
+          set -euo pipefail
+          version="${{ needs.resolve.outputs.version }}"
+          zip_name="plugin-${version}.zip"
+          # Zip rooted at plugin/'s own contents, not at "plugin/" itself —
+          # this is the archive path E (manual ZIP upload) needs: a plugin
+          # package with .claude-plugin/plugin.json at the zip root.
+          (cd dist/plugin && zip -qr "$GITHUB_WORKSPACE/$zip_name" .)
+          sha256sum "$zip_name" > "${zip_name}.sha256"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-tree
+          path: dist
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        with:
+          name: plugin-zip
+          path: |
+            plugin-${{ needs.resolve.outputs.version }}.zip
+            plugin-${{ needs.resolve.outputs.version }}.zip.sha256
+          retention-days: 90
+
+  publish:
+    name: publish to ${{ needs.resolve.outputs.dist_repo }}
+    needs: [resolve, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist-tree
+          path: dist
+      - name: clone the dist repo
+        env:
+          DIST_PUSH_TOKEN: ${{ secrets.DIST_PUSH_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${DIST_PUSH_TOKEN:-}" ]; then
+            echo "::error::DIST_PUSH_TOKEN secret is not set — see playbooks/plugin-distribution.md for the owner setup steps (create the sb-dist repo, mint the PAT, add the secret)."
+            exit 1
+          fi
+          owner="${{ github.repository_owner }}"
+          repo="${{ needs.resolve.outputs.dist_repo }}"
+          git clone --quiet --depth 1 "https://x-access-token:${DIST_PUSH_TOKEN}@github.com/${owner}/${repo}.git" dist-repo
+      - name: wipe everything but .git, then copy the built tree in
+        run: |
+          set -euo pipefail
+          find dist-repo -mindepth 1 -maxdepth 1 ! -name '.git' -exec rm -rf {} +
+          cp -a dist/. dist-repo/
+      - name: commit and push (no-op if nothing changed)
+        working-directory: dist-repo
+        run: |
+          set -euo pipefail
+          git config user.name "sb-accelerator release bot"
+          git config user.email "sb-accelerator-release-bot@users.noreply.github.com"
+          git add -A
+          # Idempotency gate: re-running this job for a tag/channel that was
+          # already published (a re-dispatched dryrun repair, or the workflow
+          # simply re-run) must be a safe no-op, not a duplicate/empty commit.
+          if git diff --cached --quiet; then
+            echo "already published — dist tree is unchanged, nothing to commit"
+            exit 0
+          fi
+          version="${{ needs.resolve.outputs.version }}"
+          tag="${{ needs.resolve.outputs.tag }}"
+          sha7="${GITHUB_SHA:0:7}"
+          channel="${{ needs.resolve.outputs.channel }}"
+          git commit -m "re-cut: plugin ${version} (source ${tag} @ ${sha7}) — publish to ${channel}"
+          git push origin HEAD:main
+      - name: API read-back verification (never trust the local clone)
+        env:
+          GH_TOKEN: ${{ secrets.DIST_PUSH_TOKEN }}
+        run: |
+          set -euo pipefail
+          repo="${{ github.repository_owner }}/${{ needs.resolve.outputs.dist_repo }}"
+          expected_version="${{ needs.resolve.outputs.version }}"
+          expected_marketplace="${{ needs.resolve.outputs.marketplace }}"
+
+          got_version=$(gh api "repos/${repo}/contents/plugin/.claude-plugin/plugin.json" --jq '.content' \
+            | base64 -d | python3 -c "import json,sys; print(json.load(sys.stdin)['version'])")
+          got_marketplace=$(gh api "repos/${repo}/contents/.claude-plugin/marketplace.json" --jq '.content' \
+            | base64 -d | python3 -c "import json,sys; print(json.load(sys.stdin)['name'])")
+
+          if [ "$got_version" != "$expected_version" ]; then
+            echo "::error::read-back plugin.json version ($got_version) != expected ($expected_version)"
+            exit 1
+          fi
+          if [ "$got_marketplace" != "$expected_marketplace" ]; then
+            echo "::error::read-back marketplace name ($got_marketplace) != expected ($expected_marketplace)"
+            exit 1
+          fi
+          echo "read-back OK via the GitHub API: plugin $got_version, marketplace $got_marketplace"
+
+  github_release:
+    name: GitHub Release
+    needs: [resolve, build]
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refs/tags/${{ needs.resolve.outputs.tag }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: plugin-zip
+          path: .
+      - name: extract release notes from CHANGELOG.md
+        run: |
+          set -euo pipefail
+          python scripts/build_dist.py notes --version "${{ needs.resolve.outputs.version }}" > release-notes.md
+      - name: create or refresh the release (idempotent — never fails or duplicates on re-run)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="${{ needs.resolve.outputs.tag }}"
+          version="${{ needs.resolve.outputs.version }}"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "release $tag already exists — refreshing its notes"
+            gh release edit "$tag" --notes-file release-notes.md
+          else
+            gh release create "$tag" --verify-tag --notes-file release-notes.md
+          fi
+          gh release upload "$tag" "plugin-${version}.zip" "plugin-${version}.zip.sha256" --clobber
