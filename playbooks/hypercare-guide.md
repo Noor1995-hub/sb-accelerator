@@ -16,7 +16,7 @@ title, or note text.
 
 ## How to read the numbers
 
-`/health-check` reports counts, rates and ages, never vault objects. Four
+`/health-check` reports counts, rates and ages, never vault objects. Three
 thresholds worth knowing before the first read, each pointing at a different
 part of the deployment:
 
@@ -33,21 +33,33 @@ part of the deployment:
   problem. The queue is only draining if someone works the Triage view
   regularly; a week-over-week climb means the loop needs more of her time
   than it's getting, not a different tool.
-- **`no-access` count high** (the sync-recordings run summary's `forbidden`
-  and `no-transcript` tallies for Microsoft 365, not falling week to week) →
-  the recorder, not Teams, is the primary capture for those meetings. Stop
-  chasing tenant permissions and plan the deployment around Plaud for that
-  set of meetings instead.
 
 Read the trend, not the single week: one thin week can be a real quiet week.
 Two or three in a row against the same threshold is the signal.
+
+## One more signal, off the sync-recordings run summary
+
+This one is not in `/health-check` at all, so read it from a different
+place: `/sync-recordings`' own run summary carries a `{N} no-access` tally
+for Microsoft 365 occurrences the connector could not reach. Because that
+count is a fact about one run, not a persisted ledger, capture it as the
+run happens — the EA notes it, week by week, alongside her `/health-check`
+reading, rather than expecting to look it up later.
+
+If the tally stays non-zero for the same meetings, run after run, the
+recorder — not Teams — is the primary capture for them: stop chasing tenant
+permissions and plan the deployment around Plaud for that set of meetings
+instead. Once IT grants transcript access, `sync m365-forget --outcome
+no-access` forces the next sync to re-check them rather than leaving them
+parked on the old answer.
 
 ## Check-in call agenda
 
 A short standing call each week, EA plus consultant:
 
-1. Walk the numbers from that week's `/health-check`, against the
-   thresholds above.
+1. Walk the numbers from that week's `/health-check` against the three
+   thresholds above, plus whatever the EA captured off that week's
+   `/sync-recordings` run summaries for the no-access signal.
 2. Anything the EA flagged through `/report-feedback` since the last call —
    confirm she has heard back on each (see below).
 3. Anything the three habits from `session-2-habits.md` aren't sticking to
@@ -73,11 +85,12 @@ Two rules for hypercare:
 ## Exit into steady state
 
 Hypercare ends when the numbers hold for two consecutive weekly checks
-against every threshold above, and the EA has stopped needing the
-troubleshooting ladder to explain a gap. Say so explicitly on the last
-check-in call rather than letting the weekly cadence quietly lapse — the EA
-should hear "we're calling this steady state" as a decision, not notice it
-by the calls stopping.
+against every threshold above, the no-access signal has settled or has a
+named plan (recorder-as-primary, or an access grant already requested), and
+the EA has stopped needing the troubleshooting ladder to explain a gap. Say
+so explicitly on the last check-in call rather than letting the weekly
+cadence quietly lapse — the EA should hear "we're calling this steady
+state" as a decision, not notice it by the calls stopping.
 
 ## What the care package owes quarterly
 
