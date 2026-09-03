@@ -79,8 +79,15 @@ event and derive your own ids before you touch a transcript:
 
    - `NOT_FOUND` with `transcripts_empty` → reply `no-transcript`
      (transcription was off for that meeting — settled, not an error).
-   - **403/Forbidden** → reply `forbidden` (another organization's tenant
-     owns it, permanently).
+   - **403/Forbidden** — classify by the body: Graph code 3003 / "does not
+     have access to lookup meeting" → reply `no-access` (meeting organised
+     by someone else; this connector resolves transcripts through the
+     organiser-only online-meeting lookup). An unreadable body, or a 403
+     with no readable Graph error code at all, also replies `no-access` —
+     the safer default, since not-the-organizer is the majority class and a
+     genuine cross-tenant 403 is the rarity. Only a 403 body that
+     positively names a different cause → reply `forbidden` (another
+     tenant owns it, permanently).
    - A transport error, or a result too large for the tool result → reply
      `fetch-error`.
 
@@ -246,7 +253,8 @@ above.
 |---|---|
 | `written: <note stem>` | note verified on disk (append any reassemble warnings / conflict kind; M365 additionally appends `(recording-id: m365:<hex>)` and `(new-people: <names>` or `none)`) |
 | `no-transcript` | M365: `m365 ids` returned `skipped: no-transcript-url` (before any fetch), or the transcript read answered `transcripts_empty` |
-| `forbidden` | M365: 403 on the transcript read — permanent |
+| `no-access` | M365: 403 on the transcript read, body carries Graph code 3003 / "does not have access to lookup meeting" (meeting organised by someone else) — or the body is unreadable / carries no readable Graph error code at all (safer default); permanent |
+| `forbidden` | M365: a 403 on the transcript read whose body positively names a different cause — another tenant, permanent |
 | `fetch-error: <one clause why>` | transport failure, incomplete page set, oversized result — retries next run |
 | `auth-error` | connector wants re-authentication — the adapter should stop |
 | `already-synced: <recording_id>` | M365 only: `sync dedup` already reports your derived id `synced` — stop before the transcript read; no payload |

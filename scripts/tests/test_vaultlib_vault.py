@@ -37,6 +37,19 @@ def test_resolve_rejects_a_missing_directory(tmp_path):
         vault.resolve(str(tmp_path / "nope"))
 
 
+def test_resolve_missing_directory_hints_at_cowork_cloud_sessions(tmp_path):
+    """A missing path is exactly what a Cowork cloud session sees when the
+    vault folder is never mounted — the hint names the cause so a session
+    does not burn a day treating it as a typo."""
+    with pytest.raises(vault.VaultError, match="Cowork cloud session"):
+        vault.resolve(str(tmp_path / "nope"))
+    with pytest.raises(
+        vault.VaultError,
+        match=r"Settings → Cowork → Run new tasks in the cloud: off",
+    ):
+        vault.resolve(str(tmp_path / "nope"))
+
+
 def test_resolve_rejects_a_directory_that_is_not_a_vault(tmp_path):
     plain = tmp_path / "plain"
     plain.mkdir()

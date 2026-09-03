@@ -380,6 +380,7 @@ def test_sync_probe_m365_contract_exists_and_covers_outcomes():
     assert "still-no-transcript" in ref
     assert "transcript-found" in ref
     assert "forbidden" in ref
+    assert "no-access" in ref
     assert "fetch-error" in ref
     assert "auth-error" in ref
     assert "worker-contract.md" in ref, (
@@ -401,12 +402,79 @@ def test_sync_probe_m365_contract_never_extracts_or_touches_the_cache():
 
 def test_sync_recordings_worker_outcomes_are_a_closed_vocabulary():
     text = read_skill("sync-recordings")
-    for token in ("written:", "no-transcript", "forbidden",
+    for token in ("written:", "no-transcript", "forbidden", "no-access",
                   "fetch-error", "auth-error", "possible-duplicate-of",
                   "already-synced", "skip-listed"):
         assert token in text, f"outcome vocabulary is missing {token}"
     assert "never writes the seen-events cache" in text, (
         "the single-writer rule must be stated")
+
+
+def test_no_access_classification_prose_is_consistent_everywhere():
+    """Defect #124: a 403 on the transcript read was banked as forbidden,
+    terminal, on the claim "another tenant owns it" — false for the
+    majority of an exec's calendar, meetings they attended but did not
+    organise. Graph code 3003 ("does not have access to lookup meeting")
+    distinguishes that case from a genuine cross-tenant 403, and the same
+    classification wording must appear everywhere a worker or probe makes
+    the 403 call: both contract files, and every SKILL.md mention."""
+    texts = {
+        "worker-contract.md": read_ref("sync-recordings", "worker-contract.md"),
+        "probe-contract.md": read_ref("sync-recordings", "probe-contract.md"),
+        "SKILL.md": read_skill("sync-recordings"),
+    }
+    for name, text in texts.items():
+        assert "3003" in text, f"{name} is missing the Graph 3003 code"
+        assert "does not have access to lookup meeting" in text, (
+            f"{name} is missing the Graph error text")
+        assert "no-access" in text, f"{name} is missing the no-access outcome"
+        # Review finding #2 (round 1): a 403 with an unreadable body, or no
+        # readable Graph code at all, had no rule. Orchestrator ruling: it
+        # defaults to no-access — the safer default, since not-the-organizer
+        # is the majority class and a true cross-tenant forbidden is the
+        # rarity. Stated in the same sentence as the 3003 rule everywhere.
+        assert "no readable Graph" in text, (
+            f"{name} is missing the no-readable-Graph-code default rule")
+
+
+def test_sync_recordings_filtered_buckets_include_no_access():
+    """Review finding #1 (round 1): step 1's description of `filtered`
+    enumerated only the pre-#124 buckets (written, skipped, forbidden,
+    no-transcript) — no-access is a fifth bucket the CLI counts, and
+    leaving it out of this sentence means the "M365 fetches saved" total
+    the summary reports from it can silently drop no-access occurrences."""
+    text = read_skill("sync-recordings")
+    idx = text.index("`filtered` counts occurrences")
+    clause = text[idx: idx + 300]
+    assert "no-access" in clause, (
+        "the filtered-buckets sentence must name the no-access bucket, "
+        "the same way it names forbidden and no-transcript")
+
+
+def test_sync_recordings_summary_names_m365_forget():
+    """Review finding #3 (round 1): `sync m365-forget` was only named in
+    cli.py and its own tests — nothing told a consultant it existed. The
+    standing no-access sentence in the summary section must point at the
+    recheck command right after it."""
+    text = read_skill("sync-recordings")
+    idx = text.index("no-access` count is greater than 0")
+    clause = text[idx: idx + 700]
+    assert "sync m365-forget" in clause, (
+        "the standing no-access sentence must be followed by the "
+        "m365-forget recheck recipe")
+    assert "--outcome no-access" in clause
+
+
+def test_sync_recordings_per_event_no_access_listing_covers_the_probe_too():
+    """Review finding #7 (round 1): the per-event no-access listing named
+    only the worker's reply; a probe's no-access reply (step 6, the probe
+    banking bullets) settles the very same way and must be listed too."""
+    flat = re.sub(r"\s+", " ", read_skill("sync-recordings"))
+    idx = flat.index("Per event, list")
+    clause = flat[idx: idx + 300]
+    assert "probe" in clause.lower(), (
+        "the per-event no-access listing must cover probe replies, not "
+        "just worker replies")
 
 
 def test_sync_recordings_worker_contract_carries_the_fetch_mechanics():
@@ -598,6 +666,29 @@ def test_sync_recordings_states_the_start_date_bound():
     assert "sync.start-date" in text
     assert 'dates window --vault "$VAULT"' in text, (
         "the clamp only holds when the skill passes the vault")
+
+
+def test_sync_recordings_start_date_shorthand_names_a_real_flag():
+    """#121: the illustrative `dates window --vault "$VAULT"` shorthand
+    reads as a runnable command, but the CLI requires --start (or
+    --trailing-days) — a session that took it literally burned a retry
+    loop on exit 2 before reading the help. Every mention must carry the
+    missing flag, or say "with the item's timestamp", inline — checked
+    with re.finditer over ALL occurrences (review finding #6, round 1),
+    not just the first, so a reintroduced bare shorthand anywhere in the
+    file fails this test rather than hiding behind an earlier, fixed one."""
+    text = read_skill("sync-recordings")
+    matches = list(re.finditer(r'dates window --vault "\$VAULT"', text))
+    assert matches, "no dates window --vault \"$VAULT\" mention found at all"
+    for match in matches:
+        tail = text[match.end(): match.end() + 200]
+        assert ("--start" in tail or "--trailing-days" in tail
+                or "item's timestamp" in tail
+                or "item's own timestamp" in tail), (
+            f"bare shorthand at offset {match.start()} must name a real "
+            "flag or the item's timestamp inline, never look like a "
+            "complete, runnable call on its own"
+        )
 
 
 @pytest.mark.parametrize("name", ["setup-my-brain", "provision-vault",

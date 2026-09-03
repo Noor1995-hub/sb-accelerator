@@ -193,6 +193,13 @@ Execs and EAs report breakage and improvement ideas from inside their normal wor
   markdown + YAML data layer stays surface-agnostic; the only
   Obsidian-proprietary surfaces are `.obsidian/` config and the `.base`
   views, both thin YAML. (Parked 2026-08-23.)
+- **Cloud-resident vault (git-hosted, routines)** — revisit after the field
+  test with exec-usage data. v1 runs local only because the vault is a
+  local folder; round-2 research found cloud sessions clone/push private
+  repos via the Claude GitHub App, and routines run unattended with
+  connectors (research preview, daily caps) — both suggest a git-hosted
+  vault could work as a distinct architecture, not a mode of today's local
+  one. (#144, #148.)
 
 ## Next Steps
 
