@@ -20,26 +20,25 @@ This playbook is the layer underneath: the mechanics and the decision of
 
 Related: the tag-triggered release pipeline (`.github/workflows/release.yml`,
 `scripts/build_dist.py`, `scripts/cut_release.sh`) shipped in #10, milestone
-v1.0. What is still missing is the **owner setup** it depends on — the
-private `sb-dist` repo does not exist yet, and neither does the
-`DIST_PUSH_TOKEN` secret the `publish` job needs to push to it. Both are
-owner (Michael) actions, not something a PR can do:
+v1.0. **Both channels are live as of 2026-09-03** — the owner setup it
+depends on is done:
 
-1. Create a private `sb-dist` repository (default branch `main`, no
-   push-blocking ruleset — the release bot pushes straight to it).
-2. Mint one fine-grained PAT: resource owner the org, repository access
-   scoped to `sb-dist-dryrun` and `sb-dist`, Contents read/write, roughly a
-   year's expiry.
-3. Add it as the repo secret `DIST_PUSH_TOKEN`.
-4. Optionally, a ruleset restricting who can push a `refs/tags/plugin-v*`
-   tag to admins.
+- `sb-dist-dryrun` and `sb-dist` both exist, private, default branch `main`,
+  no push-blocking ruleset (the release bot pushes straight to them).
+- The `DIST_PUSH_TOKEN` secret is set on this repo: one fine-grained PAT,
+  resource owner the org, repository access scoped to those two repos,
+  Contents read/write. Minted 2026-09-03 — **check its expiry before the
+  next quarterly release**; when it lapses, the `publish` job fails at its
+  own `DIST_PUSH_TOKEN` check with a message pointing back here, loudly
+  rather than silently.
+- 0.10.28 was the first version published to the client channel
+  (`sb-dist@05d5e8e`), the same day the dryrun channel got it.
 
-Until that setup lands, `channel=dryrun` releases work end-to-end (the
-dryrun repo already exists and has been hand-cut before), but a
-`channel=client` dispatch fails at the publish job's `DIST_PUSH_TOKEN` check
-with a message pointing back here — loudly, not by silently doing nothing.
-Until `sb-dist` exists, delivery to a real client stays manual (ZIP upload,
-path E).
+One optional hardening step is still **not** in place: a ruleset restricting
+who can push a `refs/tags/plugin-v*` tag to admins. Anyone who can push to
+this repo can therefore start a dryrun release train. The client promotion
+is still a separate deliberate `workflow_dispatch`, so this is a nuisance,
+not an exposure.
 
 **One limitation carried over from the bta deployment, verified there
 2026-07-31:** a plugin cannot deliver an MCP connector to the *chat*
