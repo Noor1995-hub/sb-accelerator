@@ -17,6 +17,7 @@ import pytest
 
 import instantiate_vault
 from instantiate_vault import EXPECTED_STRUCTURE_VERSION, InstantiateError, instantiate
+from vaultlib import provenance
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 TEMPLATE = REPO_ROOT / "plugin" / "template"
@@ -62,6 +63,16 @@ def test_existing_empty_target_is_accepted(tmp_path):
     target.mkdir()
     result = instantiate(target)
     assert result["obsidian_present"] is True
+
+
+def test_happy_path_records_a_provision_event_for_all_34_shipped_files(tmp_path):
+    target = tmp_path / "vault"
+    result = instantiate(target)
+    assert result["provenance"] == "99-workflow-config/provenance.json"
+    data = provenance.read(target)
+    assert data["events"][-1]["event"] == "provision"
+    assert data["events"][-1]["structure_version"] == EXPECTED_STRUCTURE_VERSION
+    assert len(data["template_files"]) == 34
 
 
 def test_default_template_root_is_this_plugins_own_template(tmp_path):
@@ -126,6 +137,18 @@ def test_symlink_created_on_success(tmp_path):
     result = instantiate(target, template_root=src)
     assert result["symlink"] == "created"
     assert (target / ".claude").is_symlink()
+
+
+def test_provenance_recorded_against_an_injected_template_root(tmp_path):
+    """record_provision must use the passed-in template_root, not the
+    module default — the same guardrail contract as the copy itself."""
+    src = make_fake_template(tmp_path)
+    target = tmp_path / "vault"
+    result = instantiate(target, template_root=src)
+    assert result["provenance"] == "99-workflow-config/provenance.json"
+    data = provenance.read(target)
+    assert set(data["template_files"]) == {
+        "CLAUDE.md", "structure-version", ".obsidian/app.json"}
 
 
 def test_symlink_failure_is_reported_not_raised(tmp_path, monkeypatch):
