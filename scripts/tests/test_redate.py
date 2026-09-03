@@ -203,10 +203,18 @@ def test_determinism_same_demo_day_same_output(tmp_path):
     target_a = _build(tmp_path, demo_day, name="vault-a")
     target_b = _build(tmp_path, demo_day, name="vault-b")
 
+    # provenance.json carries a wall-clock "at" timestamp from
+    # build_vault()'s own record_provision() call, same as obsidian_probe.
+    # provenance()'s pristine-vault comparison excludes it for the same
+    # reason: it is CLI-owned bookkeeping written fresh on every build, not
+    # demo content redate.py is responsible for reproducing byte-for-byte.
+    _PROVENANCE_RELPATH = Path("99-workflow-config") / "provenance.json"
+
     def _files(target):
         return sorted(
             p.relative_to(target) for p in target.rglob("*")
             if p.is_file() and p.relative_to(target).parts[0] != ".claude"
+            and p.relative_to(target) != _PROVENANCE_RELPATH
         )
 
     files_a, files_b = _files(target_a), _files(target_b)
