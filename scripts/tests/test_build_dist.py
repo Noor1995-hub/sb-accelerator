@@ -443,3 +443,15 @@ def test_verify_tree_still_flags_a_vendored_filename(tmp_path):
     (out / "plugin" / "vendor" / "obsidian" / "michael.txt").write_text("x\n", encoding="utf-8")
     problems = build_dist.verify_tree(out, REPO_ROOT)
     assert any("michael" in p.lower() and "filename" in p.lower() for p in problems)
+
+
+def test_verify_tree_still_scans_the_vendor_licence_index(tmp_path):
+    """The dist tree carries LICENSES.md too, and it is ours: a violation
+    planted there must be caught by the release gate, not waved through
+    with the upstream files beside it."""
+    out = tmp_path / "out"
+    build_dist.build("client", out, REPO_ROOT, lint=False)
+    index = out / "plugin" / "vendor" / "obsidian" / "LICENSES.md"
+    index.write_text(index.read_text(encoding="utf-8") + "\nReviewed with Michael.\n", encoding="utf-8")
+    problems = build_dist.verify_tree(out, REPO_ROOT)
+    assert any("michael" in p.lower() and "LICENSES.md" in p for p in problems)

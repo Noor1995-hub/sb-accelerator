@@ -1,6 +1,6 @@
 # Vendored Obsidian plugins and theme — licences
 
-This directory carries the unmodified release assets of the Obsidian community plugins and theme the vault expects, so `lib/provision_plugins.py` can install them without network access. Each subdirectory holds exactly the files listed in `lib/plugin-pins.json` for that entry, byte-for-byte as published upstream at the pinned tag, plus that project's licence text as `LICENSE`. Nothing here is written or modified by delaware; the directory is regenerated from the pins by tooling and never edited by hand.
+This directory carries the unmodified release assets of the Obsidian community plugins and theme the vault expects, so `lib/provision_plugins.py` can install them without network access. Each subdirectory holds exactly the files listed in `lib/plugin-pins.json` for that entry, byte-for-byte as published upstream at the pinned tag, plus that project's licence text as `LICENSE`. Nothing inside those subdirectories is written or modified by delaware; they are regenerated from the pins by tooling and never edited by hand. This index is the one hand-maintained file here.
 
 | Directory | Upstream project | Pinned tag | Licence |
 |---|---|---|---|

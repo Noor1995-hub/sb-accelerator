@@ -343,3 +343,24 @@ def test_fixtures_get_no_vendor_exemption(tmp_path):
     root = make_repo(tmp_path)
     write_prose(root, "fixtures/vendor/leak.md", "Ping Michael.")
     assert any("michael" in p.lower() for p in main(root))
+
+
+def test_hand_written_licence_index_at_the_vendor_root_is_still_scanned(tmp_path):
+    """plugin/vendor/obsidian/LICENSES.md is delaware-authored prose that
+    happens to live under the vendor prefix; refresh_vendor.py never writes
+    it. The exemption stops at the project directory, so a name or a stale
+    command slipping into the index during a pin bump is still caught."""
+    root = make_repo(tmp_path)
+    a_skill(root, "evening-sync")
+    write_prose(root, "plugin/vendor/obsidian/LICENSES.md",
+                "| `dataview/` | pinned for Michael's demo |",
+                "Installed by `/morning-brief`.")
+    problems = main(root)
+    assert any("LICENSES.md:1" in p and "michael" in p.lower() for p in problems)
+    assert any("LICENSES.md:2" in p and "morning-brief" in p for p in problems)
+
+
+def test_a_file_at_the_vendor_root_itself_is_still_scanned(tmp_path):
+    root = make_repo(tmp_path)
+    write_prose(root, "plugin/vendor/README.md", "Ask Michael which pins to bump.")
+    assert any("vendor/README.md" in p and "michael" in p.lower() for p in main(root))

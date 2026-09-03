@@ -23,15 +23,18 @@ per-occurrence exemption, not a whole-line one: any other "busdev" mention
 riding along on the same line still flags, as do other terms on that line and
 bare "busdev" anywhere else (including filenames).
 
-Exemption: plugin/vendor/ is exempt from the CONTENT scans (denylist and
-slash-command references), never from the filename check. It holds the
-unmodified upstream release assets and licence texts of the Obsidian
-community plugins the vault expects (#164) — third-party code and its
-authors' copyright notices, not delaware content. The clean-room rule is
-about what delaware wrote; a maintainer's name in an upstream manifest.json or
-a `/path` inside minified JavaScript is neither a client leak nor our prose.
-A denylisted term in a vendored FILENAME still flags: the directory names are
-ours, and a file we chose to put there is ours to name.
+Exemption: the upstream files under plugin/vendor/<family>/<project>/ are
+exempt from the CONTENT scans (denylist and slash-command references), never
+from the filename check. They are the unmodified release assets and licence
+texts of the Obsidian community plugins the vault expects (#164) — third-party
+code and its authors' copyright notices, not delaware content. The clean-room
+rule is about what delaware wrote; a maintainer's name in an upstream
+manifest.json or a `/path` inside minified JavaScript is neither a client leak
+nor our prose. The exemption stops at the project directory: files at the
+vendor root or family level (plugin/vendor/obsidian/LICENSES.md, the
+hand-written licence index) are ours and scanned like any other shipped prose.
+A denylisted term in a vendored FILENAME still flags at every level: the
+directory names are ours, and a file we chose to put there is ours to name.
 
 Exit 0 with no output on success; print problems and exit 1 otherwise.
 """
@@ -68,12 +71,19 @@ SHIPPED_TREES = ("plugin", "fixtures")
 # and for a built dist tree (root = the dist directory, which build_dist.py's
 # verify_tree() scans with the same function) alike.
 VENDOR_PREFIX = ("plugin", "vendor")
+# Upstream bytes live at plugin/vendor/<family>/<project>/<file> — five parts.
+# Anything shallower (plugin/vendor/obsidian/LICENSES.md, a future README at
+# either level) is a file *we* wrote and gets no exemption.
+VENDOR_UPSTREAM_DEPTH = len(VENDOR_PREFIX) + 3
 
 
 def is_vendored(rel: Path) -> bool:
-    """True for a path under plugin/vendor/ — third-party content whose text
-    is exempt from the clean-room and slash-command scans (see module doc)."""
-    return tuple(rel.parts[:len(VENDOR_PREFIX)]) == VENDOR_PREFIX
+    """True for an upstream file inside a project directory under
+    plugin/vendor/ — third-party content whose text is exempt from the
+    clean-room and slash-command scans (see module doc). False for the
+    hand-written files at the vendor root or family level, which are ours."""
+    return (tuple(rel.parts[:len(VENDOR_PREFIX)]) == VENDOR_PREFIX
+            and len(rel.parts) >= VENDOR_UPSTREAM_DEPTH)
 
 
 def load_denylist(root: Path) -> list[str]:
