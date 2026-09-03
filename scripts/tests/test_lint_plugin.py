@@ -363,4 +363,6 @@ def test_hand_written_licence_index_at_the_vendor_root_is_still_scanned(tmp_path
 def test_a_file_at_the_vendor_root_itself_is_still_scanned(tmp_path):
     root = make_repo(tmp_path)
     write_prose(root, "plugin/vendor/README.md", "Ask Michael which pins to bump.")
-    assert any("vendor/README.md" in p and "michael" in p.lower() for p in main(root))
+    # Problem lines carry the OS-native path (backslashes on Windows CI), so
+    # match on the filename and line, not on a slash-joined fragment.
+    assert any("README.md:1" in p and "michael" in p.lower() for p in main(root))
