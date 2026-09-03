@@ -95,3 +95,9 @@ file with `--consent` folds it back to `current`, whether or not the
 refresh actually rewrites its bytes). A migration that touches a managed
 file should say so in its own module doc, so the consultant is not
 surprised by a "locally-edited" reason with no local edit behind it.
+
+Consenting to that refresh **reverts the migration's edit** — the managed
+file's bytes go back to whatever the shipped template holds, which is not
+necessarily what the migration wrote. A migration that must permanently own
+a managed file's content should ship that content in the template itself
+instead, so a later refresh converges on it rather than overwriting it.
