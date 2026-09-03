@@ -55,15 +55,24 @@ python3 "${CLAUDE_PLUGIN_ROOT}/lib/instantiate_vault.py" "$VAULT"
 
 This copies `plugin/template/` — **including the hidden `.obsidian/`
 directory** — from the plugin's own cache into `$VAULT`, refuses to touch a
-target that already has files in it, and verifies afterward that
-`.obsidian/` arrived and `structure-version` reads `2` before reporting
-success. It also attempts the `.claude → claude` symlink as part of the
-same run (see step 3).
+target that already has files in it, makes the copy writable (a read-only
+plugin cache — Cowork's is one — would otherwise hand its read-only modes
+to every file and folder in the new vault), and verifies afterward that
+the vault accepts a write, that `.obsidian/` arrived, and that
+`structure-version` reads `2` before reporting success. It also attempts
+the `.claude → claude` symlink as part of the same run (see step 3).
 
-Read `ok` first. On `ok: false`, **surface `error` and `hint` verbatim** —
-this is almost always a target that was not empty, which means confirming
-the intended location with the client rather than picking a different one
-or overwriting what is there.
+Read `ok` first. On `ok: false`, **surface `error` and `hint` verbatim**.
+There are two refusals:
+
+- **A target that was not empty** — the usual one. Confirm the intended
+  location with the client rather than picking a different one or
+  overwriting what is there.
+- **A target that is not writable** — the vault location itself refuses
+  writes even after the copied modes were normalised. This is a location
+  or ownership question for the consultant (in Cowork: is `$VAULT` inside a
+  connected folder?), never something to route around with `sudo` or by
+  writing files some other way. Remove the partial copy before retrying.
 
 On `ok: true`, this same call already records the vault's provenance
 baseline — which plugin version and structure version provisioned it, and
@@ -72,9 +81,19 @@ a digest of every shipped file as laid down — at
 `/health-check` reads plugin-version drift off it later, and a future
 `/upgrade-vault` step reads it to know what it can refresh silently versus
 what needs the consultant's eyes. Report `result.provenance` only if it
-starts with `"failed —"` — a provenance write failing is never a reason to
-redo provisioning, but it is worth a one-line note for whoever runs the
-next tune-up.
+starts with `"failed —"` — a provenance write failing on its own is never
+a reason to redo provisioning, but it is worth a one-line note for whoever
+runs the next tune-up.
+
+**If both `provenance` and `symlink` start with `"failed —"`, stop.** Two
+unrelated soft failures in the same run are not two soft failures: they
+are the first two writes into the new vault, and both failing means the
+vault cannot be written to at all. Check the target before anything else
+— `ls -ld "$VAULT" "$VAULT/99-workflow-config"`, then try creating a file
+there — and do not continue to `config write` or step 2 until it accepts a
+write. Since 0.10.29 step 1 refuses such a vault outright with `ok:
+false`, so this pairing should not occur; the rule stays because it is
+what tells a broken target apart from two coincidences.
 
 Never `git init` the vault. It has no git by design — Obsidian Sync's
 version history and the client's own backups cover recovery, and a `.git`
@@ -122,12 +141,15 @@ Read step 1's `symlink` field and report it, rather than assuming it
 worked:
 
 - `"created"` — done, nothing further to do.
-- `"failed — <reason>"` — most likely Windows without symlink privileges.
-  Say so out loud and give the fallback: `mklink /D .claude claude` from an
-  elevated shell, or with Developer Mode enabled. If neither is available
-  on this machine, point Claude Code at the `claude/` directory directly
-  instead of `.claude/` — the vault still works; only the dot-path
-  convenience is lost.
+- `"failed — <reason>"` with `provenance` **not** failed — most likely
+  Windows without symlink privileges. Say so out loud and give the
+  fallback: `mklink /D .claude claude` from an elevated shell, or with
+  Developer Mode enabled. If neither is available on this machine, point
+  Claude Code at the `claude/` directory directly instead of `.claude/` —
+  the vault still works; only the dot-path convenience is lost.
+- `"failed — <reason>"` with `provenance` **also** failed — not a symlink
+  story at all: the vault is not writable. Go back to step 1's
+  writability check before doing anything else.
 - `"skipped — ..."` — the template shipped without a `claude/` directory to
   link, which is a plugin defect, not something to work around by hand;
   report it rather than improvising a fix.
@@ -194,7 +216,9 @@ day:
    only that the file exists and is non-empty.
 3. **Never paraphrase `error` or `hint` from `instantiate_vault.py`.** A
    refused, non-empty target is a location question for the consultant to
-   resolve with the client, not something to route around.
+   resolve with the client, not something to route around; a refused,
+   unwritable target is a permissions question for the same conversation,
+   never a reason for `sudo` or a location picked on your own.
 4. **Never run this against a vault the owner or assistant is actively
    using.** Step 1's refusal on a non-empty target is a safety net, not
    permission to retarget an in-use vault at will.
