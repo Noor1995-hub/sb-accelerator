@@ -31,7 +31,7 @@ from datetime import date, timedelta
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-from . import markdown, schema, syncjob, vault
+from . import markdown, provenance, schema, syncjob, vault
 
 MEETINGS_DIR = vault.MEETINGS_DIR
 PROJECTS_DIR = vault.PROJECTS_DIR
@@ -281,6 +281,45 @@ def _decisions(root: Path, unparsed: _Counter) -> Dict[str, int]:
     return counts
 
 
+_EMPTY_PROVENANCE_BLOCK = {
+    "recorded": False, "malformed": False,
+    "provisioned_at": None, "provisioned_plugin_version": None,
+    "last_event": None, "last_event_at": None,
+    "recorded_plugin_version": None, "plugin_drift": "unknown",
+}
+
+
+def _provenance_block(root: Path) -> dict:
+    """provenance.json folded to counts/strings only — never raises, and a
+    malformed file folds to `recorded: false, malformed: true` rather than
+    surfacing whatever ProvenanceError says (that message could quote the
+    file's own bytes back)."""
+    try:
+        data = provenance.read(root)
+    except provenance.ProvenanceError:
+        return {**_EMPTY_PROVENANCE_BLOCK, "malformed": True}
+    if data is None:
+        return dict(_EMPTY_PROVENANCE_BLOCK)
+    events = data.get("events") or []
+    provision_event = next(
+        (e for e in events if e.get("event") == "provision"), None)
+    last_event = events[-1] if events else None
+    recorded_version = last_event.get("plugin_version") if last_event else None
+    drift = (provenance.compare_versions(recorded_version, vault.plugin_version())
+             if recorded_version else "unknown")
+    return {
+        "recorded": True,
+        "malformed": False,
+        "provisioned_at": provision_event.get("at") if provision_event else None,
+        "provisioned_plugin_version": (provision_event.get("plugin_version")
+                                       if provision_event else None),
+        "last_event": last_event.get("event") if last_event else None,
+        "last_event_at": last_event.get("at") if last_event else None,
+        "recorded_plugin_version": recorded_version,
+        "plugin_drift": drift,
+    }
+
+
 def _resolve_window(window) -> int:
     try:
         window_days = int(window)
@@ -337,6 +376,8 @@ def report(root: Path, today: str, window: int = DEFAULT_WINDOW_DAYS) -> dict:
         "entities": _entities(root, meetings, cutoff_30d, unparsed),
         "decisions": _decisions(root, unparsed),
         "unparsed": unparsed.value,
+        "provenance": _provenance_block(root),
+        "claude_link": provenance.claude_link_state(root),
     }
     return result
 
@@ -397,6 +438,19 @@ def render(data: dict) -> str:
               for status, count in sorted(data["decisions"].items())]
     lines += ["", "## Unparsed"]
     lines += _table([("unparsed", data["unparsed"])])
+    lines += ["", "## Provenance"]
+    lines += _table([
+        ("recorded", data["provenance"]["recorded"]),
+        ("malformed", data["provenance"]["malformed"]),
+        ("provisioned_at", data["provenance"]["provisioned_at"]),
+        ("provisioned_plugin_version", data["provenance"]["provisioned_plugin_version"]),
+        ("last_event", data["provenance"]["last_event"]),
+        ("last_event_at", data["provenance"]["last_event_at"]),
+        ("recorded_plugin_version", data["provenance"]["recorded_plugin_version"]),
+        ("plugin_drift", data["provenance"]["plugin_drift"]),
+        ("claude_link_is_symlink", data["claude_link"]["is_symlink"]),
+        ("claude_link_state", data["claude_link"]["state"]),
+    ])
     lines.append("")
     return "\n".join(lines) + "\n"
 

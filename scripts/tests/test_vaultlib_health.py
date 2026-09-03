@@ -5,11 +5,12 @@ path that can output a note's title, name, or filename — only counts,
 rates, ages, dates, and version strings. A consultant should be able to
 paste a rendered report into a client channel without a second look.
 """
+import json
 from datetime import date, timedelta
 
 import pytest
 
-from vaultlib import health, schema, syncjob
+from vaultlib import health, provenance, schema, syncjob
 
 from test_vaultlib_vault import make_vault
 
@@ -222,10 +223,83 @@ def test_render_contains_no_fixture_name(tmp_path):
                    "steering", "follow-up", "unfiled"):
         assert leaked not in lowered
 
+    # Provenance and claude_link must be just as content-free: no vault-
+    # relative paths or filenames, even though this vault has no
+    # provenance.json at all yet.
+    for leaked in ("99-workflow-config", "provenance.json", ".claude",
+                   "Meetings.base"):
+        assert leaked not in rendered
+
     # But the numbers that make the report useful are present.
     assert "2026-08-25" in rendered
     assert "2026-08-10" in rendered  # the per-week bucket date
     assert str(data["meetings"]["in_window"]) in rendered
+
+
+# --- provenance + claude_link blocks ---------------------------------------
+
+
+def test_report_folds_an_absent_provenance_file_to_recorded_false(tmp_path):
+    root = seeded_vault(tmp_path)
+    data = health.report(root, TODAY)
+    assert data["provenance"] == {
+        "recorded": False, "malformed": False,
+        "provisioned_at": None, "provisioned_plugin_version": None,
+        "last_event": None, "last_event_at": None,
+        "recorded_plugin_version": None, "plugin_drift": "unknown",
+    }
+
+
+def test_report_never_raises_on_malformed_provenance(tmp_path):
+    root = seeded_vault(tmp_path)
+    (root / "99-workflow-config" / "provenance.json").write_text(
+        "{not json", encoding="utf-8")
+    data = health.report(root, TODAY)
+    assert data["provenance"]["recorded"] is False
+    assert data["provenance"]["malformed"] is True
+
+
+def test_report_reads_provisioned_and_last_event_from_a_real_record(tmp_path):
+    root = seeded_vault(tmp_path)
+    provenance.record_event(root, "provision", at="2026-07-01T09:00:00Z",
+                            structure_version="2")
+    provenance.record_event(root, "upgrade", at="2026-08-01T09:00:00Z",
+                            structure_version="2", from_structure_version="1")
+    data = health.report(root, TODAY)
+    block = data["provenance"]
+    assert block["recorded"] is True
+    assert block["malformed"] is False
+    assert block["provisioned_at"] == "2026-07-01T09:00:00Z"
+    assert block["last_event"] == "upgrade"
+    assert block["last_event_at"] == "2026-08-01T09:00:00Z"
+    assert isinstance(block["recorded_plugin_version"], str)
+    assert block["plugin_drift"] in ("matches", "behind", "ahead", "unknown")
+
+
+def test_report_claude_link_reports_the_onedrive_copy_case(tmp_path):
+    root = seeded_vault(tmp_path)
+    (root / ".claude").mkdir()
+    data = health.report(root, TODAY)
+    assert data["claude_link"] == {"is_symlink": False, "state": "directory"}
+
+
+def test_render_of_a_real_provenance_record_leaks_no_paths(tmp_path):
+    root = seeded_vault(tmp_path)
+    (root / "99-workflow-config" / "provenance.json").write_text(json.dumps({
+        "provenance-version": 1,
+        "events": [{"event": "provision", "at": "2026-07-01T09:00:00Z",
+                     "plugin_version": "0.10.20", "structure_version": "2"}],
+        "template_files": {"20-meetings/Meetings.base": "deadbeef"},
+    }), encoding="utf-8")
+    data = health.report(root, TODAY)
+    rendered = health.render(data)
+    assert "99-workflow-config" not in rendered
+    assert "Meetings.base" not in rendered
+    assert "20-meetings" not in rendered
+    assert "deadbeef" not in rendered
+    assert "## Provenance" in rendered
+    assert "0.10.20" in rendered
+    assert "2026-07-01T09:00:00Z" in rendered
 
 
 def test_write_creates_the_dated_report_file(tmp_path):
