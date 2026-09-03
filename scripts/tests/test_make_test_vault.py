@@ -66,6 +66,44 @@ def test_default_overlay_still_records_provenance_for_unchanged_files(tmp_path):
     assert "20-meetings/Meetings.base" in data["template_files"]
 
 
+def test_demo_day_builds_record_identical_provenance_bytes(tmp_path):
+    """Round-2 review fix: two --demo-day builds of the same day must be
+    byte-identical everywhere, including provenance.json — that invariant
+    is what test_redate.py::test_determinism_same_demo_day_same_output
+    checks. record_provision()'s "at" is pinned to midnight UTC on the demo
+    day itself rather than left at the wall-clock default, so it no longer
+    differs between two builds run moments apart."""
+    demo_day = date(2026, 9, 10)
+    target_a = tmp_path / "vault-a"
+    target_b = tmp_path / "vault-b"
+    build_vault(target_a, REPO_ROOT, fresh=False, demo_day=demo_day)
+    build_vault(target_b, REPO_ROOT, fresh=False, demo_day=demo_day)
+
+    provenance_relpath = Path("99-workflow-config") / "provenance.json"
+    bytes_a = (target_a / provenance_relpath).read_bytes()
+    bytes_b = (target_b / provenance_relpath).read_bytes()
+    assert bytes_a == bytes_b
+
+    data = provenance.read(target_a)
+    assert data["events"][-1]["at"] == "2026-09-10T00:00:00Z"
+
+
+def test_without_demo_day_provenance_carries_a_wall_clock_timestamp(tmp_path):
+    """The non-demo-day path is unpinned on purpose — nothing else about
+    that build is deterministic either, so provenance's "at" should keep
+    reading as a real, current wall-clock timestamp rather than a frozen
+    stand-in that would misrepresent when the vault was actually built."""
+    before = provenance._now_iso()
+    target = tmp_path / "vault"
+    build_vault(target, REPO_ROOT, fresh=False)
+    after = provenance._now_iso()
+
+    data = provenance.read(target)
+    at = data["events"][-1]["at"]
+    assert at.endswith("Z")
+    assert before <= at <= after
+
+
 def test_default_overlays_fixtures(tmp_path):
     target = tmp_path / "vault"
     build_vault(target, REPO_ROOT, fresh=False)

@@ -86,7 +86,16 @@ def build_vault(target: Path, repo_root: Path, fresh: bool,
         sys.path.insert(0, lib_dir)
     from vaultlib import provenance
 
-    status = provenance.record_provision(target, repo_root / "plugin" / "template")
+    # A demo-day build's provenance.json must be just as deterministic as
+    # the rest of the re-dated fixture overlay — otherwise two builds of the
+    # same demo day differ only in record_provision()'s wall-clock "at",
+    # which the redate determinism test exists to catch. Pin it to midnight
+    # UTC on the demo day itself; a non-demo-day build (demo_day is None)
+    # keeps the honest wall-clock default, since nothing else about that
+    # build is pinned either.
+    at = f"{demo_day.isoformat()}T00:00:00Z" if demo_day is not None else None
+    status = provenance.record_provision(target, repo_root / "plugin" / "template",
+                                         at=at)
     if status.startswith("failed"):
         warnings.append(f"provenance not recorded ({status})")
     return warnings
