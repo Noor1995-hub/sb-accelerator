@@ -56,6 +56,16 @@ def test_the_shipped_file_count_matches_the_provenance_all_34_fixture():
     assert len(template.MANAGED) == 26
 
 
+def test_no_shipped_template_file_contains_a_nul_byte():
+    """digest()'s only normalisation is CRLF->LF; a NUL byte anywhere in a
+    managed file would silently survive both a text decode with
+    errors="replace" and a byte-for-byte hash compare, so this is a pinned
+    property of the actual shipped tree rather than something status()/
+    refresh() detect at runtime."""
+    for rel in template.ALL_TIERED:
+        assert b"\x00" not in (REAL_TEMPLATE_ROOT / rel).read_bytes(), rel
+
+
 # --- a synthetic template root for isolated status-matrix tests ------------
 
 
