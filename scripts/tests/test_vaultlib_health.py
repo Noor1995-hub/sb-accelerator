@@ -10,7 +10,7 @@ from datetime import date, timedelta
 
 import pytest
 
-from vaultlib import health, provenance, schema, syncjob
+from vaultlib import health, provenance, schema, syncjob, template
 
 from test_vaultlib_vault import make_vault
 
@@ -315,6 +315,60 @@ def test_render_of_a_real_provenance_record_leaks_no_paths(tmp_path):
     assert "## Provenance" in rendered
     assert "0.10.20" in rendered
     assert "2026-07-01T09:00:00Z" in rendered
+
+
+# --- template block ----------------------------------------------------
+
+
+def test_report_template_block_is_counts_only(tmp_path):
+    root = seeded_vault(tmp_path)
+    data = health.report(root, TODAY)
+    block = data["template"]
+    assert block["baseline"] == "unknown"
+    assert block["managed"] == len(template.MANAGED)
+    assert (block["current"] + block["refresh"] + block["needs_consent"]
+            + block["missing"] + block["blocked"]) == block["managed"]
+    # seeded_vault predates the feature and never wrote the shipped
+    # .obsidian/.base tree, so nothing is "current" or silently refreshable.
+    assert block["current"] == 0
+    assert block["refresh"] == 0
+
+
+def test_report_template_block_on_a_freshly_provisioned_vault_is_all_current(tmp_path):
+    import instantiate_vault
+    target = tmp_path / "vault"
+    instantiate_vault.instantiate(target)
+
+    data = health.report(target, TODAY)
+    block = data["template"]
+    assert block["baseline"] == "recorded"
+    assert block["managed"] == len(template.MANAGED)
+    assert block["current"] == len(template.MANAGED)
+    assert block["needs_consent"] == 0
+    assert block["missing"] == 0
+    assert block["blocked"] == 0
+
+
+def test_report_template_block_never_raises_on_malformed_provenance(tmp_path):
+    root = seeded_vault(tmp_path)
+    (root / "99-workflow-config" / "provenance.json").write_text(
+        "{not json", encoding="utf-8")
+    data = health.report(root, TODAY)
+    assert data["template"] == {
+        "managed": 0, "current": 0, "refresh": 0, "needs_consent": 0,
+        "missing": 0, "blocked": 0, "baseline": "unknown",
+    }
+
+
+def test_render_includes_template_files_section_with_no_paths(tmp_path):
+    root = seeded_vault(tmp_path)
+    data = health.report(root, TODAY)
+    rendered = health.render(data)
+    assert "## Template files" in rendered
+    for leaked in ("Meetings.base", "20-meetings", "CLAUDE.md",
+                   "99-workflow-config"):
+        assert leaked not in rendered
+    assert str(data["template"]["managed"]) in rendered
 
 
 def test_write_creates_the_dated_report_file(tmp_path):

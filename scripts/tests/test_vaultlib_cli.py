@@ -8,7 +8,7 @@ import pathlib
 
 import pytest
 
-from vaultlib import cli, migrate, provenance, syncjob, vault
+from vaultlib import cli, migrate, provenance, syncjob, template, vault
 
 from test_vaultlib_vault import make_vault
 
@@ -1390,6 +1390,97 @@ def test_provenance_read_folds_a_missing_plugin_version_to_unknown_drift(
     assert payload["result"]["present"] is True
     assert payload["result"]["plugin_drift"] == "unknown"
     assert payload["result"]["provenance"]["events"][-1].get("plugin_version") is None
+
+
+def _provisioned_vault(tmp_path):
+    """A real vault copied from the shipped template, with provenance
+    recorded — the same primitive /provision-vault uses — so the template
+    CLI tests exercise the actual 19 managed files rather than a synthetic
+    stand-in."""
+    import instantiate_vault
+    target = tmp_path / "vault"
+    instantiate_vault.instantiate(target)
+    return target
+
+
+def test_template_status_through_the_cli(capsys, tmp_path):
+    root = _provisioned_vault(tmp_path)
+
+    code, payload = run(capsys, ["template", "status", "--vault", str(root)])
+
+    assert code == 0
+    result = payload["result"]
+    assert result["baseline"] == "recorded"
+    assert len(result["files"]) == len(template.MANAGED)
+    assert sum(result["counts"].values()) == len(template.MANAGED)
+    # A freshly provisioned vault's managed files all match the shipped
+    # template byte-for-byte, so nothing needs consent yet.
+    assert result["counts"]["needs-consent"] == 0
+    assert result["counts"]["missing"] == 0
+
+
+def test_template_diff_through_the_cli(capsys, tmp_path):
+    root = _provisioned_vault(tmp_path)
+    (root / "CLAUDE.md").write_text("hand edited\n", encoding="utf-8")
+
+    code, payload = run(capsys, [
+        "template", "diff", "--vault", str(root), "--file", "CLAUDE.md"])
+
+    assert code == 0
+    assert payload["result"]["relpath"] == "CLAUDE.md"
+    assert "-hand edited" in payload["result"]["diff"]
+
+
+def test_template_refresh_without_consent_is_a_structured_error(capsys, tmp_path):
+    root = _provisioned_vault(tmp_path)
+    meetings_base = root / "20-meetings" / "Meetings.base"
+    meetings_base.write_text(
+        meetings_base.read_text(encoding="utf-8") + "\n# hand edit\n",
+        encoding="utf-8")
+
+    code, payload = run(capsys, [
+        "template", "refresh", "--vault", str(root),
+        "--file", "20-meetings/Meetings.base"])
+
+    assert code == 1
+    assert payload["ok"] is False
+    assert "consent" in payload["error"]
+    assert "--consent" in payload["hint"]
+    # Nothing was written.
+    assert "hand edit" in meetings_base.read_text(encoding="utf-8")
+
+
+def test_template_refresh_with_consent_through_the_cli(capsys, tmp_path):
+    root = _provisioned_vault(tmp_path)
+    meetings_base = root / "20-meetings" / "Meetings.base"
+    meetings_base.write_text(
+        meetings_base.read_text(encoding="utf-8") + "\n# hand edit\n",
+        encoding="utf-8")
+
+    code, payload = run(capsys, [
+        "template", "refresh", "--vault", str(root),
+        "--file", "20-meetings/Meetings.base", "--consent",
+        "--today", "2026-09-03", "--stamp", "2026-09-03-120000"])
+
+    assert code == 0
+    result = payload["result"]
+    assert result["refreshed"] == ["20-meetings/Meetings.base"]
+    assert "hand edit" not in meetings_base.read_text(encoding="utf-8")
+    backup = root / result["backup"] / "20-meetings" / "Meetings.base"
+    assert backup.is_file()
+    assert "hand edit" in backup.read_text(encoding="utf-8")
+
+
+def test_template_refresh_a_seeded_once_file_is_a_structured_error(capsys, tmp_path):
+    root = _provisioned_vault(tmp_path)
+
+    code, payload = run(capsys, [
+        "template", "refresh", "--vault", str(root),
+        "--file", "99-workflow-config/config.json", "--consent"])
+
+    assert code == 1
+    assert payload["ok"] is False
+    assert "never refreshed" in payload["error"]
 
 
 def test_scratch_sweep_returns_the_standard_envelope(capsys, tmp_path):

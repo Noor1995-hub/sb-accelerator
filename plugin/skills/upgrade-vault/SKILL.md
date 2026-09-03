@@ -57,8 +57,11 @@ The result carries `structure_version` (current), `expected_version` (what
 the vault would be at once every pending migration lands), and `pending[]`
 — each entry has `number`, `slug`, `target_version`, and `lossy`.
 
-If `pending` is empty: say so plainly. State the current version (which
-equals the expected version) and stop here — there is nothing to run.
+If `pending` is empty: say so plainly, state the current version (which
+equals the expected version), and go straight to **step 5** — an
+up-to-date structure version says nothing about whether the vault's
+`.base` views, `.obsidian` settings, or other plugin-owned template files
+have drifted from what this plugin version ships. Do not stop here.
 
 ## 2. Present the plan
 
@@ -134,7 +137,93 @@ precisely so a human decides when and whether to use it, not so an agent
 unzips it unattended on top of a vault that might still have uncommitted
 edits from the vault owner sitting outside the snapshot's scope.
 
-## 5. After a successful run — fill in what migration 001 left null
+## 5. Template refresh
+
+Structure migrations move `structure-version` forward; they say nothing
+about whether the vault's `.base` views, `.obsidian` settings, or other
+plugin-owned template files still match what this plugin version ships. A
+new Bases view, a corrected theme setting, or a fixed CSS snippet only
+reaches an already-deployed vault through this step. Run it every visit,
+whether or not step 1 found any pending migration.
+
+**Ask the consultant to close Obsidian on this vault first.** Obsidian's
+Bases plugin writes column widths (`columnSize`) back into a `.base` file
+as the consultant resizes columns, and a refresh landing under an open
+vault can be silently overwritten the next time Obsidian saves.
+
+```bash
+python3 "$VAULTLIB" template status --vault "$VAULT"
+```
+
+The result carries `baseline` (`"recorded"` once the vault has a
+provenance record, `"unknown"` for one that predates this feature
+entirely) and `files[]`, each with `relpath`, `state`
+(`current`/`refresh`/`needs-consent`/`missing`/`blocked`), `reason`,
+`tier`, `lines_added`/`lines_removed`, and `resets_column_widths`.
+
+Group `files[]` into three lists and present them in this order:
+
+1. **Silent refreshes** (`state: refresh`) — unchanged since the last
+   baseline, about to be replaced with no further input needed. Name them,
+   do not ask permission for this list.
+2. **Needs consent** (`state: needs-consent`) — for each, read out its
+   `reason` (`unknown-baseline`, `consent-always`, or `locally-edited`),
+   its `±lines_added`/`lines_removed`, and whether `resets_column_widths`
+   is true. Offer `template diff --file <relpath>` on request before the
+   consultant decides.
+3. **Missing** (`state: missing`) — offer to restore each from the shipped
+   template; treat it the same as a needs-consent item for the gate below.
+
+If `baseline` is `"unknown"`, say so explicitly: this vault predates
+provenance, so **every** differing managed file needs consent — there is
+no silent set at all this first time.
+
+State plainly, once, before the gate: a refresh **replaces the whole
+file**, not a merge; any `.base` marked `resets_column_widths: true` loses
+its saved column widths (Obsidian rebuilds them from defaults on next
+open); and every replaced file is backed up first under
+`99-workflow-config/snapshots/template-refresh-<stamp>/` (the three newest
+runs kept).
+
+### Consent gate
+
+Same standard as step 3 — do not act on a vague earlier "sure". Confirm
+which of the needs-consent/missing files the consultant approves, if any.
+A silent refresh needs no separate approval; a `needs-consent`/`missing`
+file does, one list read out loud, not a blanket assumption.
+
+### Run it
+
+```bash
+python3 "$VAULTLIB" template refresh --vault "$VAULT" --today <YYYY-MM-DD>
+```
+
+With no `--file`/`--all-pending`, this refreshes only the silent set. For
+the approved needs-consent/missing subset, name the files explicitly:
+
+```bash
+python3 "$VAULTLIB" template refresh --vault "$VAULT" \
+  --file "20-meetings/Meetings.base" --file "CLAUDE.md" --consent \
+  --today <YYYY-MM-DD>
+```
+
+The result carries `refreshed[]`, `restored[]` (from `missing`), `backup`
+(the vault-relative snapshot directory just used, or `null` when nothing
+needed backing up — a run with nothing to replace and nothing stale to
+rebaseline creates no snapshot dir at all, so running this step at every
+visit never accumulates empty ones), `baselined[]`, `skipped[]` (already
+current), and `structure_version`. Report the counts and, when it is not
+`null`, the backup location.
+
+### Hard rule for this step
+
+**Never run `--all-pending --consent` in one call without reading the
+needs-consent/missing list out first.** `--all-pending` is a selection
+convenience for the approved subset, not a way to skip presenting what it
+will touch — the same rule step 3 holds for migrations applies here to
+every file, not only the lossy ones.
+
+## 6. After a successful run — fill in what migration 001 left null
 
 Migration 001 writes `99-workflow-config/config.json` from the template
 default on a vault that had none. A vault provisioned before the config
@@ -177,12 +266,13 @@ the new value, or `--null` to unset a nullable one) — or by handing off to
 way, do not leave the vault with a `missing` list unresolved at the end of
 the visit that just ran the migration that created it.
 
-## 6. Close out
+## 7. Close out
 
 Recommend the vault owner (or EA) restart Obsidian once the visit's changes are
-in — a migration can rewrite the vault's ontology, config, or note bodies,
-and a running Obsidian instance may still be holding stale copies of files
-this run just replaced.
+in — a migration or a template refresh can rewrite the vault's ontology,
+config, `.base` views, `.obsidian` settings, or note bodies, and a running
+Obsidian instance may still be holding stale copies of files this run just
+replaced.
 
 ## Hard rules
 
@@ -198,3 +288,6 @@ this run just replaced.
 4. **Never run this against a vault the owner or EA is actively using.**
    This is a consultant-run, attended operation at a tune-up, not a
    background task.
+5. **Never run `template refresh --all-pending --consent` without reading
+   the needs-consent/missing list out first** (step 5) — the same rule as
+   #1, extended to every managed file, not only migrations.
