@@ -15,6 +15,8 @@ delivers them.
 
 ## Unreleased
 
+## v0.10.27 — 2026-09-03
+
 - Meetings organised by someone else no longer vanish silently from the sync: the run says which ones the connector could not read and why, and once IT grants access a consultant can force a re-check without waiting for the cache to age out (#152)
 - `/upgrade-vault` now also refreshes `.base` views, `.obsidian` settings, and other plugin-owned template files on an already-deployed vault — previously only a structure migration could reach these, so a fixed Bases view or a corrected theme setting shipped in a plugin update never landed on an existing vault. Files the consultant may have hand-edited (like `CLAUDE.md`) always ask first, a refresh backs up whatever it replaces, and a refreshed `.base` view loses any column widths saved in Obsidian (they rebuild from defaults on next open) (#154)
 - Every vault now keeps a provenance record of how it was set up and updated — plugin version and structure version at each provisioning and upgrade — and `/health-check` reads out whether this machine's plugin is behind or ahead of what last wrote the vault, plus whether the `.claude` shortcut is still a real link (a OneDrive-style copy silently breaks it) (#151)
