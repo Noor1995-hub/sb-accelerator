@@ -728,7 +728,7 @@ def _dispatch(args: argparse.Namespace) -> int:
             return _ok({"present": False, "provenance": None,
                        "plugin_drift": "unknown", "running_plugin_version": running})
         events = data.get("events") or []
-        recorded_version = events[-1]["plugin_version"] if events else None
+        recorded_version = events[-1].get("plugin_version") if events else None
         drift = (provenance.compare_versions(recorded_version, running)
                  if recorded_version else "unknown")
         return _ok({"present": True, "provenance": data,

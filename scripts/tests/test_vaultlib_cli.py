@@ -1366,6 +1366,32 @@ def test_provenance_read_reports_a_non_object_event_entry_as_a_structured_error(
     assert "unknown baseline" in payload["hint"]
 
 
+def test_provenance_read_folds_a_missing_plugin_version_to_unknown_drift(
+        capsys, tmp_path):
+    """Review finding (round 3): read() validates every event is a dict but
+    requires no keys, so a hand-edited event missing plugin_version used to
+    raise KeyError from `events[-1]["plugin_version"]` — not a
+    ProvenanceError, so it fell into the generic backstop and came back
+    mislabeled "malformed edits payload" instead of a clean ok:true read
+    with unknown drift. health._provenance_block already read this field
+    defensively with .get; the CLI now matches it."""
+    root = make_vault(tmp_path)
+    (root / "structure-version").write_text("2\n", encoding="utf-8")
+    (root / "99-workflow-config" / "provenance.json").write_text(
+        json.dumps({"provenance-version": 1,
+                    "events": [{"event": "provision", "at": "2026-09-01T00:00:00Z"}],
+                    "template_files": {}}),
+        encoding="utf-8")
+
+    code, payload = run(capsys, ["provenance", "read", "--vault", str(root)])
+
+    assert code == 0
+    assert payload["ok"] is True
+    assert payload["result"]["present"] is True
+    assert payload["result"]["plugin_drift"] == "unknown"
+    assert payload["result"]["provenance"]["events"][-1].get("plugin_version") is None
+
+
 def test_scratch_sweep_returns_the_standard_envelope(capsys, tmp_path):
     scratch_dir = tmp_path / "scratch"
     scratch_dir.mkdir()
