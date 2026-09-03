@@ -93,6 +93,30 @@ Opening a non-draft PR also triggers `claude-review`, which posts findings as in
   suggestion literally, changed only docs/comments/tests, or the fixed path is now covered by
   a test you added.
 
+## Cutting a release
+
+Owner-run, not part of the normal PR flow — repo secrets and tag-push access
+aren't given to every contributor. Mechanics: `playbooks/plugin-distribution.md`.
+Steps, on `main`:
+
+1. Open a release PR that turns `CHANGELOG.md`'s `## Unreleased` heading into
+   a dated `## v<version> —` section (moving its bullets down with it) and
+   leaves a fresh empty `Unreleased` behind. Merge it like any other PR.
+2. Run `scripts/cut_release.sh`. It tags `plugin-v<version>` (read from
+   `plugin/.claude-plugin/plugin.json`) and pushes the tag — refusing with a
+   concrete next step if the tree isn't clean, isn't `main` and up to date
+   with `origin/main`, the tag already exists, or step 1 didn't happen.
+3. The tag push runs `.github/workflows/release.yml` on `channel=dryrun`
+   automatically: it re-verifies the tag, builds the dist tree with
+   `scripts/build_dist.py` (running the clean-room linter on the *built*
+   tree, not just the source), publishes it, and cuts the GitHub Release.
+4. Once the dryrun run is green and verified, promote to the client channel:
+   `gh workflow run release.yml -f tag=plugin-v<version> -f channel=client`.
+
+`scripts/build_dist.py` and `scripts/cut_release.sh` are covered by
+`scripts/tests/test_build_dist.py` and can be exercised locally — the
+workflow YAML itself cannot be run outside Actions, so review it by reading.
+
 ## Branch protection
 
 `main` is protected by two GitHub rulesets:
