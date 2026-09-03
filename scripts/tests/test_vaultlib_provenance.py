@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from vaultlib import provenance
+from vaultlib import provenance, template
 
 from test_vaultlib_vault import make_vault
 
@@ -241,13 +241,16 @@ def test_rebaseline_leaves_earlier_events_and_entries_untouched(tmp_path):
 
 
 def test_record_provision_records_all_34_shipped_files(tmp_path):
+    # len(template.ALL_TIERED) is the single source of truth for this count
+    # — #117's shared constant, so this file and test_vaultlib_template.py
+    # cannot drift apart on what "the shipped template" contains.
     target = tmp_path / "vault"
     shutil.copytree(TEMPLATE_ROOT, target)
     status = provenance.record_provision(target, TEMPLATE_ROOT,
                                          at="2026-09-03T09:12:00Z")
     assert status == provenance.PROVENANCE_RELPATH.as_posix()
     data = provenance.read(target)
-    assert len(data["template_files"]) == 34
+    assert len(data["template_files"]) == len(template.ALL_TIERED)
     for rel, recorded_digest in data["template_files"].items():
         assert recorded_digest == provenance.digest((TEMPLATE_ROOT / rel).read_bytes())
     assert data["events"][-1] == {
@@ -265,7 +268,7 @@ def test_record_provision_only_records_files_that_match_the_vault_copy(tmp_path)
     provenance.record_provision(target, TEMPLATE_ROOT)
     data = provenance.read(target)
     assert "CLAUDE.md" not in data["template_files"]
-    assert len(data["template_files"]) == 33
+    assert len(data["template_files"]) == len(template.ALL_TIERED) - 1
 
 
 def test_record_provision_never_raises_on_a_bad_root(tmp_path):
@@ -322,3 +325,38 @@ def test_claude_link_state_symlink(tmp_path):
     os.symlink("claude", root / ".claude")
     assert provenance.claude_link_state(root) == {"is_symlink": True,
                                                    "state": "symlink"}
+
+
+# --- drift ---------------------------------------------------------------
+# The single helper cli.py's `provenance read` and health._provenance_block
+# both call, so the two cannot compute plugin drift differently (#117
+# absorb of a Task B review finding).
+
+
+def test_drift_is_unknown_for_no_provenance_at_all():
+    assert provenance.drift(None) == "unknown"
+
+
+def test_drift_is_unknown_for_an_empty_events_list():
+    assert provenance.drift({"events": []}) == "unknown"
+
+
+def test_drift_is_unknown_when_the_last_event_has_no_plugin_version():
+    """Defensive against a hand-edited or partially-written event, the
+    same shape a subscript (`events[-1]["plugin_version"]`) would raise
+    KeyError on instead of folding to "unknown"."""
+    assert provenance.drift({"events": [{"event": "provision"}]}) == "unknown"
+
+
+def test_drift_matches_reads_the_last_events_plugin_version(monkeypatch):
+    monkeypatch.setattr(provenance.vault, "plugin_version", lambda: "0.10.24")
+    data = {"events": [{"event": "provision", "plugin_version": "0.10.9"},
+                        {"event": "upgrade", "plugin_version": "0.10.24"}]}
+    assert provenance.drift(data) == "matches"
+
+
+def test_drift_behind_when_the_recorded_version_is_older(monkeypatch):
+    monkeypatch.setattr(provenance.vault, "plugin_version", lambda: "0.10.24")
+    assert provenance.drift(
+        {"events": [{"event": "provision", "plugin_version": "0.10.9"}]}
+    ) == "behind"

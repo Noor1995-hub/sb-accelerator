@@ -227,6 +227,24 @@ def compare_versions(recorded, running) -> str:
     return "behind" if parsed_recorded < parsed_running else "ahead"
 
 
+def drift(data: Optional[dict]) -> str:
+    """compare_versions(the last event's plugin_version, the running plugin)
+    — the one place `provenance read`'s CLI dispatch and health's
+    `_provenance_block` both derive plugin drift from, so a future reader
+    of either cannot compute it differently. `data` is what `read()`
+    returns: `None` (no provenance.json yet) and an events list with no
+    plugin_version to read both fold to "unknown", same as
+    `compare_versions` does for either side failing to parse.
+    """
+    if not data:
+        return "unknown"
+    events = data.get("events") or []
+    recorded_version = events[-1].get("plugin_version") if events else None
+    if recorded_version is None:
+        return "unknown"
+    return compare_versions(recorded_version, vault.plugin_version())
+
+
 def claude_link_state(root: Path) -> dict:
     """Whether `.claude` is the intended relative symlink to `claude/`.
 
