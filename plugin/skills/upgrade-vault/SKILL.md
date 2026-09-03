@@ -207,10 +207,13 @@ python3 "$VAULTLIB" template refresh --vault "$VAULT" \
   --today <YYYY-MM-DD>
 ```
 
-The result carries `refreshed[]`, `restored[]` (from `missing`),
-`backup` (the vault-relative snapshot directory just used), `baselined[]`,
-`skipped[]` (already current), and `structure_version`. Report the counts
-and the backup location.
+The result carries `refreshed[]`, `restored[]` (from `missing`), `backup`
+(the vault-relative snapshot directory just used, or `null` when nothing
+needed backing up — a run with nothing to replace and nothing stale to
+rebaseline creates no snapshot dir at all, so running this step at every
+visit never accumulates empty ones), `baselined[]`, `skipped[]` (already
+current), and `structure_version`. Report the counts and, when it is not
+`null`, the backup location.
 
 ### Hard rule for this step
 
