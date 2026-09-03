@@ -1,5 +1,7 @@
 # Client deployment registry — one entry per deployed engagement.
 # v1 is this file; moves to Airtable when client count justifies it (design doc, Phase 2).
+# Written by scripts/provision_client.py (see playbooks/provisioning-runbook.md
+# §6-7) — run it with --update at a tune-up rather than hand-editing an entry.
 # Entry shape:
 #   - client: <client-slug>
 #     owner: <name or initials>
@@ -7,5 +9,22 @@
 #     structure_version: <template structure-version deployed>
 #     archetype: commercial-leader
 #     care_package: active | lapsed | none
+#     delivery_path: A | B | C | D | E   (playbooks/plugin-distribution.md path)
+#     feedback_repo: <org>/sb-client-<client-slug>
+#     dist_channel: client | dryrun
+#     provisioned: <ISO date>            (starts the token-expiry clock)
 #     notes: ""
-clients: []
+# No `machines` field — two machines per deployment is the runbook invariant;
+# note any deviation in `notes` instead.
+clients:
+- client: dryrun
+  owner: MB
+  plugin_version: 0.10.24
+  structure_version: '2'
+  archetype: commercial-leader
+  care_package: active
+  delivery_path: E
+  feedback_repo: DLW-INT-BTA-BELUX/sb-client-dryrun
+  dist_channel: dryrun
+  provisioned: '2026-09-03'
+  notes: internal DryRunVault
