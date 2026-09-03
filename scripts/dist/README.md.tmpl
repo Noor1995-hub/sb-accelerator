@@ -1,0 +1,44 @@
+# sb-accelerator distribution
+
+Distribution repository for the **Second Brain Accelerator**. A Claude plugin
+marketplace plus the vault template that pairs with it. Written entirely by
+`scripts/build_dist.py` in the product repo (`sb-accelerator`) — do not hand-edit
+anything here; a hand edit is overwritten by the next release.
+
+{channel_notice}## Contents
+
+| Path | What it is |
+|---|---|
+| `.claude-plugin/marketplace.json` | The marketplace manifest. Lists one plugin, `second-brain`, sourced from `./plugin`. |
+| `plugin/` | The plugin: skills, hooks, `lib/vaultlib`, and `migrations/`. |
+| `plugin/template/` | The vault template, including the hidden `.obsidian/` configuration. Ships inside the plugin since 0.10.0; instantiated by `/provision-vault` (or manually) — see below. |
+| `CHANGELOG.md` | Client-facing release notes, one section per version. |
+| `RELEASE.json` | The exact build this tree was produced from — plugin version, structure version, channel, marketplace, source ref and commit. |
+
+Pinned contents: plugin **{plugin_version}**, template **structure-version {structure_version}**.
+
+## How each part reaches a machine
+
+These are two different mechanisms, and conflating them is the easy mistake:
+
+- **The plugin** arrives through Claude. An administrator connects this
+  repository under Organization settings → Plugins; Claude syncs `./plugin`
+  from the manifest. Nothing is installed by hand and the machine needs
+  neither git nor a GitHub account.
+- **The template** ships *inside* the plugin (`plugin/template/`), so the
+  marketplace delivers both together. The vault is instantiated from it by
+  the `/provision-vault` skill (or by copying it manually) — a consultant
+  step, done once per machine at provisioning.
+
+The Obsidian community plugins and theme the vault expects are also not here:
+they are fetched from their own upstream releases, pinned and
+checksum-verified, by `scripts/provision_plugins.py` in the product
+repository. `plugin/template/.obsidian/plugins/` carries their *settings*, not their
+code.
+
+## Verifying a deployment
+
+The plugin version in effect on a machine is visible in Claude's
+Customize → Plugins view. It should match the `version` in
+`plugin/.claude-plugin/plugin.json` at the commit this marketplace is synced
+from, and both should match `RELEASE.json` in this repository.

@@ -3,8 +3,13 @@
 # plugin/.claude-plugin/plugin.json to a version that is (a) different from the
 # target branch's and (b) not already released.
 #
-# "Released" today = tag plugin-v<version> exists on origin (sb-dist doesn't
-# exist yet; the release-pipeline issue moves this check there).
+# "Released" = tag plugin-v<version> exists on origin. The tag check stays
+# exactly this, even now that the release pipeline (#10) and sb-dist exist:
+# a tag IS the release event — cut_release.sh only ever creates one after a
+# version bump has merged — while sb-dist deliberately lags main between
+# quarterly publishes. Checking sb-dist's own plugin.json here would make
+# this guard pass or fail depending on when the last release happened to
+# ship, rather than on whether the version has been claimed.
 #
 # Usage: check-plugin-version.sh [--baseline <version>]
 # Called from CI with the target branch's version as --baseline; the diff

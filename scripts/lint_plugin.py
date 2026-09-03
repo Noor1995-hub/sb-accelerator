@@ -115,38 +115,54 @@ def lint_skills(root: Path) -> list[str]:
     return problems
 
 
-def scan_cleanroom(root: Path, terms: list[str]) -> list[str]:
+def _scan_file(path: Path, root: Path, terms: list[str]) -> list[str]:
+    """Clean-room check for a single file: its name, then (if decodable as
+    UTF-8 text) each of its lines. Split out of scan_cleanroom() so
+    scripts/build_dist.py's verify_tree() can be described as "the real
+    linter" without duplicating this logic — it calls scan_cleanroom() too,
+    just with a different `trees`, and this is the part per-file."""
+    if not path.is_file():
+        return []
     problems = []
-    for tree in SHIPPED_TREES:
+    # Filename check runs for every file, binary or text — a client slug or
+    # name in a filename is a clean-room violation regardless of whether the
+    # file's content can be decoded as text.
+    for term in terms:
+        if term in path.name.lower():
+            problems.append(f"{path.relative_to(root)}: clean-room violation in filename: {term!r}")
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (UnicodeDecodeError, ValueError):
+        return problems  # binary — filename already checked above
+    for i, line in enumerate(text.splitlines(), 1):
+        lower_line = line.lower()
+        # Strip only the matched provenance span before checking the
+        # "busdev" term, so an unrelated "busdev" elsewhere on the same line
+        # still flags — a per-occurrence exemption, not a whole-line one.
+        busdev_haystack = PROVENANCE_RE.sub("", line).lower()
+        for term in terms:
+            haystack = busdev_haystack if term == "busdev" else lower_line
+            if term in haystack:
+                problems.append(
+                    f"{path.relative_to(root)}:{i}: clean-room violation: {term!r}"
+                )
+    return problems
+
+
+def scan_cleanroom(root: Path, terms: list[str], trees: tuple[str, ...] = SHIPPED_TREES) -> list[str]:
+    """`trees` defaults to SHIPPED_TREES (plugin/ + fixtures/, this repo's
+    own shape) for every existing caller. scripts/build_dist.py passes
+    `trees=("plugin",)` to run this same check over a *built dist tree*,
+    which has no fixtures/ sibling — a backward-compatible parameter, not a
+    new function, so the one linter stays the single source of truth for
+    both the source tree and the shipped artifact."""
+    problems = []
+    for tree in trees:
         base = root / tree
         if not base.is_dir():
             continue
         for path in sorted(base.rglob("*")):
-            if not path.is_file():
-                continue
-            # Filename check runs for every file, binary or text — a client
-            # slug or name in a filename is a clean-room violation regardless
-            # of whether the file's content can be decoded as text.
-            for term in terms:
-                if term in path.name.lower():
-                    problems.append(f"{path.relative_to(root)}: clean-room violation in filename: {term!r}")
-            try:
-                text = path.read_text(encoding="utf-8")
-            except (UnicodeDecodeError, ValueError):
-                continue  # binary — filename already checked above
-            for i, line in enumerate(text.splitlines(), 1):
-                lower_line = line.lower()
-                # Strip only the matched provenance span before checking the
-                # "busdev" term, so an unrelated "busdev" elsewhere on the
-                # same line still flags — a per-occurrence exemption, not a
-                # whole-line one.
-                busdev_haystack = PROVENANCE_RE.sub("", line).lower()
-                for term in terms:
-                    haystack = busdev_haystack if term == "busdev" else lower_line
-                    if term in haystack:
-                        problems.append(
-                            f"{path.relative_to(root)}:{i}: clean-room violation: {term!r}"
-                        )
+            problems.extend(_scan_file(path, root, terms))
     return problems
 
 

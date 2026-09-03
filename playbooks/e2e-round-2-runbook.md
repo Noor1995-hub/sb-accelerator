@@ -10,27 +10,30 @@ writing) to the current plugin via the real tune-up path, rehearse the full
 daily loop, run the visual tier, then watch one real week. File findings
 against the rubric in Phase 7.
 
-## Phase 0 — Ship the plugin: dist re-cut
+## Phase 0 — Ship the plugin: tag it
 
-Needs push access to `DLW-INT-BTA-BELUX/sb-dist-dryrun` — get explicit
-authorization before touching it. Mechanics live in
-`playbooks/plugin-distribution.md`; do not duplicate them here. In short:
+Needs push access to this repo's tags and `DLW-INT-BTA-BELUX/sb-dist-dryrun`
+— get explicit authorization before touching either. Mechanics live in
+`playbooks/plugin-distribution.md`; do not duplicate them here. As of #10
+this is the tag-triggered pipeline, not a hand-built re-cut:
 
-1. Scratch-clone the dist repo, `rm -rf plugin`, then
-   `git archive origin/main plugin | tar -x` from the product repo.
-2. Bump the README pin line:
-   `Pinned contents: plugin **<X>**, template **structure-version 2**.`
-3. Verify with the **real** linter — import `lint_skills` and `scan_cleanroom`
-   from the product repo's `scripts/`, with `root=<dist checkout>` and the
-   denylist from the product repo. A naive grep false-positives on exempted
-   `upstreamed-from:` provenance lines; only the real linter is trustworthy
-   here.
-4. Commit using the established shape:
-   `re-cut: plugin <X> (source main @ <sha>) — <summary>`, then push.
-5. Verify via the GitHub API read-back — never the local copy.
+1. On `main`, with the release PR merged (CHANGELOG's `## Unreleased`
+   already turned into a dated `## v<version> —` section): run
+   `scripts/cut_release.sh`. It tags `plugin-v<version>` and pushes it,
+   refusing first with a concrete fix-it message if the CHANGELOG rewrite,
+   the clean-tree check, or the `main`-and-up-to-date check didn't hold.
+2. The tag push runs `.github/workflows/release.yml` on `channel=dryrun`
+   automatically: verify (tag matches `plugin.json`, tag is on `main`, the
+   three CI checks) → build (`scripts/build_dist.py`, the real clean-room
+   linter run *on the built dist tree*, not just the source) → publish to
+   `sb-dist-dryrun` (idempotent; the GitHub API read-back is the check, not
+   the local clone) → the GitHub Release with notes and the zip+sha256.
+3. Watch the run in Actions; a red `verify` or `build` job means nothing
+   was pushed — fix and re-tag rather than force-pushing the tag.
 
-**Checkpoint:** pushed `plugin.json` and README pin both read the new
-version; linter clean.
+**Checkpoint:** the Actions run is green; the dryrun repo's `plugin.json`
+version and README pin (read back via the GitHub API step, not a manual
+check) match the tag.
 
 ## Phase 1 — Local plugin refresh **[Michael's machine]**
 

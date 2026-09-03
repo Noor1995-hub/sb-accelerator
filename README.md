@@ -19,6 +19,7 @@ Engineering conventions and the bootstrap rationale:
 | `playbooks/` | Onboarding interview, pre-flight checklist, provisioning runbook, hypercare, EA training. Never ships. |
 | `docs/` | Architecture, backlog model, local setup, builder onboarding. |
 | `registry.yaml` | Client deployment registry (v1: file; later Airtable). |
+| `scripts/dist/` | The dist-tree template (`README.md.tmpl`) `scripts/build_dist.py` renders for each release channel. Never ships itself. |
 
 ## The four layers (what ships, what doesn't)
 

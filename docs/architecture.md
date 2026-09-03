@@ -19,6 +19,17 @@ a release when clients should get it (quarterly, around tune-ups). Structure
 migrations are consultant-run via `/upgrade-vault`; a plugin/vault
 structure-version mismatch check makes skills degrade gracefully until migrated.
 
+A release is cut, not merged directly: `scripts/cut_release.sh` tags
+`plugin-v<version>` on `main` after a release PR has dated the CHANGELOG's
+`Unreleased` section, and `.github/workflows/release.yml` does the rest —
+verify the tag, build the dist tree (`scripts/build_dist.py`, which re-runs
+the clean-room linter on the *built* tree), publish it, and cut the GitHub
+Release. A tag push always publishes to the internal `sb-dist-dryrun` first;
+promoting a verified tag to the client-facing `sb-dist` is a separate,
+explicit `workflow_dispatch`. See `playbooks/plugin-distribution.md` and
+`CONTRIBUTING.md`'s "Cutting a release" for the full mechanics and the
+owner-only setup (`sb-dist`, `DIST_PUSH_TOKEN`) it depends on.
+
 The vault's own marker is `plugin/template/structure-version` — a plain integer,
 bumped only by a migration under `migrations/`, read by `/upgrade-vault`.
 
@@ -46,6 +57,10 @@ Three required checks on every PR (see `.github/workflows/ci.yml`):
 - `plugin (skill lint + tests)` — skill frontmatter + clean-room lint + pytest over `scripts/tests/`
 - `template (structure validation)` — template skeleton invariants
 - `plugin version (not already released)` — plugin/ changes require a version bump; bumped version must not be already tagged
+
+`.github/workflows/release.yml` is separate and not a PR status check — it
+runs on a `plugin-v*` tag push or an owner's `workflow_dispatch`, never on a
+pull request. See "Update policy" above.
 
 ## Verification below CI
 

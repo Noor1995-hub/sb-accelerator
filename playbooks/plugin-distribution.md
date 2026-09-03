@@ -18,11 +18,28 @@ declined. Adapt it per engagement; do not rewrite it.
 This playbook is the layer underneath: the mechanics and the decision of
 *which* delivery path an engagement uses. The two are complements.
 
-Related: the client-facing marketplace repo (`sb-dist`) and its
-tag-triggered release pipeline are **not built yet** — tracked as issue #10,
-milestone v1.0. Until they exist, delivery to a real client is manual (ZIP
-upload, path E), and the release-train section below describes the intended
-steady state rather than current capability.
+Related: the tag-triggered release pipeline (`.github/workflows/release.yml`,
+`scripts/build_dist.py`, `scripts/cut_release.sh`) shipped in #10, milestone
+v1.0. What is still missing is the **owner setup** it depends on — the
+private `sb-dist` repo does not exist yet, and neither does the
+`DIST_PUSH_TOKEN` secret the `publish` job needs to push to it. Both are
+owner (Michael) actions, not something a PR can do:
+
+1. Create a private `sb-dist` repository (default branch `main`, no
+   push-blocking ruleset — the release bot pushes straight to it).
+2. Mint one fine-grained PAT: resource owner the org, repository access
+   scoped to `sb-dist-dryrun` and `sb-dist`, Contents read/write, roughly a
+   year's expiry.
+3. Add it as the repo secret `DIST_PUSH_TOKEN`.
+4. Optionally, a ruleset restricting who can push a `refs/tags/plugin-v*`
+   tag to admins.
+
+Until that setup lands, `channel=dryrun` releases work end-to-end (the
+dryrun repo already exists and has been hand-cut before), but a
+`channel=client` dispatch fails at the publish job's `DIST_PUSH_TOKEN` check
+with a message pointing back here — loudly, not by silently doing nothing.
+Until `sb-dist` exists, delivery to a real client stays manual (ZIP upload,
+path E).
 
 **One limitation carried over from the bta deployment, verified there
 2026-07-31:** a plugin cannot deliver an MCP connector to the *chat*
@@ -180,24 +197,66 @@ marketplace) under Organization settings → Plugins. No git, no HTTPS host, no
 MDM. Perfectly viable for a single-owner engagement, and the honest fallback
 when a client's IT will not connect anything to a delaware repository.
 
+The release pipeline's `github_release` job attaches exactly the artifact
+this path needs to every tag pushed to `main`: download `plugin-<version>.zip`
+and `plugin-<version>.zip.sha256` from the tag's GitHub Release, check the
+sha256 matches (`shasum -a 256 -c plugin-<version>.zip.sha256`), then upload
+the zip as-is. It's built with `.claude-plugin/plugin.json` at the zip
+root (not nested under a `plugin/` folder) on the reasoning that a
+single-plugin ZIP upload expects the package rooted there — **not yet
+verified against a real upload.** Owner action: the first time a Release
+exists, spend five minutes uploading its zip under Organization settings →
+Plugins once, confirm it's accepted, and note the result here (or file a
+fix if the layout is wrong).
+
 ## The release train, concretely
 
-The quarterly care-package update is now a one-line change rather than a
-per-machine visit:
+The quarterly care-package update starts with one command and ends with a
+one-line change per client, rather than a per-machine visit:
 
-1. Merge the release into the distribution repo and note the commit SHA.
-2. **Path A:** the marketplace re-syncs; users pick it up on their next
+1. **Cut the release.** On `main`, after the release PR has turned
+   `## Unreleased` into a dated `## v<version> —` section and merged:
+   `scripts/cut_release.sh`. It tags `plugin-v<version>` and pushes the tag —
+   refusing first if the tree isn't clean, isn't `main`, the tag already
+   exists, or the CHANGELOG rewrite above didn't happen.
+2. **Dryrun, automatically.** A tag push always runs
+   `.github/workflows/release.yml` with `channel=dryrun`: it re-verifies the
+   tag against the three CI checks, builds the dryrun dist tree, publishes it
+   to `sb-dist-dryrun`, reads the push back via the GitHub API, and attaches
+   the GitHub Release (notes extracted from the CHANGELOG section, plus the
+   zip and its sha256).
+3. **Verify locally**, the same way as an E2E round: refresh the dryrun
+   marketplace (`claude plugin marketplace update sb-accelerator-dryrun`,
+   `claude plugin update second-brain@sb-accelerator-dryrun`) and confirm the
+   version lands.
+4. **Dispatch to the client channel** once satisfied:
+   `gh workflow run release.yml -f tag=plugin-v<version> -f channel=client`.
+   This re-runs the same build against `sb-dist` — a distinct commit and
+   marketplace name, verified by its own API read-back — and does **not**
+   recreate the GitHub Release (that only happens on the original tag push).
+   Dryrun-before-client is procedural, not enforced by the workflow itself —
+   nothing stops dispatching `channel=client` for a tag that skipped step 3;
+   verifying dryrun first is on whoever runs this step.
+5. **Roll out per client**, by delivery path:
+   **Path A:** the marketplace re-syncs; users pick it up on their next
    session or plugin refresh.
    **Path B/C:** update `ref` (or `manifestSha256`) in managed configuration
    and redistribute it. Devices sync on next app launch or periodic re-fetch.
    **Path D:** push the files and bump `version.json`.
-3. Verify the deployed version in the client's Customize → Plugins view, and
+   **Path E:** download the tag's Release zip and sha256 (the one step 2
+   attached — the Release belongs to the tag, not the channel, so the
+   `channel=client` dispatch in step 4 adds no new asset), verify the
+   checksum, upload it by hand.
+6. Verify the deployed version in the client's Customize → Plugins view, and
    record it in `registry.yaml` (`plugin_version`).
 
-Rollback is the same move with the previous SHA. Because `required` and
-`auto_install` refuse unpinned refs, every deployed state is deterministic
-and auditable — which is exactly what the "backward compatibility within a
-structure-version" rule needs to be checkable.
+Rollback is `gh workflow run release.yml -f tag=<previous-tag> -f
+channel=client` — the same dispatch with the prior tag, which rebuilds and
+republishes it verbatim (the build is deterministic; re-cutting the same tag
+twice produces a byte-identical dist tree). Because `required` and
+`auto_install` refuse unpinned refs on paths B/C, every deployed state is
+deterministic and auditable — which is exactly what the "backward
+compatibility within a structure-version" rule needs to be checkable.
 
 Removing a marketplace entry uninstalls its plugins on the next sync. Worth
 knowing before a client offboards: their skills disappear, the vault does
