@@ -13,7 +13,7 @@ import re
 import zipfile
 from pathlib import Path
 
-from vaultlib import vault
+from vaultlib import provenance, vault
 
 MIGRATIONS_DIR = Path(__file__).resolve().parents[2] / "migrations"
 SNAPSHOT_DIR = Path("99-workflow-config") / "snapshots"
@@ -195,6 +195,19 @@ def run(root: Path, today: str, stamp: str = None) -> dict:
             if needs_human:
                 outcome += " · needs a human: " + "; ".join(needs_human)
             _log(root, today, from_version, target, snapshot_name, outcome)
+            # A migration earlier in this same chain may have already
+            # bumped structure-version on disk before this one failed — in
+            # its own try, same as the success path below, so a provenance
+            # failure never masks the MigrateError about to be raised.
+            # `applied` empty means nothing landed and structure-version
+            # never moved, so no event is recorded in that case.
+            if applied:
+                try:
+                    provenance.record_event(
+                        root, "upgrade", structure_version=from_version,
+                        from_structure_version=str(current))
+                except Exception:  # noqa: BLE001 — never masks the re-raise below
+                    pass
             raise MigrateError(
                 f"migration {number:03d}-{slug} failed after snapshot "
                 f"{snapshot_name}: {exc}",
@@ -208,8 +221,20 @@ def run(root: Path, today: str, stamp: str = None) -> dict:
         })
         from_version = target
 
-    return {
+    result = {
         "snapshot": snapshot_name,
         "applied": applied,
         "structure_version": from_version,
     }
+    # In its own try: a provenance failure (a malformed provenance.json, an
+    # unwritable vault) must never turn a chain of migrations that already
+    # landed into a reported migration failure. Reported under "provenance"
+    # instead — "failed: ..." rather than record_provision's "failed — ...",
+    # to read as "the migration ran; recording that it did, did not."
+    try:
+        provenance.record_event(root, "upgrade", structure_version=from_version,
+                                from_structure_version=str(current))
+        result["provenance"] = provenance.PROVENANCE_RELPATH.as_posix()
+    except Exception as exc:  # noqa: BLE001 — never a migration failure
+        result["provenance"] = f"failed: {exc}"
+    return result

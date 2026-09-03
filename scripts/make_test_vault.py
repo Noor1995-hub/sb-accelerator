@@ -76,6 +76,28 @@ def build_vault(target: Path, repo_root: Path, fresh: bool,
             warnings.append(
                 f"could not create .claude symlink ({e}); create it by hand: ln -s claude {link}"
             )
+
+    # plugin/lib/ is where the shipped vaultlib package lives, not next to
+    # this script — same seam provision_into() uses above. record_provision
+    # never raises; a "failed — ..." status is surfaced as a warning rather
+    # than aborting a test vault that otherwise built fine.
+    lib_dir = str(repo_root / "plugin" / "lib")
+    if lib_dir not in sys.path:
+        sys.path.insert(0, lib_dir)
+    from vaultlib import provenance
+
+    # A demo-day build's provenance.json must be just as deterministic as
+    # the rest of the re-dated fixture overlay — otherwise two builds of the
+    # same demo day differ only in record_provision()'s wall-clock "at",
+    # which the redate determinism test exists to catch. Pin it to midnight
+    # UTC on the demo day itself; a non-demo-day build (demo_day is None)
+    # keeps the honest wall-clock default, since nothing else about that
+    # build is pinned either.
+    at = f"{demo_day.isoformat()}T00:00:00Z" if demo_day is not None else None
+    status = provenance.record_provision(target, repo_root / "plugin" / "template",
+                                         at=at)
+    if status.startswith("failed"):
+        warnings.append(f"provenance not recorded ({status})")
     return warnings
 
 

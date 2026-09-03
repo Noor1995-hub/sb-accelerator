@@ -66,6 +66,22 @@ object; the counts carry the whole story:
   as a count ("2 of 7 projects"), not by name.
 - Decisions by status, and how many frontmatter reads failed to parse
   (`unparsed`) — a sign worth a mention if it is not zero.
+- `provenance.plugin_drift`: `behind` means a tune-up is pending — this
+  machine's plugin is newer than what last provisioned or upgraded the
+  vault, so `/upgrade-vault` has something to check; `ahead` means the
+  opposite — this machine's own plugin cache is older than what last wrote
+  the vault, which is itself worth a mention (a stale local install);
+  `matches` means nothing to flag; `unknown` means the vault has no
+  provenance record yet (it predates this feature) or the record could not
+  be read. Never read out the version numbers or dates behind this as vault
+  content — the state (`behind`/`ahead`/`matches`/`unknown`) is the whole
+  story here.
+- `claude_link`: `is_symlink: false` with `state: directory` is the
+  OneDrive-copy case — a sync client materialised `.claude` as a real
+  directory copy instead of preserving the symlink, which silently breaks
+  the vault-local Claude Code files. Flag that one by name; hand it to the
+  consultant rather than trying to repair it — this skill never touches
+  the filesystem to fix it.
 
 Then name the report file so the user can open it themselves:
 

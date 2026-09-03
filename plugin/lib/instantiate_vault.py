@@ -96,12 +96,25 @@ def instantiate(target: Path, template_root: Optional[Path] = None) -> dict:
             f"{EXPECTED_STRUCTURE_VERSION!r} — the copied template is stale "
             "or the plugin cache is corrupt")
 
+    # Imported here, not at module load, so a plugin cache that is somehow
+    # missing vaultlib (or has it broken) fails this one step — reported
+    # through record_provision's own never-raises "failed — ..." contract —
+    # rather than killing the whole primitive with an import traceback and
+    # no JSON envelope at all before instantiate() even starts.
+    try:
+        from vaultlib import provenance
+    except Exception as exc:  # noqa: BLE001 — never raises, by design
+        provenance_status = f"failed — {exc}"
+    else:
+        provenance_status = provenance.record_provision(target, template_root)
+
     return {
         "target": str(target),
         "template": str(template_root),
         "obsidian_present": obsidian_present,
         "structure_version": found_version,
         "symlink": _create_symlink(target),
+        "provenance": provenance_status,
     }
 
 

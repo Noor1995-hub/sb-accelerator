@@ -32,7 +32,7 @@ if __package__ in (None, ""):
     # the skills invoke it.
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from vaultlib import config, dailynote, dates, decision, entity, feedback, health, lastsync, m365, meeting, migrate, person, plaud, project, runlog, scratch, schema, seenevents, syncjob, updatequeue, vault  # noqa: E402
+from vaultlib import config, dailynote, dates, decision, entity, feedback, health, lastsync, m365, meeting, migrate, person, plaud, project, provenance, runlog, scratch, schema, seenevents, syncjob, updatequeue, vault  # noqa: E402
 
 
 def _emit(payload: dict) -> None:
@@ -498,6 +498,14 @@ def build_parser() -> argparse.ArgumentParser:
         "--outcome", required=True,
         help="one line describing what happened, including a no-op run")
 
+    provenance_group = top.add_parser(
+        "provenance", help="CLI-owned vault provenance record (read-only here; "
+                           "written in-process by provision and migrate)")
+    provenance_sub = provenance_group.add_subparsers(dest="action", required=True)
+    provenance_read = provenance_sub.add_parser(
+        "read", help="the recorded provenance plus plugin-version drift")
+    _add_vault_argument(provenance_read)
+
     health_group = top.add_parser(
         "health", help="content-free vault health metrics (read-only)")
     health_sub = health_group.add_subparsers(dest="action", required=True)
@@ -713,6 +721,18 @@ def _dispatch(args: argparse.Namespace) -> int:
         return _ok(scratch.sweep(args.dir))
     if args.group == "runlog":
         return _ok(runlog.append(root, args.routine, args.outcome))
+    if args.group == "provenance":
+        data = provenance.read(root)
+        running = vault.plugin_version()
+        if data is None:
+            return _ok({"present": False, "provenance": None,
+                       "plugin_drift": "unknown", "running_plugin_version": running})
+        events = data.get("events") or []
+        recorded_version = events[-1].get("plugin_version") if events else None
+        drift = (provenance.compare_versions(recorded_version, running)
+                 if recorded_version else "unknown")
+        return _ok({"present": True, "provenance": data,
+                   "plugin_drift": drift, "running_plugin_version": running})
     if args.group == "health":
         window = args.window if args.window is not None else health.DEFAULT_WINDOW_DAYS
         data = health.report(root, vault.today_iso(args.today), window=window)
@@ -790,6 +810,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         return _fail(str(exc), "Fix --routine or --outcome and retry.")
     except health.HealthError as exc:
         return _fail(str(exc), "Fix --today or --window and retry.")
+    except provenance.ProvenanceError as exc:
+        return _fail(str(exc), "CLI-owned; restore from a snapshot or delete "
+                     "it to start from an unknown baseline.")
     except migrate.MigrateError as exc:
         # The per-file list rides the hint rather than a fourth envelope key:
         # `hint` is already "what to do", and these files are the whole of it.

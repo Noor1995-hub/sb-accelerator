@@ -381,6 +381,10 @@ def guard(**kw) -> Path:
 # creates; the rest is OS litter.
 _IGNORED_PREFIXES = (".obsidian/", ".claude/", ".trash/")
 _IGNORED_NAMES = {".DS_Store", ".claude"}
+# CLI-owned, written by build_vault() itself on every run (provenance.record_
+# provision) rather than shipped in either source tree — a pristine vault
+# always carries it, so it is not evidence of hand-editing.
+_IGNORED_RELPATHS = {"99-workflow-config/provenance.json"}
 
 
 def _inventory(root: Path) -> set:
@@ -389,7 +393,8 @@ def _inventory(root: Path) -> set:
         if not p.is_file() or p.is_symlink():
             continue
         rel = p.relative_to(root).as_posix()
-        if rel.startswith(_IGNORED_PREFIXES) or Path(rel).name in _IGNORED_NAMES:
+        if (rel.startswith(_IGNORED_PREFIXES) or Path(rel).name in _IGNORED_NAMES
+                or rel in _IGNORED_RELPATHS):
             continue
         out.add(rel)
     return out
