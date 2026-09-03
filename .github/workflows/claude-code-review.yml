@@ -265,11 +265,18 @@ jobs:
           #
           # Without `--model` the action defaults to Opus and the Task
           # subagents inherit it, so those pins are largely not honoured.
-          # Measured over the 85 billed runs from 2026-08-22 to 2026-09-03
-          # ($343.35, ~$4.04/run, median $3.60): roughly 85% of spend was
-          # Opus, 13% Sonnet, 2% Haiku -- the inverse of the design. Opus 5
-          # is $5/$25 per MTok against Sonnet 5's $2/$10, so the same review
-          # on the intended model should land near $170/month.
+          # Measured over the 85 billed runs from 2026-08-22 to 2026-09-03 by
+          # reading `total_cost_usd` out of each run log: $371.00 total, mean
+          # $4.36, median $3.49, max $11.88, with roughly 85% of spend on
+          # Opus, 13% Sonnet, 2% Haiku -- the inverse of the design.
+          #
+          # What the pin actually bought, on the first run after merge
+          # (#157): $2.84 over 11.8 min with one valid finding delivered.
+          # Cheaper, but well short of the 2.5x the per-token prices imply
+          # (Opus 5 $5/$25 per MTok against Sonnet 5's $2/$10), because much
+          # of a run's bill is the orchestrator's own turns and the Haiku
+          # steps rather than the five reviewers. Read `total_cost_usd`
+          # across several runs before quoting a monthly figure.
           #
           # This pin CANNOT be verified from the PR that introduces it: the
           # action's workflow-validation guard (see the delivery assertion
@@ -295,14 +302,19 @@ jobs:
       # to prevent it, but a prompt is guidance and this is an assertion.
       #
       # It provably still happens. Census over the 82 PRs opened between
-      # 2026-08-22 and 2026-09-03: seven -- #21, #22, #30, #69, #102, #105,
-      # #155 -- carry no `claude[bot]` output of any kind, neither inline
-      # findings nor the "No issues found" summary. Every one merged
-      # unreviewed, and nobody noticed, because a review that delivers
-      # nothing looks exactly like a review that found nothing.
+      # 2026-08-22 and 2026-09-03: six -- #21, #22, #30, #69, #102, #105 --
+      # carry no `claude[bot]` output of any kind, neither inline findings
+      # nor the "No issues found" summary. Every one merged unreviewed, and
+      # nobody noticed, because a review that delivers nothing looks exactly
+      # like a review that found nothing.
       #
-      # One of the seven, #30, is explained by the workflow-validation guard
-      # handled below -- it edited this very file. The other six are not.
+      # One of the six, #30, is explained by the workflow-validation guard
+      # handled below -- it edited this very file. The other five are not.
+      #
+      # Re-run that census rather than trusting this comment: it is a moving
+      # target. An earlier draft said seven because the snapshot was taken
+      # while #155 was still open, and #155's "No issues found" comment
+      # landed 58 seconds before it merged.
       #
       # `claude-review` is NOT one of the three contexts in the `main-ci`
       # ruleset, so a red X here is a visible signal and not a merge block.

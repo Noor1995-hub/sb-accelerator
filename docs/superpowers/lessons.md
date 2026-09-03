@@ -649,3 +649,94 @@ visible over CDP in the probe:
 with computed heights (`getBoundingClientRect().height`), not `display` of
 the innermost element, and read the inline `style` attribute of every
 ancestor in both states.
+
+## 2026-09-03 — the review plugin's model pins are prose, and the action ignores them
+
+**What went wrong.** Nothing visibly. The code review worked well for two
+weeks — 80 findings across 41 PRs, none of them a false positive — while
+running on a model the plugin never asked for. Across the 85 billed runs from
+2026-08-22 to 2026-09-03 it cost **$371.00: mean $4.36, median $3.49, max
+$11.88**, and the console Cost page grouped by Model put roughly **85% of it
+on Opus**, 13% on Sonnet, 2% on Haiku.
+
+That split is the inverse of the design. The `code-review` plugin's own
+command file pins a model per step in prose: "use a Haiku agent" for steps
+1, 2, 3, 5 and 7, and "launch 5 parallel **Sonnet** agents" for step 4 — the
+five reviewers that do all the actual reading. It asks for Opus nowhere.
+
+**Why the pins lose.** They are instructions to the orchestrator, not
+configuration. With no `--model` in `claude_args`, `claude-code-action`
+starts the session on its default (Opus) and the `Task` subagents inherit
+the session model, so the prose is honoured only as far as the orchestrator
+happens to pass a `model` override — which, measurably, is not far.
+
+**Where per-run cost actually lives: in the run log.** The action writes
+`claude-execution-output.json` and echoes it into the step, carrying
+`total_cost_usd`, `num_turns` and `permission_denials_count` for that run:
+
+```
+gh run view <id> --log | grep -oE '"total_cost_usd": [0-9.]+'
+```
+
+Do not do what the first draft of this entry did and derive cost by
+correlating daily console totals against billed run-minutes. That estimate
+landed within about 8% here ($4.04 mean against the real $4.36), but it is
+unnecessary work and it cannot attribute a single run. Read the field.
+
+`permission_denials_count` from the same JSON is a free health signal worth
+watching — 14 on the first Sonnet run — because a denied agent silently
+downgrades to reading the code instead of running the tests (see the
+2026-08-23 denials entry). The log carries the count only, never which tool.
+
+**The remedy, and what it actually bought.** `--model claude-sonnet-5` in
+`claude_args` (#156) — the plugin's own intended model, not a downgrade.
+First pinned run (#157): **$2.84 over 11.8 min, one valid finding
+delivered**, against the Opus mean of $4.36 and median $3.49. Real, but well
+short of the 2.5x the per-token prices imply (Opus 5 $5/$25 per MTok against
+Sonnet 5 $2/$10), because much of a run's bill is the orchestrator's own
+turns and the Haiku steps, not the five reviewers. One run is one run; read
+`total_cost_usd` across the next several before quoting a monthly figure.
+
+**Do not trust a ported workflow's cost comments.** Ours quoted a $1.63
+median that came from bta-agents-portal and cited PR numbers that do not
+exist in this repo — 2.2x optimistic for us. Re-measure per repo.
+
+## 2026-09-03 — a change to the review workflow cannot be tested from its own PR
+
+**What went wrong.** PR #156 added a delivery assertion to the review job.
+Its first run red-X'd, and the action step above it had "succeeded" in two
+seconds having posted nothing:
+
+> Skipping action due to workflow validation: Workflow validation failed.
+> The workflow file must exist and have identical content to the version on
+> the repository's default branch.
+
+`claude-code-action` refuses to run when its own workflow file differs from
+the copy on the default branch. The guard is sound — otherwise a PR could
+rewrite the reviewer's config and walk off with `ANTHROPIC_API_KEY` — but it
+exits with `outcome: success`, so from the outside it is indistinguishable
+from a review that ran and found nothing.
+
+**What it means.** Any edit to `claude-code-review.yml` takes effect on the
+**first PR opened after merge**, never on the PR that makes it. Plan the
+verification accordingly: assert the logic locally against real PR history
+(the comment endpoints are read-only and free), then merge and spike-test
+with a PR that touches no workflow file. #157 was that spike.
+
+**How to tell.** Compare `git hash-object
+.github/workflows/claude-code-review.yml` against the contents API's `.sha`
+for the default branch — the same blob comparison the action makes. The
+delivery assertion exempts itself on that condition; without the carve-out it
+red-Xes every workflow-touching PR by construction.
+
+**It also rewrites history.** Six of the first 82 PRs carry no `claude[bot]`
+output of any kind — full cost, green check, nothing posted, merged
+unreviewed. One of them, #30, edited this workflow file, so it was never
+going to be reviewed at all. Five — #21, #22, #69, #102, #105 — are the
+orphaned-agent race that constraint 1 of the prompt tries to pin.
+
+**A census of this is a moving target, so re-run it rather than citing one.**
+The first draft of this entry said seven, because the snapshot behind it was
+taken while #155 was still open; #155's "No issues found" comment landed 58
+seconds before it merged. The review on #157 caught exactly that — its own
+small proof that the Sonnet-pinned reviewer still reads carefully.
