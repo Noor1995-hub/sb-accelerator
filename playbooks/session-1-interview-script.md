@@ -46,7 +46,7 @@ Session 1b is where the EA gets the keyboard.
 
 ## The arc
 
-Five stretches, mapped to the skill's own phase names:
+Six stretches, mapped to the skill's own phase names:
 
 | Time | Skill phase | What happens |
 |---|---|---|
@@ -112,8 +112,8 @@ their summary.
 
 - **Won't share something.** Say that anything they would rather keep out of
   the shared vault belongs in `95-private/` — the owner-private folder that
-  is excluded from sync on every machine but theirs, so it is a real
-  boundary, not a polite one.
+  is excluded from Obsidian Sync on every machine, so its contents never
+  leave theirs. A real boundary, not a polite one.
 - **Won't have their mail read.** The decline path is fine and it is
   recorded as such — file 3's block stands as drafted from the interview,
   and the skill needs no further commentary from you. Do not push back on a
