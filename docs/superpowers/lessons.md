@@ -607,3 +607,45 @@ the PNGs are ruined). Dismiss it once via its own button so it persists:
 `(() => { const c = document.querySelector('.modal-container'); const b =
 c && (c.querySelector('button.mod-cta') || c.querySelector('button'));
 if (b) b.click(); })()` — then recapture.
+
+## 2026-09-03 — hard-wrapped prose renders as hard line breaks in the vault
+
+**What went wrong.** Decision notes and `Start here.md` looked "too narrow"
+next to meeting and daily notes, and the first instinct was the Minimal
+theme's line width. The theme was fine: those files were the only ones with
+source hard-wrapped at ~76 columns (`textwrap.fill` in `decision.py`, hand
+wrapping in the template prose). Obsidian ships with *strict line breaks*
+off, so a single newline renders as `<br>` in Reading view, and Live Preview
+shows source lines regardless. Every note the CLI writes as one long line per
+paragraph soft-wraps to the theme width; every hard-wrapped one stops at
+column 76.
+
+**Rule.** Vault-facing markdown — emitted by `vaultlib` or shipped in
+`plugin/template/` — is one source line per paragraph. Wrap the repo's docs
+and code comments; never the notes. When a rendered note looks narrow, diff
+its line lengths against a note that looks right before touching the theme.
+
+## 2026-09-03 — "properties collapsed by default" is a CSS inversion, and needs one `!important`
+
+**What went wrong.** Obsidian has no default-fold setting for properties.
+The snippet inverts app.css's `.metadata-container.is-collapsed
+.metadata-property { display: none }`. Three things bit in turn, each only
+visible over CDP in the probe:
+
+1. `display: none` on the rows made the "Add file property" command type
+   into an invisible input — a display:none element cannot take focus, so a
+   `:focus-within` reveal never fired. Clip instead (`max-height: 0;
+   overflow: hidden` on `.metadata-properties`); clipped elements focus.
+2. Clicking the heading also writes an inline `display: none` on
+   `.metadata-content` from JS, not from app.css. An inline style beats every
+   stylesheet rule except an `!important` one, so the expanded state needs
+   `display: block !important` there — the first computed-style check said
+   the rows were `flex` while their parent was `none`, and a screenshot with
+   the chevron down and no rows is what finally showed it.
+3. Fold state persists per file, so the memory is inverted too: a file the
+   user expanded reopens expanded. Acceptable, and documented in the snippet.
+
+**Rule.** For any CSS that fights Obsidian's own state, verify in the probe
+with computed heights (`getBoundingClientRect().height`), not `display` of
+the innermost element, and read the inline `style` attribute of every
+ancestor in both states.

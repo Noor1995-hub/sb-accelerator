@@ -4,12 +4,12 @@ filters:
     - file.ext == "md"
 formulas:
   open: link(file.path, "→")
-  project-links: projects.map(link("30-projects/" + value + "/index.md", value))
+  project-links: projects.map(link("30-projects/" + value + "/index.md", "↗"))
 properties:
   formula.open:
     displayName: " "
   formula.project-links:
-    displayName: "↗ Project"
+    displayName: "↗"
   note.date:
     displayName: Date
   note.type:
@@ -25,11 +25,11 @@ properties:
   note.review_status:
     displayName: Review Status
   note.conflicts-with:
-    displayName: ⚠ Duplicate of
+    displayName: "⚠ Duplicate of"
   note.reviewed:
-    displayName: ✓ Reviewed
+    displayName: "✓ Reviewed"
   note.archived:
-    displayName: 🗑 Archive
+    displayName: "🗑 Archive"
   note.recording-duration:
     displayName: Duration
   note.source:
@@ -45,18 +45,23 @@ views:
     order:
       - formula.open
       - date
-      - calendar-subject
-      - reviewed
-      - conflicts-with
-      - archived
       - calendar_match
+      - calendar-subject
+      - attendees
+      - reviewed
       - projects
       - formula.project-links
-      - attendees
+      - archived
+      - conflicts-with
     sort:
       - property: date
         direction: DESC
     rowHeight: medium
+    columnSize:
+      note.calendar_match: 54
+      note.attendees: 251
+      note.reviewed: 36
+      formula.project-links: 32
   - type: table
     name: All Meetings
     order:
@@ -72,3 +77,5 @@ views:
     sort:
       - property: date
         direction: DESC
+    columnSize:
+      formula.project-links: 32

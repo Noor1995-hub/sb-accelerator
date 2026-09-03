@@ -232,17 +232,23 @@ def test_reviewed_records_which_mode_wrote_the_note(tmp_path):
         (root / bg["path"]).read_text(encoding="utf-8"))[0]["reviewed"] is False
 
 
-def test_the_body_carries_three_wrapped_bold_markers(tmp_path):
+def test_the_body_carries_three_bold_markers_one_line_each(tmp_path):
+    """Obsidian renders a single newline as a line break, so a body
+    hard-wrapped at a fixed column showed as a narrow ragged block in the
+    vault while meeting and daily notes soft-wrapped to the theme width. Each
+    paragraph is exactly one source line; the theme owns the width."""
     root = vault_with_project(tmp_path)
+    long_why = " ".join(["a reason that runs well past any wrap column"] * 6)
     result = decision.write(root, project=PROJECT, date="2026-05-20",
-                            payload=note(), reviewed=True)
+                            payload=note(why=long_why), reviewed=True)
     body = (root / result["path"]).read_text(encoding="utf-8").split("---\n", 2)[2]
     assert body.startswith("\n**Decision** — ")
     assert "\n\n**Why** — " in body
     assert "\n\n**Implications** — " in body
     assert body.endswith("\n")
-    assert all(len(line) <= decision.WRAP_WIDTH
-               for line in body.split("\n")), "body prose must wrap"
+    lines = [line for line in body.split("\n") if line]
+    assert len(lines) == 3, f"three paragraphs, three lines: {lines}"
+    assert lines[1] == f"**Why** — {long_why}"
 
 
 def test_a_multi_line_body_field_becomes_one_paragraph(tmp_path):

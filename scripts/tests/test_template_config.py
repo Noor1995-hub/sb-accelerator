@@ -20,9 +20,11 @@ EXPECTED_SHORTCUTS = [
     ("note", "Start here.md"),
     ("note", "20-meetings/Meetings.base"),
     ("note", "30-projects/Projects.base"),
+    # Decisions sit under Projects: they are project objects, and the two
+    # tables are read together at a tune-up.
+    ("note", "30-projects/Decisions.base"),
     ("note", "40-entities/Entities.base"),
     ("note", "50-people/People.base"),
-    ("note", "30-projects/Decisions.base"),
     ("folder", "60-daily-notes"),
 ]
 
@@ -99,6 +101,33 @@ def test_snippet_hides_comment_only_lines_in_live_preview():
     as .cm-comment directly inside .cm-line."""
     css = SNIPPET.read_text(encoding="utf-8")
     assert ".cm-comment" in css and "display: none" in css
+
+
+def test_snippet_collapses_properties_by_default():
+    """Obsidian has no default-fold setting for properties, so the snippet
+    inverts app.css's own `.metadata-container.is-collapsed .metadata-property`
+    rule (verified live on 1.13.7): rows hide while the container is *not*
+    `.is-collapsed`. Both halves must be present — hiding without the
+    restoring rule would make the heading a dead click — and both editing
+    modes must be covered, scoped to the main editor so the sidebar
+    Properties pane and the Bases new-item popover stay editable."""
+    css = SNIPPET.read_text(encoding="utf-8")
+    for mode in (".markdown-source-view", ".markdown-preview-view"):
+        # Clipped (max-height), not display:none — a display:none row cannot
+        # take focus, and "Add file property" focuses the row it just added.
+        assert (f".mod-root {mode} .metadata-container:not(.is-collapsed)"
+                ":not(:focus-within) .metadata-properties") in css
+        assert f".mod-root {mode} .metadata-container.is-collapsed .metadata-property" in css
+    assert "max-height: 0" in css
+    assert ".metadata-container:not(.is-collapsed) .metadata-add-button" in css
+    # Collapsing writes an inline display:none on .metadata-content (JS);
+    # without this override the click to expand shows nothing.
+    assert ".metadata-container.is-collapsed .metadata-content" in css
+    assert "display: block !important" in css
+    # Every selector is scoped; an unscoped one would reach the popover.
+    for line in css.splitlines():
+        if ".metadata-" in line and line.startswith("."):
+            assert line.startswith(".mod-root "), f"unscoped properties selector: {line}"
 
 
 # --- .base property namespacing ---------------------------------------------

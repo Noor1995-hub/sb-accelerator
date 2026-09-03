@@ -9,13 +9,10 @@ source: "[[20-04-26-commercial-ops-workshop]]"
 reviewed: true
 ---
 
-**Decision** — Migrate all regions to the new CRM data platform in one
-big-bang cutover, scheduled into the Q4 commercial slow period.
+**Decision** — Migrate all regions to the new CRM data platform in one big-bang cutover, scheduled into the Q4 commercial slow period.
 
-**Why** — A single cutover avoids running two systems of record in parallel
-and keeps the vendor's migration team on site once instead of three times.
+**Why** — A single cutover avoids running two systems of record in parallel and keeps the vendor's migration team on site once instead of three times.
 
-**Implications** — Every region's data has to be clean by the same date;
-the migration plan has no fallback short of full rollback.
+**Implications** — Every region's data has to be clean by the same date; the migration plan has no fallback short of full rollback.
 
 **Superseded** — 2026-06-01 · replaced by [[2026-06-01-phased-migration-by-region-adopted]].

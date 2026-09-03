@@ -1,14 +1,10 @@
 # Tools & Systems
 
-> **Placeholder.** Filled by the onboarding interview (`/setup-my-brain`).
-> Until then, Claude treats this file as empty context.
+> **Placeholder.** Filled by the onboarding interview (`/setup-my-brain`). Until then, Claude treats this file as empty context.
 
 ## Purpose
 
-The systems around the vault, as narrative — what they are, who runs them,
-where things land. Machine decisions (which adapters sync, account binding,
-timezone) live in `99-workflow-config/config.json`, not here: skills read
-that file, and this one stays human context.
+The systems around the vault, as narrative — what they are, who runs them, where things land. Machine decisions (which adapters sync, account binding, timezone) live in `99-workflow-config/config.json`, not here: skills read that file, and this one stays human context.
 
 ## Interview questions
 

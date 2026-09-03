@@ -15,6 +15,8 @@ delivers them.
 
 ## Unreleased
 
+- The vault opens cleaner: every note's Properties block starts collapsed (click the heading to expand; a note you expanded stays that way), the Meetings **Triage** view carries the new default layout — Date, Cal, Subject, Attendees, ✓, Projects, then a narrow ↗ arrow that opens the project — Decisions sits directly under Projects in the sidebar shortcuts, and decision notes plus *Start here* now use the same reading width as every other note instead of wrapping at a fixed column (#158)
+
 ## v0.10.27 — 2026-09-03
 
 - Meetings organised by someone else no longer vanish silently from the sync: the run says which ones the connector could not read and why, and once IT grants access a consultant can force a re-check without waiting for the cache to age out (#152)

@@ -16,3 +16,57 @@
 .markdown-source-view.mod-cm6 .cm-line:has(> .cm-comment:only-child) {
   display: none;
 }
+
+/* Properties start collapsed.
+   A dossier, a project index or a meeting note opens on a block of a dozen
+   machine-owned properties before its first line of prose; the vault owner
+   curates those in the .base tables, not here. Obsidian has no setting for the
+   default fold state — every note opens expanded, and the fold it remembers
+   per file is written only once someone has clicked the heading. So this
+   inverts Obsidian's own rule (`.metadata-container.is-collapsed
+   .metadata-property { display: none }`, app.css, verified on 1.13.7): the
+   rows hide while the container is NOT `.is-collapsed`, and show once it is.
+   Clicking the heading still toggles, the chevron still points right when the
+   rows are hidden, and the per-file memory still holds — it just remembers
+   "expanded" instead of "collapsed".
+
+   Scoped to `.mod-root`: the sidebar Properties pane and the new-item popover
+   a Base opens are editing surfaces and keep Obsidian's behaviour. */
+.mod-root .markdown-source-view .metadata-container:not(.is-collapsed) .metadata-add-button,
+.mod-root .markdown-preview-view .metadata-container:not(.is-collapsed) .metadata-add-button {
+  display: none;
+}
+/* The rows are clipped, not display:none — a display:none input cannot take
+   focus, and "Add file property" focuses the row it just added. Clipped, the
+   focus lands, and the :focus-within rule below reveals the rows for as long
+   as one of them is being edited. */
+.mod-root .markdown-source-view .metadata-container:not(.is-collapsed):not(:focus-within) .metadata-properties,
+.mod-root .markdown-preview-view .metadata-container:not(.is-collapsed):not(:focus-within) .metadata-properties {
+  max-height: 0;
+  overflow: hidden;
+  margin: 0;
+  padding: 0;
+}
+.mod-root .markdown-source-view .metadata-container.is-collapsed .metadata-property,
+.mod-root .markdown-preview-view .metadata-container.is-collapsed .metadata-property {
+  display: flex;
+}
+/* Collapsing also writes an inline `display: none` on the content wrapper
+   (JS, not app.css), and an inline style outranks every stylesheet rule but
+   an !important one. This is the single place the snippet needs it. */
+.mod-root .markdown-source-view .metadata-container.is-collapsed .metadata-content,
+.mod-root .markdown-preview-view .metadata-container.is-collapsed .metadata-content {
+  display: block !important;
+}
+.mod-root .markdown-source-view .metadata-container .metadata-properties-heading .collapse-indicator,
+.mod-root .markdown-preview-view .metadata-container .metadata-properties-heading .collapse-indicator {
+  opacity: 1;
+}
+.mod-root .markdown-source-view .metadata-container:not(.is-collapsed) .collapse-icon svg.svg-icon,
+.mod-root .markdown-preview-view .metadata-container:not(.is-collapsed) .collapse-icon svg.svg-icon {
+  transform: rotate(calc(var(--direction, 1) * -1 * 90deg));
+}
+.mod-root .markdown-source-view .metadata-container.is-collapsed .collapse-icon svg.svg-icon,
+.mod-root .markdown-preview-view .metadata-container.is-collapsed .collapse-icon svg.svg-icon {
+  transform: none;
+}

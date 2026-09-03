@@ -11,8 +11,6 @@ reviewed: false
 
 **Decision** — Shortlist three vendors for the CRM data modernization RFP.
 
-**Why** — Weighting integration effort over sticker price, given the
-existing pipeline-stage inconsistencies flagged at the kickoff workshop.
+**Why** — Weighting integration effort over sticker price, given the existing pipeline-stage inconsistencies flagged at the kickoff workshop.
 
-**Implications** — RFP responses due by the next milestone
-(vendor selection finalized, 2026-08-30); Omar owns scoring.
+**Implications** — RFP responses due by the next milestone (vendor selection finalized, 2026-08-30); Omar owns scoring.

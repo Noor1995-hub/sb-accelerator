@@ -17,9 +17,9 @@
         { "type": "note", "path": "Start here.md" },
         { "type": "note", "path": "20-meetings/Meetings.base" },
         { "type": "note", "path": "30-projects/Projects.base" },
+        { "type": "note", "path": "30-projects/Decisions.base" },
         { "type": "note", "path": "40-entities/Entities.base" },
         { "type": "note", "path": "50-people/People.base" },
-        { "type": "note", "path": "30-projects/Decisions.base" },
         { "type": "folder", "path": "60-daily-notes" }
       ],
       "navRainbow": {

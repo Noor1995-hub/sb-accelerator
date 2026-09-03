@@ -13,7 +13,6 @@ contract in ontology.md §Decision.
 from __future__ import annotations
 
 import re
-import textwrap
 from pathlib import Path
 from typing import Optional
 
@@ -33,7 +32,6 @@ _WS_RUN_RE = re.compile(r"\s+")
 _WIKILINK_RE = re.compile(r"\A\[\[(?P<target>[^\[\]|]+?)(?:\|[^\]]*)?\]\]\Z")
 
 BODY_MARKERS = ("Decision", "Why", "Implications")
-WRAP_WIDTH = 76
 
 REQUIRED_NOTE_FIELDS = ("title", "summary", "decision", "why", "implications")
 OPTIONAL_NOTE_FIELDS = ("status", "source", "supersedes")
@@ -251,9 +249,15 @@ def _resolve_source(root: Path, raw: Optional[str]) -> Optional[str]:
 
 
 def _render_body(decision_text: str, why: str, implications: str) -> str:
+    """One source line per paragraph, never hard-wrapped.
+
+    Obsidian renders a single newline as a line break (strict line breaks are
+    off by default, and Live Preview shows source lines regardless), so a body
+    wrapped at a fixed column reads as a narrow ragged block beside notes that
+    soft-wrap to the theme's line width. The theme owns the width.
+    """
     paragraphs = [
-        textwrap.fill(f"**{marker}** — {text}", width=WRAP_WIDTH,
-                      break_long_words=False, break_on_hyphens=False)
+        f"**{marker}** — {text}"
         for marker, text in zip(BODY_MARKERS,
                                 (decision_text, why, implications))
     ]

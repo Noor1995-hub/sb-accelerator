@@ -5,27 +5,15 @@ type: note
 Your second brain. Five things to know, then you can close this note.
 
 > [!tip] The one habit that matters
-> There isn't one. The evening run happens on its own, at the time you chose
-> when your vault was set up. **`/evening-sync`** is there for the evenings
-> you want it early, or the mornings your laptop was shut.
+> There isn't one. The evening run happens on its own, at the time you chose when your vault was set up. **`/evening-sync`** is there for the evenings you want it early, or the mornings your laptop was shut.
 
 ## The daily loop
 
-Everything runs off your daily note in `60-daily-notes`, and one thing drives
-it: the evening run. It writes *tomorrow's* note — a recap of today, then a
-prepared section for each meeting on tomorrow's calendar, with who's coming
-and what happened last time. There is no morning command to run: tomorrow's
-note is already waiting when you open the vault.
+Everything runs off your daily note in `60-daily-notes`, and one thing drives it: the evening run. It writes *tomorrow's* note — a recap of today, then a prepared section for each meeting on tomorrow's calendar, with who's coming and what happened last time. There is no morning command to run: tomorrow's note is already waiting when you open the vault.
 
-It runs by itself each working evening, as long as this machine is awake with
-Claude open. If it was shut at the time, the run happens the next time Claude
-opens and the note says so. To write tomorrow's note right now instead, run
-**`/evening-sync`**.
+It runs by itself each working evening, as long as this machine is awake with Claude open. If it was shut at the time, the run happens the next time Claude opens and the note says so. To write tomorrow's note right now instead, run **`/evening-sync`**.
 
-Each note has three parts. **Recap** is written for you. **Meetings** is one
-heading per meeting. **End of day** is yours. Jot whatever you like under any
-of them — free text is fine, nothing needs a format, and the next evening run
-reads what you wrote.
+Each note has three parts. **Recap** is written for you. **Meetings** is one heading per meeting. **End of day** is yours. Jot whatever you like under any of them — free text is fine, nothing needs a format, and the next evening run reads what you wrote.
 
 ## The five tables
 
@@ -43,24 +31,15 @@ They're pinned at the top of the sidebar.
 
 ## Reviewing
 
-Everything in the **Meetings** table arrives marked **needs-review** because
-something was inferred rather than known — a name matched by guess, a calendar
-entry matched loosely, an email routed to a project by its sender's domain.
-Open the *Triage* view and tick **Reviewed** once it looks right. That tick is
-the signal that a row can be trusted downstream; nothing else writes it.
+Everything in the **Meetings** table arrives marked **needs-review** because something was inferred rather than known — a name matched by guess, a calendar entry matched loosely, an email routed to a project by its sender's domain. Open the *Triage* view and tick **Reviewed** once it looks right. That tick is the signal that a row can be trusted downstream; nothing else writes it.
 
-A row typed `note` is a capture rather than a meeting: a forwarded email or a
-voice memo that carried context worth keeping. Its **Cal** column is empty
-because no calendar was ever consulted — nothing corroborated it but the item
-itself.
+A row typed `note` is a capture rather than a meeting: a forwarded email or a voice memo that carried context worth keeping. Its **Cal** column is empty because no calendar was ever consulted — nothing corroborated it but the item itself.
 
-Anything marked `<!-- needs-review -->` in a table cell is the same idea: a
-value that was inferred and wants your eye.
+Anything marked `<!-- needs-review -->` in a table cell is the same idea: a value that was inferred and wants your eye.
 
 ## Asking for things
 
-Ask in plain language — you don't need to remember commands. Each one below
-has a name in case you'd rather type it.
+Ask in plain language — you don't need to remember commands. Each one below has a name in case you'd rather type it.
 
 | When you want to… | Say | Command |
 |---|---|---|
@@ -72,29 +51,19 @@ has a name in case you'd rather type it.
 | write tomorrow's note now | "run the evening sync" | `/evening-sync` |
 
 > [!info] Nothing leaves this vault unless you say so
-> Two commands can talk to delaware, and only these two: `/report-feedback`
-> and `/health-check`. Between them they carry version numbers, which skill
-> was involved, what went wrong, and counts — never a name, never a line of
-> your notes — and never without your yes on the exact text they would send.
-> `95-private` is read by nothing at all.
+> Two commands can talk to delaware, and only these two: `/report-feedback` and `/health-check`. Between them they carry version numbers, which skill was involved, what went wrong, and counts — never a name, never a line of your notes — and never without your yes on the exact text they would send. `95-private` is read by nothing at all.
 
-Your assistant has one more: **`/health-check`** — a numbers-only pulse on the
-vault, no names and no content in it. Worth running weekly in the first month;
-it will offer to send the numbers to delaware, and take no for an answer.
+Your assistant has one more: **`/health-check`** — a numbers-only pulse on the vault, no names and no content in it. Worth running weekly in the first month; it will offer to send the numbers to delaware, and take no for an answer.
 
 ## Where things live
 
 - `10-inbox` — anything unfiled. Gets swept into the right place.
-- `20-meetings` · `30-projects` · `40-entities` · `50-people` — the objects
-  behind the five tables.
+- `20-meetings` · `30-projects` · `40-entities` · `50-people` — the objects behind the five tables.
 - `60-daily-notes` — the daily loop.
 - `70-resources` · `80-thoughts-ideas` — reference material and your own notes.
 - `90-archive` — finished, kept.
 - `95-private` — never read by any command. Yours alone.
-- `99-workflow-config` — how the assistant works: who you are, how you like
-  things written, what the vocabulary means. Worth editing when something
-  reads wrong.
-- `claude` — the assistant's own machinery. Visible on purpose, so nothing
-  about how it works is hidden from you; nothing you need day to day.
+- `99-workflow-config` — how the assistant works: who you are, how you like things written, what the vocabulary means. Worth editing when something reads wrong.
+- `claude` — the assistant's own machinery. Visible on purpose, so nothing about how it works is hidden from you; nothing you need day to day.
 
 Nothing in here is hidden from you. If something reads wrong, say so.

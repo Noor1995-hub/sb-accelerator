@@ -9,13 +9,8 @@ source: "[[20-05-26-meridian-vendor-strategy-brainstorm]]"
 reviewed: true
 ---
 
-**Decision** — Consolidate on a single automation vendor across all three
-yards.
+**Decision** — Consolidate on a single automation vendor across all three yards.
 
-**Why** — Running three vendors' PLC and control software in parallel was
-creating integration overhead that outweighed the site-pacing benefit of the
-phased approach.
+**Why** — Running three vendors' PLC and control software in parallel was creating integration overhead that outweighed the site-pacing benefit of the phased approach.
 
-**Implications** — The Phase 0 pilot vendor stays for yard 1; yards 2–3
-re-scope onto the same platform, pushing final commissioning out roughly six
-weeks versus the original phased plan.
+**Implications** — The Phase 0 pilot vendor stays for yard 1; yards 2–3 re-scope onto the same platform, pushing final commissioning out roughly six weeks versus the original phased plan.
