@@ -49,8 +49,11 @@ Fetch the `transcript_url` `m365 ids` returned, **exactly as given**, one
 - `NOT_FOUND` with `transcripts_empty` → reply `still-no-transcript`.
 - Transcript content → reply
   `transcript-found: <recording_id> (event at $SCRATCH/m365_probe_<n>.event.json, transcript-url: <verbatim transcript_url>)`.
-- **403/Forbidden** → reply `forbidden` (another organization's tenant owns
-  it, permanently).
+- **403/Forbidden** — classify by the body: Graph code 3003 / "does not
+  have access to lookup meeting" → reply `no-access` (meeting organised by
+  someone else; this connector resolves transcripts through the
+  organiser-only online-meeting lookup). Any other 403 → reply `forbidden`
+  (another tenant owns it, permanently).
 - **401** → reply `auth-error` — re-authentication is interactive and
   belongs to the user; never retry auth in a loop.
 - A transport error, or a result too large for the tool result, after 3
@@ -84,6 +87,7 @@ read this contract or the worker's makes.
 |---|---|
 | `still-no-transcript` | `m365 ids` returned `skipped: no-transcript-url`, or the transcript read answered `transcripts_empty` |
 | `transcript-found: <recording_id> (event at <path>, transcript-url: <verbatim url>)` | the transcript read returned content |
-| `forbidden` | 403 on the transcript read — permanent |
+| `no-access` | 403 on the transcript read, body carries Graph code 3003 / "does not have access to lookup meeting" — meeting organised by someone else, permanent |
+| `forbidden` | any other 403 on the transcript read — another tenant, permanent |
 | `fetch-error: <one clause why>` | transport failure or oversized result after 3 retries |
 | `auth-error` | connector wants re-authentication — stop |

@@ -380,6 +380,7 @@ def test_sync_probe_m365_contract_exists_and_covers_outcomes():
     assert "still-no-transcript" in ref
     assert "transcript-found" in ref
     assert "forbidden" in ref
+    assert "no-access" in ref
     assert "fetch-error" in ref
     assert "auth-error" in ref
     assert "worker-contract.md" in ref, (
@@ -401,12 +402,32 @@ def test_sync_probe_m365_contract_never_extracts_or_touches_the_cache():
 
 def test_sync_recordings_worker_outcomes_are_a_closed_vocabulary():
     text = read_skill("sync-recordings")
-    for token in ("written:", "no-transcript", "forbidden",
+    for token in ("written:", "no-transcript", "forbidden", "no-access",
                   "fetch-error", "auth-error", "possible-duplicate-of",
                   "already-synced", "skip-listed"):
         assert token in text, f"outcome vocabulary is missing {token}"
     assert "never writes the seen-events cache" in text, (
         "the single-writer rule must be stated")
+
+
+def test_no_access_classification_prose_is_consistent_everywhere():
+    """Defect #124: a 403 on the transcript read was banked as forbidden,
+    terminal, on the claim "another tenant owns it" — false for the
+    majority of an exec's calendar, meetings they attended but did not
+    organise. Graph code 3003 ("does not have access to lookup meeting")
+    distinguishes that case from a genuine cross-tenant 403, and the same
+    classification wording must appear everywhere a worker or probe makes
+    the 403 call: both contract files, and every SKILL.md mention."""
+    texts = {
+        "worker-contract.md": read_ref("sync-recordings", "worker-contract.md"),
+        "probe-contract.md": read_ref("sync-recordings", "probe-contract.md"),
+        "SKILL.md": read_skill("sync-recordings"),
+    }
+    for name, text in texts.items():
+        assert "3003" in text, f"{name} is missing the Graph 3003 code"
+        assert "does not have access to lookup meeting" in text, (
+            f"{name} is missing the Graph error text")
+        assert "no-access" in text, f"{name} is missing the no-access outcome"
 
 
 def test_sync_recordings_worker_contract_carries_the_fetch_mechanics():
@@ -598,6 +619,21 @@ def test_sync_recordings_states_the_start_date_bound():
     assert "sync.start-date" in text
     assert 'dates window --vault "$VAULT"' in text, (
         "the clamp only holds when the skill passes the vault")
+
+
+def test_sync_recordings_start_date_shorthand_names_a_real_flag():
+    """#121: the illustrative `dates window --vault "$VAULT"` shorthand
+    reads as a runnable command, but the CLI requires --start (or
+    --trailing-days) — a session that took it literally burned a retry
+    loop on exit 2 before reading the help. The mention must carry the
+    missing flag, or say "with the item's timestamp", inline."""
+    text = read_skill("sync-recordings")
+    idx = text.index('dates window --vault "$VAULT"')
+    tail = text[idx: idx + 200]
+    assert ("--start" in tail or "--trailing-days" in tail
+            or "item's timestamp" in tail or "item's own timestamp" in tail), (
+        "the shorthand mention must name a real flag or the item's "
+        "timestamp inline, never look like a complete, runnable call")
 
 
 @pytest.mark.parametrize("name", ["setup-my-brain", "provision-vault",

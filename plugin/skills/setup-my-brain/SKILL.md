@@ -14,10 +14,9 @@ engagement, what they work on and with whom — it has written them tomorrow's
 daily note while they watch, and that note has a standing time it arrives.
 
 **Precondition: a provisioned vault.** This skill *fills*; it never scaffolds.
-The vault template does not ship inside the plugin, so there is nothing here
-to instantiate from — pointed at an ordinary folder, phase 0 stops and points
-at the provisioning runbook. That is the correct outcome, not a gap to work
-around by creating folders by hand.
+Provisioning is `/provision-vault`'s job — pointed at an ordinary folder,
+phase 0 stops and points at the provisioning runbook. That is the correct
+outcome, not a gap to work around by creating folders by hand.
 
 ## Tone — this is an interview, not a form
 
