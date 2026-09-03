@@ -537,6 +537,51 @@ def test_refresh_a_pure_restore_selection_creates_no_backup_dir(one_managed_file
     result = template.refresh(root, files=["a.md"], consent=True, today="2026-09-03")
     assert result["restored"] == ["a.md"]
     assert result["backup"] is None
+
+
+# --- refresh: --file duplicates are de-duplicated (review, round 2) --------
+
+
+def test_refresh_a_duplicated_file_flag_writes_and_counts_it_once(one_managed_file):
+    """--file X --file X --consent used to run the write loop twice for X:
+    pass 2's backup copy overwrote pass 1's pre-refresh backup with the
+    just-written template bytes, and refreshed[]/the provenance event/the
+    log line all double-counted it. The de-dup fixes all three at once."""
+    root, _ = one_managed_file
+    (root / "a.md").write_text("hand edited\n", encoding="utf-8")
+
+    result = template.refresh(root, files=["a.md", "a.md"], consent=True,
+                              today="2026-09-03", stamp="2026-09-03-000000")
+
+    assert result["refreshed"] == ["a.md"]
+    backup_path = root / result["backup"] / "a.md"
+    assert backup_path.is_file()
+    # The backup must hold the PRE-refresh bytes, not the just-written
+    # template bytes a second, redundant write-and-backup pass would leave.
+    assert backup_path.read_text(encoding="utf-8") == "hand edited\n"
+    data = provenance.read(root)
+    assert data["events"][-1]["refreshed"] == 1
+    log_text = (root / "99-workflow-config" / "migration-log.md").read_text(
+        encoding="utf-8")
+    lines = [line for line in log_text.splitlines() if "template-refresh" in line]
+    assert len(lines) == 1
+    assert "refreshed 1" in lines[0]
+
+
+def test_refresh_a_duplicated_file_flag_on_a_missing_file_creates_no_backup_dir(
+        one_managed_file):
+    """A duplicated --file naming a *missing* file must restore it exactly
+    once and never create a snapshot dir — the second, redundant pass used
+    to "back up" the file it had just restored one line earlier, arming
+    rotation for what should have been a pure restore."""
+    root, _ = one_managed_file
+    result = template.refresh(root, files=["a.md", "a.md"], consent=True,
+                              today="2026-09-03")
+    assert result["restored"] == ["a.md"]
+    assert result["refreshed"] == []
+    assert result["backup"] is None
+    snapdir = root / "99-workflow-config" / "snapshots"
+    assert not snapdir.is_dir() or not list(snapdir.glob("template-refresh-*"))
     snapdir = root / "99-workflow-config" / "snapshots"
     assert not snapdir.is_dir() or not list(snapdir.glob("template-refresh-*"))
 

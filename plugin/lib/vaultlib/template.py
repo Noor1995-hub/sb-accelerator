@@ -300,7 +300,17 @@ def refresh(root, *, files: Optional[Iterable[str]] = None,
     by_rel = {entry["relpath"]: entry for entry in current["files"]}
 
     if files is not None:
-        selected = list(files)
+        # Order-preserving de-dup, before any consent/blocked/unknown check
+        # (review finding, round 2): --file is argparse action="append", so
+        # `--file X --file X --consent` used to leave X twice in `selected`.
+        # The write loop then ran twice for X — the second pass's backup
+        # copy overwrote the first with the just-written template bytes
+        # (breaking the backup guarantee), refreshed[]/the provenance event/
+        # the log line all double-counted it, and a duplicated *missing*
+        # file was restored in pass 1 then "backed up" (from its own
+        # freshly-restored copy) in pass 2, arming rotation for a pure
+        # restore that should never have created a snapshot dir at all.
+        selected = list(dict.fromkeys(files))
         # Checked before the generic "unknown" test below, and by tier_of()
         # rather than by "in MANAGED" — MANAGED no longer contains
         # SEEDED_ONCE relpaths at all (#117 review finding #2), so without
