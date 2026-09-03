@@ -217,7 +217,7 @@ def run(root: Path, today: str, stamp: str = None) -> dict:
     # unwritable vault) must never turn a chain of migrations that already
     # landed into a reported migration failure. Reported under "provenance"
     # instead — "failed: ..." rather than record_provision's "failed — ...",
-    # to read as "the migration ran; recording that it did did not."
+    # to read as "the migration ran; recording that it did, did not."
     try:
         provenance.record_event(root, "upgrade", structure_version=from_version,
                                 from_structure_version=str(current))
