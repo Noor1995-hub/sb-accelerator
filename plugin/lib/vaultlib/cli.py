@@ -32,7 +32,7 @@ if __package__ in (None, ""):
     # the skills invoke it.
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from vaultlib import config, dailynote, dates, decision, entity, feedback, health, lastsync, m365, meeting, migrate, person, plaud, project, provenance, runlog, scratch, schema, seenevents, syncjob, updatequeue, vault  # noqa: E402
+from vaultlib import config, dailynote, dates, decision, entity, feedback, health, lastsync, m365, meeting, migrate, person, plaud, project, provenance, runlog, scratch, schema, seenevents, syncjob, template, updatequeue, vault  # noqa: E402
 
 
 def _emit(payload: dict) -> None:
@@ -506,6 +506,39 @@ def build_parser() -> argparse.ArgumentParser:
         "read", help="the recorded provenance plus plugin-version drift")
     _add_vault_argument(provenance_read)
 
+    template_group = top.add_parser(
+        "template", help="managed template-file tiers: status, diff, refresh "
+                          "(#117, built on provenance)")
+    template_sub = template_group.add_subparsers(dest="action", required=True)
+    template_status = template_sub.add_parser(
+        "status", help="per managed file: current/refresh/needs-consent/"
+                       "missing/blocked, against the shipped template")
+    _add_vault_argument(template_status)
+    template_diff = template_sub.add_parser(
+        "diff", help="unified diff from the vault's copy to the shipped "
+                     "template for one managed file")
+    _add_vault_argument(template_diff)
+    template_diff.add_argument("--file", required=True,
+                               help="managed relpath, e.g. 20-meetings/Meetings.base")
+    template_refresh = template_sub.add_parser(
+        "refresh", help="replace managed files with the shipped template; "
+                        "--consent required for edited/missing files")
+    _add_vault_argument(template_refresh)
+    template_refresh.add_argument(
+        "--file", action="append", dest="files",
+        help="a managed relpath to refresh (repeatable); default is every "
+             "silently-refreshable file")
+    template_refresh.add_argument(
+        "--all-pending", action="store_true",
+        help="select every refresh/needs-consent/missing file (never a "
+             "seeded-once file, which is refused regardless)")
+    template_refresh.add_argument(
+        "--consent", action="store_true",
+        help="required alongside --file/--all-pending for edited or missing files")
+    template_refresh.add_argument("--today", help="ISO date; defaults to today")
+    template_refresh.add_argument(
+        "--stamp", help="backup-directory timestamp override (tests)")
+
     health_group = top.add_parser(
         "health", help="content-free vault health metrics (read-only)")
     health_sub = health_group.add_subparsers(dest="action", required=True)
@@ -727,12 +760,17 @@ def _dispatch(args: argparse.Namespace) -> int:
         if data is None:
             return _ok({"present": False, "provenance": None,
                        "plugin_drift": "unknown", "running_plugin_version": running})
-        events = data.get("events") or []
-        recorded_version = events[-1].get("plugin_version") if events else None
-        drift = (provenance.compare_versions(recorded_version, running)
-                 if recorded_version else "unknown")
         return _ok({"present": True, "provenance": data,
-                   "plugin_drift": drift, "running_plugin_version": running})
+                   "plugin_drift": provenance.drift(data),
+                   "running_plugin_version": running})
+    if args.group == "template":
+        if args.action == "status":
+            return _ok(template.status(root))
+        if args.action == "diff":
+            return _ok({"relpath": args.file, "diff": template.diff(root, args.file)})
+        return _ok(template.refresh(
+            root, files=args.files, all_pending=args.all_pending,
+            consent=args.consent, today=args.today, stamp=args.stamp))
     if args.group == "health":
         window = args.window if args.window is not None else health.DEFAULT_WINDOW_DAYS
         data = health.report(root, vault.today_iso(args.today), window=window)
@@ -813,6 +851,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     except provenance.ProvenanceError as exc:
         return _fail(str(exc), "CLI-owned; restore from a snapshot or delete "
                      "it to start from an unknown baseline.")
+    except template.TemplateError as exc:
+        return _fail(str(exc), "Re-run `template status`; pass --consent "
+                     "with --file / --all-pending for edited or missing "
+                     "files.")
     except migrate.MigrateError as exc:
         # The per-file list rides the hint rather than a fourth envelope key:
         # `hint` is already "what to do", and these files are the whole of it.
