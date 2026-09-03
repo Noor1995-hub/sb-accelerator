@@ -160,6 +160,25 @@ def test_verify_tree_catches_a_synthetic_denylist_hit(tmp_path):
     assert any("michael" in p.lower() for p in problems)
 
 
+def test_verify_tree_catches_a_denylist_hit_in_the_dist_root_changelog(tmp_path):
+    """The denylist must also cover the dist-root files build() writes
+    outside plugin/ — CHANGELOG.md above all: it's free-form human prose,
+    it explicitly ships to sb-dist (CHANGELOG.md's own header), and the
+    repo's own scripts/lint_plugin.py never scans it at PR time either
+    (SHIPPED_TREES is plugin/ + fixtures/), so this is the only gate that
+    ever could. Planting the violation in CHANGELOG.md, not under plugin/,
+    is the point — a trees=("plugin",) scope would miss this entirely."""
+    out = tmp_path / "out"
+    build_dist.build("client", out, REPO_ROOT, lint=False)
+    changelog = out / "CHANGELOG.md"
+    changelog.write_text(
+        changelog.read_text(encoding="utf-8") + "\n- the fix Michael asked for\n",
+        encoding="utf-8",
+    )
+    problems = build_dist.verify_tree(out, REPO_ROOT)
+    assert any("michael" in p.lower() and "CHANGELOG.md" in p for p in problems)
+
+
 def _minimal_repo(tmp_path: Path) -> Path:
     """A small, self-contained fake repo root with everything build() needs
     to run for real — used to exercise build(..., lint=True)'s own call into

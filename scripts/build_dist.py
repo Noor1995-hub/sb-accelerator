@@ -219,8 +219,16 @@ def _root_file_scan(out: Path) -> list[str]:
 
 def verify_tree(out: Path, repo_root: Path) -> list[str]:
     """Runs the real, product-repo clean-room linter over a *built* dist
-    tree — not the source tree lint_plugin.py normally checks. `out` has no
-    fixtures/ sibling, so only the plugin tree is scanned.
+    tree — not the source tree lint_plugin.py normally checks.
+
+    Scans the whole dist root (`trees=(".",)`), not just `out/plugin/`:
+    build() also writes README.md, CHANGELOG.md and RELEASE.json at the
+    root, and CHANGELOG.md above all is free-form human prose that
+    explicitly ships to sb-dist — and scripts/lint_plugin.py's own
+    SHIPPED_TREES (plugin/ + fixtures/) never scans it at PR time either, so
+    this is the only gate that ever could. `pathlib` collapses `out / "."`
+    to `out`, so one token widens the walk to the whole built tree (plugin/
+    included) with no double-scan.
 
     Imports lint_plugin here, not at module scope: lint_plugin imports
     PyYAML, and notes() (below) must keep working in a job that never
@@ -229,7 +237,7 @@ def verify_tree(out: Path, repo_root: Path) -> list[str]:
 
     problems: list[str] = []
     problems.extend(lint_skills(out))
-    problems.extend(scan_cleanroom(out, load_denylist(repo_root), trees=("plugin",)))
+    problems.extend(scan_cleanroom(out, load_denylist(repo_root), trees=(".",)))
     problems.extend(_root_file_scan(out))
     problems.extend(_scan_dev_leakage(out))
     return problems

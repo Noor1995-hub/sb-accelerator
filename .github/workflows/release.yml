@@ -178,14 +178,36 @@ jobs:
     permissions:
       contents: read
     steps:
+      # Checked out by the sha `verify` resolved and pinned, NOT by
+      # re-resolving the tag: a tag can move (a legitimate re-tag after a
+      # red job, per the runbook) or a partial re-run can reuse verify's
+      # stale output while re-resolving the tag fresh. Checking out by tag
+      # here again would let the commit CI actually verified drift from the
+      # commit that gets built and published. actions/checkout@v4 accepts a
+      # bare commit sha at the default fetch-depth (1) — no full history is
+      # needed to build from it.
       - uses: actions/checkout@v4
         with:
-          ref: refs/tags/${{ needs.resolve.outputs.tag }}
+          ref: ${{ needs.verify.outputs.sha }}
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
       - name: install deps
         run: pip install pyyaml
+      - name: confirm the checkout landed on the verified commit
+        env:
+          SOURCE_SHA: ${{ needs.verify.outputs.sha }}
+        run: |
+          set -euo pipefail
+          # Belt and braces: the checkout above is already by sha, so this
+          # can't actually diverge — but it documents the invariant this
+          # job depends on, in the same place a future edit to the checkout
+          # step would have to look.
+          actual=$(git rev-parse HEAD)
+          if [ "$actual" != "$SOURCE_SHA" ]; then
+            echo "::error::checked out $actual but verify resolved $SOURCE_SHA — refusing to build the wrong commit"
+            exit 1
+          fi
       - name: build the dist tree (runs the real clean-room linter on the output)
         env:
           CHANNEL: ${{ needs.resolve.outputs.channel }}
@@ -338,15 +360,22 @@ jobs:
 
   github_release:
     name: GitHub Release
-    needs: [resolve, build]
+    # verify is in needs (not just transitively required via build) so
+    # needs.verify.outputs.sha is visible here — an omission here would
+    # silently evaluate the ref below to empty and check out the default
+    # branch instead of the tag's commit.
+    needs: [resolve, verify, build]
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
+      # By sha, same reasoning as the build job: the checked-out commit
+      # must be the one verify actually verified and build actually built,
+      # not a re-resolution of the tag that could have moved since.
       - uses: actions/checkout@v4
         with:
-          ref: refs/tags/${{ needs.resolve.outputs.tag }}
+          ref: ${{ needs.verify.outputs.sha }}
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
