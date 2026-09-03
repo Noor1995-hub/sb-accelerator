@@ -140,16 +140,34 @@ will tell you it happened.
 One-time, not per-machine: the token file lands inside the vault and reaches
 the assistant's machine the same way everything else does, over Sync.
 
-1. Create a delaware-owned `sb-client-<slug>` GitHub repo for this client.
-   `/report-feedback` and `/health-check` only ever open issues on it; feedback
-   never lands on a repo shared across clients.
-2. Mint a token scoped **fine-grained**, **`issues: read` + `issues: write` on
-   that repo only — **no `contents` scope**. This is the leak blast-radius
-   control: the token file lives inside the vault, readable by anything with
-   vault access, so the worst case of a leak has to stay "someone can file or
-   read issues on this client's own feedback repo" — a `contents` scope would
-   turn the same leak into read or write access to a repo's actual files, which
-   is a materially worse failure than the one this channel is meant to allow.
+1. From an accelerator repo checkout, run the script:
+
+   ```bash
+   python scripts/provision_client.py <slug> --owner <name or initials> \
+     --delivery-path <A..E> --dist-channel client
+   ```
+
+   It creates the delaware-owned `sb-client-<slug>` GitHub repo (or reuses it
+   if it already exists), seeds its `README.md` and
+   `.github/ISSUE_TEMPLATE/feedback.md`, ensures the `feedback` /
+   `health-report` / `triage:*` labels, and writes the `registry.yaml` entry
+   for you — see step 7. `/report-feedback` and `/health-check` only ever
+   open issues on this repo; feedback never lands on a repo shared across
+   clients. Pass `--register-only` instead if the repo already exists and
+   only the registry entry is missing (never run the script without
+   `--register-only` or `--dry-run` unless you mean to create or modify a
+   real GitHub repo).
+2. Follow the recipe the script prints, verbatim: mint a token scoped
+   **fine-grained**, **`issues: read` + `issues: write` on that repo
+   only** — **no `contents` scope**. This is the leak blast-radius control:
+   the token file lives inside the vault, readable by anything with vault
+   access, so the worst case of a leak has to stay "someone can file or
+   read issues on this client's own feedback repo" — a `contents` scope
+   would turn the same leak into read or write access to a repo's actual
+   files, which is a materially worse failure than the one this channel is
+   meant to allow. Set the expiration to 1 year — that is what
+   `registry.yaml`'s `provisioned` date (written by the script) measures
+   against.
 3. Place the token, and nothing else, at
    `99-workflow-config/secrets/feedback-token` in the instantiated vault — one
    line, no surrounding commentary.
@@ -162,11 +180,14 @@ the assistant's machine the same way everything else does, over Sync.
      --field feedback.repo --value <owner>/sb-client-<slug>
    ```
 
-   Run it directly, the same way, if you are not going through the skill.
+   The script's recipe prints this same command, already filled in — run it
+   directly, the same way, if you are not going through the skill.
 
 5. Rotate the token at any tune-up — swap the file's contents; the repo name
    in `config.json` doesn't change, so there is nothing to re-run `config
-   write` for.
+   write` for. Re-run `provision_client.py <slug> --update ...` at the same
+   tune-up if `owner`, `care_package`, `delivery_path`, or `dist_channel`
+   changed — see step 7.
 6. Vault snapshots (`99-workflow-config/snapshots/`) are full-vault zips, so
    they include the token file too — treat a snapshot copied off the machine
    as carrying a live credential, and rotate the token if one ever leaves the
@@ -178,7 +199,14 @@ Open the vault and leave the vault owner on **`Start here`** — their own
 orientation note, written for them. Do not walk them through this runbook;
 none of it is theirs.
 
-Record the deployment in `registry.yaml` before you leave.
+`registry.yaml` is already written — step 6 ran `scripts/provision_client.py`,
+which wrote the entry as part of creating the feedback channel. Nothing left
+to do here except double-check it landed: `git diff registry.yaml` (or
+`git status`, if this checkout tracks it) should show one new entry for this
+client, with the header comment untouched above it. If anything about the
+deployment changes at a tune-up — owner, care package, delivery path, dist
+channel — re-run the script with `--update` rather than hand-editing the
+YAML.
 
 ## 8. The standing evening run — know what Session 1 will do
 
