@@ -8,7 +8,7 @@ import pathlib
 
 import pytest
 
-from vaultlib import cli, migrate, syncjob
+from vaultlib import cli, migrate, provenance, syncjob, vault
 
 from test_vaultlib_vault import make_vault
 
@@ -1300,6 +1300,49 @@ def test_health_report_rejects_a_bad_window_as_a_structured_error(
     assert code == 1
     assert payload["ok"] is False
     assert "--window" in payload["error"]
+
+
+def test_provenance_read_reports_absent_as_present_false(capsys, tmp_path):
+    root = make_vault(tmp_path)
+    (root / "structure-version").write_text("2\n", encoding="utf-8")
+
+    code, payload = run(capsys, ["provenance", "read", "--vault", str(root)])
+
+    assert code == 0
+    assert payload["result"]["present"] is False
+    assert payload["result"]["provenance"] is None
+    assert payload["result"]["plugin_drift"] == "unknown"
+    assert payload["result"]["running_plugin_version"] == vault.plugin_version()
+
+
+def test_provenance_read_returns_the_full_record_and_drift(capsys, tmp_path):
+    root = make_vault(tmp_path)
+    (root / "structure-version").write_text("2\n", encoding="utf-8")
+    provenance.record_event(root, "provision", at="2026-07-01T09:00:00Z",
+                            structure_version="2")
+
+    code, payload = run(capsys, ["provenance", "read", "--vault", str(root)])
+
+    assert code == 0
+    assert payload["result"]["present"] is True
+    assert payload["result"]["provenance"]["events"][0]["event"] == "provision"
+    assert payload["result"]["plugin_drift"] in (
+        "matches", "behind", "ahead", "unknown")
+    assert payload["result"]["running_plugin_version"] == vault.plugin_version()
+
+
+def test_provenance_read_reports_malformed_as_a_structured_error(capsys, tmp_path):
+    root = make_vault(tmp_path)
+    (root / "structure-version").write_text("2\n", encoding="utf-8")
+    (root / "99-workflow-config" / "provenance.json").write_text(
+        "{not json", encoding="utf-8")
+
+    code, payload = run(capsys, ["provenance", "read", "--vault", str(root)])
+
+    assert code == 1
+    assert payload["ok"] is False
+    assert "not valid JSON" in payload["error"]
+    assert "unknown baseline" in payload["hint"]
 
 
 def test_scratch_sweep_returns_the_standard_envelope(capsys, tmp_path):
