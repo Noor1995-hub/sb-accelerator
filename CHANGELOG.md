@@ -15,7 +15,7 @@ delivers them.
 
 ## Unreleased
 
-- `/provision-vault` no longer hands over a vault nobody can write into. Provisioning from Cowork (or any machine whose plugin cache is read-only) used to copy the cache's read-only permissions onto every file and folder of the new vault, reporting success with two soft warnings while the client could not add a single note; the copy is now made writable before anything else is written, and a vault location that still refuses writes fails provisioning with a clear error and hint instead (#163)
+- `/provision-vault` no longer hands over a vault nobody can write into. Provisioning from Cowork (or any machine whose plugin cache is read-only) used to copy the cache's read-only permissions onto every file and folder of the new vault, reporting success with two soft warnings while the client could not add a single note; the copy is now made writable before anything else is written, and a vault location that still refuses writes fails provisioning with a clear error and hint instead (#165)
 
 ## v0.10.28 — 2026-09-03
 

@@ -206,6 +206,11 @@ def test_read_only_template_yields_a_user_writable_vault(read_only_template, tmp
     assert result["symlink"] == "created"
 
 
+@pytest.mark.skipif(
+    os.name == "nt",
+    reason="Windows has a single read-only attribute, no group/other bits: "
+           "chmod(0o444) reads back as 0o666 once the attribute is cleared",
+)
 def test_normalisation_only_widens_the_user_bits(tmp_path):
     src = make_fake_template(tmp_path)
     (src / "CLAUDE.md").chmod(0o444)
