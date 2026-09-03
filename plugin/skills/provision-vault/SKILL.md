@@ -65,6 +65,17 @@ this is almost always a target that was not empty, which means confirming
 the intended location with the client rather than picking a different one
 or overwriting what is there.
 
+On `ok: true`, this same call already records the vault's provenance
+baseline — which plugin version and structure version provisioned it, and
+a digest of every shipped file as laid down — at
+`99-workflow-config/provenance.json`. Nothing further to run for that:
+`/health-check` reads plugin-version drift off it later, and a future
+`/upgrade-vault` step reads it to know what it can refresh silently versus
+what needs the consultant's eyes. Report `result.provenance` only if it
+starts with `"failed —"` — a provenance write failing is never a reason to
+redo provisioning, but it is worth a one-line note for whoever runs the
+next tune-up.
+
 Never `git init` the vault. It has no git by design — Obsidian Sync's
 version history and the client's own backups cover recovery, and a `.git`
 directory inside a synced folder causes more problems than it solves.
