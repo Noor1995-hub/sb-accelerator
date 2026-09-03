@@ -113,6 +113,11 @@ Steps, on `main`:
 4. Once the dryrun run is green and verified, promote to the client channel:
    `gh workflow run release.yml -f tag=plugin-v<version> -f channel=client`.
 
+Dryrun-before-client is procedural, not something the workflow enforces —
+nothing stops dispatching `channel=client` for a tag that never ran (or
+failed) on `channel=dryrun` first; verifying dryrun before promoting is on
+whoever runs step 4.
+
 `scripts/build_dist.py` and `scripts/cut_release.sh` are covered by
 `scripts/tests/test_build_dist.py` and can be exercised locally — the
 workflow YAML itself cannot be run outside Actions, so review it by reading.

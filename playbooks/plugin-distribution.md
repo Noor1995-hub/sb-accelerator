@@ -201,8 +201,13 @@ The release pipeline's `github_release` job attaches exactly the artifact
 this path needs to every tag pushed to `main`: download `plugin-<version>.zip`
 and `plugin-<version>.zip.sha256` from the tag's GitHub Release, check the
 sha256 matches (`shasum -a 256 -c plugin-<version>.zip.sha256`), then upload
-the zip as-is — its root already is a plugin package
-(`.claude-plugin/plugin.json` at the zip root, not nested under `plugin/`).
+the zip as-is. It's built with `.claude-plugin/plugin.json` at the zip
+root (not nested under a `plugin/` folder) on the reasoning that a
+single-plugin ZIP upload expects the package rooted there — **not yet
+verified against a real upload.** Owner action: the first time a Release
+exists, spend five minutes uploading its zip under Organization settings →
+Plugins once, confirm it's accepted, and note the result here (or file a
+fix if the layout is wrong).
 
 ## The release train, concretely
 
@@ -229,15 +234,19 @@ one-line change per client, rather than a per-machine visit:
    This re-runs the same build against `sb-dist` — a distinct commit and
    marketplace name, verified by its own API read-back — and does **not**
    recreate the GitHub Release (that only happens on the original tag push).
+   Dryrun-before-client is procedural, not enforced by the workflow itself —
+   nothing stops dispatching `channel=client` for a tag that skipped step 3;
+   verifying dryrun first is on whoever runs this step.
 5. **Roll out per client**, by delivery path:
    **Path A:** the marketplace re-syncs; users pick it up on their next
    session or plugin refresh.
    **Path B/C:** update `ref` (or `manifestSha256`) in managed configuration
    and redistribute it. Devices sync on next app launch or periodic re-fetch.
    **Path D:** push the files and bump `version.json`.
-   **Path E:** download the Release zip and sha256 (step 2's artifact, or the
-   one the `channel=client` dispatch attaches nothing extra for — it's the
-   same tag's Release), verify the checksum, upload it by hand.
+   **Path E:** download the tag's Release zip and sha256 (the one step 2
+   attached — the Release belongs to the tag, not the channel, so the
+   `channel=client` dispatch in step 4 adds no new asset), verify the
+   checksum, upload it by hand.
 6. Verify the deployed version in the client's Customize → Plugins view, and
    record it in `registry.yaml` (`plugin_version`).
 
