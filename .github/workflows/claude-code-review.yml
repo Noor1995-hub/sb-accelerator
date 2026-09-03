@@ -117,6 +117,16 @@ jobs:
       - name: install validator deps
         run: pip install pytest pyyaml
 
+      # Recorded BEFORE the action runs so the delivery check below can tell
+      # THIS run's comments from the ones an earlier run left. Comparing
+      # against a timestamp is deliberate: the plugin delivers in two
+      # different shapes (inline comments carry a `commit_id`, the "No issues
+      # found" summary is a plain issue comment with no sha on it), so a
+      # sha-matching check would only ever see half of them.
+      - name: mark review start
+        id: started
+        run: echo "at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+
       - name: Run Claude Code Review
         id: claude-review
         uses: anthropics/claude-code-action@v1
@@ -245,7 +255,134 @@ jobs:
           # tests silently downgrades to reading the code instead, which is a
           # quieter review, not a failed one. When adding a command here,
           # allow the variants too.
+          #
+          # `--model` is a COST fix, and it is the model the plugin was
+          # written for -- not a downgrade. The plugin's own command file
+          # pins a model per step: steps 1, 2, 3, 5 and 7 say "use a Haiku
+          # agent", and step 4 -- the five parallel reviewers that do the
+          # actual reading -- says "launch 5 parallel Sonnet agents".
+          # Nothing in it asks for Opus.
+          #
+          # Without `--model` the action defaults to Opus and the Task
+          # subagents inherit it, so those pins are largely not honoured.
+          # Measured over the 85 billed runs from 2026-08-22 to 2026-09-03
+          # ($343.35, ~$4.04/run, median $3.60): roughly 85% of spend was
+          # Opus, 13% Sonnet, 2% Haiku -- the inverse of the design. Opus 5
+          # is $5/$25 per MTok against Sonnet 5's $2/$10, so the same review
+          # on the intended model should land near $170/month.
+          #
+          # This pin CANNOT be verified from the PR that introduces it: the
+          # action's workflow-validation guard (see the delivery assertion
+          # below) skips any run whose copy of this file differs from the
+          # default branch's. The first real measurement is the first PR
+          # opened after merge -- read it off the console Cost page grouped
+          # by Model, not off a green check.
+          #
+          # Watch one thing there: the orphaned-agent race in constraint 1
+          # above is a harness-behaviour bet, and a different orchestrator
+          # model may take it differently. That is precisely what the
+          # delivery assertion below exists to catch -- it turns a silent
+          # non-delivery into a visible red X instead of a green check with
+          # nothing posted.
           claude_args: |
+            --model claude-sonnet-5
             --allowedTools "Task,Read,Glob,Grep,mcp__github_inline_comment__create_inline_comment,Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr list:*),Bash(gh pr comment:*),Bash(gh issue view:*),Bash(gh issue list:*),Bash(gh search:*),Bash(gh api:*),Bash(git log:*),Bash(git blame:*),Bash(git show:*),Bash(git --no-pager show:*),Bash(git diff:*),Bash(git fetch:*),Bash(python -m pytest:*),Bash(python3 -m pytest:*),Bash(python scripts/lint_plugin.py:*),Bash(python3 scripts/lint_plugin.py:*),Bash(python scripts/validate_template.py:*),Bash(python3 scripts/validate_template.py:*)"
           # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
           # or https://code.claude.com/docs/en/cli-reference for available options
+
+      # The failure mode this closes is the expensive one: full API cost,
+      # green check, nothing posted. Constraint 1 in the prompt above tries
+      # to prevent it, but a prompt is guidance and this is an assertion.
+      #
+      # It provably still happens. Census over the 82 PRs opened between
+      # 2026-08-22 and 2026-09-03: seven -- #21, #22, #30, #69, #102, #105,
+      # #155 -- carry no `claude[bot]` output of any kind, neither inline
+      # findings nor the "No issues found" summary. Every one merged
+      # unreviewed, and nobody noticed, because a review that delivers
+      # nothing looks exactly like a review that found nothing.
+      #
+      # One of the seven, #30, is explained by the workflow-validation guard
+      # handled below -- it edited this very file. The other six are not.
+      #
+      # `claude-review` is NOT one of the three contexts in the `main-ci`
+      # ruleset, so a red X here is a visible signal and not a merge block.
+      # That is the point: it costs nothing to be wrong occasionally, and
+      # the recovery is one `/review` comment.
+      #
+      # Known legitimate red X: the plugin's step-1 guard may stop without
+      # posting when it judges a PR "does not need a code review (eg.
+      # because it is an automated pull request, or is very simple and
+      # obviously ok)". That call is made inside the run and is not
+      # observable from here, so a release-only or trivial PR can fail this
+      # step having done nothing wrong. The already-reviewed half of that
+      # guard IS handled below -- a `ready_for_review` re-fire on a PR
+      # Claude has already commented on passes.
+      - name: assert the review was delivered
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SINCE: ${{ steps.started.outputs.at }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          # LOAD-BEARING carve-out, learned the hard way on this step's own
+          # first run (PR #156, run 33749882773). `claude-code-action` will
+          # not run at all when this workflow file differs from the copy on
+          # the default branch:
+          #
+          #   Skipping action due to workflow validation: [...] The workflow
+          #   file must exist and have identical content to the version on
+          #   the repository's default branch.
+          #
+          # It is a sound guard -- otherwise a PR could rewrite the
+          # reviewer's own config and walk off with ANTHROPIC_API_KEY -- but
+          # it exits with `outcome: success` after ~2s having posted nothing,
+          # which is indistinguishable from a delivered no-issues review to
+          # everything except this check. Without the carve-out, every PR
+          # that edits this file red-Xes by construction (and it explains one
+          # of the seven silent PRs above: #30 edited this file).
+          #
+          # The corollary is worth knowing when changing anything here: a
+          # change to this workflow cannot be tested from its own PR. It
+          # takes effect on the FIRST PR OPENED AFTER MERGE.
+          self=".github/workflows/claude-code-review.yml"
+          default=$(gh api "repos/$REPO" --jq .default_branch)
+          remote=$(gh api "repos/$REPO/contents/$self?ref=$default" --jq .sha 2>/dev/null || true)
+          if [ -n "${remote:-}" ] && [ "$remote" != "$(git hash-object "$self")" ]; then
+            echo "This PR edits \`$self\`, so the action skipped itself on its workflow-validation guard (no review, by design). Not asserting delivery." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          count() {  # count() <endpoint> <"new"|"prior">
+            local op='>=' ; [ "$2" = prior ] && op='<'
+            gh api "repos/$REPO/$1/$PR_NUMBER/comments?per_page=100" \
+              --jq "[.[] | select(.user.login == \"claude[bot]\" and .created_at $op \"$SINCE\")] | length"
+          }
+
+          new=$(( $(count pulls new) + $(count issues new) ))
+          prior=$(( $(count pulls prior) + $(count issues prior) ))
+
+          if [ "$new" -gt 0 ]; then
+            echo "Review delivered: $new comment(s) from this run." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          if [ "$prior" -gt 0 ]; then
+            echo "No new comments, but $prior from an earlier run — treating this as the plugin's already-reviewed stop." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          {
+            echo "## Review produced no output"
+            echo
+            echo "The action exited successfully but posted nothing to PR #$PR_NUMBER —"
+            echo "no inline findings and no \"No issues found\" summary. This PR is"
+            echo "currently **unreviewed**, and the API cost was spent regardless."
+            echo
+            echo "Re-run it by commenting \`/review\` on the PR. If the run died mid-way,"
+            echo "the step summary above (\`display_report: true\`) carries the trace."
+            echo
+            echo "If the reviewer instead judged this PR not to need a review at all"
+            echo "(release-only, or trivial), this red X is expected — merge as normal."
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit 1

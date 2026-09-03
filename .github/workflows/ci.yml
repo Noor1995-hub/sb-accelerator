@@ -68,6 +68,32 @@ jobs:
             | python3 -c "import json,sys; print(json.load(sys.stdin)['version'])" 2>/dev/null) || baseline=""
           scripts/check-plugin-version.sh ${baseline:+--baseline "$baseline"}
 
+  changelog_entry:
+    name: changelog (new entry cites this PR)
+    # PR builds only — the check's whole premise is knowing the PR's number,
+    # which is exactly what the `opened` code review cannot know. It reclaims
+    # a class the reviewer was catching at a few dollars a run, and could
+    # only ever catch one round late: eight findings in the repo's first two
+    # weeks were `(#PR)`/`(#TBD)` placeholders or the tracking issue's number
+    # standing in for the PR's (#46, #48, #109, #112, #113, #114, #123, #143).
+    #
+    # Not a required check yet — same staging as `runtime_floor` below;
+    # promote it in the ruleset once it has proven it does not false-positive.
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Merge-commit checkout: HEAD~1 is the target-branch tip, so
+          # HEAD~1..HEAD is the PR's net change — the same basis the version
+          # guard above relies on, and the script's default `--base`.
+          fetch-depth: 2
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: fail if a new Unreleased entry omits this PR's number
+        run: python scripts/check_changelog_entry.py --pr ${{ github.event.pull_request.number }}
+
   runtime_floor:
     name: runtime floor (python 3.10)
     # Cowork's VM ships Python 3.10 while the job above runs 3.13, so a 3.11+
