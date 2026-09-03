@@ -777,6 +777,77 @@ def test_sync_m365_record_accepts_a_forbidden_outcome(capsys, tmp_path):
     assert payload["result"]["filtered"]["forbidden"] == 1
 
 
+def test_sync_m365_record_accepts_a_no_access_outcome(capsys, tmp_path):
+    """A 403 whose body names Graph code 3003 means the meeting was
+    organised by someone else — settled separately from a cross-tenant
+    forbidden, per the filtered counters."""
+    root = make_vault(tmp_path)
+    listing = tmp_path / "search.json"
+    listing.write_text(json.dumps(M365_LISTING), encoding="utf-8")
+
+    outcomes = tmp_path / "outcomes.json"
+    outcomes.write_text(json.dumps([{
+        "id": "AAMkAGId1", "start_utc": "2026-08-25T14:00:00",
+        "outcome": "no-access",
+    }]), encoding="utf-8")
+    code, payload = run(capsys, [
+        "sync", "m365-record", "--vault", str(root),
+        "--outcomes", str(outcomes), "--now", "2026-08-25T19:00:00",
+    ])
+    assert code == 0
+    assert payload["result"]["recorded"] == 1
+
+    code, payload = run(capsys, [
+        "sync", "m365-triage", "--vault", str(root),
+        "--events", str(listing), "--now", "2026-09-01T20:00:00",
+    ])
+    assert code == 0
+    assert payload["result"]["fetch"] == []
+    assert payload["result"]["filtered"]["no_access"] == 1
+    assert payload["result"]["filtered"]["forbidden"] == 0
+
+
+def test_sync_m365_forget_drops_the_named_outcome_through_the_cli(
+    capsys, tmp_path
+):
+    root = make_vault(tmp_path)
+    outcomes = tmp_path / "outcomes.json"
+    outcomes.write_text(json.dumps([{
+        "id": "AAMkAGId1", "start_utc": "2026-08-25T14:00:00",
+        "outcome": "no-access",
+    }]), encoding="utf-8")
+    code, payload = run(capsys, [
+        "sync", "m365-record", "--vault", str(root),
+        "--outcomes", str(outcomes), "--now", "2026-08-25T19:00:00",
+    ])
+    assert code == 0
+
+    code, payload = run(capsys, [
+        "sync", "m365-forget", "--vault", str(root), "--outcome", "no-access",
+    ])
+    assert code == 0
+    assert payload["result"] == {"forgotten": 1, "remaining": 0}
+
+    listing = tmp_path / "search.json"
+    listing.write_text(json.dumps(M365_LISTING), encoding="utf-8")
+    code, payload = run(capsys, [
+        "sync", "m365-triage", "--vault", str(root),
+        "--events", str(listing), "--now", "2026-09-01T20:00:00",
+    ])
+    assert code == 0
+    assert [e["reason"] for e in payload["result"]["fetch"]] == ["unseen"]
+
+
+def test_sync_m365_forget_rejects_an_unknown_outcome(capsys, tmp_path):
+    root = make_vault(tmp_path)
+    code, payload = run(capsys, [
+        "sync", "m365-forget", "--vault", str(root), "--outcome", "maybe",
+    ])
+    assert code == 1
+    assert payload["ok"] is False
+    assert "outcome" in payload["error"]
+
+
 def test_sync_watermark_round_trips_through_the_cli(capsys, tmp_path):
     root = make_vault(tmp_path)
     code, payload = run(capsys, [

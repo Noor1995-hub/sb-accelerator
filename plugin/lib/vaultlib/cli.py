@@ -357,6 +357,17 @@ def build_parser() -> argparse.ArgumentParser:
     sync_record.add_argument(
         "--now", help="UTC ISO datetime override (tests); defaults to now")
 
+    sync_forget = sync_sub.add_parser(
+        "m365-forget",
+        help="drop every seen-events cache entry with one outcome, forcing "
+             "a re-check next run (the hand-editable-cache fallback, made "
+             "deterministic) — e.g. after client IT fixes a permission "
+             "behind a no-access 403")
+    _add_vault_argument(sync_forget)
+    sync_forget.add_argument(
+        "--outcome", required=True,
+        help="the outcome to drop, e.g. no-access or forbidden")
+
     sync_rederive = sync_sub.add_parser(
         "rederive-entities",
         help="recompute entities from projects on every meeting; repairs "
@@ -651,6 +662,8 @@ def _dispatch(args: argparse.Namespace) -> int:
             payload = (json.load(sys.stdin) if args.outcomes == "-"
                        else json.loads(Path(args.outcomes).read_text(encoding="utf-8")))
             return _ok(seenevents.record(root, payload, seenevents.parse_now(args.now)))
+        if args.action == "m365-forget":
+            return _ok(seenevents.forget(root, args.outcome))
         if args.action == "rederive-entities":
             return _ok(syncjob.rederive_entities(root))
         if args.action == "watermark":

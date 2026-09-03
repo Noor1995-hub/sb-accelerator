@@ -55,7 +55,7 @@ def test_fresh_cache_sends_every_event_to_fetch(tmp_path):
     assert all(e["reason"] == "unseen" for e in result["fetch"])
     assert result["filtered"] == {"written": 0, "no_transcript_final": 0,
                                   "no_transcript_waiting": 0,
-                                  "skipped": 0, "forbidden": 0}
+                                  "skipped": 0, "forbidden": 0, "no_access": 0}
 
 
 def test_triage_filters_written_and_skipped_occurrences(tmp_path):
@@ -70,7 +70,7 @@ def test_triage_filters_written_and_skipped_occurrences(tmp_path):
     assert [e["id"] for e in result["fetch"]] == ["AAMkAGId3"]
     assert result["filtered"] == {"written": 1, "no_transcript_final": 0,
                                   "no_transcript_waiting": 0,
-                                  "skipped": 1, "forbidden": 0}
+                                  "skipped": 1, "forbidden": 0, "no_access": 0}
 
 
 def test_two_occurrences_of_one_series_are_distinct(tmp_path):
@@ -220,6 +220,43 @@ def test_forbidden_is_terminal_immediately(tmp_path):
     result = seenevents.triage(root, [listing_event()], later)
     assert result["fetch"] == []
     assert result["filtered"]["forbidden"] == 1
+
+
+def test_no_access_is_terminal_immediately(tmp_path):
+    """A 403 whose body names Graph code 3003 means the vault owner attended
+    but did not organise the meeting — this connector resolves transcripts
+    through the organiser-only lookup, so the condition heals only through a
+    permission or connector change, never a per-run retry. Settled like
+    forbidden, but counted and reported separately."""
+    root = make_vault(tmp_path)
+    seenevents.record(root, [outcome(kind="no-access")], NOW)
+    soon = NOW + timedelta(minutes=1)
+    result = seenevents.triage(root, [listing_event()], soon)
+    assert result["fetch"] == []
+    assert result["filtered"]["no_access"] == 1
+    assert result["filtered"]["forbidden"] == 0
+    later = NOW + timedelta(days=7)
+    result = seenevents.triage(root, [listing_event()], later)
+    assert result["fetch"] == []
+    assert result["filtered"]["no_access"] == 1
+
+
+def test_no_access_requires_no_recording_id(tmp_path):
+    root = make_vault(tmp_path)
+    recorded = seenevents.record(root, [{
+        "id": "AAMkAGId1", "start_utc": "2026-08-28T14:00:00",
+        "outcome": "no-access",
+    }], NOW)
+    assert recorded["recorded"] == 1
+
+
+def test_no_access_prunes_at_the_same_30_day_horizon(tmp_path):
+    root = make_vault(tmp_path)
+    old = outcome(event_id="AAMkAGOld", start_utc="2026-06-01T14:00:00",
+                  kind="no-access")
+    seenevents.record(root, [old], datetime(2026, 6, 1, 18, 0, 0))
+    result = seenevents.record(root, [outcome()], NOW)
+    assert result["pruned"] == 1
 
 
 def test_forbidden_requires_no_recording_id(tmp_path):
@@ -421,3 +458,49 @@ def test_past_events_are_never_deferred(tmp_path):
     result = seenevents.triage(root, [listing_event()], NOW)
     assert result["deferred"] == []
     assert [e["reason"] for e in result["fetch"]] == ["unseen"]
+
+
+# ---------------------------------------------------------------------------
+# forget() — the hand-editable-cache fallback made deterministic. A
+# consultant forces a re-check after client IT changes a permission by
+# dropping every cached entry with one outcome, rather than editing the
+# JSON file by hand or deleting the whole cache (which would also cost a
+# re-check on every unrelated occurrence).
+
+
+def test_forget_drops_only_entries_with_the_named_outcome(tmp_path):
+    root = make_vault(tmp_path)
+    seenevents.record(root, [
+        outcome(event_id="AAMkAGId1", kind="no-access"),
+        outcome(event_id="AAMkAGId2", kind="forbidden"),
+        outcome(event_id="AAMkAGId3", kind="written"),
+    ], NOW)
+    result = seenevents.forget(root, "no-access")
+    assert result["forgotten"] == 1
+    assert result["remaining"] == 2
+    cache = json.loads(
+        (root / seenevents.CACHE_RELPATH).read_text(encoding="utf-8"))
+    outcomes_left = {v["outcome"] for v in cache["events"].values()}
+    assert outcomes_left == {"forbidden", "written"}
+
+
+def test_forget_is_a_noop_on_a_cold_cache(tmp_path):
+    root = make_vault(tmp_path)
+    result = seenevents.forget(root, "no-access")
+    assert result == {"forgotten": 0, "remaining": 0}
+
+
+def test_forget_rejects_an_outcome_not_in_the_closed_vocabulary(tmp_path):
+    root = make_vault(tmp_path)
+    with pytest.raises(seenevents.SeenEventsError, match="outcome"):
+        seenevents.forget(root, "maybe")
+
+
+def test_forgetting_no_access_lets_the_occurrence_be_fetched_again(tmp_path):
+    root = make_vault(tmp_path)
+    seenevents.record(root, [outcome(kind="no-access")], NOW)
+    still_settled = seenevents.triage(root, [listing_event()], NOW)
+    assert still_settled["fetch"] == []
+    seenevents.forget(root, "no-access")
+    after_forget = seenevents.triage(root, [listing_event()], NOW)
+    assert [e["reason"] for e in after_forget["fetch"]] == ["unseen"]

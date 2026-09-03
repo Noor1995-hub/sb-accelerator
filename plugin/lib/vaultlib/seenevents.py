@@ -33,7 +33,7 @@ from .m365 import _parse_graph_dt, M365Error
 
 CACHE_RELPATH = Path("99-workflow-config") / "sync-state" / "seen-events.json"
 CACHE_VERSION = 1
-OUTCOMES = ("written", "no-transcript", "skipped", "forbidden")
+OUTCOMES = ("written", "no-transcript", "skipped", "forbidden", "no-access")
 # Teams transcripts trail the meeting; the lab saw them minutes-to-hours
 # late. Two days is the horizon after which "no transcript" stops being
 # "not yet" and becomes the answer.
@@ -45,7 +45,14 @@ NO_TRANSCRIPT_FINAL_AFTER_HOURS = 48
 RECHECK_MIN_INTERVAL_HOURS = 6
 # "forbidden" is a cross-tenant 403 on the transcript fetch: the ACL never
 # heals, so — unlike "no-transcript" — it is terminal the moment it is
-# recorded, same as "skipped".
+# recorded, same as "skipped". "no-access" is a different 403 — Graph code
+# 3003, "does not have access to lookup meeting": the vault owner attended
+# but did not organise the meeting, and this connector resolves transcripts
+# through the organiser-only online-meeting lookup. It is terminal the same
+# way (no per-run retry — the condition heals only through a permission or
+# connector change, and a retry is a paid dispatch) but counted and reported
+# separately from "forbidden", because the majority of an exec's calendar is
+# meetings someone else organised.
 # Occurrences older than this fall out of every search window this plugin
 # runs (7 trailing days), so their entries are dead weight; dropping them
 # costs at most one re-check if a wider window ever asks again.
@@ -145,7 +152,8 @@ def triage(root: Path, events, now_utc: datetime) -> dict:
     deferred: List[dict] = []
     warnings: List[str] = []
     filtered = {"written": 0, "no_transcript_final": 0,
-                "no_transcript_waiting": 0, "skipped": 0, "forbidden": 0}
+                "no_transcript_waiting": 0, "skipped": 0, "forbidden": 0,
+                "no_access": 0}
     for event in events:
         if not isinstance(event, dict):
             raise SeenEventsError(
@@ -185,6 +193,8 @@ def triage(root: Path, events, now_utc: datetime) -> dict:
             filtered["skipped"] += 1
         elif outcome == "forbidden":
             filtered["forbidden"] += 1
+        elif outcome == "no-access":
+            filtered["no_access"] += 1
         elif outcome == "no-transcript":
             end = _occurrence_dt(event, "end") or start
             if now_utc - end >= timedelta(
@@ -270,3 +280,28 @@ def record(root: Path, outcomes, now_utc: datetime) -> dict:
     save(root, cache)
     return {"recorded": len(validated), "pruned": pruned,
             "cached_total": len(cache["events"])}
+
+
+def forget(root: Path, outcome: str) -> dict:
+    """Drop every cached entry with one outcome, so triage re-checks those
+    occurrences on the next run.
+
+    The hand-editable-cache fallback made deterministic: `no-access` and
+    `forbidden` never heal on their own, so the only way a consultant forces
+    a re-check after client IT changes a permission is to make the cache
+    forget what it settled — one outcome at a time, never the whole cache,
+    which would also cost a re-check on every unrelated occurrence.
+    """
+    if outcome not in OUTCOMES:
+        raise SeenEventsError(
+            f"outcome {outcome!r} must be one of {list(OUTCOMES)}")
+    cache = load(root)
+    forgotten = 0
+    for key in list(cache["events"]):
+        entry = cache["events"][key]
+        if isinstance(entry, dict) and entry.get("outcome") == outcome:
+            del cache["events"][key]
+            forgotten += 1
+    if forgotten:
+        save(root, cache)
+    return {"forgotten": forgotten, "remaining": len(cache["events"])}
