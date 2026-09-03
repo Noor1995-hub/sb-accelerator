@@ -259,6 +259,21 @@ def test_report_never_raises_on_malformed_provenance(tmp_path):
     assert data["provenance"]["malformed"] is True
 
 
+def test_report_never_raises_on_a_non_object_event_entry(tmp_path):
+    """Reviewer finding #1's exact reproduction: {"events": ["oops"]} used to
+    pass provenance.read()'s isinstance(events, list) check, and health's
+    `event.get("event")` on that string raised AttributeError instead of
+    folding to malformed:true."""
+    root = seeded_vault(tmp_path)
+    (root / "99-workflow-config" / "provenance.json").write_text(
+        json.dumps({"provenance-version": 1, "events": ["oops"],
+                    "template_files": {}}),
+        encoding="utf-8")
+    data = health.report(root, TODAY)
+    assert data["provenance"]["recorded"] is False
+    assert data["provenance"]["malformed"] is True
+
+
 def test_report_reads_provisioned_and_last_event_from_a_real_record(tmp_path):
     root = seeded_vault(tmp_path)
     provenance.record_event(root, "provision", at="2026-07-01T09:00:00Z",

@@ -1345,6 +1345,27 @@ def test_provenance_read_reports_malformed_as_a_structured_error(capsys, tmp_pat
     assert "unknown baseline" in payload["hint"]
 
 
+def test_provenance_read_reports_a_non_object_event_entry_as_a_structured_error(
+        capsys, tmp_path):
+    """Reviewer finding #1: this exact payload used to hit the generic
+    (KeyError, TypeError, AttributeError) backstop in main(), which mislabels
+    it as "malformed edits payload" — the wrong error and the wrong hint."""
+    root = make_vault(tmp_path)
+    (root / "structure-version").write_text("2\n", encoding="utf-8")
+    (root / "99-workflow-config" / "provenance.json").write_text(
+        json.dumps({"provenance-version": 1, "events": ["oops"],
+                    "template_files": {}}),
+        encoding="utf-8")
+
+    code, payload = run(capsys, ["provenance", "read", "--vault", str(root)])
+
+    assert code == 1
+    assert payload["ok"] is False
+    assert "malformed edits payload" not in payload["error"]
+    assert "events" in payload["error"]
+    assert "unknown baseline" in payload["hint"]
+
+
 def test_scratch_sweep_returns_the_standard_envelope(capsys, tmp_path):
     scratch_dir = tmp_path / "scratch"
     scratch_dir.mkdir()

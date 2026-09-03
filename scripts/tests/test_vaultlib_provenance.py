@@ -116,6 +116,43 @@ def test_read_returns_the_parsed_dict_when_well_formed(tmp_path):
     assert provenance.read(root) == payload
 
 
+def test_read_raises_when_an_event_is_not_an_object(tmp_path):
+    """Reviewer finding #1: {"events": ["oops"]} passed the old `isinstance(
+    events, list)` check, and the first caller to do `event.get("event")`
+    (health._provenance_block, cli.py's provenance read) raised AttributeError
+    or TypeError instead of the briefed ProvenanceError -> malformed:true."""
+    root = _versioned_vault(tmp_path)
+    (root / "99-workflow-config" / "provenance.json").write_text(
+        json.dumps({"provenance-version": 1, "events": ["oops"],
+                    "template_files": {}}),
+        encoding="utf-8")
+    with pytest.raises(provenance.ProvenanceError, match="events"):
+        provenance.read(root)
+
+
+def test_read_raises_when_a_template_files_value_is_not_a_string(tmp_path):
+    root = _versioned_vault(tmp_path)
+    (root / "99-workflow-config" / "provenance.json").write_text(
+        json.dumps({"provenance-version": 1, "events": [],
+                    "template_files": {"CLAUDE.md": 123}}),
+        encoding="utf-8")
+    with pytest.raises(provenance.ProvenanceError, match="template_files"):
+        provenance.read(root)
+
+
+def test_read_raises_when_a_template_files_key_is_not_a_string_value_pair(tmp_path):
+    """Belt-and-suspenders on the same shape: JSON object keys are always
+    strings, so this exercises a non-string *value* the way Obsidian's own
+    property panel could never produce but a hand-edit could."""
+    root = _versioned_vault(tmp_path)
+    (root / "99-workflow-config" / "provenance.json").write_text(
+        json.dumps({"provenance-version": 1, "events": [],
+                    "template_files": {"CLAUDE.md": None}}),
+        encoding="utf-8")
+    with pytest.raises(provenance.ProvenanceError, match="template_files"):
+        provenance.read(root)
+
+
 # --- record_event ---------------------------------------------------------
 
 

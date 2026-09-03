@@ -103,13 +103,19 @@ def read(root: Path) -> Optional[dict]:
             f"{PROVENANCE_RELPATH.as_posix()} provenance-version "
             f"{data.get('provenance-version')!r} is not the supported "
             f"version {PROVENANCE_VERSION} — this plugin cannot read it")
-    if not isinstance(data.get("events"), list):
+    events = data.get("events")
+    if not isinstance(events, list) or not all(
+            isinstance(event, dict) for event in events):
         raise ProvenanceError(
-            f"{PROVENANCE_RELPATH.as_posix()} is missing a valid events list")
-    if not isinstance(data.get("template_files"), dict):
+            f"{PROVENANCE_RELPATH.as_posix()} is missing a valid events "
+            "list — every entry must be an object")
+    template_files = data.get("template_files")
+    if not isinstance(template_files, dict) or not all(
+            isinstance(key, str) and isinstance(value, str)
+            for key, value in template_files.items()):
         raise ProvenanceError(
             f"{PROVENANCE_RELPATH.as_posix()} is missing a valid "
-            "template_files object")
+            "template_files object — every value must be a string digest")
     return data
 
 
