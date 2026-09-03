@@ -11,6 +11,14 @@
 #
 # One job chain, channel resolved up front in `resolve` so every later job
 # reads it from `needs.resolve.outputs` rather than re-deriving it.
+#
+# Every value that starts life as a `workflow_dispatch` input or another
+# job's output is passed into `run:` steps via `env:` and read back as a
+# shell variable ($TAG, $VERSION, ...) rather than interpolated directly
+# into the script text with `${{ }}` — a value containing shell
+# metacharacters would otherwise be executed as script, not treated as
+# data (classic Actions script-injection). This matters most for `publish`,
+# which holds DIST_PUSH_TOKEN.
 name: Release
 
 on:
@@ -53,14 +61,23 @@ jobs:
     steps:
       - name: resolve tag, channel, version, dist repo, marketplace
         id: set
+        env:
+          # github.event_name is a fixed value GitHub sets ("push" or
+          # "workflow_dispatch"), never attacker-influenced, so it's fine
+          # interpolated directly below. inputs.tag/inputs.channel are
+          # free-form dispatch input — passed through env, not interpolated
+          # into the script, so their content is just data to bash, never
+          # code, however it's spelled.
+          INPUT_TAG: ${{ inputs.tag }}
+          INPUT_CHANNEL: ${{ inputs.channel }}
         run: |
           set -euo pipefail
           if [ "${{ github.event_name }}" = "push" ]; then
             tag="${GITHUB_REF#refs/tags/}"
             channel="dryrun"
           else
-            tag="${{ inputs.tag }}"
-            channel="${{ inputs.channel }}"
+            tag="$INPUT_TAG"
+            channel="$INPUT_CHANNEL"
           fi
 
           if ! [[ "$tag" =~ ^plugin-v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
@@ -90,31 +107,61 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    outputs:
+      sha: ${{ steps.resolve_sha.outputs.sha }}
     steps:
       - uses: actions/checkout@v4
         with:
           ref: refs/tags/${{ needs.resolve.outputs.tag }}
           fetch-depth: 0
+      - name: resolve the tag's commit sha
+        id: resolve_sha
+        env:
+          TAG: ${{ needs.resolve.outputs.tag }}
+        run: |
+          set -euo pipefail
+          # GITHUB_SHA is the *triggering event's* sha, which under
+          # workflow_dispatch is main's tip at dispatch time — not this
+          # tag's commit. Every later job needs the tag's real commit, so
+          # resolve it here, once, from the tag ref actually checked out.
+          # `^{commit}` dereferences an annotated tag object to the commit
+          # it points at (cut_release.sh creates annotated tags); it is a
+          # no-op for a lightweight tag.
+          sha=$(git rev-parse "refs/tags/${TAG}^{commit}")
+          echo "tag $TAG -> commit $sha"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
       - name: install deps
         run: pip install pytest pyyaml
       - name: plugin.json version must match the tag
+        env:
+          EXPECTED_VERSION: ${{ needs.resolve.outputs.version }}
         run: |
           set -euo pipefail
           version=$(python3 -c "import json; print(json.load(open('plugin/.claude-plugin/plugin.json'))['version'])")
-          expected="${{ needs.resolve.outputs.version }}"
-          if [ "$version" != "$expected" ]; then
-            echo "::error::plugin.json version ($version) != tag version ($expected)"
+          if [ "$version" != "$EXPECTED_VERSION" ]; then
+            echo "::error::plugin.json version ($version) != tag version ($EXPECTED_VERSION)"
             exit 1
           fi
       - name: refuse a tag that is not on main (no side-branch releases)
+        env:
+          TAG: ${{ needs.resolve.outputs.tag }}
         run: |
           set -euo pipefail
-          git fetch origin main --quiet
-          if ! git merge-base --is-ancestor "${{ needs.resolve.outputs.tag }}" origin/main; then
-            echo "::error::${{ needs.resolve.outputs.tag }} is not an ancestor of origin/main"
+          # Explicit refspec (rather than a bare `git fetch origin main`) so
+          # the local ref this creates is unambiguous, and a distinct
+          # rev-parse check first so a fetch problem is reported as exactly
+          # that — not folded into the ancestor check below and misread as
+          # "not on main".
+          git fetch origin main:refs/remotes/origin/main --quiet
+          if ! git rev-parse --verify origin/main >/dev/null 2>&1; then
+            echo "::error::could not resolve origin/main after fetching it — this is a fetch problem, not a policy violation"
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor "$TAG" origin/main; then
+            echo "::error::$TAG is not an ancestor of origin/main — refusing a side-branch release"
             exit 1
           fi
       - name: skill lint + clean-room scan
@@ -140,17 +187,23 @@ jobs:
       - name: install deps
         run: pip install pyyaml
       - name: build the dist tree (runs the real clean-room linter on the output)
-        run: |
-          python scripts/build_dist.py build \
-            --channel "${{ needs.resolve.outputs.channel }}" \
-            --out dist \
-            --source-ref "${{ needs.resolve.outputs.tag }}" \
-            --source-sha "$GITHUB_SHA"
-      - name: zip the plugin package
+        env:
+          CHANNEL: ${{ needs.resolve.outputs.channel }}
+          TAG: ${{ needs.resolve.outputs.tag }}
+          SOURCE_SHA: ${{ needs.verify.outputs.sha }}
         run: |
           set -euo pipefail
-          version="${{ needs.resolve.outputs.version }}"
-          zip_name="plugin-${version}.zip"
+          python scripts/build_dist.py build \
+            --channel "$CHANNEL" \
+            --out dist \
+            --source-ref "$TAG" \
+            --source-sha "$SOURCE_SHA"
+      - name: zip the plugin package
+        env:
+          VERSION: ${{ needs.resolve.outputs.version }}
+        run: |
+          set -euo pipefail
+          zip_name="plugin-${VERSION}.zip"
           # Zip rooted at plugin/'s own contents, not at "plugin/" itself —
           # this is the archive path E (manual ZIP upload) needs: a plugin
           # package with .claude-plugin/plugin.json at the zip root.
@@ -160,6 +213,12 @@ jobs:
         with:
           name: dist-tree
           path: dist
+          # upload-artifact@v4.4+ excludes dotfiles by default, which would
+          # silently drop .claude-plugin/, .gitignore, and everything under
+          # plugin/template/.obsidian/ — exactly the tree `publish` then
+          # wipes the dist repo to make room for. Without this, a truncated
+          # artifact would look like a normal successful build.
+          include-hidden-files: true
           retention-days: 14
       - uses: actions/upload-artifact@v4
         with:
@@ -171,25 +230,52 @@ jobs:
 
   publish:
     name: publish to ${{ needs.resolve.outputs.dist_repo }}
-    needs: [resolve, build]
+    needs: [resolve, verify, build]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
         with:
           name: dist-tree
           path: dist
+      - name: sanity-check the downloaded artifact before touching the dist repo
+        run: |
+          set -euo pipefail
+          # Belt-and-suspenders alongside include-hidden-files above: an
+          # artifact that lost its hidden files must never reach `git push`.
+          # Failing here, before the dist repo is even cloned, means a
+          # truncated build can never wipe a good tree for a bad one.
+          missing=0
+          for f in \
+            dist/.claude-plugin/marketplace.json \
+            dist/.gitignore \
+            dist/README.md \
+            dist/CHANGELOG.md \
+            dist/RELEASE.json \
+            dist/plugin/.claude-plugin/plugin.json \
+            dist/plugin/template/structure-version \
+            dist/plugin/template/.obsidian/app.json; do
+            if [ ! -e "$f" ]; then
+              echo "::error::downloaded dist-tree artifact is missing $f"
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            echo "::error::dist-tree artifact looks truncated (hidden files likely dropped on upload) — refusing to touch the dist repo"
+            exit 1
+          fi
+          echo "artifact sanity check OK"
       - name: clone the dist repo
         env:
           DIST_PUSH_TOKEN: ${{ secrets.DIST_PUSH_TOKEN }}
+          OWNER: ${{ github.repository_owner }}
+          DIST_REPO: ${{ needs.resolve.outputs.dist_repo }}
         run: |
           set -euo pipefail
           if [ -z "${DIST_PUSH_TOKEN:-}" ]; then
             echo "::error::DIST_PUSH_TOKEN secret is not set — see playbooks/plugin-distribution.md for the owner setup steps (create the sb-dist repo, mint the PAT, add the secret)."
             exit 1
           fi
-          owner="${{ github.repository_owner }}"
-          repo="${{ needs.resolve.outputs.dist_repo }}"
-          git clone --quiet --depth 1 "https://x-access-token:${DIST_PUSH_TOKEN}@github.com/${owner}/${repo}.git" dist-repo
+          git clone --quiet --depth 1 "https://x-access-token:${DIST_PUSH_TOKEN}@github.com/${OWNER}/${DIST_REPO}.git" dist-repo
       - name: wipe everything but .git, then copy the built tree in
         run: |
           set -euo pipefail
@@ -197,6 +283,11 @@ jobs:
           cp -a dist/. dist-repo/
       - name: commit and push (no-op if nothing changed)
         working-directory: dist-repo
+        env:
+          VERSION: ${{ needs.resolve.outputs.version }}
+          TAG: ${{ needs.resolve.outputs.tag }}
+          CHANNEL: ${{ needs.resolve.outputs.channel }}
+          SOURCE_SHA: ${{ needs.verify.outputs.sha }}
         run: |
           set -euo pipefail
           git config user.name "sb-accelerator release bot"
@@ -209,32 +300,31 @@ jobs:
             echo "already published — dist tree is unchanged, nothing to commit"
             exit 0
           fi
-          version="${{ needs.resolve.outputs.version }}"
-          tag="${{ needs.resolve.outputs.tag }}"
-          sha7="${GITHUB_SHA:0:7}"
-          channel="${{ needs.resolve.outputs.channel }}"
-          git commit -m "re-cut: plugin ${version} (source ${tag} @ ${sha7}) — publish to ${channel}"
+          sha7="${SOURCE_SHA:0:7}"
+          git commit -m "re-cut: plugin ${VERSION} (source ${TAG} @ ${sha7}) — publish to ${CHANNEL}"
           git push origin HEAD:main
       - name: API read-back verification (never trust the local clone)
         env:
           GH_TOKEN: ${{ secrets.DIST_PUSH_TOKEN }}
+          OWNER: ${{ github.repository_owner }}
+          DIST_REPO: ${{ needs.resolve.outputs.dist_repo }}
+          EXPECTED_VERSION: ${{ needs.resolve.outputs.version }}
+          EXPECTED_MARKETPLACE: ${{ needs.resolve.outputs.marketplace }}
         run: |
           set -euo pipefail
-          repo="${{ github.repository_owner }}/${{ needs.resolve.outputs.dist_repo }}"
-          expected_version="${{ needs.resolve.outputs.version }}"
-          expected_marketplace="${{ needs.resolve.outputs.marketplace }}"
+          repo="${OWNER}/${DIST_REPO}"
 
           got_version=$(gh api "repos/${repo}/contents/plugin/.claude-plugin/plugin.json" --jq '.content' \
             | base64 -d | python3 -c "import json,sys; print(json.load(sys.stdin)['version'])")
           got_marketplace=$(gh api "repos/${repo}/contents/.claude-plugin/marketplace.json" --jq '.content' \
             | base64 -d | python3 -c "import json,sys; print(json.load(sys.stdin)['name'])")
 
-          if [ "$got_version" != "$expected_version" ]; then
-            echo "::error::read-back plugin.json version ($got_version) != expected ($expected_version)"
+          if [ "$got_version" != "$EXPECTED_VERSION" ]; then
+            echo "::error::read-back plugin.json version ($got_version) != expected ($EXPECTED_VERSION)"
             exit 1
           fi
-          if [ "$got_marketplace" != "$expected_marketplace" ]; then
-            echo "::error::read-back marketplace name ($got_marketplace) != expected ($expected_marketplace)"
+          if [ "$got_marketplace" != "$EXPECTED_MARKETPLACE" ]; then
+            echo "::error::read-back marketplace name ($got_marketplace) != expected ($EXPECTED_MARKETPLACE)"
             exit 1
           fi
           echo "read-back OK via the GitHub API: plugin $got_version, marketplace $got_marketplace"
@@ -250,25 +340,32 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: refs/tags/${{ needs.resolve.outputs.tag }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: install deps
+        run: pip install pyyaml
       - uses: actions/download-artifact@v4
         with:
           name: plugin-zip
           path: .
       - name: extract release notes from CHANGELOG.md
+        env:
+          VERSION: ${{ needs.resolve.outputs.version }}
         run: |
           set -euo pipefail
-          python scripts/build_dist.py notes --version "${{ needs.resolve.outputs.version }}" > release-notes.md
+          python scripts/build_dist.py notes --version "$VERSION" > release-notes.md
       - name: create or refresh the release (idempotent — never fails or duplicates on re-run)
         env:
           GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.resolve.outputs.tag }}
+          VERSION: ${{ needs.resolve.outputs.version }}
         run: |
           set -euo pipefail
-          tag="${{ needs.resolve.outputs.tag }}"
-          version="${{ needs.resolve.outputs.version }}"
-          if gh release view "$tag" >/dev/null 2>&1; then
-            echo "release $tag already exists — refreshing its notes"
-            gh release edit "$tag" --notes-file release-notes.md
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "release $TAG already exists — refreshing its notes"
+            gh release edit "$TAG" --notes-file release-notes.md
           else
-            gh release create "$tag" --verify-tag --notes-file release-notes.md
+            gh release create "$TAG" --verify-tag --notes-file release-notes.md
           fi
-          gh release upload "$tag" "plugin-${version}.zip" "plugin-${version}.zip.sha256" --clobber
+          gh release upload "$TAG" "plugin-${VERSION}.zip" "plugin-${VERSION}.zip.sha256" --clobber
