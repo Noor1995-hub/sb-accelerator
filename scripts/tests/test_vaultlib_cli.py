@@ -1395,7 +1395,7 @@ def test_provenance_read_folds_a_missing_plugin_version_to_unknown_drift(
 def _provisioned_vault(tmp_path):
     """A real vault copied from the shipped template, with provenance
     recorded — the same primitive /provision-vault uses — so the template
-    CLI tests exercise the actual 26 managed files rather than a synthetic
+    CLI tests exercise the actual 19 managed files rather than a synthetic
     stand-in."""
     import instantiate_vault
     target = tmp_path / "vault"

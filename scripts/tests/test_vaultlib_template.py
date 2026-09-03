@@ -53,7 +53,26 @@ def test_the_shipped_file_count_matches_the_provenance_all_34_fixture():
     # Single source of truth for the count both test files pin, per the
     # brief's "shared constant" absorb: neither hardcodes 34 independently.
     assert len(template.ALL_TIERED) == 34
-    assert len(template.MANAGED) == 26
+    # MANAGED is status()/refresh()'s surface: silent + consent-always only.
+    # SEEDED_ONCE is real classification (tier_of() still names it, and it's
+    # still part of ALL_TIERED for the every-file-classified pin above) but
+    # never appears in status() output or a refresh selection — review
+    # finding #2, round 1: it used to be inside MANAGED, so config.json and
+    # the five context/*.md permanently read needs-consent in status() and
+    # health's `managed` count was 26 instead of 19.
+    assert len(template.MANAGED) == 19
+    assert template.MANAGED.isdisjoint(template.SEEDED_ONCE)
+    assert template.MANAGED | template.SEEDED_ONCE | template.IGNORED == template.ALL_TIERED
+
+
+def test_status_never_lists_a_seeded_once_file():
+    result = template.status(REAL_TEMPLATE_ROOT.parent)  # any real, non-vault path
+    # (status() only reads MANAGED relpaths against TEMPLATE_ROOT + the
+    # vault root; a non-vault root just means every file reads "missing",
+    # which is fine for this assertion.)
+    relpaths = {entry["relpath"] for entry in result["files"]}
+    assert relpaths.isdisjoint(template.SEEDED_ONCE)
+    assert relpaths == template.MANAGED
 
 
 def test_no_shipped_template_file_contains_a_nul_byte():
@@ -279,9 +298,21 @@ def test_refresh_default_selection_is_silent_refresh_state_only(one_managed_file
 def test_refresh_needs_consent_without_it_writes_nothing(one_managed_file):
     root, _ = one_managed_file
     (root / "a.md").write_text("hand edited\n", encoding="utf-8")
+    provenance_before = (root / "99-workflow-config" / "provenance.json").read_bytes() \
+        if (root / "99-workflow-config" / "provenance.json").is_file() else None
     with pytest.raises(template.TemplateError):
         template.refresh(root, files=["a.md"], today="2026-09-03")
     assert (root / "a.md").read_text(encoding="utf-8") == "hand edited\n"
+    # Review finding #5, round 1: a refused call must be a true no-op — no
+    # snapshot dir, and provenance.json (if it existed at all) byte-for-byte
+    # unchanged, not merely logically equivalent.
+    snapdir = root / "99-workflow-config" / "snapshots"
+    assert not snapdir.is_dir() or not list(snapdir.glob("template-refresh-*"))
+    provenance_path = root / "99-workflow-config" / "provenance.json"
+    if provenance_before is None:
+        assert not provenance_path.is_file()
+    else:
+        assert provenance_path.read_bytes() == provenance_before
 
 
 def test_refresh_with_file_and_consent_writes_it(one_managed_file):
@@ -335,8 +366,10 @@ def test_refresh_writes_one_migration_log_line(one_managed_file):
     (root / "a.md").write_text("hand edited\n", encoding="utf-8")
     template.refresh(root, files=["a.md"], consent=True, today="2026-09-03")
     log_text = (root / "99-workflow-config" / "migration-log.md").read_text(encoding="utf-8")
-    assert "template-refresh" in log_text
-    assert log_text.count("\n") >= 1
+    # Review finding #6, round 1: exactly one, not "at least one newline
+    # somewhere in the file" (which the header line alone already satisfies).
+    lines = [line for line in log_text.splitlines() if "template-refresh" in line]
+    assert len(lines) == 1
 
 
 def test_refresh_writes_lf_even_when_the_vault_copy_was_crlf(one_managed_file):
@@ -347,6 +380,34 @@ def test_refresh_writes_lf_even_when_the_vault_copy_was_crlf(one_managed_file):
     raw = (root / "a.md").read_bytes()
     assert b"\r\n" not in raw
     assert raw == b"template v2\n"
+
+
+def test_refresh_writes_lf_even_when_the_shipped_template_is_crlf(tmp_path, monkeypatch):
+    """Review finding #10, round 1: the CRLF case above only covers a CRLF
+    *vault* copy. A shipped template file itself could carry CRLF (a Windows
+    checkout, a bad line-ending setting) — refresh must still write LF, and
+    a follow-up status() must read the result as "current", not
+    perpetually "refresh" because the recorded/template digests disagree
+    on line endings provenance.digest() already normalises away."""
+    fake_root = _fake_template(tmp_path, {"a.md": b"template v2\r\n"})
+    monkeypatch.setattr(template, "TEMPLATE_ROOT", fake_root)
+    monkeypatch.setattr(provenance, "TEMPLATE_ROOT", fake_root)
+    monkeypatch.setattr(template, "MANAGED_SILENT", frozenset({"a.md"}))
+    monkeypatch.setattr(template, "MANAGED_CONSENT_ALWAYS", frozenset())
+    monkeypatch.setattr(template, "SEEDED_ONCE", frozenset())
+    monkeypatch.setattr(template, "IGNORED", frozenset())
+    monkeypatch.setattr(template, "MANAGED", frozenset({"a.md"}))
+    root = _versioned_vault(tmp_path)
+    (root / "a.md").write_text("hand edited\n", encoding="utf-8")
+
+    template.refresh(root, files=["a.md"], consent=True, today="2026-09-03")
+
+    raw = (root / "a.md").read_bytes()
+    assert b"\r\n" not in raw
+    assert raw == b"template v2\n"
+    entry = _entry(template.status(root), "a.md")
+    assert entry["state"] == "current"
+    assert entry["reason"] is None
 
 
 def test_refresh_all_pending_covers_needs_consent_and_missing(tmp_path, monkeypatch):
@@ -390,6 +451,96 @@ def test_refresh_first_run_on_an_unknown_baseline_vault_needs_consent_for_everyt
     assert data["template_files"]["a.md"] == provenance.template_digest("a.md")
 
 
+# --- refresh: the three no-op/repair/real shapes (review finding #1, #3) --
+
+
+def test_refresh_with_nothing_to_do_is_a_true_no_op(one_managed_file):
+    """Shape 1: the file already matches the shipped template and the
+    baseline is already current — a plain status-check run of step 5. No
+    backup dir, no provenance event, no migration-log line."""
+    root, _ = one_managed_file
+    (root / "a.md").write_text("template v2\n", encoding="utf-8")
+    provenance.rebaseline(root, ["a.md"])
+    events_before = len(provenance.read(root)["events"])
+    log_path = root / "99-workflow-config" / "migration-log.md"
+    assert not log_path.is_file()
+
+    result = template.refresh(root, today="2026-09-03")
+
+    assert result == {
+        "refreshed": [], "restored": [], "backup": None, "baselined": [],
+        "skipped": [], "structure_version": "2",
+    }
+    assert not log_path.is_file()
+    assert len(provenance.read(root)["events"]) == events_before
+    snapdir = root / "99-workflow-config" / "snapshots"
+    assert not snapdir.is_dir() or not list(snapdir.glob("template-refresh-*"))
+
+
+def test_refresh_repairs_a_stale_baseline_with_no_backup_dir(one_managed_file):
+    """Shape 2 (review finding #3): the vault's copy already matches the
+    shipped template (V==T) but the recorded baseline doesn't (R!=T) — the
+    default (nothing named, nothing needs-consent) selection still repairs
+    it, because the repair pass runs over every managed file, not just
+    `selected`. No file is written, so no backup dir either."""
+    root, _ = one_managed_file
+    (root / "a.md").write_text("template v2\n", encoding="utf-8")
+    provenance.record_event(root, "provision", structure_version="2")
+    data = provenance.read(root)
+    data["template_files"]["a.md"] = provenance.digest(b"some older content\n")
+    (root / "99-workflow-config" / "provenance.json").write_text(
+        json.dumps(data), encoding="utf-8")
+    entry_before = _entry(template.status(root), "a.md")
+    assert entry_before["state"] == "current"
+    assert entry_before["reason"] == "baseline_stale"
+
+    result = template.refresh(root, today="2026-09-03")
+
+    assert result["refreshed"] == []
+    assert result["restored"] == []
+    assert result["backup"] is None
+    assert result["baselined"] == ["a.md"]
+    entry_after = _entry(template.status(root), "a.md")
+    assert entry_after["reason"] is None
+    # Still no snapshot dir — nothing was written, only rebaselined.
+    snapdir = root / "99-workflow-config" / "snapshots"
+    assert not snapdir.is_dir() or not list(snapdir.glob("template-refresh-*"))
+    # But the event and log line for this real repair *do* land.
+    data_after = provenance.read(root)
+    assert data_after["events"][-1]["event"] == "template-refresh"
+    log_text = (root / "99-workflow-config" / "migration-log.md").read_text(
+        encoding="utf-8")
+    assert "template-refresh" in log_text
+
+
+def test_refresh_a_real_refresh_still_backs_up_and_logs(one_managed_file):
+    """Shape 3: the ordinary case — something is actually replaced, so the
+    backup dir, the provenance event and the migration-log line all land,
+    same as before this round's fix."""
+    root, _ = one_managed_file
+    (root / "a.md").write_text("hand edited\n", encoding="utf-8")
+    result = template.refresh(root, files=["a.md"], consent=True, today="2026-09-03")
+    assert result["refreshed"] == ["a.md"]
+    assert result["backup"] is not None
+    assert (root / result["backup"] / "a.md").is_file()
+    data = provenance.read(root)
+    assert data["events"][-1]["event"] == "template-refresh"
+    log_text = (root / "99-workflow-config" / "migration-log.md").read_text(
+        encoding="utf-8")
+    assert "template-refresh" in log_text
+
+
+def test_refresh_a_pure_restore_selection_creates_no_backup_dir(one_managed_file):
+    """A selection made entirely of missing files has nothing to copy, so
+    backup stays None even though real writes (restores) happen."""
+    root, _ = one_managed_file
+    result = template.refresh(root, files=["a.md"], consent=True, today="2026-09-03")
+    assert result["restored"] == ["a.md"]
+    assert result["backup"] is None
+    snapdir = root / "99-workflow-config" / "snapshots"
+    assert not snapdir.is_dir() or not list(snapdir.glob("template-refresh-*"))
+
+
 def test_refresh_rotates_old_backup_dirs_keeping_three_newest(one_managed_file):
     root, _ = one_managed_file
     for stamp in ("2026-09-01-000000", "2026-09-02-000000",
@@ -416,9 +567,14 @@ def test_refresh_a_seeded_once_file_is_always_refused(tmp_path, monkeypatch):
     monkeypatch.setattr(template, "MANAGED", frozenset({"config.json"}))
     root = _versioned_vault(tmp_path)
     (root / "config.json").write_text('{"edited": true}\n', encoding="utf-8")
+    assert provenance.read(root) is None
     with pytest.raises(template.TemplateError):
         template.refresh(root, files=["config.json"], consent=True, today="2026-09-03")
     assert (root / "config.json").read_text(encoding="utf-8") == '{"edited": true}\n'
+    # Review finding #5, round 1: the refusal is a true no-op.
+    snapdir = root / "99-workflow-config" / "snapshots"
+    assert not snapdir.is_dir() or not list(snapdir.glob("template-refresh-*"))
+    assert provenance.read(root) is None
 
 
 def test_refresh_rejects_an_unmanaged_relpath(one_managed_file):
