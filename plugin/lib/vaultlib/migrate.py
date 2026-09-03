@@ -13,7 +13,7 @@ import re
 import zipfile
 from pathlib import Path
 
-from vaultlib import vault
+from vaultlib import provenance, vault
 
 MIGRATIONS_DIR = Path(__file__).resolve().parents[2] / "migrations"
 SNAPSHOT_DIR = Path("99-workflow-config") / "snapshots"
@@ -208,8 +208,20 @@ def run(root: Path, today: str, stamp: str = None) -> dict:
         })
         from_version = target
 
-    return {
+    result = {
         "snapshot": snapshot_name,
         "applied": applied,
         "structure_version": from_version,
     }
+    # In its own try: a provenance failure (a malformed provenance.json, an
+    # unwritable vault) must never turn a chain of migrations that already
+    # landed into a reported migration failure. Reported under "provenance"
+    # instead — "failed: ..." rather than record_provision's "failed — ...",
+    # to read as "the migration ran; recording that it did did not."
+    try:
+        provenance.record_event(root, "upgrade", structure_version=from_version,
+                                from_structure_version=str(current))
+        result["provenance"] = provenance.PROVENANCE_RELPATH.as_posix()
+    except Exception as exc:  # noqa: BLE001 — never a migration failure
+        result["provenance"] = f"failed: {exc}"
+    return result
