@@ -649,3 +649,75 @@ visible over CDP in the probe:
 with computed heights (`getBoundingClientRect().height`), not `display` of
 the innermost element, and read the inline `style` attribute of every
 ancestor in both states.
+
+## 2026-09-03 — the review plugin's model pins are prose, and the action ignores them
+
+**What went wrong.** Nothing visibly. The code review worked well for two
+weeks — 80 findings across 41 PRs, none of them a false positive — while
+costing 2.5x what it should have. Over the 85 billed runs from 2026-08-22 to
+2026-09-03 the bill was $343.35, about $4.04 a run against a $3.60 median,
+and the console Cost page grouped by Model put roughly **85% of it on Opus,
+13% on Sonnet, 2% on Haiku**.
+
+That split is the inverse of the design. The `code-review` plugin's own
+command file pins a model per step in prose: "use a Haiku agent" for steps
+1, 2, 3, 5 and 7, and "launch 5 parallel **Sonnet** agents" for step 4 — the
+five reviewers that do all the actual reading. It asks for Opus nowhere.
+
+**Why the pins lose.** They are instructions to the orchestrator, not
+configuration. With no `--model` in `claude_args`, `claude-code-action`
+starts the session on its default (Opus) and the `Task` subagents inherit
+the session model, so the prose is honoured only as far as the orchestrator
+happens to pass a `model` override — which, measurably, is not far.
+
+**How to tell.** Read the console Cost page filtered to the workflow's API
+key and grouped by Model. Do not infer it from the plugin's prose, and do not
+infer it from run count either: this repo's `claude.yml` (the `@claude`
+assistant) had 300 runs and **zero** billed, because every one was the `if:`
+guard skipping. Count `conclusion`, not runs.
+
+**The remedy.** `--model claude-sonnet-5` in `claude_args` (#156). That is
+the plugin's own intended model, not a downgrade — Opus 5 is $5/$25 per MTok
+against Sonnet 5's $2/$10.
+
+**The trap in measuring it.** Per-run cost is not on the run. Derive it by
+correlating daily console cost against billed run-minutes per day; on this
+repo that held at $0.29-$0.40/min across ten independent days, which is also
+what proves the key carries nothing but this workflow. And do not trust the
+cost figures in a ported workflow's comments: ours quoted a $1.63 median
+that came from bta-agents-portal, 2.2x optimistic for this repo, and cited
+PR numbers that do not exist here.
+
+## 2026-09-03 — a change to the review workflow cannot be tested from its own PR
+
+**What went wrong.** PR #156 added a delivery assertion to the review job.
+Its first run red-X'd, and the action step above it had "succeeded" in two
+seconds having posted nothing:
+
+> Skipping action due to workflow validation: Workflow validation failed.
+> The workflow file must exist and have identical content to the version on
+> the repository's default branch.
+
+`claude-code-action` refuses to run when its own workflow file differs from
+the copy on the default branch. The guard is sound — otherwise a PR could
+rewrite the reviewer's config and walk off with `ANTHROPIC_API_KEY` — but it
+exits with `outcome: success`, so from the outside it is indistinguishable
+from a review that ran and found nothing.
+
+**What it means.** Any edit to `claude-code-review.yml` takes effect on the
+**first PR opened after merge**, never on the PR that makes it. Plan the
+verification accordingly: assert the logic locally against real PR history
+(the comment endpoints are read-only and free), and treat the first
+post-merge run as the actual test.
+
+**It also rewrites history.** Seven of the first 82 PRs carry no `claude[bot]`
+output of any kind — full cost, green check, nothing posted, merged
+unreviewed. One of them, #30, edited this workflow file, so it was never
+going to be reviewed at all. Six, not seven, are the orphaned-agent race
+that constraint 1 of the prompt tries to pin.
+
+**How to tell.** Compare `git hash-object
+.github/workflows/claude-code-review.yml` against the contents API's `.sha`
+for the default branch — the same blob comparison the action makes. The
+delivery assertion exempts itself on that condition; without the carve-out it
+red-Xes every workflow-touching PR by construction.
