@@ -19,7 +19,7 @@
 clients:
 - client: dryrun
   owner: MB
-  plugin_version: 0.10.24
+  plugin_version: 0.10.28
   structure_version: '2'
   archetype: commercial-leader
   care_package: active
