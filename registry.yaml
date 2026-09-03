@@ -28,3 +28,14 @@ clients:
   dist_channel: dryrun
   provisioned: '2026-09-03'
   notes: internal DryRunVault
+- client: la-lorraine
+  owner: MB
+  plugin_version: 0.10.28
+  structure_version: '2'
+  archetype: commercial-leader
+  care_package: none
+  delivery_path: A
+  feedback_repo: DLW-INT-BTA-BELUX/sb-client-la-lorraine
+  dist_channel: client
+  provisioned: '2026-09-03'
+  notes: exco pilot; vault owner (exec) to be recorded at Session 1
