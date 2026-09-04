@@ -254,6 +254,42 @@ def test_update_on_unknown_slug_raises(tmp_path):
     assert only_client(registry_path)["client"] == "acme"
 
 
+def test_update_keeps_the_registered_org(tmp_path):
+    """`--org` is an entry field like any other: a deployment registered in a
+    non-default org must not have `feedback_repo` rewritten to the default
+    one by a bare --update — and the gh calls must target the same repo."""
+    registry_path = make_registry(tmp_path)
+    provision(base_opts(org="ACME-CORP"), RecordingRunner(), registry_path, TODAY)
+
+    runner = RecordingRunner(existing_repo=True)
+    result = provision(update_opts(register_only=False), runner, registry_path, LATER)
+
+    assert only_client(registry_path)["feedback_repo"] == "ACME-CORP/sb-client-acme"
+    assert result["feedback_repo"] == "ACME-CORP/sb-client-acme"
+    assert "ACME-CORP" in result["recipe"]
+    assert all("DLW-INT-BTA-BELUX" not in " ".join(c["args"]) for c in runner.calls)
+
+
+def test_update_can_still_move_a_deployment_to_another_org(tmp_path):
+    registry_path = make_registry(tmp_path)
+    provision(base_opts(org="ACME-CORP"), RecordingRunner(), registry_path, TODAY)
+
+    provision(update_opts(org="NEW-CORP"), RecordingRunner(), registry_path, LATER)
+
+    assert only_client(registry_path)["feedback_repo"] == "NEW-CORP/sb-client-acme"
+
+
+def test_update_of_a_row_with_no_feedback_repo_falls_back_to_the_default_org(tmp_path):
+    registry_path = make_registry(tmp_path)
+    registry = load_registry(registry_path)
+    registry["clients"].append({"client": "acme", "owner": "MB"})
+    save_registry(registry_path, registry)
+
+    provision(update_opts(), RecordingRunner(), registry_path, LATER)
+
+    assert only_client(registry_path)["feedback_repo"] == f"{DEFAULT_ORG}/sb-client-acme"
+
+
 # ---------------------------------------------------------------------------
 # provision(): the token clock
 # ---------------------------------------------------------------------------

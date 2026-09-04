@@ -333,10 +333,10 @@ class ProvisionOptions:
     care_package: Optional[str] = None
     notes: Optional[str] = None
     token_minted: Optional[date] = None
+    org: Optional[str] = None
     register_only: bool = False
     update: bool = False
     dry_run: bool = False
-    org: str = DEFAULT_ORG
 
 
 def provision(opts: ProvisionOptions, runner: GhRunner, registry_path: Path,
@@ -351,7 +351,6 @@ def provision(opts: ProvisionOptions, runner: GhRunner, registry_path: Path,
     unconditionally restamped from this checkout, since recording what is
     deployed is what an update is for."""
     slug = validate_slug(opts.slug)
-    feedback_repo = f"{opts.org}/sb-client-{slug}"
 
     registry = load_registry(registry_path)
     clients = registry["clients"]
@@ -367,6 +366,19 @@ def provision(opts: ProvisionOptions, runner: GhRunner, registry_path: Path,
             "deployment (check the slug for a typo first)")
 
     existing = clients[index] if index is not None else {}
+
+    # The org is sticky too, and `feedback_repo` is derived from it rather
+    # than stored independently — so a deployment registered in a non-default
+    # org keeps it through a bare --update, and the gh calls below (and the
+    # printed recipe) address that org rather than silently the default one.
+    registered_repo = str(existing.get("feedback_repo") or "")
+    if opts.org is not None:
+        org = opts.org
+    elif "/" in registered_repo:
+        org = registered_repo.split("/", 1)[0]
+    else:
+        org = DEFAULT_ORG
+    feedback_repo = f"{org}/sb-client-{slug}"
 
     owner = opts.owner if opts.owner is not None else existing.get("owner")
     if not owner:
@@ -425,7 +437,7 @@ def provision(opts: ProvisionOptions, runner: GhRunner, registry_path: Path,
         "gh_actions": gh_actions,
         "entry": entry,
         "registered": registered,
-        "recipe": token_recipe(feedback_repo, slug, opts.org),
+        "recipe": token_recipe(feedback_repo, slug, org),
     }
 
 
@@ -481,8 +493,10 @@ def parse_args(argv):
     parser.add_argument("--dry-run", action="store_true",
                          help="Print the gh calls and registry entry that would "
                               "result; never spawns gh, never touches registry.yaml")
-    parser.add_argument("--org", default=DEFAULT_ORG,
-                         help=f"GitHub org that owns client repos (default {DEFAULT_ORG})")
+    parser.add_argument("--org", default=None,
+                         help="GitHub org that owns client repos (default "
+                              f"{DEFAULT_ORG}; on --update, the org this "
+                              "deployment is already registered under)")
     parser.add_argument("--registry", type=Path, default=None,
                          help="Path to registry.yaml (default: repo root's registry.yaml)")
     return parser.parse_args(argv)
