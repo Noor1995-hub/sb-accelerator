@@ -10,7 +10,7 @@ Usage:
     provision_client.py <slug> --owner NAME [--delivery-path A..E]
         [--dist-channel client|dryrun] [--archetype commercial-leader]
         [--care-package active|lapsed|none] [--notes TEXT]
-        [--register-only] [--update] [--dry-run]
+        [--token-minted [YYYY-MM-DD]] [--register-only] [--update] [--dry-run]
         [--org DLW-INT-BTA-BELUX] [--registry registry.yaml]
 
 `--register-only` skips every `gh` call and only writes the registry entry
@@ -20,6 +20,18 @@ repo, e.g. the internal DryRunVault. `--dry-run` never spawns `gh` either
 registry.yaml — it only prints what would happen. Creating or modifying a
 real GitHub repo is a deliberate act: never run this without one of those
 two flags unless you mean to call `gh` for real.
+
+`--update` is non-destructive by design: it restamps `plugin_version` and
+`structure_version` from this checkout and leaves every other field at its
+registered value unless you pass that field's flag. So recording a release
+against an existing deployment is the whole command —
+
+    provision_client.py <slug> --update --register-only
+
+— and neither date moves. `provisioned` is the deployment's birth date,
+written once; `token_minted` is what the feedback token's 1-year expiry
+counts from, and only `--token-minted` moves it (bare flag = today). Pass it
+when you rotate the token, not when you bump a version.
 """
 from __future__ import annotations
 
@@ -63,6 +75,17 @@ DEFAULT_ORG = "DLW-INT-BTA-BELUX"
 
 SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]{1,39}$")
 
+# What a field falls back to when it is left off the command line *and* there
+# is no existing entry to inherit it from. On an --update the registered value
+# wins over every one of these — a flag you don't type changes nothing.
+CREATE_DEFAULTS = {
+    "delivery_path": "E",
+    "dist_channel": "client",
+    "archetype": "commercial-leader",
+    "care_package": "active",
+    "notes": "",
+}
+
 
 class SlugError(ValueError):
     """Slug does not match SLUG_RE."""
@@ -70,6 +93,14 @@ class SlugError(ValueError):
 
 class DuplicateClientError(Exception):
     """Slug already has a registry.yaml entry and --update was not given."""
+
+
+class UnknownClientError(Exception):
+    """--update was given for a slug with no registry.yaml entry."""
+
+
+class MissingOwnerError(ValueError):
+    """Creating an entry without an owner. Only an --update may omit it."""
 
 
 class GhCommandError(RuntimeError):
@@ -271,9 +302,12 @@ def token_recipe(feedback_repo: str, slug: str, org: str) -> str:
         f"  - Repository access: Only select repositories -> sb-client-{slug}\n"
         "  - Permissions: Issues -> Read and write\n"
         "  - Contents: leave at No access — no Contents permission on this token\n"
-        "  - Expiration: 1 year (starts the token-expiry clock on this deployment)\n"
+        "  - Expiration: 1 year, counted from this deployment's `token_minted`\n"
         "Save the token, and nothing else, at:\n"
         "  <vault>/99-workflow-config/secrets/feedback-token\n"
+        "Record the mint date (do this again on every rotation):\n"
+        f"  python scripts/provision_client.py {slug} --update --register-only "
+        "--token-minted\n"
         "Then bind the vault to this repo:\n"
         '  python3 "${CLAUDE_PLUGIN_ROOT}/lib/vaultlib/cli.py" config write --vault <vault> \\\n'
         f"    --field feedback.repo --value {feedback_repo}\n"
@@ -286,26 +320,37 @@ def token_recipe(feedback_repo: str, slug: str, org: str) -> str:
 
 @dataclass
 class ProvisionOptions:
+    """`None` means "not given on the command line" for every entry field —
+    which on an --update means "keep what's registered", and on a create
+    means CREATE_DEFAULTS. Never conflate the two: a dataclass default here
+    would silently overwrite a registered value at the next tune-up."""
+
     slug: str
-    owner: str
-    delivery_path: str = "E"
-    dist_channel: str = "client"
-    archetype: str = "commercial-leader"
-    care_package: str = "active"
-    notes: str = ""
+    owner: Optional[str] = None
+    delivery_path: Optional[str] = None
+    dist_channel: Optional[str] = None
+    archetype: Optional[str] = None
+    care_package: Optional[str] = None
+    notes: Optional[str] = None
+    token_minted: Optional[date] = None
+    org: Optional[str] = None
     register_only: bool = False
     update: bool = False
     dry_run: bool = False
-    org: str = DEFAULT_ORG
 
 
 def provision(opts: ProvisionOptions, runner: GhRunner, registry_path: Path,
               today: date) -> dict:
     """Pure orchestration: validate, (maybe) provision the repo through
-    `runner`, then update the registry entry. Raises DuplicateClientError
-    if the slug is already registered and `opts.update` is not set."""
+    `runner`, then write the registry entry. Raises DuplicateClientError if
+    the slug is already registered and `opts.update` is not set, and
+    UnknownClientError for the reverse.
+
+    On an --update every entry field left `None` in `opts` keeps its
+    registered value; only `plugin_version` and `structure_version` are
+    unconditionally restamped from this checkout, since recording what is
+    deployed is what an update is for."""
     slug = validate_slug(opts.slug)
-    feedback_repo = f"{opts.org}/sb-client-{slug}"
 
     registry = load_registry(registry_path)
     clients = registry["clients"]
@@ -314,6 +359,48 @@ def provision(opts: ProvisionOptions, runner: GhRunner, registry_path: Path,
         raise DuplicateClientError(
             f"client {slug!r} is already registered in {registry_path} — "
             "pass --update to replace its entry")
+    if index is None and opts.update:
+        raise UnknownClientError(
+            f"client {slug!r} is not registered in {registry_path} — "
+            "--update edits an existing entry; drop it to register a new "
+            "deployment (check the slug for a typo first)")
+
+    existing = clients[index] if index is not None else {}
+
+    # The org is sticky too, and `feedback_repo` is derived from it rather
+    # than stored independently — so a deployment registered in a non-default
+    # org keeps it through a bare --update, and the gh calls below (and the
+    # printed recipe) address that org rather than silently the default one.
+    registered_repo = str(existing.get("feedback_repo") or "")
+    if opts.org is not None:
+        org = opts.org
+    elif "/" in registered_repo:
+        org = registered_repo.split("/", 1)[0]
+    else:
+        org = DEFAULT_ORG
+    feedback_repo = f"{org}/sb-client-{slug}"
+
+    owner = opts.owner if opts.owner is not None else existing.get("owner")
+    if not owner:
+        raise MissingOwnerError(
+            f"--owner is required to register {slug!r} — it is only optional "
+            "on an --update, which inherits the registered owner")
+
+    def field(name: str):
+        given = getattr(opts, name)
+        if given is not None:
+            return given
+        return existing.get(name, CREATE_DEFAULTS[name])
+
+    # The deployment's birth date: written once, never moved. `token_minted`
+    # is the clock the 1-year feedback token expires against, and it only
+    # moves when --token-minted says a token was (re)minted. On a row that
+    # predates the split, the old single field is the best-known clock start.
+    provisioned = existing.get("provisioned") or today.isoformat()
+    if opts.token_minted is not None:
+        token_minted = opts.token_minted.isoformat()
+    else:
+        token_minted = existing.get("token_minted") or provisioned
 
     gh_actions: list[str] = []
     if not opts.register_only:
@@ -321,16 +408,17 @@ def provision(opts: ProvisionOptions, runner: GhRunner, registry_path: Path,
 
     entry = {
         "client": slug,
-        "owner": opts.owner,
+        "owner": owner,
         "plugin_version": _plugin_version(),
         "structure_version": _structure_version(),
-        "archetype": opts.archetype,
-        "care_package": opts.care_package,
-        "delivery_path": opts.delivery_path,
+        "archetype": field("archetype"),
+        "care_package": field("care_package"),
+        "delivery_path": field("delivery_path"),
         "feedback_repo": feedback_repo,
-        "dist_channel": opts.dist_channel,
-        "provisioned": today.isoformat(),
-        "notes": opts.notes,
+        "dist_channel": field("dist_channel"),
+        "provisioned": provisioned,
+        "token_minted": token_minted,
+        "notes": field("notes"),
     }
 
     if index is not None:
@@ -349,7 +437,7 @@ def provision(opts: ProvisionOptions, runner: GhRunner, registry_path: Path,
         "gh_actions": gh_actions,
         "entry": entry,
         "registered": registered,
-        "recipe": token_recipe(feedback_repo, slug, opts.org),
+        "recipe": token_recipe(feedback_repo, slug, org),
     }
 
 
@@ -357,31 +445,58 @@ def provision(opts: ProvisionOptions, runner: GhRunner, registry_path: Path,
 # CLI
 # ---------------------------------------------------------------------------
 
+def resolve_token_minted(raw: Optional[str], today: date) -> Optional[date]:
+    """`--token-minted` as a date. `None` (flag absent) means "don't move the
+    token clock"; a bare flag arrives as "today"."""
+    if raw is None:
+        return None
+    if raw == "today":
+        return today
+    return date.fromisoformat(raw)
+
+
 def parse_args(argv):
     parser = argparse.ArgumentParser(
         description="Create/reuse a client's sb-client-<slug> feedback repo, "
                      "register the deployment, and print the token recipe.")
     parser.add_argument("slug", type=_slug_type,
                          help="Client slug, e.g. 'acme' -> sb-client-acme")
-    parser.add_argument("--owner", required=True,
-                         help="Consultant owning this deployment (name or initials)")
-    parser.add_argument("--delivery-path", choices=list("ABCDE"), default="E",
+    # Every entry field defaults to None, not to its value: on an --update a
+    # flag you leave off keeps whatever is registered. The create-time
+    # fallbacks live in CREATE_DEFAULTS.
+    parser.add_argument("--owner",
+                         help="Consultant owning this deployment (name or initials). "
+                              "Required to register a new deployment; on --update it "
+                              "defaults to the registered owner")
+    parser.add_argument("--delivery-path", choices=list("ABCDE"), default=None,
                          help="Which playbooks/plugin-distribution.md path this "
                               "deployment uses (A-E); default E (manual ZIP upload)")
-    parser.add_argument("--dist-channel", choices=["client", "dryrun"], default="client")
-    parser.add_argument("--archetype", default="commercial-leader")
-    parser.add_argument("--care-package", choices=["active", "lapsed", "none"], default="active")
-    parser.add_argument("--notes", default="")
+    parser.add_argument("--dist-channel", choices=["client", "dryrun"], default=None)
+    parser.add_argument("--archetype", default=None,
+                         help="Default commercial-leader")
+    parser.add_argument("--care-package", choices=["active", "lapsed", "none"],
+                         default=None, help="Default active")
+    parser.add_argument("--notes", default=None)
+    parser.add_argument("--token-minted", nargs="?", const="today", default=None,
+                         metavar="YYYY-MM-DD",
+                         help="Record that the feedback token was minted on this "
+                              "date (bare flag = today) — the 1-year expiry counts "
+                              "from it. Pass this when you rotate the token; leave "
+                              "it off and the date does not move")
     parser.add_argument("--register-only", action="store_true",
                          help="Skip every gh call — only write the registry.yaml entry")
     parser.add_argument("--update", action="store_true",
-                         help="Replace an existing entry for this slug instead of "
-                              "refusing it as a duplicate")
+                         help="Edit this slug's existing entry instead of refusing "
+                              "it as a duplicate. Restamps plugin_version and "
+                              "structure_version; every other field keeps its "
+                              "registered value unless you pass its flag")
     parser.add_argument("--dry-run", action="store_true",
                          help="Print the gh calls and registry entry that would "
                               "result; never spawns gh, never touches registry.yaml")
-    parser.add_argument("--org", default=DEFAULT_ORG,
-                         help=f"GitHub org that owns client repos (default {DEFAULT_ORG})")
+    parser.add_argument("--org", default=None,
+                         help="GitHub org that owns client repos (default "
+                              f"{DEFAULT_ORG}; on --update, the org this "
+                              "deployment is already registered under)")
     parser.add_argument("--registry", type=Path, default=None,
                          help="Path to registry.yaml (default: repo root's registry.yaml)")
     return parser.parse_args(argv)
@@ -390,6 +505,14 @@ def parse_args(argv):
 def main(argv=None) -> int:
     args = parse_args(argv)
     registry_path = args.registry if args.registry is not None else (REPO_ROOT / "registry.yaml")
+    today = date.today()
+
+    try:
+        token_minted = resolve_token_minted(args.token_minted, today)
+    except ValueError:
+        print(f"error: --token-minted {args.token_minted!r} is not an ISO date "
+              "(YYYY-MM-DD); pass the flag bare for today", file=sys.stderr)
+        return 1
 
     opts = ProvisionOptions(
         slug=args.slug,
@@ -399,6 +522,7 @@ def main(argv=None) -> int:
         archetype=args.archetype,
         care_package=args.care_package,
         notes=args.notes,
+        token_minted=token_minted,
         register_only=args.register_only,
         update=args.update,
         dry_run=args.dry_run,
@@ -408,8 +532,8 @@ def main(argv=None) -> int:
     runner: GhRunner = RecordingRunner(echo=True) if opts.dry_run else SubprocessRunner()
 
     try:
-        result = provision(opts, runner, registry_path, date.today())
-    except DuplicateClientError as exc:
+        result = provision(opts, runner, registry_path, today)
+    except (DuplicateClientError, UnknownClientError, MissingOwnerError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
     except (GhCommandError, SlugError) as exc:

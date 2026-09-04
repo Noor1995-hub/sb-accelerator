@@ -12,21 +12,27 @@ from pathlib import Path
 import pytest
 import yaml
 
+import provision_client
 from provision_client import (
     DEFAULT_ORG,
     DuplicateClientError,
     GhCommandError,
+    MissingOwnerError,
     ProvisionOptions,
     RecordingRunner,
     SlugError,
+    UnknownClientError,
     load_registry,
     provision,
+    resolve_token_minted,
     save_registry,
     token_recipe,
     validate_slug,
 )
 
 TODAY = date(2026, 9, 3)
+# A later tune-up: far enough from TODAY that a re-stamped date is unmistakable.
+LATER = date(2027, 3, 14)
 
 
 def make_registry(tmp_path: Path, header: str = None) -> Path:
@@ -63,6 +69,22 @@ def base_opts(slug="acme", **overrides) -> ProvisionOptions:
     )
     fields.update(overrides)
     return ProvisionOptions(**fields)
+
+
+def update_opts(slug="acme", **overrides) -> ProvisionOptions:
+    """What a consultant actually types at a tune-up: the slug, `--update`,
+    and only the fields that changed. Every other field stays `None`, so a
+    test built on this helper fails the moment an unstated field is
+    overwritten with a default instead of the registered value."""
+    fields = dict(slug=slug, update=True, register_only=True)
+    fields.update(overrides)
+    return ProvisionOptions(**fields)
+
+
+def only_client(registry_path: Path) -> dict:
+    registry = yaml.safe_load(registry_path.read_text(encoding="utf-8"))
+    assert len(registry["clients"]) == 1
+    return registry["clients"][0]
 
 
 # ---------------------------------------------------------------------------
@@ -122,7 +144,7 @@ def test_provision_appends_new_client_with_exact_key_set(tmp_path):
     assert set(entry.keys()) == {
         "client", "owner", "plugin_version", "structure_version", "archetype",
         "care_package", "delivery_path", "feedback_repo", "dist_channel",
-        "provisioned", "notes",
+        "provisioned", "token_minted", "notes",
     }
     assert entry["client"] == "acme"
     assert entry["owner"] == "MB"
@@ -130,7 +152,30 @@ def test_provision_appends_new_client_with_exact_key_set(tmp_path):
     assert entry["delivery_path"] == "E"
     assert entry["dist_channel"] == "client"
     assert entry["provisioned"] == "2026-09-03"
+    # Setup day is token day: the two dates only diverge at a later rotation.
+    assert entry["token_minted"] == "2026-09-03"
     assert result["feedback_repo"] == f"{DEFAULT_ORG}/sb-client-acme"
+
+
+def test_create_uses_defaults_for_flags_left_off(tmp_path):
+    registry_path = make_registry(tmp_path)
+    provision(ProvisionOptions(slug="acme", owner="MB", register_only=True),
+              RecordingRunner(), registry_path, TODAY)
+
+    entry = only_client(registry_path)
+    assert entry["delivery_path"] == "E"
+    assert entry["dist_channel"] == "client"
+    assert entry["archetype"] == "commercial-leader"
+    assert entry["care_package"] == "active"
+    assert entry["notes"] == ""
+
+
+def test_create_without_owner_raises(tmp_path):
+    registry_path = make_registry(tmp_path)
+
+    with pytest.raises(MissingOwnerError):
+        provision(ProvisionOptions(slug="acme", register_only=True),
+                  RecordingRunner(), registry_path, TODAY)
 
 
 def test_duplicate_slug_refused_without_update(tmp_path):
@@ -142,17 +187,181 @@ def test_duplicate_slug_refused_without_update(tmp_path):
         provision(base_opts(), RecordingRunner(), registry_path, TODAY)
 
 
-def test_update_replaces_existing_entry(tmp_path):
+def test_update_applies_the_fields_given(tmp_path):
     registry_path = make_registry(tmp_path)
     provision(base_opts(notes="first"), RecordingRunner(), registry_path, TODAY)
 
-    provision(base_opts(notes="second", update=True), RecordingRunner(), registry_path,
-              date(2026, 9, 10))
+    provision(update_opts(notes="second", care_package="lapsed"),
+              RecordingRunner(), registry_path, LATER)
 
-    registry = yaml.safe_load(registry_path.read_text(encoding="utf-8"))
-    assert len(registry["clients"]) == 1
-    assert registry["clients"][0]["notes"] == "second"
-    assert registry["clients"][0]["provisioned"] == "2026-09-10"
+    entry = only_client(registry_path)
+    assert entry["notes"] == "second"
+    assert entry["care_package"] == "lapsed"
+
+
+def test_update_never_moves_the_provisioned_date(tmp_path):
+    """The deployment's birth date. Recording a version bump at a later
+    tune-up must not claim the client was stood up that day."""
+    registry_path = make_registry(tmp_path)
+    provision(base_opts(), RecordingRunner(), registry_path, TODAY)
+
+    provision(update_opts(), RecordingRunner(), registry_path, LATER)
+
+    assert only_client(registry_path)["provisioned"] == "2026-09-03"
+
+
+def test_update_keeps_fields_not_given_on_the_command_line(tmp_path):
+    registry_path = make_registry(tmp_path)
+    provision(base_opts(owner="AB", delivery_path="A", dist_channel="dryrun",
+                        archetype="ea", care_package="lapsed", notes="exco pilot"),
+              RecordingRunner(), registry_path, TODAY)
+
+    provision(update_opts(), RecordingRunner(), registry_path, LATER)
+
+    entry = only_client(registry_path)
+    assert entry["owner"] == "AB"
+    assert entry["delivery_path"] == "A"
+    assert entry["dist_channel"] == "dryrun"
+    assert entry["archetype"] == "ea"
+    assert entry["care_package"] == "lapsed"
+    assert entry["notes"] == "exco pilot"
+
+
+def test_update_refreshes_the_version_stamps(tmp_path, monkeypatch):
+    """The one thing a bare `--update` is *for*: restamping what's deployed
+    from the plugin manifest in this checkout."""
+    registry_path = make_registry(tmp_path)
+    provision(base_opts(), RecordingRunner(), registry_path, TODAY)
+
+    monkeypatch.setattr(provision_client, "_plugin_version", lambda: "9.9.9")
+    monkeypatch.setattr(provision_client, "_structure_version", lambda: "7")
+    provision(update_opts(), RecordingRunner(), registry_path, LATER)
+
+    entry = only_client(registry_path)
+    assert entry["plugin_version"] == "9.9.9"
+    assert entry["structure_version"] == "7"
+
+
+def test_update_on_unknown_slug_raises(tmp_path):
+    """--update is for an entry that exists; a typo'd slug must not quietly
+    create a half-empty row now that --owner is optional."""
+    registry_path = make_registry(tmp_path)
+    provision(base_opts(), RecordingRunner(), registry_path, TODAY)
+
+    with pytest.raises(UnknownClientError):
+        provision(update_opts(slug="acmee"), RecordingRunner(), registry_path, LATER)
+
+    assert only_client(registry_path)["client"] == "acme"
+
+
+def test_update_keeps_the_registered_org(tmp_path):
+    """`--org` is an entry field like any other: a deployment registered in a
+    non-default org must not have `feedback_repo` rewritten to the default
+    one by a bare --update — and the gh calls must target the same repo."""
+    registry_path = make_registry(tmp_path)
+    provision(base_opts(org="ACME-CORP"), RecordingRunner(), registry_path, TODAY)
+
+    runner = RecordingRunner(existing_repo=True)
+    result = provision(update_opts(register_only=False), runner, registry_path, LATER)
+
+    assert only_client(registry_path)["feedback_repo"] == "ACME-CORP/sb-client-acme"
+    assert result["feedback_repo"] == "ACME-CORP/sb-client-acme"
+    assert "ACME-CORP" in result["recipe"]
+    assert all("DLW-INT-BTA-BELUX" not in " ".join(c["args"]) for c in runner.calls)
+
+
+def test_update_can_still_move_a_deployment_to_another_org(tmp_path):
+    registry_path = make_registry(tmp_path)
+    provision(base_opts(org="ACME-CORP"), RecordingRunner(), registry_path, TODAY)
+
+    provision(update_opts(org="NEW-CORP"), RecordingRunner(), registry_path, LATER)
+
+    assert only_client(registry_path)["feedback_repo"] == "NEW-CORP/sb-client-acme"
+
+
+def test_update_of_a_row_with_no_feedback_repo_falls_back_to_the_default_org(tmp_path):
+    registry_path = make_registry(tmp_path)
+    registry = load_registry(registry_path)
+    registry["clients"].append({"client": "acme", "owner": "MB"})
+    save_registry(registry_path, registry)
+
+    provision(update_opts(), RecordingRunner(), registry_path, LATER)
+
+    assert only_client(registry_path)["feedback_repo"] == f"{DEFAULT_ORG}/sb-client-acme"
+
+
+# ---------------------------------------------------------------------------
+# provision(): the token clock
+# ---------------------------------------------------------------------------
+
+def test_token_minted_flag_moves_only_the_token_date(tmp_path):
+    registry_path = make_registry(tmp_path)
+    provision(base_opts(), RecordingRunner(), registry_path, TODAY)
+
+    provision(update_opts(token_minted=LATER), RecordingRunner(), registry_path, LATER)
+
+    entry = only_client(registry_path)
+    assert entry["token_minted"] == "2027-03-14"
+    assert entry["provisioned"] == "2026-09-03"
+
+
+def test_update_leaves_the_token_date_alone_by_default(tmp_path):
+    registry_path = make_registry(tmp_path)
+    provision(base_opts(), RecordingRunner(), registry_path, TODAY)
+
+    provision(update_opts(), RecordingRunner(), registry_path, LATER)
+
+    assert only_client(registry_path)["token_minted"] == "2026-09-03"
+
+
+def test_update_backfills_token_minted_on_a_row_that_predates_the_field(tmp_path):
+    """A row written before `token_minted` existed. Its best-known clock
+    start is the provisioning date, which is what the old single field meant."""
+    registry_path = make_registry(tmp_path)
+    registry = load_registry(registry_path)
+    registry["clients"].append({
+        "client": "acme", "owner": "MB", "plugin_version": "0.1.0",
+        "structure_version": "2", "archetype": "commercial-leader",
+        "care_package": "active", "delivery_path": "E",
+        "feedback_repo": f"{DEFAULT_ORG}/sb-client-acme",
+        "dist_channel": "client", "provisioned": "2026-01-05", "notes": "",
+    })
+    save_registry(registry_path, registry)
+
+    provision(update_opts(), RecordingRunner(), registry_path, LATER)
+
+    entry = only_client(registry_path)
+    assert entry["token_minted"] == "2026-01-05"
+    assert entry["provisioned"] == "2026-01-05"
+
+
+def test_update_of_a_row_missing_provisioned_stamps_today(tmp_path):
+    """Defensive: a hand-edited row with no birth date at all gets one
+    rather than serialising `None` into the registry."""
+    registry_path = make_registry(tmp_path)
+    registry = load_registry(registry_path)
+    registry["clients"].append({"client": "acme", "owner": "MB"})
+    save_registry(registry_path, registry)
+
+    provision(update_opts(), RecordingRunner(), registry_path, LATER)
+
+    entry = only_client(registry_path)
+    assert entry["provisioned"] == "2027-03-14"
+    assert entry["token_minted"] == "2027-03-14"
+
+
+@pytest.mark.parametrize("raw,expected", [
+    (None, None),
+    ("today", LATER),
+    ("2026-12-01", date(2026, 12, 1)),
+])
+def test_resolve_token_minted(raw, expected):
+    assert resolve_token_minted(raw, LATER) == expected
+
+
+def test_resolve_token_minted_rejects_a_malformed_date():
+    with pytest.raises(ValueError):
+        resolve_token_minted("14/03/2027", LATER)
 
 
 # ---------------------------------------------------------------------------

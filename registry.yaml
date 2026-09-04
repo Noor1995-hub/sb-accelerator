@@ -2,6 +2,10 @@
 # v1 is this file; moves to Airtable when client count justifies it (design doc, Phase 2).
 # Written by scripts/provision_client.py (see playbooks/provisioning-runbook.md
 # §6-7) — run it with --update at a tune-up rather than hand-editing an entry.
+# --update only touches what you name: it restamps plugin_version and
+# structure_version from the checkout it runs in and leaves every other field
+# alone, so recording a release is `provision_client.py <slug> --update
+# --register-only` with no other flags.
 # Entry shape:
 #   - client: <client-slug>
 #     owner: <name or initials>
@@ -12,7 +16,12 @@
 #     delivery_path: A | B | C | D | E   (playbooks/plugin-distribution.md path)
 #     feedback_repo: <org>/sb-client-<client-slug>
 #     dist_channel: client | dryrun
-#     provisioned: <ISO date>            (starts the token-expiry clock)
+#     provisioned: <ISO date>            (the day this deployment was stood
+#                                         up — written once, never moves)
+#     token_minted: <ISO date>           (the day the feedback token was last
+#                                         minted; its 1-year expiry counts
+#                                         from here. Moved only by
+#                                         --token-minted, at every rotation)
 #     notes: ""
 # No `machines` field — two machines per deployment is the runbook invariant;
 # note any deviation in `notes` instead.
@@ -27,6 +36,7 @@ clients:
   feedback_repo: DLW-INT-BTA-BELUX/sb-client-dryrun
   dist_channel: dryrun
   provisioned: '2026-09-03'
+  token_minted: '2026-09-03'
   notes: internal DryRunVault
 - client: la-lorraine
   owner: MB
@@ -38,4 +48,5 @@ clients:
   feedback_repo: DLW-INT-BTA-BELUX/sb-client-la-lorraine
   dist_channel: client
   provisioned: '2026-09-03'
+  token_minted: '2026-09-03'
   notes: exco pilot; vault owner (exec) to be recorded at Session 1

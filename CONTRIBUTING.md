@@ -57,10 +57,9 @@ Examples:
 - `fix: lint skill names against directory names`
 - `docs: explain the structure-version marker`
 
-**Every commit message MUST end with this exact trailer line:**
-```
-Co-Authored-By: Claude <noreply@anthropic.com>
-```
+No trailer is required. Most of the history carries a `Co-Authored-By:
+Claude` line and that stands as written, but nothing enforces it and nothing
+depends on it.
 
 ## Before you open a PR
 
