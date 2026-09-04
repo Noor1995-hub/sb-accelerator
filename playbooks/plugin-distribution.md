@@ -261,7 +261,15 @@ one-line change per client, rather than a per-machine visit:
    `channel=client` dispatch in step 4 adds no new asset), verify the
    checksum, upload it by hand.
 6. Verify the deployed version in the client's Customize → Plugins view, and
-   record it in `registry.yaml` (`plugin_version`).
+   record it in `registry.yaml` (`plugin_version`) from a checkout at the tag
+   you just shipped:
+
+   ```bash
+   python scripts/provision_client.py <slug> --update --register-only
+   ```
+
+   That restamps both version numbers and touches nothing else — no flags to
+   restate, no dates moved.
 
 Rollback is `gh workflow run release.yml -f tag=<previous-tag> -f
 channel=client` — the same dispatch with the prior tag, which rebuilds and

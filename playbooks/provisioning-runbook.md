@@ -208,8 +208,16 @@ the assistant's machine the same way everything else does, over Sync.
    would turn the same leak into read or write access to a repo's actual
    files, which is a materially worse failure than the one this channel is
    meant to allow. Set the expiration to 1 year — that is what
-   `registry.yaml`'s `provisioned` date (written by the script) measures
-   against.
+   `registry.yaml`'s `token_minted` date measures against. Record the mint
+   date the same day, which is the last line of the recipe the script prints:
+
+   ```bash
+   python scripts/provision_client.py <slug> --update --register-only --token-minted
+   ```
+
+   (`--token-minted` bare means today; pass a date — `--token-minted
+   2027-03-14` — if you are recording it after the fact.) `provisioned` is a
+   different date and stays put: it is the day the deployment was stood up.
 3. Place the token, and nothing else, at
    `99-workflow-config/secrets/feedback-token` in the instantiated vault — one
    line, no surrounding commentary.
@@ -234,9 +242,11 @@ the assistant's machine the same way everything else does, over Sync.
 
 5. Rotate the token at any tune-up — swap the file's contents; the repo name
    in `config.json` doesn't change, so there is nothing to re-run `config
-   write` for. Re-run `provision_client.py <slug> --update ...` at the same
-   tune-up if `owner`, `care_package`, `delivery_path`, or `dist_channel`
-   changed — see step 7.
+   write` for. Do re-run the script with `--token-minted` when you rotate,
+   though: nothing else restarts the expiry clock, and a `token_minted` left
+   at last year's date is how a channel goes quietly dead. Same command as
+   step 2 above. Add `--owner`, `--care-package`, `--delivery-path` or
+   `--dist-channel` to the same run if any of those changed — see step 7.
 6. Vault snapshots (`99-workflow-config/snapshots/`) are full-vault zips, so
    they include the token file too — treat a snapshot copied off the machine
    as carrying a live credential, and rotate the token if one ever leaves the
@@ -256,6 +266,20 @@ client, with the header comment untouched above it. If anything about the
 deployment changes at a tune-up — owner, care package, delivery path, dist
 channel — re-run the script with `--update` rather than hand-editing the
 YAML.
+
+`--update` only touches what you name. It restamps `plugin_version` and
+`structure_version` from the checkout it runs in and leaves every other
+field at its registered value, so recording a release against a deployment
+that is otherwise unchanged needs no flags at all:
+
+```bash
+python scripts/provision_client.py <slug> --update --register-only
+```
+
+Both dates survive that (see step 6 for which is which), and you don't have
+to restate `--owner` or any field you aren't changing. Run it from a
+checkout at the version you actually shipped — that is where the two version
+numbers are read from.
 
 ## 8. The standing evening run — know what Session 1 will do
 
