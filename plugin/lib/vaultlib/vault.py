@@ -49,10 +49,14 @@ def resolve(raw: str) -> Path:
     root = Path(os.path.expanduser(str(raw))).resolve()
     if not root.is_dir():
         raise VaultError(
-            f"vault path does not exist or is not a directory: {root} — if "
-            "this is a Cowork cloud session, the vault folder is not "
-            "mounted — open the vault in a local session (Settings → "
-            "Cowork → Run new tasks in the cloud: off)")
+            f"vault path does not exist or is not a directory: {root} — in "
+            "Cowork this is usually a mount, not a typo, and there are two "
+            "causes: the folder was created after the session started, so it "
+            "was never mounted (restart the session with the folder "
+            "connected — re-picking it in the folder picker does not remount "
+            "it), or this is a cloud session, where the vault is not a "
+            "filesystem at all (Settings → Cowork → Run new tasks in the "
+            "cloud: off)")
     if not (root / _MARKER).is_dir() or not any(
         (root / folder).is_dir() for folder in _CONTENT_FOLDERS
     ):

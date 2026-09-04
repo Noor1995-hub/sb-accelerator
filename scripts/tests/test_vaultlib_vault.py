@@ -41,12 +41,25 @@ def test_resolve_missing_directory_hints_at_cowork_cloud_sessions(tmp_path):
     """A missing path is exactly what a Cowork cloud session sees when the
     vault folder is never mounted — the hint names the cause so a session
     does not burn a day treating it as a typo."""
-    with pytest.raises(vault.VaultError, match="Cowork cloud session"):
+    with pytest.raises(vault.VaultError, match="cloud session"):
         vault.resolve(str(tmp_path / "nope"))
     with pytest.raises(
         vault.VaultError,
         match=r"Settings → Cowork → Run new tasks in the cloud: off",
     ):
+        vault.resolve(str(tmp_path / "nope"))
+
+
+def test_resolve_missing_directory_also_hints_at_a_late_created_folder(tmp_path):
+    """The other Cowork mount cause, and the one a *local* session hits: the
+    folder was created after the session booted, so it was never mounted and
+    no amount of re-picking it in the folder picker helps. Naming only the
+    cloud-session cause sent a consultant to a toggle that was already off."""
+    with pytest.raises(
+        vault.VaultError, match="created after the session started"
+    ):
+        vault.resolve(str(tmp_path / "nope"))
+    with pytest.raises(vault.VaultError, match="restart"):
         vault.resolve(str(tmp_path / "nope"))
 
 

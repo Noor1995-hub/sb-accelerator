@@ -15,6 +15,9 @@ delivers them.
 
 ## Unreleased
 
+- **`/provision-vault` can be re-run to finish the feedback channel later.** The channel's token often arrives days after setup, and the skill previously could not be re-run at all — its first step refuses a non-empty target — so binding it afterwards meant a consultant reconstructing two raw commands from memory. Run it again on a vault that already exists and it now recognises it, says which plugin version provisioned it, skips instantiation entirely, and offers only the feedback-channel step. (Refreshing an already-provisioned vault's *files* remains `/upgrade-vault`'s job.) (#162, #169)
+- **The feedback-channel question is no longer asked before the vault exists.** It asks whether the token file has been placed inside the vault — impossible to answer honestly on a surface that renders the opening questions as a single form, which silently forced "skip" for the whole run. It is now asked after the vault is created, as a second question (#162, #169)
+- A vault path the tooling cannot reach now explains both Cowork causes: a folder created after the session started (never mounted — restart with it connected; re-picking it does not remount), or a cloud session where the vault is not a filesystem. The message previously named only the second, sending a consultant to a setting that was already off (#162, #169)
 - `/provision-vault` now states the Cowork precondition up front: **create the vault folder on the machine before starting the Cowork session.** Cowork's shell only sees folders that were connected when the session booted, so a folder created mid-session stays invisible to provisioning even after you pick it in the folder picker — the session has to be restarted. Claude Code is unaffected (#168)
 
 ## v0.10.30 — 2026-09-03

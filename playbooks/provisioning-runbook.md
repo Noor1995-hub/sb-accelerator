@@ -219,11 +219,18 @@ the assistant's machine the same way everything else does, over Sync.
 
    ```bash
    python3 "${CLAUDE_PLUGIN_ROOT}/lib/vaultlib/cli.py" config write --vault <vault> \
-     --field feedback.repo --value <owner>/sb-client-<slug>
+     --field feedback.repo --value <org>/sb-client-<slug>
    ```
 
    The script's recipe prints this same command, already filled in — run it
    directly, the same way, if you are not going through the skill.
+
+   **The token usually arrives after setup day, and that is fine.** Skip
+   step 4 on the day, then re-run `/provision-vault` against the same vault
+   whenever the token is in place: it detects an already-provisioned vault,
+   skips instantiation, and offers step 4 alone. You are not meant to
+   hand-run the `config write` above because the skill "cannot" be re-run —
+   it can.
 
 5. Rotate the token at any tune-up — swap the file's contents; the repo name
    in `config.json` doesn't change, so there is nothing to re-run `config

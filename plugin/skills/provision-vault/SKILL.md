@@ -77,6 +77,58 @@ assistant's) before running step 1 — step 4 only ever happens once, and
 running it a second time on the second machine would mint a second, unused
 binding intent.
 
+**Those two are the only opening questions.** Step 4's question — whether
+to bind the feedback channel now — is asked *after* step 1 reports
+`ok: true`, never batched with them. The reason is ordering, not
+tidiness: step 4 asks whether the token file has been placed inside
+`99-workflow-config/secrets/`, and until step 1 runs, that folder does not
+exist, so the only honest answer to a question asked up front is "skip".
+On a surface that renders a batch of questions as one form — Cowork does —
+asking them together silently forecloses step 4 for the whole run. Two
+forms in sequence is the correct shape here.
+
+## Step 0 — Is this vault already provisioned?
+
+Ask the target itself before proposing to build a vault in it:
+
+```bash
+VAULTLIB="${CLAUDE_PLUGIN_ROOT}/lib/vaultlib/cli.py"
+python3 "$VAULTLIB" provenance read --vault "$VAULT"
+```
+
+Four outcomes, and only one of them stops the run:
+
+- **`ok: false`, error "does not look like a vault"** — the target exists
+  but holds no vault. The normal fresh start. Continue to step 1.
+- **`ok: false`, error "does not exist or is not a directory"** — the
+  target is not there. What that means depends on the surface, and the
+  error text cannot tell them apart, so decide by where you are running:
+  - **Claude Code** — ordinary. Step 1 creates the target, including
+    missing parents. Continue to step 1.
+  - **Cowork** — this is the mount question above, because the folder was
+    supposed to exist before the session started. Surface the error and
+    stop; do not create the directory to get past it.
+- **`ok: true` with `result.present: false`** — a vault is there, but it
+  carries no provenance record: provisioned before provenance existed, or
+  a partial run. Treat it as provisioned — step 1 would refuse it anyway —
+  and offer step 4 only, saying the version is unrecorded rather than
+  guessing one.
+- **`ok: true` with `result.present: true`** — this vault was provisioned
+  already. **Do not run steps 1–3.** Say so in one line, naming the plugin
+  version from the last `provision` event in `result.provenance.events`,
+  and add `result.plugin_drift` when it is not `"matches"` (`behind` = a
+  tune-up is pending, `ahead` = this machine's plugin cache is stale).
+  Ignore `result.provenance.template_files`; it is a digest map for
+  `/upgrade-vault`, not something to report.
+
+This is the sanctioned re-entry path, and step 4 is the thing it exists
+for: the channel is bound once per client, the token often arrives after
+setup day, and step 1's refusal of a non-empty target would otherwise make
+`/provision-vault` un-re-runnable — leaving the consultant to reconstruct
+the two raw moves from memory. Refreshing an already-provisioned vault's
+*files* is a different job with its own skill: `/upgrade-vault`. Never
+reach for step 1 to do it.
+
 ## Step 1 — Instantiate the vault
 
 ```bash
@@ -198,10 +250,16 @@ worked:
 
 ## Step 4 — Feedback channel (optional, skippable)
 
+Ask this step's question **here**, after step 1 succeeded — not with the
+opening questions (see Usage). Reached from step 0 on an
+already-provisioned vault, this is the whole run.
+
 This step is **one-time per client, not per machine**, and can be skipped
 entirely for now — a vault with no feedback channel configured degrades
 gracefully; `/report-feedback` and `/health-check` just save the draft to
-the inbox instead of sending it.
+the inbox instead of sending it. Skipping costs nothing later: re-run
+`/provision-vault` against the same vault whenever the token arrives, and
+step 0 brings you straight back here.
 
 Repo creation and token minting stay a manual, out-of-band consultant
 action — this skill never does either:
@@ -222,14 +280,15 @@ test -s "$VAULT/99-workflow-config/secrets/feedback-token" && echo "token file p
 ```
 
 Report only `present` or `missing`, never the file's contents. If it is
-missing, tell the consultant exactly where to place it and stop here for
-now — come back to the rest of this step once it exists.
+missing, tell the consultant exactly where to place it, and say that
+re-running `/provision-vault` on this vault once it is there picks up at
+step 4 — the vault is provisioned, so nothing is redone. Then stop here.
 
 Once the token file is confirmed present, bind the vault to the repo:
 
 ```bash
 VAULTLIB="${CLAUDE_PLUGIN_ROOT}/lib/vaultlib/cli.py"
-python3 "$VAULTLIB" config write --vault "$VAULT" --field feedback.repo --value <owner>/sb-client-<slug>
+python3 "$VAULTLIB" config write --vault "$VAULT" --field feedback.repo --value <org>/sb-client-<slug>
 ```
 
 ## Handoff — what this skill deliberately did not do
