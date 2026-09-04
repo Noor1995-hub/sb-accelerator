@@ -36,6 +36,36 @@ hardcode one name.
 
 Set `VAULT` to the vault location agreed with the client before starting.
 
+### In Cowork, the folder must exist before the session starts
+
+**Create the (empty) vault folder on the machine first, then start the
+Cowork session on it.** Cowork's shell runs in a Linux VM and sees only
+what was mounted when that session booted — a folder created afterwards is
+not mounted, no matter that you then pick it in the folder picker. Picking
+it grants the *app* access immediately, which is why a file can appear
+there while every shell command still reports the path as missing. That
+split is the confusing part: an agent can write a file into the folder and
+then be unable to read it back.
+
+So if `$VAULT` is unreachable from the shell, do not route around it —
+creating the directory from the VM writes into the VM, not onto the
+machine, and provisioning a vault into a container that disappears with
+the session is worse than stopping. Instead:
+
+1. Create the empty folder on the machine (Finder / Explorer).
+2. Start a **new** Cowork session with that folder — or a folder containing
+   it — connected.
+3. Then run this skill, with `$VAULT` under the connected folder.
+
+Nothing else about the skill changes: `instantiate_vault.py` creates
+missing parents, so an already-existing empty folder and a not-yet-created
+subfolder of a connected one are both fine. Claude Code is unaffected — it
+runs on the machine's own filesystem and can create the target itself.
+
+**A stray file blocks step 1.** Anything left in the folder while
+diagnosing a mount — including a dotfile — makes step 1 refuse a non-empty
+target. Clear it from the machine (not from the VM) before retrying.
+
 ## Usage
 
 ```

@@ -12,11 +12,38 @@ vault template and the provisioning scripts ship inside the plugin itself
 machine where the plugin cache is unavailable or you are recovering from a
 broken install.
 
-Do the whole sequence on the vault owner's machine, then repeat steps 1–5 on the
-assistant's. There is no shortcut: Obsidian Sync moves the vault's *content*
+Do the whole sequence on the vault owner's machine, then repeat §0 and steps
+1–5 on the assistant's. There is no shortcut: Obsidian Sync moves the vault's *content*
 between machines, not its plugin binaries or its symlink. Steps 6–7 happen
 once, after both machines are provisioned. Step 8 is not a step at all — it is
 what Session 1 does about scheduling, and what you should know before it does.
+
+## 0. Create the vault folder *before* you start the Cowork session
+
+On a Cowork machine, do these two things in this order:
+
+1. **Create the empty vault folder** in Finder / Explorer, at the location
+   agreed with the client.
+2. **Then start the Cowork session** on it — or on a folder that contains
+   it.
+
+Cowork's shell runs in a Linux VM that mounts the connected folder when the
+session boots. A folder created after that is not mounted, and picking it
+in the folder picker does not remount it: the picker grants the *app*
+access, which is a different path from the VM's filesystem. The symptom is
+a genuinely strange one — a file can be written into the folder and then
+be invisible to every shell command, including `/provision-vault`'s own
+step 1. Restarting the session is the only fix, so it is cheaper to get
+the order right.
+
+Do not work around it by creating the directory from inside the session:
+that writes into the VM, and the vault would vanish when the session ends.
+If you were diagnosing and left a file in the folder, delete it from the
+machine before retrying — step 1 refuses any non-empty target, dotfiles
+included.
+
+Claude Code needs none of this — it runs on the machine's own filesystem
+and creates the target itself.
 
 ## 1. Instantiate the vault
 

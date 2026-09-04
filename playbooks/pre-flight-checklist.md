@@ -81,6 +81,12 @@ the questions to settle before you get that far.
       picks up the vault's `CLAUDE.md` as folder instructions — it does so by
       default, and it should appear in Cowork's context panel as
       "Instructions · CLAUDE.md".
+- [ ] **Vault folder created before the Cowork session is started**, on each
+      machine. Cowork's VM mounts the connected folder at session boot, so a
+      folder created mid-session is invisible to the shell even after you
+      pick it — provisioning cannot write there until the session is
+      restarted. Order matters: create the empty folder, *then* start the
+      session — runbook §0.
 
 ## 4. Plugin delivery
 

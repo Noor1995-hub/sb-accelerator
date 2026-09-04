@@ -15,6 +15,8 @@ delivers them.
 
 ## Unreleased
 
+- `/provision-vault` now states the Cowork precondition up front: **create the vault folder on the machine before starting the Cowork session.** Cowork's shell only sees folders that were connected when the session booted, so a folder created mid-session stays invisible to provisioning even after you pick it in the folder picker — the session has to be restarted. Claude Code is unaffected (#168)
+
 ## v0.10.30 — 2026-09-03
 
 - `/provision-vault` step 2 now installs the Obsidian plugins and Minimal theme from copies that ship inside the plugin itself, verified against the same pinned checksums as before — so provisioning works on a machine with no network access to GitHub (Cowork's sandbox blocks release downloads by default), and the consultant no longer needs to ask a client's IT to open network egress. The by-hand fallback stays, now with the explicit instruction to pick Dataview 0.5.68 (#164, #166)
