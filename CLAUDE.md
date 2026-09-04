@@ -95,8 +95,6 @@ Same three things CI runs. To exercise the plugin against a vault, instantiate
 
 - `main` is protected: branch → PR → three green checks → squash merge.
   Full flow: `CONTRIBUTING.md`.
-- Every commit message ends with the exact trailer:
-  `Co-Authored-By: Claude <noreply@anthropic.com>`
 - Any PR touching `plugin/` (except `plugin/CLAUDE.md`) must bump the version
   in `plugin/.claude-plugin/plugin.json` — CI's version guard enforces it.
 - `CHANGELOG.md` is client-facing release notes, not a work log: a PR gets a

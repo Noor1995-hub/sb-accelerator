@@ -72,9 +72,6 @@ busdev checkout is present on disk.
      python -m pytest scripts/tests -q
      ```
 
-   - Every commit message ends with the exact trailer:
-     `Co-Authored-By: Claude <noreply@anthropic.com>`
-
 5. **Open the PR:**
 
    ```bash
