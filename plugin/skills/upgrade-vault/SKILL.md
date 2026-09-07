@@ -260,6 +260,22 @@ re-checks, while a date after a meeting that never synced hides that meeting
 from every future run. When nobody remembers the provisioning date, the
 vault's oldest daily note is a safe bound. Never set it later than today.
 
+For `adapters.m365.home_domains` — listed once the M365 adapter is enabled
+and the key is still null, which is every vault provisioned before this key
+existed — write every email domain the vault owner's own organisation uses,
+comma-separated, including subsidiaries and legacy names:
+
+```bash
+python3 "$VAULTLIB" config write --vault "$VAULT" --field adapters.m365.home_domains --value "<domain>[,<domain>]"
+```
+
+Until it is set, `/sync-recordings` cannot tell a meeting hosted in another
+organisation's tenant from one of the client's own, so it dispatches a
+worker for every listed Teams meeting and its summary carries a warning
+saying so. The vault owner's own `mail` and `userPrincipalName` domains are
+the minimum; when in doubt, ask the consultant which domains the client's
+staff send from.
+
 (one call per field; `--field` takes any of the writable fields, `--value`
 the new value, or `--null` to unset a nullable one) — or by handing off to
 `/setup-my-brain`, whichever the consultant prefers for that visit. Either

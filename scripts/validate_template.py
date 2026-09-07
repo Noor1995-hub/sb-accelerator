@@ -109,11 +109,14 @@ def check_config(template: Path) -> list[str]:
         return problems
     if adapters["inbox"] != {"enabled": True}:
         problems.append("template config.json must ship adapters.inbox as {\"enabled\": true}")
-    for name in ("plaud", "m365"):
-        if adapters[name] != {"enabled": False, "account_hint": None}:
-            problems.append(
-                f"template config.json must ship adapters.{name} disabled with a null account_hint"
-            )
+    if adapters["plaud"] != {"enabled": False, "account_hint": None}:
+        problems.append(
+            "template config.json must ship adapters.plaud disabled with a null account_hint")
+    if adapters["m365"] != {"enabled": False, "account_hint": None,
+                             "home_domains": None}:
+        problems.append(
+            "template config.json must ship adapters.m365 disabled with a "
+            "null account_hint and a null home_domains")
     if cfg.get("feedback") != {"repo": None}:
         problems.append('template config.json must ship feedback as {"repo": null}')
     if cfg.get("sync") != {"start-date": None}:

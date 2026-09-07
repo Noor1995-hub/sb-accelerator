@@ -55,7 +55,8 @@ def test_fresh_cache_sends_every_event_to_fetch(tmp_path):
     assert all(e["reason"] == "unseen" for e in result["fetch"])
     assert result["filtered"] == {"written": 0, "no_transcript_final": 0,
                                   "no_transcript_waiting": 0,
-                                  "skipped": 0, "forbidden": 0, "no_access": 0}
+                                  "skipped": 0, "forbidden": 0, "no_access": 0,
+                                  "external": 0}
 
 
 def test_triage_filters_written_and_skipped_occurrences(tmp_path):
@@ -70,7 +71,8 @@ def test_triage_filters_written_and_skipped_occurrences(tmp_path):
     assert [e["id"] for e in result["fetch"]] == ["AAMkAGId3"]
     assert result["filtered"] == {"written": 1, "no_transcript_final": 0,
                                   "no_transcript_waiting": 0,
-                                  "skipped": 1, "forbidden": 0, "no_access": 0}
+                                  "skipped": 1, "forbidden": 0, "no_access": 0,
+                                  "external": 0}
 
 
 def test_two_occurrences_of_one_series_are_distinct(tmp_path):
@@ -550,6 +552,142 @@ def test_forget_allows_the_outcomes_that_never_heal_on_their_own(
 # indirectly, through record()'s own validation rejecting it first. Writing
 # the unknown value straight into the cache file bypasses record() and
 # proves triage() itself refuses to trust an outcome it cannot recognise.
+
+
+# ---------------------------------------------------------------------------
+# The external-organizer filter (home_domains). triage() does not read
+# config itself — these tests build vaults with no config.json at all, so
+# home_domains always arrives as an explicit keyword from the caller.
+
+
+def test_home_domains_none_filters_nothing(tmp_path):
+    root = make_vault(tmp_path)
+    ev = listing_event()
+    ev["organizer"] = "someone@other-org.example"
+    result = seenevents.triage(root, [ev], NOW, home_domains=None)
+    assert result["external"] == []
+    assert [e["reason"] for e in result["fetch"]] == ["unseen"]
+
+
+def test_organizer_outside_home_domains_is_external(tmp_path):
+    root = make_vault(tmp_path)
+    ev = listing_event()
+    ev["organizer"] = "someone@other-org.example"
+    result = seenevents.triage(root, [ev], NOW, home_domains=["example.com"])
+    assert result["fetch"] == []
+    assert result["external"] == [{
+        "id": "AAMkAGId1", "start_utc": "2026-08-28T14:00:00",
+        "subject": "Weekly sync", "organizer": "someone@other-org.example",
+    }]
+    assert result["filtered"]["external"] == 1
+
+
+def test_organizer_inside_home_domains_is_not_external(tmp_path):
+    root = make_vault(tmp_path)
+    ev = listing_event()
+    ev["organizer"] = "someone@example.com"
+    result = seenevents.triage(root, [ev], NOW, home_domains=["example.com"])
+    assert result["external"] == []
+    assert [e["reason"] for e in result["fetch"]] == ["unseen"]
+
+
+def test_domain_match_is_casefolded(tmp_path):
+    root = make_vault(tmp_path)
+    ev = listing_event()
+    ev["organizer"] = "someone@Example.COM"
+    result = seenevents.triage(root, [ev], NOW, home_domains=["example.com"])
+    assert result["external"] == []
+    result2 = seenevents.triage(root, [ev], NOW, home_domains=["EXAMPLE.COM"])
+    assert result2["external"] == []
+
+
+def test_organizer_dict_with_address_shape_is_read(tmp_path):
+    """The full event-read shape: {"address": "..."}."""
+    root = make_vault(tmp_path)
+    ev = listing_event()
+    ev["organizer"] = {"address": "someone@other-org.example"}
+    result = seenevents.triage(root, [ev], NOW, home_domains=["example.com"])
+    assert result["filtered"]["external"] == 1
+    assert result["external"][0]["organizer"] == "someone@other-org.example"
+
+
+def test_organizer_dict_with_email_address_shape_is_read(tmp_path):
+    """Graph's own event shape: {"emailAddress": {"address": "..."}}."""
+    root = make_vault(tmp_path)
+    ev = listing_event()
+    ev["organizer"] = {"emailAddress": {"address": "someone@other-org.example"}}
+    result = seenevents.triage(root, [ev], NOW, home_domains=["example.com"])
+    assert result["filtered"]["external"] == 1
+    assert result["external"][0]["organizer"] == "someone@other-org.example"
+
+
+def test_missing_organizer_fails_open_with_a_warning(tmp_path):
+    root = make_vault(tmp_path)
+    ev = listing_event()  # no "organizer" key at all
+    result = seenevents.triage(root, [ev], NOW, home_domains=["example.com"])
+    assert result["external"] == []
+    assert [e["reason"] for e in result["fetch"]] == ["unseen"]
+    assert result["warnings"]
+    assert "AAMkAGId1" in result["warnings"][0]
+    assert "Weekly sync" in result["warnings"][0]
+
+
+def test_organizer_with_no_at_sign_fails_open_with_a_warning(tmp_path):
+    root = make_vault(tmp_path)
+    ev = listing_event()
+    ev["organizer"] = "not-an-email"
+    result = seenevents.triage(root, [ev], NOW, home_domains=["example.com"])
+    assert result["external"] == []
+    assert [e["reason"] for e in result["fetch"]] == ["unseen"]
+    assert result["warnings"]
+
+
+def test_external_outranks_a_cached_forbidden_outcome(tmp_path):
+    """An occurrence cached as forbidden/no-access by an earlier run must
+    surface as external once home_domains excludes its organizer — the
+    filter may only just have been configured."""
+    root = make_vault(tmp_path)
+    seenevents.record(root, [outcome(kind="forbidden")], NOW)
+    ev = listing_event()
+    ev["organizer"] = "someone@other-org.example"
+    result = seenevents.triage(root, [ev], NOW, home_domains=["example.com"])
+    assert result["fetch"] == []
+    assert result["filtered"]["forbidden"] == 0
+    assert result["filtered"]["external"] == 1
+
+
+def test_external_outranks_a_cached_no_access_outcome(tmp_path):
+    root = make_vault(tmp_path)
+    seenevents.record(root, [outcome(kind="no-access")], NOW)
+    ev = listing_event()
+    ev["organizer"] = "someone@other-org.example"
+    result = seenevents.triage(root, [ev], NOW, home_domains=["example.com"])
+    assert result["fetch"] == []
+    assert result["filtered"]["no_access"] == 0
+    assert result["filtered"]["external"] == 1
+
+
+def test_external_outranks_a_cached_written_outcome(tmp_path):
+    root = make_vault(tmp_path)
+    seenevents.record(root, [outcome(kind="written")], NOW)
+    ev = listing_event()
+    ev["organizer"] = "someone@other-org.example"
+    result = seenevents.triage(root, [ev], NOW, home_domains=["example.com"])
+    assert result["fetch"] == []
+    assert result["filtered"]["written"] == 0
+    assert result["filtered"]["external"] == 1
+
+
+def test_external_outranks_not_ended(tmp_path):
+    """A future external meeting is still external — never deferred."""
+    root = make_vault(tmp_path)
+    future = listing_event(start="2026-09-03T14:00:00.0000000",
+                           end="2026-09-03T15:00:00.0000000")
+    future["organizer"] = "someone@other-org.example"
+    result = seenevents.triage(root, [future], NOW, home_domains=["example.com"])
+    assert result["deferred"] == []
+    assert result["fetch"] == []
+    assert result["filtered"]["external"] == 1
 
 
 def test_triage_fails_open_on_an_unrecognized_outcome_value_on_disk(tmp_path):

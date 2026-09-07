@@ -57,7 +57,7 @@ def shipping_config() -> dict:
         "adapters": {
             "inbox": {"enabled": True},
             "plaud": {"enabled": False, "account_hint": None},
-            "m365": {"enabled": False, "account_hint": None},
+            "m365": {"enabled": False, "account_hint": None, "home_domains": None},
         },
         "feedback": {"repo": None},
         "sync": {"start-date": None},

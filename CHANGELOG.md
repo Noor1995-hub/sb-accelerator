@@ -15,6 +15,8 @@ delivers them.
 
 ## Unreleased
 
+- Meetings hosted by another organisation are now recognised from the organizer's email domain before any fetch, listed per event in the sync summary as recorder territory, and never cost a worker; the sync's 403 guidance now names the two real causes (a missing home domain, or the tenant's Microsoft Graph transcript-access setting) and how to re-check after the fix; `/setup-my-brain` seeds the organisation's domains from the connected account. (#124, #174)
+
 ## v0.10.32 — 2026-09-04
 
 - **`/provision-vault` can be re-run to finish the feedback channel later.** The channel's token often arrives days after setup, and the skill previously could not be re-run at all — its first step refuses a non-empty target — so binding it afterwards meant a consultant reconstructing two raw commands from memory. Run it again on a vault that already exists and it now recognises it, says which plugin version provisioned it, skips instantiation entirely, and offers only the feedback-channel step. (Refreshing an already-provisioned vault's *files* remains `/upgrade-vault`'s job.) (#162, #169)

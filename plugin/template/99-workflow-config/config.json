@@ -18,7 +18,15 @@
     "date by /setup-my-brain and /provision-vault. No adapter ever lists,",
     "fetches, or writes a meeting dated before it — recurring calendar series",
     "otherwise drag in occurrences from years back. Backfilling earlier",
-    "meetings is a deliberate, interactive act, never the default."
+    "meetings is a deliberate, interactive act, never the default.",
+    "adapters.m365.home_domains: every email domain the vault owner's own",
+    "organisation uses — get_me's mail and userPrincipalName domains are the",
+    "seed (/setup-my-brain writes them); a multi-domain organisation",
+    "(subsidiaries, legacy names) must list all of them. A meeting organised",
+    "from any other domain is hosted in another organisation's tenant, whose",
+    "Teams transcripts this account can never read — sync-recordings lists",
+    "those occurrences as external and never fetches them. Null disables the",
+    "filter (every listed occurrence is fetched)."
   ],
   "config-version": 1,
   "timezone": null,
@@ -26,7 +34,7 @@
   "adapters": {
     "inbox": {"enabled": true},
     "plaud": {"enabled": false, "account_hint": null},
-    "m365": {"enabled": false, "account_hint": null}
+    "m365": {"enabled": false, "account_hint": null, "home_domains": null}
   },
   "feedback": {"repo": null},
   "sync": {"start-date": null}

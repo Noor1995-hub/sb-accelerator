@@ -543,6 +543,47 @@ def test_config_write_display_name_hint_is_a_structured_error(capsys, tmp_path):
     assert "display name" in payload["error"]
 
 
+def test_config_write_home_domains_comma_form_through_the_cli(capsys, tmp_path):
+    root = make_vault(tmp_path)
+    write_vault_config(root)
+    code, payload = run(capsys, [
+        "config", "write", "--vault", str(root),
+        "--field", "adapters.m365.home_domains",
+        "--value", " Example.com , other.org ,",
+    ])
+    assert code == 0
+    assert payload["result"]["config"]["adapters"]["m365"]["home_domains"] == [
+        "example.com", "other.org"]
+
+
+def test_config_write_home_domains_null_through_the_cli(capsys, tmp_path):
+    root = make_vault(tmp_path)
+    write_vault_config(root, extra={"adapters": {
+        "inbox": {"enabled": True},
+        "plaud": {"enabled": True, "account_hint": "morgan@example.com"},
+        "m365": {"enabled": False, "account_hint": None,
+                 "home_domains": ["example.com"]},
+    }})
+    code, payload = run(capsys, [
+        "config", "write", "--vault", str(root),
+        "--field", "adapters.m365.home_domains", "--null",
+    ])
+    assert code == 0
+    assert payload["result"]["config"]["adapters"]["m365"]["home_domains"] is None
+
+
+def test_config_read_reports_missing_home_domains_when_m365_enabled(capsys, tmp_path):
+    root = make_vault(tmp_path)
+    write_vault_config(root, extra={"adapters": {
+        "inbox": {"enabled": True},
+        "plaud": {"enabled": True, "account_hint": "morgan@example.com"},
+        "m365": {"enabled": True, "account_hint": "morgan@example.com"},
+    }})
+    code, payload = run(capsys, ["config", "read", "--vault", str(root)])
+    assert code == 0
+    assert "adapters.m365.home_domains" in payload["result"]["missing"]
+
+
 def test_sync_archive_moves_the_file_and_reports_both_paths(capsys, tmp_path):
     root = make_vault(tmp_path)
     (root / "10-inbox" / "notes.txt").write_text("x", encoding="utf-8")
@@ -703,6 +744,80 @@ def test_sync_m365_triage_and_record_round_trip_through_the_cli(
     assert code == 0
     assert payload["result"]["fetch"] == []
     assert payload["result"]["filtered"]["written"] == 1
+
+
+def test_sync_m365_triage_without_config_yields_unset_warning_and_no_filtering(
+    capsys, tmp_path
+):
+    """A vault with no config.json at all — the round-trip test's own vault
+    shape — must still triage normally, just with the filter off and a
+    warning surfaced instead of a failure."""
+    root = make_vault(tmp_path)
+    listing = tmp_path / "search.json"
+    external_listing = [{**M365_LISTING[0],
+                         "organizer": "someone@other-org.example"}]
+    listing.write_text(json.dumps(external_listing), encoding="utf-8")
+
+    code, payload = run(capsys, [
+        "sync", "m365-triage", "--vault", str(root),
+        "--events", str(listing), "--now", "2026-08-25T18:00:00",
+    ])
+    assert code == 0
+    assert payload["result"]["external"] == []
+    assert [e["reason"] for e in payload["result"]["fetch"]] == ["unseen"]
+    # No config.json at all: the helper's warning is the ConfigError text,
+    # not the "is unset" message (that is for a config.json that exists but
+    # never set the field) — either way the filter stays off, never a failure.
+    assert any("config.json" in w for w in payload["result"]["warnings"])
+
+
+def test_sync_m365_triage_with_config_but_null_home_domains_warns_unset(
+    capsys, tmp_path
+):
+    root = make_vault(tmp_path)
+    write_vault_config(root)  # m365 disabled, no home_domains key -> null
+    listing = tmp_path / "search.json"
+    listing.write_text(json.dumps(M365_LISTING), encoding="utf-8")
+
+    code, payload = run(capsys, [
+        "sync", "m365-triage", "--vault", str(root),
+        "--events", str(listing), "--now", "2026-08-25T18:00:00",
+    ])
+    assert code == 0
+    assert payload["result"]["external"] == []
+    assert any("home_domains is unset" in w for w in payload["result"]["warnings"])
+
+
+def test_sync_m365_triage_filters_external_with_home_domains_configured(
+    capsys, tmp_path
+):
+    """A vault with a config.json setting adapters.m365.home_domains filters
+    an occurrence organised outside those domains into `external`, never
+    `fetch`, with no unset warning."""
+    root = make_vault(tmp_path)
+    write_vault_config(root, extra={"adapters": {
+        "inbox": {"enabled": True},
+        "plaud": {"enabled": True, "account_hint": "morgan@example.com"},
+        "m365": {"enabled": True, "account_hint": "morgan@example.com",
+                 "home_domains": ["example.com"]},
+    }})
+    listing = tmp_path / "search.json"
+    external_listing = [{**M365_LISTING[0],
+                         "organizer": "someone@other-org.example"}]
+    listing.write_text(json.dumps(external_listing), encoding="utf-8")
+
+    code, payload = run(capsys, [
+        "sync", "m365-triage", "--vault", str(root),
+        "--events", str(listing), "--now", "2026-08-25T18:00:00",
+    ])
+    assert code == 0
+    assert payload["result"]["fetch"] == []
+    assert payload["result"]["external"] == [{
+        "id": "AAMkAGId1", "start_utc": "2026-08-25T14:00:00",
+        "subject": "Weekly sync", "organizer": "someone@other-org.example"}]
+    assert payload["result"]["filtered"]["external"] == 1
+    assert not any("home_domains is unset" in w
+                   for w in payload["result"]["warnings"])
 
 
 def test_sync_m365_record_bad_outcome_is_a_structured_error(capsys, tmp_path):

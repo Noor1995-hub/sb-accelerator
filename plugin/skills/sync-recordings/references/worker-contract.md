@@ -80,14 +80,21 @@ event and derive your own ids before you touch a transcript:
    - `NOT_FOUND` with `transcripts_empty` → reply `no-transcript`
      (transcription was off for that meeting — settled, not an error).
    - **403/Forbidden** — classify by the body: Graph code 3003 / "does not
-     have access to lookup meeting" → reply `no-access` (meeting organised
-     by someone else; this connector resolves transcripts through the
-     organiser-only online-meeting lookup). An unreadable body, or a 403
-     with no readable Graph error code at all, also replies `no-access` —
-     the safer default, since not-the-organizer is the majority class and a
-     genuine cross-tenant 403 is the rarity. Only a 403 body that
-     positively names a different cause → reply `forbidden` (another
-     tenant owns it, permanently).
+     have access to lookup meeting" → reply `no-access`. An unreadable
+     body, or a 403 with no readable Graph error code at all, also replies
+     `no-access` — the safer default. Either way the transcript is not
+     reachable from this account; it does not mean the meeting was
+     organised by someone else (attendee access to an intra-tenant
+     transcript works once the tenant enables it — live reproduction
+     2026-08-31). The two real causes are the meeting being hosted in
+     another organisation's tenant (`sync m365-triage`'s home_domains
+     filter is meant to catch these before you are ever dispatched, so you
+     seeing one at all means the organizer's domain is missing from
+     `adapters.m365.home_domains`, or that list is unset) or the
+     organisation's own tenant having the "Transcript API access —
+     Microsoft Graph access" setting off. Only a 403 body that positively
+     names a different cause → reply `forbidden` (another tenant owns it,
+     permanently).
    - A transport error, or a result too large for the tool result → reply
      `fetch-error`.
 
@@ -253,7 +260,7 @@ above.
 |---|---|
 | `written: <note stem>` | note verified on disk (append any reassemble warnings / conflict kind; M365 additionally appends `(recording-id: m365:<hex>)` and `(new-people: <names>` or `none)`) |
 | `no-transcript` | M365: `m365 ids` returned `skipped: no-transcript-url` (before any fetch), or the transcript read answered `transcripts_empty` |
-| `no-access` | M365: 403 on the transcript read, body carries Graph code 3003 / "does not have access to lookup meeting" (meeting organised by someone else) — or the body is unreadable / carries no readable Graph error code at all (safer default); permanent |
+| `no-access` | M365: 403 on the transcript read, body carries Graph code 3003 / "does not have access to lookup meeting" — or the body is unreadable / carries no readable Graph error code at all (safer default); the transcript is not reachable from this account, either because the organizer's domain is missing from `adapters.m365.home_domains` (or the list is unset) or because the tenant's Microsoft Graph transcript-access setting is off; permanent |
 | `forbidden` | M365: a 403 on the transcript read whose body positively names a different cause — another tenant, permanent |
 | `fetch-error: <one clause why>` | transport failure, incomplete page set, oversized result — retries next run |
 | `auth-error` | connector wants re-authentication — the adapter should stop |
