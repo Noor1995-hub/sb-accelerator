@@ -76,7 +76,7 @@ The JSON envelope and interpreter resolution are documented in the plugin's
    full event either: it scores candidates and pre-fills fields straight
    off the calendar-search listing already in context, so there is nothing
    there to spill to scratch. (A calendar listing is not a transcript —
-   the step 1 trim to `m365_search.json`'s four fields, and to
+   the step 1 trim to `m365_search.json`'s five fields, and to
    `m365_routing.json`'s nine, is fine.)
 9. **Batch independent CLI calls into one Bash call.** Every separate tool
    turn re-reads the whole session context. Calls with no data dependency —
@@ -343,12 +343,12 @@ meetings just never sync.
 **A full event read is expensive, so it no longer happens here at all —
 it's the worker's job, gated by triage.** Keep the listing lean: never
 search a window wider than `dates window` returned, and write only the
-four fields triage reads — `id`, `subject`, `start`, `end`, values
-verbatim — for each kept event, across every page, as one JSON array to
-`$SCRATCH/m365_search.json` with the Write tool. The connector's calendar
+five fields triage reads — `id`, `subject`, `start`, `end`, `organizer`,
+values verbatim — for each kept event, across every page, as one JSON array
+to `$SCRATCH/m365_search.json` with the Write tool. The connector's calendar
 search selects no fields, so this scratch write is where the listing gets
 trimmed — a live run wrote 53k characters of raw listing for 33 events
-when 11 mattered and four fields per event were ever read. (A listing is
+when 11 mattered and five fields per event were ever read. (A listing is
 not a transcript — rule 8 does not apply.) Then ask the seen-events cache
 which occurrences still need a worker at all:
 
@@ -359,10 +359,22 @@ python3 "$VAULTLIB" sync m365-triage --vault "$VAULT" \
 
 Everything the cache already answers is filtered out here, before any
 dispatch: `filtered` counts occurrences already written into the vault,
-permanently skipped, organised by someone else (`no-access`), refused by
-another organization's tenant (`forbidden`), or finally transcript-less. A `no-transcript` outcome
-stays provisional for 48 hours after the meeting ends — Teams delivers
-transcripts with delay — so those come back in `fetch` as
+permanently skipped, answered `no-access` or `forbidden` on an earlier
+transcript read, or finally transcript-less. Before any of that, `triage`
+also splits off `external`: occurrences whose organizer's email domain
+falls outside `adapters.m365.home_domains` are hosted in another
+organisation's tenant — this account can never read their transcripts, no
+matter what an older run's 403 said — so they get **no worker and no
+probe, are never banked, and are never counted toward `no-access` or
+`forbidden`**; list each one in the run summary by subject, local date, and
+organizer domain (never the full organizer address — it is a person's
+email) as recorder territory. If `warnings` carries a line saying
+`adapters.m365.home_domains is unset`, the filter is off and every listed
+occurrence is dispatched regardless of organizer — surface that warning in
+the summary verbatim, including the `config write` command it names, so an
+unattended run's savings do not just quietly not happen. A `no-transcript`
+outcome stays provisional for 48 hours after the meeting ends — Teams
+delivers transcripts with delay — so those come back in `fetch` as
 `recheck-no-transcript` until the window passes. A provisional occurrence
 checked within the last 6 hours comes back in `filtered.no_transcript_waiting`
 instead and is not fetched this run — the 48h horizon above is unchanged.
@@ -406,12 +418,16 @@ what it finds comes back as its outcome line: `already-synced:
 no transcript fetch, no payload), `no-transcript` (its own id-derivation
 call found no `meetingTranscriptUrl`, or the transcript read answered
 `transcripts_empty`), `"no-access"` (a 403 whose body carries Graph code
-3003 / "does not have access to lookup meeting" — the meeting was
-organised by someone else; this connector resolves transcripts through the
-organiser-only online-meeting lookup — or whose body is unreadable / carries
-no readable Graph error code at all, the safer default), `"forbidden"` (a
-403 whose body positively names a different cause — another tenant owns
-the transcript, permanently), or a written note. Those outcomes are
+3003 / "does not have access to lookup meeting", or whose body is
+unreadable / carries no readable Graph error code at all, the safer
+default — the transcript is not reachable from this account; a triage
+survivor reaching a worker at all rather than being caught as `external`
+means either the organizer's domain is missing from
+`adapters.m365.home_domains` or that list is unset, or the organisation's
+own tenant has the Microsoft Graph transcript-access setting off), or
+`"forbidden"` (a 403 whose body positively names a different cause —
+another tenant owns the transcript, permanently), or a written note. Those
+outcomes are
 banked per batch in step 6. A recording that *failed* — a transport error
 — gets **no outcome line**, and neither does a cross-adapter duplicate
 deferred under `--unattended`: what is not settled is not recorded, and
@@ -692,10 +708,12 @@ When a probe batch returns, act on each line:
   for this occurrence waits another 6 hours, exactly like a worker's first
   `no-transcript` reply does.
 - `no-access` — settles as `{"id": <id>, "start_utc": <start_utc>,
-  "outcome": "no-access"}`, same as a worker's `no-access` reply — the
-  meeting was organised by someone else (Graph code 3003), or the 403 body
-  was unreadable / carried no readable Graph error code at all (the safer
-  default).
+  "outcome": "no-access"}`, same as a worker's `no-access` reply — the 403
+  body carried Graph code 3003, or was unreadable / carried no readable
+  Graph error code at all (the safer default): the transcript is not
+  reachable from this account, either because the organizer's domain is
+  missing from `adapters.m365.home_domains` (or the list is unset) or
+  because the tenant's Microsoft Graph transcript-access setting is off.
 - `forbidden` — settles as `{"id": <id>, "start_utc": <start_utc>,
   "outcome": "forbidden"}`, same as a worker's `forbidden` reply — a 403
   body that positively names a different cause.
@@ -886,11 +904,15 @@ and settles it as already synced.
 - `no-transcript` / `no-access` / `forbidden` — settled negatives, banked
   keyed by the `id` and `start_utc` triage carried, same as always. A worker
   replies `no-access` when the transcript read's 403 body carries Graph
-  code 3003 / "does not have access to lookup meeting" (meeting organised
-  by someone else), or when the body is unreadable / carries no readable
-  Graph error code at all (the safer default — not-the-organizer is the
-  majority class), and `forbidden` only when the body positively names a
-  different cause (another tenant).
+  code 3003 / "does not have access to lookup meeting", or when the body is
+  unreadable / carries no readable Graph error code at all (the safer
+  default) — the transcript is not reachable from this account, either
+  because the organizer's domain is missing from
+  `adapters.m365.home_domains` (or the list is unset — the filter that
+  should have caught this before dispatch did not run) or because the
+  tenant's Microsoft Graph transcript-access setting is off — and
+  `forbidden` only when the body positively names a different cause
+  (another tenant).
 - `fetch-error` — no outcome line is banked; it retries next run.
 - `auth-error` — stop dispatching that adapter's remaining recordings and
   report it; re-authentication belongs to the user.
@@ -997,8 +1019,9 @@ Count what exists, not what you intended (a lab run once reported
 **Possible duplicates:** {N} ({list the stems}) — kept as separate notes; each landed on a meeting that already had a note (one you confirmed, or one written from another source this run), so nothing was overwritten
 **Possible cross-adapter duplicates:** {N} — deferred; needs an interactive run
 **Skipped / errors:** {N} (will retry next run) · {N} tiny clips auto-skipped ({list each with its duration}) — permanent, not a retry
-**M365 fetches saved:** {N} of {N} listed occurrences answered from the seen-events cache ({N} held in the 6h recheck window) | cache cold (first run)
-**Workers dispatched:** {N} ({N} plaud · {N} m365 · {N} inbox) — m365 candidates not dispatched were answered by the cache ({N}) or hadn't ended yet ({N}); worker outcomes: {N} written · {N} already-synced · {N} skip-listed · {N} no-transcript · {N} no-access · {N} forbidden · {N} fetch-error · {N} auth-error · {N} probes ({N} still-no-transcript · {N} transcript-found)
+**M365 fetches saved:** {N} of {N} listed occurrences answered from the seen-events cache or the home-domain filter ({N} held in the 6h recheck window) | cache cold (first run)
+**Workers dispatched:** {N} ({N} plaud · {N} m365 · {N} inbox) — m365 candidates not dispatched were answered by the cache ({N}), were external ({N}), or hadn't ended yet ({N}); worker outcomes: {N} written · {N} already-synced · {N} skip-listed · {N} no-transcript · {N} no-access · {N} forbidden · {N} fetch-error · {N} auth-error · {N} probes ({N} still-no-transcript · {N} transcript-found)
+**External meetings (recorder territory):** {N} — {subject} · {local date} · {organizer domain}; {subject} · {local date} · {organizer domain} | none
 **Adapters:** inbox ok · plaud ok (window {N}d) | REFUSED — signed in as a different account (account-mismatch) | REFUSED — no account bound to this vault yet (no-account-hint) | disabled | unavailable | STOPPED mid-run — connector wants re-authentication (auth-error) · m365 ok (window {N}d) | REFUSED — signed in as a different account (account-mismatch) | REFUSED — no account bound to this vault yet (no-account-hint) | disabled | unavailable | STOPPED mid-run — connector wants re-authentication (auth-error)
 **Calendar enrichment:** ok | UNAVAILABLE
 **Warnings:** {verbatim} | none
@@ -1014,17 +1037,29 @@ Each adapter's `(window {N}d)` is that step-1 `dates window` call's
 watermark is doing its job. It is reported only for `ok`; a refused,
 disabled, or unavailable adapter never computed one.
 
+**External meetings** is the `sync m365-triage` result's own `external`
+list, rendered one event per entry: subject, the occurrence's local date,
+and the organizer's domain only — never the full organizer address, which
+is a person's email and has no business in a run summary. These occurrences
+never reached a worker or a probe, cost nothing, and are not a problem to
+fix — they are meetings hosted in another organisation's tenant, which this
+account can never read Teams transcripts for, by design. "none" when the
+list is empty. If a `warnings` entry says `adapters.m365.home_domains is
+unset`, surface it verbatim in the **Warnings** line, exact `config write`
+command included — an empty external list on an unset filter means nothing
+was screened, not that nothing was external.
+
 When the `no-access` count is greater than 0, the summary gains a standing
-sentence right after the `Workers dispatched` line: "N meetings this run
-were organised by others; their Teams transcripts are not readable by this
-connector. Use the recorder for those, or ask IT about transcript access."
-Once transcript access is granted, the consultant forces a re-check with
-`python3 "$VAULTLIB" sync m365-forget --vault "$VAULT" --outcome no-access`
-— name it right there, in the same sentence, so it is discoverable from the
-summary that surfaces the problem rather than only from `cli.py`. Per event,
-list both a worker's and a probe's `no-access` reply by the meeting's
-subject and date in the in-session summary — that is calendar metadata
-already on screen, and it is never written to a note.
+sentence right after the `External meetings` line: "N meetings answered 403
+on the transcript read. Either their organizer belongs to your organisation
+but that domain is not in `adapters.m365.home_domains` yet (add it), or your
+organisation's tenant has Microsoft Graph transcript access switched off
+(ask IT to enable 'Transcript API access — Microsoft Graph access' in the
+Teams admin center). After the fix:
+`python3 "$VAULTLIB" sync m365-forget --vault "$VAULT" --outcome no-access`."
+Per event, list both a worker's and a probe's `no-access` reply by the
+meeting's subject and date in the in-session summary — that is calendar
+metadata already on screen, and it is never written to a note.
 
 `New people` sums two sources, never just one: the orchestrator's own
 `person ensure` calls for plaud, inbox, and capture attendees (step 3), and

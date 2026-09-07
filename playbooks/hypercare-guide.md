@@ -40,18 +40,26 @@ Two or three in a row against the same threshold is the signal.
 ## One more signal, off the sync-recordings run summary
 
 This one is not in `/health-check` at all, so read it from a different
-place: `/sync-recordings`' own run summary carries a `{N} no-access` tally
-for Microsoft 365 occurrences the connector could not reach. Because that
-count is a fact about one run, not a persisted ledger, capture it as the
-run happens — the EA notes it, week by week, alongside her `/health-check`
-reading, rather than expecting to look it up later.
+place: `/sync-recordings`' own run summary carries two distinct M365
+signals — do not conflate them. **External meetings** lists occurrences
+organised outside `adapters.m365.home_domains` — hosted in another
+organisation's tenant, so this account can never read their transcripts.
+That is expected and needs no fix; it is recorder territory by design.
+The **no-access** tally is different: a 403 on a meeting whose organizer
+*is* in the client's own organisation, which means either that domain is
+missing from `home_domains` or the tenant's Microsoft Graph
+transcript-access setting is off. Because both counts are facts about one
+run, not a persisted ledger, capture them as the run happens — the EA notes
+them, week by week, alongside her `/health-check` reading, rather than
+expecting to look it up later.
 
-If the tally stays non-zero for the same meetings, run after run, the
-recorder — not Teams — is the primary capture for them: stop chasing tenant
-permissions and plan the deployment around Plaud for that set of meetings
-instead. Once IT grants transcript access, `sync m365-forget --outcome
-no-access` forces the next sync to re-check them rather than leaving them
-parked on the old answer.
+If the external list stays non-zero for the same meetings, that is simply
+their permanent shape — plan the deployment around Plaud for that set
+instead of chasing tenant permissions that were never going to grant
+access. If the no-access tally stays non-zero, fix the actual cause first
+(add the missing domain, or have IT flip the tenant setting), then
+`sync m365-forget --outcome no-access` forces the next sync to re-check
+rather than leaving them parked on the old answer.
 
 ## Check-in call agenda
 

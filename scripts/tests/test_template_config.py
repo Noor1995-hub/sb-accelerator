@@ -242,6 +242,16 @@ def test_shipped_config_carries_null_feedback_repo():
     assert cfg["feedback"] == {"repo": None}
 
 
+def test_shipped_config_carries_the_m365_home_domains_key():
+    """adapters.m365.home_domains is validated (config.py); the shipped
+    default must carry it explicitly as null so a fresh vault's config.json
+    documents the shape rather than relying on the read-side default, same
+    as feedback.repo and sync.start-date above."""
+    cfg = json.loads(CONFIG.read_text(encoding="utf-8"))
+    assert cfg["adapters"]["m365"] == {
+        "enabled": False, "account_hint": None, "home_domains": None}
+
+
 def test_shipped_config_carries_null_sync_start_date():
     """sync.start-date is written at provisioning (#110); the shipped default
     must carry it explicitly as null so a fresh vault's config.json documents

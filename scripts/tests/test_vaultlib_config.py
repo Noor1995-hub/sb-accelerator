@@ -411,3 +411,132 @@ def test_write_rejects_malformed_feedback_repo(tmp_path):
     write_config(root, valid_config())
     with pytest.raises(config.ConfigError):
         config.write(root, "feedback.repo", "not-a-slug")
+
+
+# --- adapters.m365.home_domains ---------------------------------------------
+
+
+def test_read_defaults_absent_home_domains_to_null(tmp_path):
+    # Deployed vaults predate this key; absence must not fail.
+    root = make_vault(tmp_path)
+    cfg = valid_config()
+    del cfg["adapters"]["m365"]["account_hint"]
+    cfg["adapters"]["m365"] = {"enabled": False, "account_hint": None}
+    write_config(root, cfg)
+    result = config.read(root)
+    assert result["config"]["adapters"]["m365"]["home_domains"] is None
+
+
+def test_read_accepts_configured_home_domains(tmp_path):
+    root = make_vault(tmp_path)
+    cfg = valid_config()
+    cfg["adapters"]["m365"] = {
+        "enabled": True, "account_hint": "morgan@example.com",
+        "home_domains": ["example.com"],
+    }
+    write_config(root, cfg)
+    result = config.read(root)
+    assert result["config"]["adapters"]["m365"]["home_domains"] == ["example.com"]
+    assert "adapters.m365.home_domains" not in result["missing"]
+
+
+def test_read_reports_null_home_domains_as_missing_when_m365_enabled(tmp_path):
+    root = make_vault(tmp_path)
+    cfg = valid_config()
+    cfg["adapters"]["m365"] = {
+        "enabled": True, "account_hint": "morgan@example.com",
+        "home_domains": None,
+    }
+    write_config(root, cfg)
+    assert "adapters.m365.home_domains" in config.read(root)["missing"]
+
+
+def test_read_does_not_report_null_home_domains_when_m365_disabled(tmp_path):
+    root = make_vault(tmp_path)
+    write_config(root, valid_config())  # m365 disabled, no home_domains key
+    assert "adapters.m365.home_domains" not in config.read(root)["missing"]
+
+
+@pytest.mark.parametrize("bad", [
+    [],                          # empty list — use null for "unset"
+    ["example.com", ""],          # empty entry
+    ["example.com", " x.com"],    # leading whitespace
+    ["exa mple.com"],             # internal whitespace
+    ["morgan@example.com"],       # looks like an email, not a domain
+    ["example"],                  # no "."
+    ["example.com", "Example.com"],  # duplicate after casefolding
+    "example.com",                # not a list at all
+    [1],                           # not a string entry
+])
+def test_read_rejects_malformed_home_domains(tmp_path, bad):
+    root = make_vault(tmp_path)
+    cfg = valid_config()
+    cfg["adapters"]["m365"] = {
+        "enabled": False, "account_hint": None, "home_domains": bad}
+    write_config(root, cfg)
+    with pytest.raises(config.ConfigError):
+        config.read(root)
+
+
+def test_write_home_domains_stores_casefolded(tmp_path):
+    root = make_vault(tmp_path)
+    write_config(root, valid_config())
+    result = config.write(
+        root, "adapters.m365.home_domains", ["Example.COM", "other.org"])
+    assert result["config"]["adapters"]["m365"]["home_domains"] == [
+        "example.com", "other.org"]
+
+
+def test_write_home_domains_null_unsets(tmp_path):
+    root = make_vault(tmp_path)
+    cfg = valid_config()
+    cfg["adapters"]["m365"] = {
+        "enabled": False, "account_hint": None,
+        "home_domains": ["example.com"],
+    }
+    write_config(root, cfg)
+    result = config.write(root, "adapters.m365.home_domains", None)
+    assert result["config"]["adapters"]["m365"]["home_domains"] is None
+
+
+def test_write_home_domains_rejects_non_list(tmp_path):
+    root = make_vault(tmp_path)
+    write_config(root, valid_config())
+    with pytest.raises(config.ConfigError):
+        config.write(root, "adapters.m365.home_domains", "example.com")
+
+
+def test_write_home_domains_rejects_empty_list(tmp_path):
+    root = make_vault(tmp_path)
+    write_config(root, valid_config())
+    with pytest.raises(config.ConfigError):
+        config.write(root, "adapters.m365.home_domains", [])
+
+
+def test_m365_home_domains_helper_returns_list_and_no_warning(tmp_path):
+    root = make_vault(tmp_path)
+    cfg = valid_config()
+    cfg["adapters"]["m365"] = {
+        "enabled": True, "account_hint": "morgan@example.com",
+        "home_domains": ["example.com"],
+    }
+    write_config(root, cfg)
+    domains, warning = config.m365_home_domains(root)
+    assert domains == ["example.com"]
+    assert warning is None
+
+
+def test_m365_home_domains_helper_warns_when_unset(tmp_path):
+    root = make_vault(tmp_path)
+    write_config(root, valid_config())  # m365.home_domains absent -> null
+    domains, warning = config.m365_home_domains(root)
+    assert domains is None
+    assert "home_domains is unset" in warning
+    assert "config write --field adapters.m365.home_domains" in warning
+
+
+def test_m365_home_domains_helper_never_raises_on_missing_config(tmp_path):
+    root = make_vault(tmp_path)  # no config.json at all
+    domains, warning = config.m365_home_domains(root)
+    assert domains is None
+    assert warning

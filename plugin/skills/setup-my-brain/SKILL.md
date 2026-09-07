@@ -395,6 +395,24 @@ python3 "$VAULTLIB" config write --vault "$VAULT" --field adapters.m365.enabled 
 python3 "$VAULTLIB" config verify-account --vault "$VAULT" --adapter m365 --identity "$SCRATCH/m365.whoami.json"
 ```
 
+Once `match: true`, read the domains off `mail` and `userPrincipalName` in
+the same payload — the text after each address's `@`, deduplicated (the two
+fields often differ, e.g. a `.onmicrosoft.com` UPN beside a vanity `mail`
+domain) — and write them before sweeping:
+
+```bash
+python3 "$VAULTLIB" config write --vault "$VAULT" --field adapters.m365.home_domains --value "<domain>[,<domain>]"
+```
+
+These are the organisation's own email domains, the seed for the
+external-organizer filter: a meeting organised from any other domain is
+hosted in another organisation's tenant, and this account's Teams
+transcripts for it are unreachable by design, so `/sync-recordings` lists
+those occurrences as external instead of trying. Ask the vault owner
+whether their organisation uses further email domains — subsidiaries,
+legacy names — and if so append them to the same `--value`, comma-separated
+(the write replaces the whole list, so include every domain each time).
+
 ```bash
 python3 "$VAULTLIB" scratch sweep --dir "$SCRATCH"
 ```

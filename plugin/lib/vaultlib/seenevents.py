@@ -43,16 +43,23 @@ NO_TRANSCRIPT_FINAL_AFTER_HOURS = 48
 # the same still-transcript-less occurrence three times, so a provisional
 # no-transcript answer holds for this long before it is worth re-checking.
 RECHECK_MIN_INTERVAL_HOURS = 6
-# "forbidden" is a cross-tenant 403 on the transcript fetch: the ACL never
-# heals, so — unlike "no-transcript" — it is terminal the moment it is
-# recorded, same as "skipped". "no-access" is a different 403 — Graph code
-# 3003, "does not have access to lookup meeting": the vault owner attended
-# but did not organise the meeting, and this connector resolves transcripts
-# through the organiser-only online-meeting lookup. It is terminal the same
-# way (no per-run retry — the condition heals only through a permission or
-# connector change, and a retry is a paid dispatch) but counted and reported
-# separately from "forbidden", because the majority of an exec's calendar is
-# meetings someone else organised.
+# "no-access" is a 403 on the transcript fetch whose body carries Graph
+# error code 3003 ("does not have access to lookup meeting"), or one whose
+# body could not be read at all — the transcript is not reachable from this
+# account. Two known causes, neither "organised by someone else" (that
+# framing was withdrawn — live reproduction 2026-08-31 showed attendee
+# access to an intra-tenant transcript works once the tenant enables it):
+# the meeting is hosted in another organisation's tenant (the home_domains
+# filter in triage() is meant to catch these before dispatch, so one
+# reaching a worker means the organizer's domain is missing from
+# adapters.m365.home_domains, or the list is unset); or the organisation's
+# own tenant has the "Transcript API access — Microsoft Graph access"
+# setting off (Microsoft switched it off by default in late July 2026; IT
+# turns it back on, then `sync m365-forget --outcome no-access` forces a
+# re-check). It is terminal the moment it is recorded (no per-run retry —
+# the condition heals only through a home_domains edit, a tenant setting
+# change, or a forget), same as "skipped". "forbidden" is a 403 that
+# positively names a different cause, counted and reported separately.
 # Occurrences older than this fall out of every search window this plugin
 # runs (7 trailing days), so their entries are dead weight; dropping them
 # costs at most one re-check if a wider window ever asks again.
@@ -125,7 +132,32 @@ def _occurrence_dt(event: dict, field: str) -> Optional[datetime]:
         return None
 
 
-def triage(root: Path, events, now_utc: datetime) -> dict:
+def _organizer_domain(event: dict):
+    """(domain, raw_address) from a calendar-search listing's organizer
+    field, or (None, address_or_None) when no usable address is present.
+
+    Three shapes are accepted: a bare string (the calendar-search listing),
+    a dict with `address` (a full event read), or a dict with
+    `emailAddress.address` (Graph's own event shape) — this module does not
+    own either connector's payload shape, so it stays permissive rather than
+    asserting one.
+    """
+    node = event.get("organizer")
+    if isinstance(node, str):
+        addr = node
+    elif isinstance(node, dict):
+        addr = node.get("address")
+        if not isinstance(addr, str):
+            email_addr = node.get("emailAddress")
+            addr = email_addr.get("address") if isinstance(email_addr, dict) else None
+    else:
+        addr = None
+    if not isinstance(addr, str) or "@" not in addr:
+        return None, (addr if isinstance(addr, str) and addr.strip() else None)
+    return addr.rsplit("@", 1)[-1].strip().casefold(), addr.strip()
+
+
+def triage(root: Path, events, now_utc: datetime, home_domains=None) -> dict:
     """Which occurrences in a raw calendar-search listing still need the
     full event fetch. Everything else is answered from the cache.
 
@@ -134,6 +166,20 @@ def triage(root: Path, events, now_utc: datetime) -> dict:
     event is the one wrong answer a cache is never allowed to give. An entry
     with no id at all cannot even be fetched, so it is warned about and
     surfaced, never silently dropped.
+
+    `home_domains`, when not None, is the vault owner's own organisation's
+    email domains (`config.m365_home_domains`). An occurrence whose
+    organizer's domain falls outside that list is hosted in another
+    organisation's tenant — this account can never read its transcript, no
+    matter how the earlier 403 framing put it — so it is filtered into
+    `external` before either of the other two checks below, never fetched
+    and never cached: a future external meeting is still external, and an
+    occurrence an earlier run cached as forbidden/no-access must now show up
+    here instead, because home_domains may have just been set. An organizer
+    this module cannot read a domain from (missing, or no "@") fails open —
+    proceeds to the normal path — rather than guess, with one warning.
+    `home_domains is None` disables the filter entirely: the caller (the
+    CLI) surfaces the config warning for that case, this function adds none.
 
     One class is refused outright rather than fetched: an occurrence that
     has not ended yet comes back in `deferred` (reason `not-ended`), never
@@ -146,14 +192,17 @@ def triage(root: Path, events, now_utc: datetime) -> dict:
     if not isinstance(events, list):
         raise SeenEventsError(
             "--events must be a JSON array of calendar-search event objects")
+    home_domain_set = ({d.casefold() for d in home_domains}
+                       if home_domains is not None else None)
     cache = load(root)
     entries = cache["events"]
     fetch: List[dict] = []
     deferred: List[dict] = []
+    external: List[dict] = []
     warnings: List[str] = []
     filtered = {"written": 0, "no_transcript_final": 0,
                 "no_transcript_waiting": 0, "skipped": 0, "forbidden": 0,
-                "no_access": 0}
+                "no_access": 0, "external": 0}
     for event in events:
         if not isinstance(event, dict):
             raise SeenEventsError(
@@ -177,6 +226,22 @@ def triage(root: Path, events, now_utc: datetime) -> dict:
         start_utc = start.strftime(_KEY_FMT)
         candidate = {"id": event_id, "start_utc": start_utc,
                      "subject": subject}
+        # The external-organizer filter outranks both the not-ended
+        # deferral and the cache lookup below it: a future external meeting
+        # is still external, and an occurrence cached as forbidden/no-access
+        # by an earlier run must now surface as external if home_domains was
+        # only just configured.
+        if home_domain_set is not None:
+            domain, organizer_addr = _organizer_domain(event)
+            if domain is None:
+                warnings.append(
+                    f"event {event_id} ({subject!r}) carries no usable "
+                    "organizer address — cannot apply the home-domain "
+                    "filter; fetching normally")
+            elif domain not in home_domain_set:
+                external.append({**candidate, "organizer": organizer_addr})
+                filtered["external"] += 1
+                continue
         # A meeting that has not ended cannot have a transcript. Checked
         # before the cache so no recorded outcome (clock skew, an improvised
         # window) can resurrect the fetch; with no end field the start
@@ -220,8 +285,8 @@ def triage(root: Path, events, now_utc: datetime) -> dict:
             # Unseen — or an outcome value this version does not know, which
             # re-checks rather than trusts (fail open).
             fetch.append({**candidate, "reason": "unseen"})
-    return {"fetch": fetch, "deferred": deferred, "filtered": filtered,
-            "warnings": warnings}
+    return {"fetch": fetch, "deferred": deferred, "external": external,
+            "filtered": filtered, "warnings": warnings}
 
 
 def _validate_outcome(entry) -> Tuple[str, dict]:

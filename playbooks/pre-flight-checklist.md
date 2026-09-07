@@ -104,6 +104,15 @@ the questions to settle before you get that far.
 
 - [ ] M365 tenant consent for the connector (Teams transcripts, calendar,
       mail).
+- [ ] Teams admin has enabled **Transcript API access — Microsoft Graph
+      access** for the tenant (Microsoft switched it off by default in late
+      July 2026). Without it every Teams transcript read answers 403 and the
+      product looks broken on day one.
+- [ ] The client's own email domains listed (seed for
+      `adapters.m365.home_domains`; all of them, including subsidiaries and
+      legacy domains). Meetings hosted by anyone outside those domains are
+      recorder territory by design — say so to the vault owner before the
+      first sync.
 - [ ] Recorder hardware ordered and account provisioned.
 - [ ] **Recording-consent legal check** — jurisdiction plus client policy.
       The client's legal function decides; we do not advise on it. Blocking

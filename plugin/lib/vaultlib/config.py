@@ -31,10 +31,12 @@ _TOP_LEVEL_KEYS = ("config-version", "timezone", "owner", "adapters",
 
 WRITABLE_FIELDS = (
     "timezone", "owner", "feedback.repo", "sync.start-date",
+    "adapters.m365.home_domains",
 ) + tuple(f"adapters.{name}.enabled" for name in ADAPTERS) + tuple(
     f"adapters.{name}.account_hint" for name in CONNECTOR_ADAPTERS)
 
 _BOOL_FIELDS = tuple(f for f in WRITABLE_FIELDS if f.endswith(".enabled"))
+_LIST_FIELDS = ("adapters.m365.home_domains",)
 
 
 class ConfigError(Exception):
@@ -66,6 +68,48 @@ def _require_optional_string(cfg: dict, key: str) -> None:
         raise ConfigError(f"{key} must be a non-empty string or null")
 
 
+def _validate_home_domains(value) -> None:
+    """Null, or a non-empty list of casefolded-comparable domain strings.
+
+    Home domains gate the M365 external-organizer filter (seenevents.triage):
+    a bare list of domain labels, never emails ("no @") and never blank
+    ("at least one .") so a caller cannot pass an account_hint by mistake.
+    Duplicates after casefolding are rejected because the config stores the
+    casefolded form and a caller that wrote "Acme.com" and "acme.com" would
+    silently collapse to one entry on the next read.
+    """
+    if value is None:
+        return
+    if not isinstance(value, list) or not value:
+        raise ConfigError(
+            "adapters.m365.home_domains must be null or a non-empty JSON "
+            "list of domain strings")
+    seen = set()
+    for domain in value:
+        if not isinstance(domain, str) or not domain.strip():
+            raise ConfigError(
+                "adapters.m365.home_domains entries must be non-empty "
+                f"strings, got {domain!r}")
+        if domain != domain.strip() or any(ch.isspace() for ch in domain):
+            raise ConfigError(
+                f"adapters.m365.home_domains entry {domain!r} must not "
+                "contain whitespace")
+        if "@" in domain:
+            raise ConfigError(
+                f"adapters.m365.home_domains entry {domain!r} looks like "
+                "an email address — list the domain only (e.g. example.com)")
+        if "." not in domain:
+            raise ConfigError(
+                f"adapters.m365.home_domains entry {domain!r} must contain "
+                "at least one \".\" — it is not a domain")
+        folded = domain.casefold()
+        if folded in seen:
+            raise ConfigError(
+                f"adapters.m365.home_domains has a duplicate entry: "
+                f"{domain!r}")
+        seen.add(folded)
+
+
 def _validate(cfg: dict) -> dict:
     version = cfg.get("config-version")
     if version != KNOWN_VERSION:
@@ -93,9 +137,15 @@ def _validate(cfg: dict) -> dict:
         entry = adapters[name]
         if not isinstance(entry, dict):
             raise ConfigError(f"adapters.{name} must be an object")
+        if name == "m365":
+            # Deployed vaults predate this key; absence is the honest
+            # unset state (the external-organizer filter is simply off).
+            entry.setdefault("home_domains", None)
         allowed = {"enabled"}
         if name in CONNECTOR_ADAPTERS:
             allowed.add("account_hint")
+        if name == "m365":
+            allowed.add("home_domains")
         stray = sorted(set(entry) - allowed)
         if stray:
             raise ConfigError(f"unknown keys on adapters.{name}: {stray}")
@@ -121,6 +171,8 @@ def _validate(cfg: dict) -> dict:
                     "name — copy an account identifier (email or id) "
                     "verbatim from the connector's whoami instead"
                 )
+        if name == "m365":
+            _validate_home_domains(entry["home_domains"])
     feedback = cfg["feedback"]
     if not isinstance(feedback, dict) or set(feedback) != {"repo"}:
         raise ConfigError('feedback must be an object with exactly the key "repo"')
@@ -169,7 +221,35 @@ def read(root: Path) -> dict:
         entry = cfg["adapters"][name]
         if entry["enabled"] and entry["account_hint"] is None:
             missing.append(f"adapters.{name}.account_hint")
+    m365 = cfg["adapters"]["m365"]
+    if m365["enabled"] and m365["home_domains"] is None:
+        # Recommended, not blocking: without it the external-organizer
+        # filter is off and every listed occurrence is dispatched.
+        missing.append("adapters.m365.home_domains")
     return {"config": cfg, "missing": sorted(missing)}
+
+
+def m365_home_domains(root: Path) -> tuple:
+    """The configured home-domain list, or (None, warning) — never raises.
+
+    A caller that wants to filter by organizer domain (seenevents.triage)
+    needs a value it can trust even when config.json is missing, unreadable,
+    or the field was never set; this is the one place that turns all three
+    into the same honest "unset" shape instead of three different failure
+    paths for every caller to handle.
+    """
+    try:
+        cfg = read(root)["config"]
+    except ConfigError as exc:
+        return None, str(exc)
+    domains = cfg["adapters"]["m365"]["home_domains"]
+    if domains is None:
+        return None, (
+            "adapters.m365.home_domains is unset — the external-organizer "
+            "filter is off and every listed occurrence is fetched; set it "
+            "with: config write --field adapters.m365.home_domains --value "
+            '"<domain>[,<domain>]"')
+    return domains, None
 
 
 def _string_scalars(node) -> list:
@@ -230,8 +310,9 @@ def verify_account(root: Path, adapter: str, identity_payload) -> dict:
 def write(root: Path, field: str, value) -> dict:
     """Set one field, re-validate the whole config, write atomically.
 
-    `value` is already typed: bool for .enabled fields, str or None
-    elsewhere. The CLI layer does the string->type coercion.
+    `value` is already typed: bool for .enabled fields, a list (or None) for
+    the list fields, str or None elsewhere. The CLI layer does the
+    string->type coercion.
     """
     if field not in WRITABLE_FIELDS:
         raise ConfigError(
@@ -239,6 +320,14 @@ def write(root: Path, field: str, value) -> dict:
     if field in _BOOL_FIELDS:
         if not isinstance(value, bool):
             raise ConfigError(f"{field} takes true or false, not {value!r}")
+    elif field in _LIST_FIELDS:
+        if value is not None and not isinstance(value, list):
+            raise ConfigError(
+                f"{field} takes a JSON list of strings or null, not {value!r}")
+        # Stored casefolded so a later read/compare never has to fold it
+        # again — every consumer (seenevents.triage) compares casefolded.
+        if value is not None:
+            value = [v.casefold() if isinstance(v, str) else v for v in value]
     elif value is not None and not isinstance(value, str):
         raise ConfigError(f"{field} takes a string or null, not {value!r}")
 

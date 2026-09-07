@@ -102,7 +102,11 @@ def build_parser() -> argparse.ArgumentParser:
     config_write.add_argument(
         "--field", required=True, choices=sorted(config.WRITABLE_FIELDS))
     value_group = config_write.add_mutually_exclusive_group(required=True)
-    value_group.add_argument("--value", help="the new value (true/false for .enabled)")
+    value_group.add_argument(
+        "--value",
+        help="the new value (true/false for .enabled; a comma-separated "
+             "list for adapters.m365.home_domains, e.g. "
+             '"example.com,example.org")')
     value_group.add_argument("--null", action="store_true",
                              help="unset the field (nullable fields only)")
 
@@ -361,8 +365,10 @@ def build_parser() -> argparse.ArgumentParser:
         "m365-forget",
         help="drop every seen-events cache entry with one outcome, forcing "
              "a re-check next run (the hand-editable-cache fallback, made "
-             "deterministic) — e.g. after client IT fixes a permission "
-             "behind a no-access 403")
+             "deterministic) — e.g. after adding the organizer's domain to "
+             "adapters.m365.home_domains or after client IT switches on "
+             "the tenant's Microsoft Graph transcript-access setting, "
+             "either of which can turn a no-access 403 into a fetch")
     _add_vault_argument(sync_forget)
     sync_forget.add_argument(
         "--outcome", required=True,
@@ -622,6 +628,9 @@ def _dispatch(args: argparse.Namespace) -> int:
                     raise config.ConfigError(
                         f"{args.field} takes --value true or false")
                 value = args.value == "true"
+            elif args.field in config._LIST_FIELDS:
+                value = [v.strip() for v in args.value.split(",")]
+                value = [v for v in value if v]
             else:
                 value = args.value
             return _ok(config.write(root, args.field, value))
@@ -701,7 +710,12 @@ def _dispatch(args: argparse.Namespace) -> int:
         if args.action == "m365-triage":
             payload = (json.load(sys.stdin) if args.events == "-"
                        else json.loads(Path(args.events).read_text(encoding="utf-8")))
-            return _ok(seenevents.triage(root, payload, seenevents.parse_now(args.now)))
+            home_domains, home_domains_warning = config.m365_home_domains(root)
+            result = seenevents.triage(root, payload, seenevents.parse_now(args.now),
+                                       home_domains=home_domains)
+            if home_domains_warning:
+                result["warnings"] = result["warnings"] + [home_domains_warning]
+            return _ok(result)
         if args.action == "m365-record":
             payload = (json.load(sys.stdin) if args.outcomes == "-"
                        else json.loads(Path(args.outcomes).read_text(encoding="utf-8")))
