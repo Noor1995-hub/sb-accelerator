@@ -15,7 +15,7 @@ delivers them.
 
 ## Unreleased
 
-- Meetings hosted by another organisation are now recognised from the organizer's email domain before any fetch, listed per event in the sync summary as recorder territory, and never cost a worker; the sync's 403 guidance now names the two real causes (a missing home domain, or the tenant's Microsoft Graph transcript-access setting) and how to re-check after the fix; `/setup-my-brain` seeds the organisation's domains from the connected account. (#124)
+- Meetings hosted by another organisation are now recognised from the organizer's email domain before any fetch, listed per event in the sync summary as recorder territory, and never cost a worker; the sync's 403 guidance now names the two real causes (a missing home domain, or the tenant's Microsoft Graph transcript-access setting) and how to re-check after the fix; `/setup-my-brain` seeds the organisation's domains from the connected account. (#124, #174)
 
 ## v0.10.32 — 2026-09-04
 
