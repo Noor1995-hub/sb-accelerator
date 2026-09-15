@@ -16,7 +16,7 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-from . import dates, markdown, meeting, naming, vault
+from . import dates, links, markdown, meeting, naming, vault
 
 DAILY_NOTES_DIR = vault.DAILY_NOTES_DIR
 NO_MEETINGS_LINE = "*No meetings scheduled.*"
@@ -38,11 +38,6 @@ _ALLOWED_KEYS = ("date", "recap", "meetings", "meetings_note", "recap_window")
 _ALLOWED_MEETING_KEYS = ("time", "subject", "entity", "prep")
 _ALLOWED_WINDOW_KEYS = ("from", "to", "detailed_from")
 _DIGEST_LENGTH = 16
-
-# `#heading` is stripped before resolution; `|alias` is the display-name
-# claim. `!?` catches embeds, which make the same claim as a plain link.
-_WIKILINK_RE = re.compile(
-    r"!?\[\[([^\[\]|#]+)(?:#[^\[\]|]*)?(?:\|([^\[\]]*))?\]\]")
 
 
 class DailyNoteError(Exception):
@@ -120,82 +115,24 @@ def _clean_region_text(value, label: str) -> str:
     return text
 
 
-def _resolve_link(root: Path, target: str):
-    """(kind, path, display-name key) for a wikilink target, or three Nones.
+_WIKILINK_RE = links.WIKILINK_RE   # kept for callers/tests that import it
 
-    Identity objects come first: they are the ones whose *name* an alias
-    claims, and a slug that is both a person note and a project folder is a
-    collision the vault should not have. Event objects resolve but make no
-    name claim — "Friday's Acme sync" is a reference, not a name.
-    """
-    candidates = (
-        ("entity", root / vault.ENTITIES_DIR / target / "dossier.md",
-         "entity-name"),
-        ("person", root / vault.PEOPLE_DIR / f"{target}.md", "person-name"),
-        ("project", root / vault.PROJECTS_DIR / target / "index.md",
-         "project-name"),
-        ("meeting", root / vault.MEETINGS_DIR / f"{target}.md", None),
-        ("daily note", root / DAILY_NOTES_DIR / f"{target}.md", None),
-    )
-    for kind, path, name_key in candidates:
-        if path.is_file():
-            return kind, path, name_key
-    projects = root / vault.PROJECTS_DIR
-    for folder in sorted(projects.glob("*/decisions")) if projects.is_dir() else []:
-        path = folder / f"{target}.md"
-        if path.is_file():
-            return "decision", path, None
-    return None, None, None
+
+def _resolve_link(root: Path, target: str):
+    return links.resolve(root, target)
 
 
 def _check_links(root: Path, text: str, label: str,
                  warnings: List[str]) -> List[str]:
     """Every wikilink resolves; every identity alias matches the vault.
 
-    Decision 19. A plain-prose name cannot be checked by anything, which is
-    why the skill mandates the wikilink form — this is the half that a
-    machine can hold.
-
-    Every unresolvable target and every identity-alias mismatch is
-    collected and returned rather than raised immediately (issue #78): a
-    recap with two independently-bad links used to exhaust the skill's
-    single retry on the first offender and still fail on the second, with
-    no note written for tomorrow. The caller raises once, across every
-    region, so a single retry always has everything it needs.
+    v1 payloads are *checked* here and left as written (byte-identical
+    rendering is pinned); v2 payloads are normalised by `recap.py` and the
+    prep renderer, which call `links.normalise` and pass its offenders
+    through the same single-raise path.
     """
-    offenders: List[str] = []
-    for match in _WIKILINK_RE.finditer(text):
-        target = match.group(1).strip()
-        alias = match.group(2)
-        kind, path, name_key = _resolve_link(root, target)
-        if kind is None:
-            offenders.append(
-                f"{label}: [[{target}]] resolves to no vault object — link "
-                "only to objects that exist (create one with /update-entity "
-                "or /new-project first), or leave the name out. Never write "
-                "a name you have not looked up.")
-            continue
-        if alias is None or name_key is None:
-            continue
-        try:
-            frontmatter, _ = markdown.split_frontmatter(
-                path.read_text(encoding="utf-8"))
-        except ValueError as exc:
-            warnings.append(
-                f"{label}: [[{target}]] resolves but its frontmatter could "
-                f"not be read ({exc}) — display name not verified")
-            continue
-        actual = str(frontmatter.get(name_key) or "").strip()
-        if not actual:
-            warnings.append(
-                f"{label}: [[{target}]] carries no {name_key} — display name "
-                "not verified")
-            continue
-        if alias.strip() != actual:
-            offenders.append(
-                f"{label}: [[{target}|{alias}]] — that {kind} is called "
-                f"{actual!r}. Display names come from the vault, never from "
-                "the model.")
+    _, offenders, new_warnings = links.normalise(root, text, label)
+    warnings.extend(new_warnings)
     return offenders
 
 
