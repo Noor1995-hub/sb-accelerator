@@ -57,7 +57,7 @@ FROM "30-projects/meridian-yard-automation-program/decisions"
 
 ## Open Items
 
-- **📤 Owe** — Priya Nathan: revised commissioning schedule to Leo (by 2026-06-15); Jamie Ellwood: floor walk with the vendor; Renee Castillo: confirm yard-3 walkthrough
+- **📤 Owe** — Priya Nathan: revised commissioning schedule to Leo (by 2026-06-15); Jamie Ellwood: floor walk with the vendor
 - **👤 Awaiting** — Consolidated integration estimate from the yard-1 vendor; Renee's availability for the July cut-over; confirm scope with IT security
 - **❓ Question** — Whether yard 3's PLC refresh sits inside this scope
 - **⏳ Pending** — _none yet_
@@ -109,7 +109,6 @@ def test_parse_v1_body_splits_the_mega_lines():
                                    "revised commissioning schedule to Leo (by 2026-06-15)"]
     assert owe["Leo Marchetti"] == ["confirm the sponsor date"]
     assert owe["Jamie Ellwood"] == ["floor walk with the vendor"]
-    assert owe["Renee Castillo"] == ["confirm yard-3 walkthrough"]
     assert parsed["awaiting"] == ["Consolidated integration estimate from the yard-1 vendor",
                                   "Renee's availability for the July cut-over",
                                   "confirm scope with IT security"]
@@ -144,6 +143,21 @@ def test_two_semicolons_still_split_into_three_items():
     assert parsed["watch"] == [
         "Nothing dated", "the monthly review pack is the standing obligation",
         "also flag the offsite"]
+
+
+def test_a_semicolon_before_an_owner_prefix_always_splits_the_owe_line():
+    """A single `;` between two owners must still split — the ≥2 threshold
+    governs plain-prose `;`, not the boundary between two owners' entries,
+    or the second owner's task would be swallowed into the first owner's."""
+    module = load()
+    body = (
+        "## Open Items\n\n"
+        "- **📤 Owe** — Priya Nathan: revised schedule to Leo; "
+        "Jamie Ellwood: floor walk with the vendor\n")
+    parsed = module.parse_v1_body(body)
+    owe = {g["owner"]: g["items"] for g in parsed["owe"]}
+    assert owe == {"Priya Nathan": ["revised schedule to Leo"],
+                   "Jamie Ellwood": ["floor walk with the vendor"]}
 
 
 def test_apply_reshapes_and_keeps_every_sentence(tmp_path):

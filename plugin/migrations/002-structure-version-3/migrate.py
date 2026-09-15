@@ -34,6 +34,10 @@ _CALLOUT_BULLET_RE = re.compile(r"\A>\s*-\s*\*\*(.+?)\*\*\s*[—:-]\s*(.*)\Z")
 _OPEN_ITEM_RE = re.compile(r"\A-\s*\*\*(?:[^\w\s]+\s*)?(Owe|Awaiting|Question|Pending)\*\*\s*[—:-]\s*(.*)\Z")
 _OWNER_RE = re.compile(r"\A(?:📤\s*)?([A-Z][\w'’.\- ]{1,40}?)\s*:\s+(.*)\Z")
 _LEGACY_CALLOUT_RE = re.compile(r"\A>\s*\[!\w+\][+-]?\s*\*\*(Now|Context)\*\*")
+# A `;` immediately followed by another owner prefix always separates two
+# owners' entries — Open Items writes `Priya: a; Jamie: b` with exactly one
+# `;`, and it must split there regardless of the ≥2 rule below.
+_OWNER_SPLIT_RE = re.compile(r";\s+(?=(?:📤\s*)?[A-Z][\w'’.\- ]{1,40}:\s)")
 
 
 def _split_items(text: str) -> List[str]:
@@ -55,32 +59,39 @@ def _split_items(text: str) -> List[str]:
 def _collect_owe(text: str, groups: Dict[str, List[str]]) -> None:
     """Fold a v1 Owe line into `groups` (owner -> tasks), insertion-ordered.
 
-    ` · ` separates owner chunks; a chunk splits further on `; ` only when
-    it holds two or more `;` — one `;` is prose, two or more is a chained
-    list (the same threshold `projectstate.validate` refuses: ≥ 2 `;` in one
-    rendered item means it chains several tasks in one bullet). A task that
-    itself opens with `Name:` starts a new owner (Open Items wrote
-    `Priya: a; Jamie: b; Renee: c`); one that does not inherits the chunk's
-    owner (the Now callout wrote `📤 Priya: a; b; c · 📤 Leo: c`). A task
-    with no owner anywhere lands under "Unassigned". A task phrased
-    `Anthropic: push harder` reads as owner "Anthropic" — acceptable for a
-    reshape the next evening run rewrites.
+    ` · ` separates owner chunks. Inside a chunk, a `;` immediately followed
+    by another owner prefix (`Name:` or `📤 Name:`) always starts a new
+    owner segment, regardless of how many `;` the chunk holds — Open Items
+    writes `Priya: a; Jamie: b` with exactly one `;` and it must still split
+    there, or Jamie's task would be swallowed into Priya's. Within each
+    owner segment, a `;` splits further into separate tasks only when the
+    segment holds two or more of them — one `;` is prose, two or more is a
+    chained list (the same threshold `projectstate.validate` refuses: ≥ 2
+    `;` in one rendered item means it chains several tasks in one bullet).
+    A task that itself opens with `Name:` starts a new owner (Open Items
+    wrote `Priya: a; Jamie: b`); one that does not inherits the segment's
+    owner (the Now callout wrote `📤 Priya: a; b; c · 📤 Leo: c`, where
+    `a; b; c` are Priya's own tasks, not new owners). A task with no owner
+    anywhere lands under "Unassigned". A task phrased `Anthropic: push
+    harder` reads as owner "Anthropic" — acceptable for a reshape the next
+    evening run rewrites.
     """
     for chunk in re.split(r"\s·\s", text or ""):
         owner = "Unassigned"
-        pieces = re.split(r";\s+", chunk) if chunk.count(";") >= 2 else [chunk]
-        for piece in pieces:
-            piece = piece.strip().rstrip(";").strip()
-            if not piece or piece in _PLACEHOLDERS:
-                continue
-            match = _OWNER_RE.match(piece)
-            if match:
-                owner, piece = match.group(1).strip(), match.group(2).strip()
-                if not piece:
+        for segment in _OWNER_SPLIT_RE.split(chunk):
+            pieces = re.split(r";\s+", segment) if segment.count(";") >= 2 else [segment]
+            for piece in pieces:
+                piece = piece.strip().rstrip(";").strip()
+                if not piece or piece in _PLACEHOLDERS:
                     continue
-            groups.setdefault(owner, [])
-            if piece not in groups[owner]:
-                groups[owner].append(piece)
+                match = _OWNER_RE.match(piece)
+                if match:
+                    owner, piece = match.group(1).strip(), match.group(2).strip()
+                    if not piece:
+                        continue
+                groups.setdefault(owner, [])
+                if piece not in groups[owner]:
+                    groups[owner].append(piece)
 
 
 def _callout_bullets(preamble: str, title: str) -> Dict[str, str]:
