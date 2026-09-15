@@ -1,5 +1,6 @@
 """project state write: the index body is rendered from JSON, never edited."""
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -165,6 +166,34 @@ def test_scaffold_renders_the_v2_body_with_placeholders(tmp_path):
     assert "> - **Defining decision** — _none yet_" in body
     assert "## Coming up\n\n_none scheduled_" in body
     assert "> [!todo]- 📤 Owe — by owner\n> - _none yet_" in body
+
+
+def test_coming_up_link_pipe_is_escaped_and_row_stays_two_cells(tmp_path):
+    # A `coming_up.what` carrying an identity link normalises to
+    # `[[40-entities/.../dossier|Name]]`, whose `|` must be escaped or the
+    # table row breaks into an extra cell.
+    root, slug = scaffolded(tmp_path)
+    payload = state()
+    payload["coming_up"] = [{"when": "Tue 1 Sept",
+                             "what": "Vendor contract signature with [[meridian-freight-holdings]]",
+                             "date": "2026-09-01"}]
+    projectstate.write(root, slug=slug, payload=payload, today="2026-06-15")
+    body = (root / "30-projects" / slug / "index.md").read_text(encoding="utf-8")
+    row = next(line for line in body.splitlines() if line.startswith("| Tue 1 Sept"))
+    cells = re.split(r"(?<!\\)\|", row)
+    assert len(cells) == 4   # '', when, what, ''
+    assert "\\|" in cells[2]
+
+
+def test_bad_milestone_date_refused_and_file_untouched(tmp_path):
+    root, slug = scaffolded(tmp_path)
+    index_path = root / "30-projects" / slug / "index.md"
+    before = index_path.read_bytes()
+    payload = state()
+    payload["next_milestone"]["date"] = "not-a-date"
+    with pytest.raises(projectstate.ProjectStateError, match="next_milestone.date"):
+        projectstate.write(root, slug=slug, payload=payload, today="2026-06-15")
+    assert index_path.read_bytes() == before
 
 
 def test_cli_state_write_envelope(tmp_path):

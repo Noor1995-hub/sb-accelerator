@@ -75,7 +75,13 @@ def split_notes_tail(body: str) -> Tuple[str, Optional[str]]:
     return body[:index], body[index:]
 
 
-def _dataview_meetings(slug: str) -> str:
+def _cell(text: str) -> str:
+    """Escape `|` for a Markdown table cell — a normalised `[[path|Name]]`
+    link would otherwise split the row and GFM would drop the extra cell."""
+    return text.replace("|", "\\|")
+
+
+def _dataview_meetings() -> str:
     return "\n".join([
         "```dataview", "TABLE WITHOUT ID",
         '  link(file.path, dateformat(date, "ccc dd-MM")) AS "Date",',
@@ -116,7 +122,7 @@ def render_body(name: str, slug: str, state: dict) -> str:
     coming = state.get("coming_up") or []
     if coming:
         table = ["| When | What |", "|---|---|"]
-        table += [f"| {row['when']} | {row['what']} |" for row in coming]
+        table += [f"| {_cell(row['when'])} | {_cell(row['what'])} |" for row in coming]
         coming_block = "\n".join(table)
     else:
         coming_block = "_none scheduled_"
@@ -140,7 +146,7 @@ def render_body(name: str, slug: str, state: dict) -> str:
     body = "\n".join([
         "", f"# {name}", "", "\n".join(stand), "",
         "## Coming up", "", coming_block, "",
-        "## Recent meetings", "", _dataview_meetings(slug), "",
+        "## Recent meetings", "", _dataview_meetings(), "",
         "## Recent decisions", "", _dataview_decisions(slug), "",
         "## Background", "", background, ""])
     tail = state.get("notes_tail")
@@ -255,8 +261,12 @@ def validate(root: Path, slug: str, raw) -> Tuple[dict, List[str], List[str]]:
     if milestone is not None:
         if not isinstance(milestone, dict) or set(milestone) != {"text", "date"}:
             raise ProjectStateError("next_milestone needs exactly text and date")
+        milestone_date = str(milestone["date"] or "").strip()
+        if not vault.ISO_DATE_RE.match(milestone_date):
+            raise ProjectStateError("next_milestone.date must be ISO YYYY-MM-DD")
+        datetime.strptime(milestone_date, "%Y-%m-%d")
         state["next_milestone"] = {"text": _line(milestone["text"], "next_milestone.text", 40),
-                                   "date": str(milestone["date"])}
+                                   "date": milestone_date}
     else:
         state["next_milestone"] = None
     return state, offenders, warnings
@@ -280,7 +290,9 @@ def write(root: Path, *, slug: str, payload, today: str,
     # would be sliced off the wrong string.
     text = index_path.read_text(encoding="utf-8").replace("\r\n", "\n")
     frontmatter, body = markdown.split_frontmatter(text)
-    assert text.endswith(body)
+    if not text.endswith(body):
+        raise ProjectStateError(
+            "index body could not be isolated from its frontmatter — refusing to rewrite")
     head = text[:len(text) - len(body)]
     name = str(frontmatter.get("project-name") or slug)
     _, tail = split_notes_tail(body)

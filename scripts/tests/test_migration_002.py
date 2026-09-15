@@ -2,6 +2,7 @@
 Meetings) → v2 (Where it stands / Coming up / Recent meetings / Recent
 decisions / Background). Reshape only — every sentence survives."""
 import importlib.util
+import re
 from pathlib import Path
 
 import pytest
@@ -287,6 +288,27 @@ def test_apply_reshapes_and_keeps_every_sentence(tmp_path):
     assert "> - **Priya Nathan**\n>   - revised commissioning schedule to Leo\n" in body
     assert "LIMIT 10" in body and 'dateformat(date, "ccc dd-MM")' in body
     module.verify(root)
+
+
+def test_next_event_link_alias_pipe_is_escaped_in_coming_up_row(tmp_path):
+    # A v1 `Next event` that carries a `[[stem|Alias]]` link must not break
+    # the rendered Coming up table: the alias pipe has to be escaped.
+    module = load()
+    root = vault_with_v1_index(tmp_path)
+    index_path = root / "30-projects" / "meridian-yard-automation-program" / "index.md"
+    linked = index_path.read_text(encoding="utf-8").replace(
+        "> - **Next event** — Vendor contract signature, target 2026-09-01; "
+        "steering call, Thursday 4 June; budget review, Tuesday 9 June",
+        "> - **Next event** — Vendor contract signature with "
+        "[[meridian-freight-holdings|Meridian Freight Holdings]]")
+    index_path.write_text(linked, encoding="utf-8")
+    module.apply(root)
+    text = index_path.read_text(encoding="utf-8")
+    _, body = md.split_frontmatter(text)
+    row = next(line for line in body.splitlines() if line.startswith("| —"))
+    cells = re.split(r"(?<!\\)\|", row)
+    assert len(cells) == 4   # '', when, what, ''
+    assert "\\|" in cells[2]
 
 
 def test_apply_is_idempotent_and_skips_v2(tmp_path):

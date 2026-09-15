@@ -9,9 +9,9 @@ renders the callouts and the table. Every free-text field goes through
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import List, Optional, Tuple
 
-from . import links, markdown, vault
+from . import links, markdown
 
 SIGNALS = {"red": "🔴", "amber": "🟠", "green": "🟢", "quiet": "⚪"}
 LABELS = ("Needs your hand", "Moved", "New", "Decided", "Quiet")
@@ -31,15 +31,22 @@ def word_count(text: str) -> int:
     return len(str(text).split())
 
 
-def _one_line(value, label: str, limit: int) -> str:
+def _one_line(value, label: str, limit: Optional[int] = None) -> str:
     text = str(value or "").strip()
     if not text:
         raise RecapError(f"{label} must be a non-empty string")
     if "\n" in text or "\r" in text:
         raise RecapError(f"{label} must be one line")
-    if word_count(text) > limit:
+    if limit is not None and word_count(text) > limit:
         raise RecapError(f"{label}: ≤ {limit} words (got {word_count(text)})")
     return text
+
+
+def _cell(text: str) -> str:
+    """Escape `|` for a Markdown table cell — a normalised `[[path|Name]]`
+    link, or free text the model typed a literal `|` into, would otherwise
+    split the row and GFM would drop the extra cell."""
+    return text.replace("|", "\\|")
 
 
 def _lines(raw, label: str, limit: int = _LINE_WORDS) -> List[str]:
@@ -127,11 +134,7 @@ def validate(root: Path, raw) -> Tuple[dict, List[str], List[str]]:
         if not isinstance(theme, dict) or set(theme) - {"headline", "body", "sources"}:
             raise RecapError(f"recap.themes[{i}] allows headline, body, sources")
         headline = _one_line(theme.get("headline"), f"recap.themes[{i}].headline", 12)
-        body = str(theme.get("body") or "").strip()
-        if not body:
-            raise RecapError(f"recap.themes[{i}].body must be a non-empty string")
-        if word_count(body) > 80:
-            raise RecapError(f"recap.themes[{i}].body: ≤ 80 words (got {word_count(body)})")
+        body = _one_line(theme.get("body"), f"recap.themes[{i}].body", 80)
         sources = []
         for j, src in enumerate(theme.get("sources") or []):
             if not isinstance(src, dict) or set(src) != {"stem", "label"}:
@@ -142,7 +145,8 @@ def validate(root: Path, raw) -> Tuple[dict, List[str], List[str]]:
                     f"recap.themes[{i}].sources[{j}]: [[{src['stem']}]] is not a "
                     "meeting or daily note that exists")
                 continue
-            sources.append(f"[[{src['stem']}|{_one_line(src['label'], 'source label', 12)}]]")
+            label = _one_line(src["label"], f"recap.themes[{i}].sources[{j}].label")
+            sources.append(f"[[{src['stem']}|{label}]]")
         themes.append({
             "headline": _norm(root, headline, f"recap.themes[{i}].headline", offenders, warnings),
             "body": _norm(root, body, f"recap.themes[{i}].body", offenders, warnings),
@@ -176,8 +180,11 @@ def validate(root: Path, raw) -> Tuple[dict, List[str], List[str]]:
                       "entity": entity_link,
                       "text": _norm(root, text, f"recap.pulse[{i}].text", offenders, warnings)})
 
+    decisions_raw = raw.get("decisions") or []
+    if not isinstance(decisions_raw, list):
+        raise RecapError("recap.decisions must be a list of decision stems")
     decisions = []
-    for i, stem in enumerate(raw.get("decisions") or []):
+    for i, stem in enumerate(decisions_raw):
         kind, path, _ = links.resolve(root, str(stem))
         if kind != "decision":
             offenders.append(f"recap.decisions[{i}]: [[{stem}]] is not a decision that exists")
@@ -231,10 +238,10 @@ def render(root: Path, clean: dict, *, meetings: int, window_label: str) -> str:
     if clean["pulse"]:
         rows = ["**Project pulse**", "", "| | Project | What moved |", "|:-:|---|---|"]
         for row in clean["pulse"]:
-            project = row["project"].replace("|", "\\|")
+            project = _cell(row["project"])
             if row["entity"]:
-                project += " · " + row["entity"].replace("|", "\\|")
-            rows.append(f"| {SIGNALS[row['signal']]} | {project} | {row['text']} |")
+                project += " · " + _cell(row["entity"])
+            rows.append(f"| {SIGNALS[row['signal']]} | {project} | {_cell(row['text'])} |")
         parts.append("\n".join(rows))
         parts.append(LEGEND)
     else:

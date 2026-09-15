@@ -1,4 +1,6 @@
 """recap v2: the CLI renders the recap from fields; the model supplies facts."""
+import re
+
 import pytest
 
 from vaultlib import recap
@@ -159,3 +161,55 @@ def test_pulse_project_without_entity_omits_the_entity_link(tmp_path):
     clean, _, warnings = recap.validate(root, full_payload())
     text = recap.render(root, clean, meetings=1, window_label="Friday")
     assert "| 🟢 | [[30-projects/yard-automation/index\\|Yard Automation Program]] | Yard 2" in text
+
+
+def test_pulse_text_with_normalised_link_escapes_pipe_and_keeps_row_intact(tmp_path):
+    # A pulse `text` containing `[[acme-industries]]` normalises to
+    # `[[40-entities/acme-industries/dossier|Acme]]`, whose `|` must be
+    # escaped or GFM reads it as a fourth table cell and drops the rest.
+    root = make_vault(tmp_path)
+    payload = full_payload()
+    payload["pulse"][0]["text"] = "Coordinating with [[acme-industries]] on the schedule"
+    clean, offenders, _ = recap.validate(root, payload)
+    assert offenders == []
+    text = recap.render(root, clean, meetings=1, window_label="Friday")
+    row = next(line for line in text.splitlines() if line.startswith("| 🟢"))
+    cells = re.split(r"(?<!\\)\|", row)
+    assert len(cells) == 5   # '', signal, project(+entity), text, ''
+    assert "\\|" in cells[3]  # the escaped identity link inside the text cell
+
+
+def test_theme_body_must_be_one_line(tmp_path):
+    root = make_vault(tmp_path)
+    payload = full_payload()
+    payload["themes"][0]["body"] = "First paragraph.\n\nSecond paragraph."
+    with pytest.raises(recap.RecapError, match="must be one line"):
+        recap.validate(root, payload)
+
+
+def test_decisions_must_be_a_list(tmp_path):
+    root = make_vault(tmp_path)
+    payload = full_payload()
+    payload["decisions"] = "2026-06-12-phase-1-deferred"
+    with pytest.raises(recap.RecapError,
+                        match="recap.decisions must be a list of decision stems"):
+        recap.validate(root, payload)
+
+
+def test_theme_source_label_allows_long_free_prose(tmp_path):
+    root = make_vault(tmp_path)
+    payload = full_payload()
+    long_label = " ".join(["word"] * 20)
+    payload["themes"][0]["sources"][0]["label"] = long_label
+    clean, offenders, _ = recap.validate(root, payload)
+    assert offenders == []
+    assert clean["themes"][0]["sources"][0] == f"[[12-06-26-weekly-status|{long_label}]]"
+
+
+def test_theme_source_label_must_be_one_line(tmp_path):
+    root = make_vault(tmp_path)
+    payload = full_payload()
+    payload["themes"][0]["sources"][0]["label"] = "line one\nline two"
+    with pytest.raises(recap.RecapError,
+                        match=r"recap\.themes\[0\]\.sources\[0\]\.label"):
+        recap.validate(root, payload)
