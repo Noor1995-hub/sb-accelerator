@@ -47,7 +47,7 @@ a stakeholder's behaviour**.
 
 | Not a decision | Why |
 |---|---|
-| "Omar will send the scoring sheet" | A task. It belongs in the project's Open Items. |
+| "Omar will send the scoring sheet" | A task. It belongs in the project's Owe list (the folded 📤 Owe callout under Background), written through `project state write`. |
 | "Leo thinks the yard-2 timeline is tight" | An opinion. Record it in the dossier's Sensitivities if it matters. |
 | "We'll meet again on the 14th" | Scheduling. |
 | "We prefer the phased approach" | A preference, until something is committed. |

@@ -283,10 +283,11 @@ def touch(root, *, slug: str, date_iso: str, timestamp: Optional[str] = None,
           next_milestone=None, next_milestone_date=None) -> dict:
     """Bump the auto-maintained frontmatter of a project-state update.
 
-    Stage-5 subagents own the Now callout and Open Items as body prose; the
-    frontmatter half comes through here so no model ever authors it. Only
-    last-updated, state-updated (and, together, the milestone pair) can
-    change; every other byte of index.md stays put.
+    Stage-4 subagents send the project state as JSON and `project state
+    write` renders the body; the frontmatter half comes through here (state
+    write calls touch itself). Only last-updated, state-updated (and,
+    together, the milestone pair) can change; every other byte of index.md
+    stays put.
 
     `last-updated` stays the human-facing day. `state-updated` records the
     minute the state was actually synthesized, and that is what the evening

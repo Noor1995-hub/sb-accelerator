@@ -182,7 +182,7 @@ def build_parser() -> argparse.ArgumentParser:
     scaffold.add_argument("--owner", required=True, help="owner person slug")
     scaffold.add_argument("--parent", help="parent project slug (initiatives only)")
     scaffold.add_argument("--today", help="ISO date; defaults to today")
-    scaffold.add_argument("--stage", help="one line for the Now callout")
+    scaffold.add_argument("--stage", help="one line for the Where it stands card")
     scaffold.add_argument("--contacts", help="one line for the Context callout")
     scaffold.add_argument("--source", help="one line for the Context callout")
 

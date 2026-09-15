@@ -226,15 +226,16 @@ re-run replacing a recap the vault owner already read with a
 differently-worded, occasionally worse one.
 
 What the stamp does **not** cover is project indexes, and the recap does
-read from them (project pulse comes from each project's `Now` callout). The
-tradeoff is deliberate: stage 4 touches `last-updated` on every project it
-visits, so hashing the indexes would churn the digest on essentially every
-run and the guard would never fire. So read the stamp as *"the window's
-meetings, jottings and decisions are unchanged"*, not *"nothing anywhere
-changed"*. The visible consequence: a re-run whose stage 4 rewrote a project
-index but wrote no new decision — a valid outcome — skips the recap, leaving
-project pulse one revision behind. A guard that holds beats a guard that
-covers everything and fires always.
+read from them (the recap's `pulse` text is composed by the model from each
+project's *Where it stands* card). The tradeoff is deliberate: stage 4
+touches `last-updated` on every project it visits, so hashing the indexes
+would churn the digest on essentially every run and the guard would never
+fire. So read the stamp as *"the window's meetings, jottings and decisions
+are unchanged"*, not *"nothing anywhere changed"*. The visible consequence:
+a re-run whose stage 4 rewrote a project index but wrote no new decision —
+a valid outcome — skips the recap, leaving project pulse one revision
+behind. A guard that holds beats a guard that covers everything and fires
+always.
 
 The stamp lives on the marker line rather than in frontmatter (which a merge
 may never touch) or a sidecar file (which the design rules out), and a

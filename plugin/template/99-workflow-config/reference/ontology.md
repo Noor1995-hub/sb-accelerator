@@ -366,7 +366,7 @@ Empty sections carry `*No entries yet.*` — replaced on first real entry.
 **Two sections are callouts, and that is part of the contract, not styling.**
 `## Context` and `## Sensitivities` render as Obsidian callouts so a dossier
 carries the same visual weight as a project index, which opens with
-`> [!summary]+ **Now**` and `> [!info]- **Context**`. The consequence for
+`> [!summary] Where it stands` and `> [!info]- **Context**`. The consequence for
 writers: every bullet in those two sections is prefixed `> `, and the merge
 matches the bullet label *after* stripping that prefix. A bullet appended
 without the prefix lands outside the callout and renders as loose text below
