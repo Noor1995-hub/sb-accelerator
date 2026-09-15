@@ -2,11 +2,17 @@
 source-recording-id. Errors are simply not recorded — a failed item has no id
 in the vault and reappears next run."""
 import json
+import re
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
 
 from vaultlib import syncjob
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+CLI = REPO_ROOT / "plugin" / "lib" / "vaultlib" / "cli.py"
 
 
 def make_vault(tmp_path: Path) -> Path:
@@ -168,10 +174,13 @@ def test_reconcile_preserves_every_other_byte(tmp_path):
     root = make_vault(tmp_path)
     write_triaged_meeting(root, "a-ticked", "needs-review", True)
     before = (root / "20-meetings" / "a-ticked.md").read_text(encoding="utf-8")
-    syncjob.reconcile_reviews(root)
+    syncjob.reconcile_reviews(root, timestamp="2026-08-21T09:30")
     after = (root / "20-meetings" / "a-ticked.md").read_text(encoding="utf-8")
-    assert after == before.replace("review_status: needs-review",
-                                   "review_status: confirmed")
+    # Exactly two edits: the status flip, and the confirmed-at stamp inserted
+    # as the last frontmatter line. Nothing else moves.
+    assert after == before.replace(
+        "review_status: needs-review", "review_status: confirmed"
+    ).replace("archived: false\n---", "archived: false\nconfirmed-at: 2026-08-21T09:30\n---")
 
 
 def test_reconcile_is_idempotent_and_tolerates_broken_files(tmp_path):
@@ -1176,3 +1185,54 @@ def test_a_skip_line_already_in_the_of_form_still_suppresses(tmp_path):
     skip_file.parent.mkdir(parents=True)
     skip_file.write_text(f"plaud:of_{HEX}\n", encoding="utf-8")
     assert syncjob.dedup(root, [f"plaud:{HEX}"])["skipped"] == [f"plaud:{HEX}"]
+
+
+def test_reconcile_stamps_confirmed_at_on_the_note_it_flips(tmp_path):
+    """The queue needs to know *when* a tick folded, not only that it did: a
+    meeting older than its project's last state update is otherwise invisible
+    to it forever (dryrun issue 1)."""
+    root = make_vault(tmp_path)
+    write_triaged_meeting(root, "a-ticked", "needs-review", True)
+    write_triaged_meeting(root, "c-confirmed", "confirmed", True)
+
+    result = syncjob.reconcile_reviews(root, timestamp="2026-08-21T09:30")
+
+    assert result["confirmed_at"] == "2026-08-21T09:30"
+    flipped = (root / "20-meetings" / "a-ticked.md").read_text(encoding="utf-8")
+    assert "confirmed-at: 2026-08-21T09:30" in flipped
+    assert "review_status: confirmed" in flipped
+    # An already-confirmed note is not re-stamped: its confirmation happened
+    # before this run, and inventing a later moment would re-queue it.
+    steady = (root / "20-meetings" / "c-confirmed.md").read_text(encoding="utf-8")
+    assert "confirmed-at" not in steady
+
+
+def test_reconcile_default_stamp_is_now_to_the_minute(tmp_path):
+    root = make_vault(tmp_path)
+    write_triaged_meeting(root, "a-ticked", "needs-review", True)
+    result = syncjob.reconcile_reviews(root)
+    assert re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}", result["confirmed_at"])
+    flipped = (root / "20-meetings" / "a-ticked.md").read_text(encoding="utf-8")
+    assert f"confirmed-at: {result['confirmed_at']}" in flipped
+
+
+def test_reconcile_refuses_a_bare_date_stamp(tmp_path):
+    """A bare date would read as end-of-day in the queue and put the meeting
+    after every state update of that day — the time is the point."""
+    root = make_vault(tmp_path)
+    with pytest.raises(syncjob.SyncError, match="timestamp"):
+        syncjob.reconcile_reviews(root, timestamp="2026-08-21")
+
+
+def test_cli_reconcile_reviews_accepts_timestamp(tmp_path):
+    root = make_vault(tmp_path)
+    write_triaged_meeting(root, "a-ticked", "needs-review", True)
+    proc = subprocess.run(
+        [sys.executable, str(CLI), "sync", "reconcile-reviews",
+         "--vault", str(root), "--timestamp", "2026-08-21T09:30"],
+        capture_output=True, text=True)
+    assert proc.returncode == 0, proc.stderr
+    payload = json.loads(proc.stdout)
+    assert payload["ok"] is True
+    assert payload["result"]["flipped"] == ["20-meetings/a-ticked.md"]
+    assert payload["result"]["confirmed_at"] == "2026-08-21T09:30"

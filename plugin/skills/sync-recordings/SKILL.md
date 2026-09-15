@@ -174,6 +174,10 @@ python3 "$VAULTLIB" sync reconcile-reviews --vault "$VAULT"
 python3 "$VAULTLIB" sync scan --vault "$VAULT"
 ```
 
+Each note it flips is also stamped `confirmed-at` with the current minute —
+that stamp is how the evening run's update queue sees a meeting that was
+ticked after its project's state was last written, so never strip it.
+
 Report `flipped` in the summary; surface any `conflict_ticks` for a human — a
 note that still carries a `conflicts-with` edge is a duplicate nobody has
 resolved yet, so a tick on it is never auto-confirmed. Say so in words, and say

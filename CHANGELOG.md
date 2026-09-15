@@ -15,6 +15,8 @@ delivers them.
 
 ## Unreleased
 
+- A meeting you tick as reviewed *after* its project's evening update no longer slips past the next run: the tick is stamped `confirmed-at`, the update queue treats that moment as when the meeting became new to the project, and the evening pipeline folds ticks once more right before building the queue. Meetings confirmed before this release are unaffected. (#185)
+
 ## v0.10.35 — 2026-09-15
 
 - A Plaud recording is no longer synced twice when the connector changes how it spells the recording's id: `plaud:of_<hash>` and `plaud:<hash>` now count as one recording in the ledger, the skip list and every meeting write, and new notes store the id in one canonical form. (#180)

@@ -18,6 +18,15 @@ suppresses a flag only on positive evidence — a `state-updated` timestamp
 later than the meeting. A queue predicate that drops a meeting therefore
 trips the sweep instead of agreeing with it (issue #98: the two passes shared
 a strict day-granularity `>`, so the self-check was blind by construction).
+
+What both passes compare against `state-updated` is a meeting's *activity*
+moment: the later of its datetime and its `confirmed-at` stamp. Meeting time
+alone was wrong in one direction — a meeting older than the project's last
+state update but confirmed after it was dropped forever, and the sweep read
+the old datetime as proof it had been incorporated (dryrun issue 1: nine
+freshly confirmed meetings in no queue entry, zero warnings). A note with no
+stamp — everything confirmed before `reconcile-reviews` wrote one — compares
+on datetime alone, so an upgraded vault behaves exactly as before.
 """
 from __future__ import annotations
 
@@ -122,10 +131,19 @@ def _index_meetings(root: Path) -> Tuple[List[dict], List[str]]:
         except (ValueError, OSError) as exc:
             warnings.append(f"{rel}: {exc}")
             continue
+        raw_confirmed = data.get("confirmed-at")
+        confirmed_at = _parse_iso_datetime(raw_confirmed)
+        if raw_confirmed is not None and confirmed_at is None:
+            warnings.append(
+                f"{rel}: unparseable confirmed-at {raw_confirmed!r} — "
+                "comparing on the meeting datetime alone; rewrite it as "
+                "YYYY-MM-DDTHH:MM or delete it"
+            )
         meetings.append({
             "file": rel,
             "date": _parse_first_iso_date(data.get("date")),
             "datetime": _parse_iso_datetime(data.get("date")),
+            "confirmed_at": confirmed_at,
             "type": data.get("type"),
             "review_status": data.get("review_status"),
             "projects": _slug_list(data.get("projects"), "projects", rel,
@@ -134,6 +152,17 @@ def _index_meetings(root: Path) -> Tuple[List[dict], List[str]]:
                                     warnings),
         })
     return meetings, warnings
+
+
+def _activity(meeting: dict) -> datetime:
+    """The moment a confirmed meeting last became new information for its
+    projects: its datetime, or its `confirmed-at` stamp when that is later.
+    Both the queue predicate and the self-check compare this, so a tick that
+    folds after a project's last state update still counts as new."""
+    confirmed_at = meeting.get("confirmed_at")
+    if confirmed_at is not None and confirmed_at > meeting["datetime"]:
+        return confirmed_at
+    return meeting["datetime"]
 
 
 def _upsert_all(text: str, fields: Dict[str, str]) -> str:
@@ -154,14 +183,18 @@ def self_check(confirmed: List[dict], queued_slugs: Set[str],
 
     The sweep is deliberately looser than the queue: day granularity, `>=`,
     and only one suppression — a `state-updated` timestamp strictly later
-    than the meeting, which is positive evidence that the state was written
-    after that meeting landed. Absent that evidence a same-day pair is
-    flagged, so a queue predicate that drops it disagrees with this pass
-    instead of matching it.
+    than the meeting's activity moment (its datetime, or its `confirmed-at`
+    stamp when that is later), which is positive evidence that the state was
+    written after that meeting landed *as confirmed*. Absent that evidence a
+    same-day pair is flagged, so a queue predicate that drops it disagrees
+    with this pass instead of matching it. Meeting time alone was not
+    evidence: a meeting confirmed after the state was written is new to the
+    project however old the meeting is.
     """
     warnings: List[str] = []
     flagged: Set[str] = set()
     for meeting in confirmed:
+        activity = _activity(meeting)
         for slug in meeting["projects"]:
             if slug not in active_stamps:
                 continue
@@ -177,17 +210,22 @@ def self_check(confirmed: List[dict], queued_slugs: Set[str],
                 flagged.add(slug)
                 continue
             last_day, state_dt = stamp
-            if meeting["date"] < last_day:
+            if activity.date() < last_day:
                 continue
-            if state_dt is not None and meeting["datetime"] < state_dt:
+            if state_dt is not None and activity < state_dt:
                 continue
             state_note = (f", state-updated {state_dt.isoformat(timespec='minutes')}"
                           if state_dt is not None else "")
+            confirmed_at = meeting.get("confirmed_at")
+            confirmed_note = (
+                f", confirmed-at {confirmed_at.isoformat(timespec='minutes')}"
+                if confirmed_at is not None else "")
             warnings.append(
                 f"SELF-CHECK: confirmed meeting '{meeting['file']}' "
-                f"({meeting['date'].isoformat()}) references active project "
-                f"'{slug}' (last-updated {last_day.isoformat()}{state_note}) but "
-                "the project was not queued — possible silent skip, investigate."
+                f"({meeting['date'].isoformat()}{confirmed_note}) references "
+                f"active project '{slug}' (last-updated {last_day.isoformat()}"
+                f"{state_note}) but the project was not queued — possible "
+                "silent skip, investigate."
             )
             flagged.add(slug)
     return warnings
@@ -275,7 +313,8 @@ def run(root: Path, today: str, owner: str) -> dict:
         # `project touch` wrote the state; without it the day at 00:00 is the
         # floor, which makes the comparison day-granularity `>=` — erring
         # toward one extra queue cycle rather than dropping a same-day meeting
-        # forever (issue #98).
+        # forever (issue #98). What it is compared against is the meeting's
+        # activity moment, not its datetime — see `_activity`.
         raw_state = data.get("state-updated")
         state_updated = _parse_iso_datetime(raw_state)
         if raw_state is not None and state_updated is None:
@@ -287,7 +326,7 @@ def run(root: Path, today: str, owner: str) -> dict:
         active_stamps[slug] = (last_updated, state_updated)
         threshold = (state_updated if state_updated is not None
                      else datetime.combine(last_updated, time.min))
-        new_meetings = [m for m in for_project if m["datetime"] >= threshold]
+        new_meetings = [m for m in for_project if _activity(m) >= threshold]
         if new_meetings:
             queue.append({
                 "slug": slug,
