@@ -32,7 +32,7 @@ if __package__ in (None, ""):
     # the skills invoke it.
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from vaultlib import config, dailynote, dates, decision, entity, feedback, health, lastsync, m365, meeting, migrate, person, plaud, project, provenance, runlog, scratch, schema, seenevents, syncjob, template, updatequeue, vault  # noqa: E402
+from vaultlib import config, dailynote, dates, decision, entity, feedback, health, lastsync, m365, meeting, migrate, person, plaud, project, projectstate, provenance, runlog, scratch, schema, seenevents, syncjob, template, updatequeue, vault  # noqa: E402
 
 
 def _emit(payload: dict) -> None:
@@ -200,6 +200,19 @@ def build_parser() -> argparse.ArgumentParser:
                             help="one line; requires --next-milestone-date")
     proj_touch.add_argument("--next-milestone-date", dest="next_milestone_date",
                             help="ISO date; requires --next-milestone")
+
+    proj_state = projects_sub.add_parser(
+        "state", help="project state: render the index body from JSON")
+    proj_state_sub = proj_state.add_subparsers(dest="state_action", required=True)
+    proj_state_write = proj_state_sub.add_parser(
+        "write", help="replace the index body from a state JSON and touch the frontmatter")
+    _add_vault_argument(proj_state_write)
+    proj_state_write.add_argument("--slug", required=True)
+    proj_state_write.add_argument("--state", required=True,
+                                  help="path to a JSON file, or - to read stdin")
+    proj_state_write.add_argument("--today", help="ISO date; defaults to today")
+    proj_state_write.add_argument("--timestamp",
+                                  help="ISO datetime YYYY-MM-DDTHH:MM; defaults to now")
 
     entities = top.add_parser("entity", help="entity dossiers")
     entities_sub = entities.add_subparsers(dest="action", required=True)
@@ -641,6 +654,12 @@ def _dispatch(args: argparse.Namespace) -> int:
         today = vault.today_iso(getattr(args, "today", None))
         return _ok(person.ensure(root, args.name, today))
     if args.group == "project":
+        if args.action == "state":
+            payload = (json.load(sys.stdin) if args.state == "-"
+                       else json.loads(Path(args.state).read_text(encoding="utf-8")))
+            return _ok(projectstate.write(
+                root, slug=args.slug, payload=payload,
+                today=vault.today_iso(args.today), timestamp=args.timestamp))
         if args.action == "touch":
             return _ok(project.touch(
                 root, slug=args.slug, date_iso=vault.today_iso(args.date),
@@ -834,6 +853,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         return _fail(str(exc), "Fix the date or timezone argument and retry.")
     except project.ProjectError as exc:
         return _fail(str(exc), "Fix the named constraint and retry.")
+    except projectstate.ProjectStateError as exc:
+        return _fail(str(exc), "Fix the named state field and retry.")
     except entity.EntityError as exc:
         return _fail(str(exc), "Fix the named constraint and retry.")
     except decision.DecisionError as exc:
