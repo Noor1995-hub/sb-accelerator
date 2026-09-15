@@ -53,14 +53,17 @@ def write_project(root: Path, slug: str, *, status="active",
 
 def write_meeting(root: Path, stem: str, *, date_value="2026-06-10T10:00",
                   review_status="confirmed", projects=(), attendees=(),
-                  type_value="meeting") -> None:
+                  type_value="meeting", confirmed_at=None) -> None:
     proj = ", ".join(projects)
     att = ", ".join(attendees)
-    (root / "20-meetings" / f"{stem}.md").write_text("\n".join([
-        "---", f"date: {date_value}", f"type: {type_value}",
-        f"review_status: {review_status}",
-        f"projects: [{proj}]", f"attendees: [{att}]", "---", "", "- x", "",
-    ]), encoding="utf-8")
+    lines = ["---", f"date: {date_value}", f"type: {type_value}",
+             f"review_status: {review_status}",
+             f"projects: [{proj}]", f"attendees: [{att}]"]
+    if confirmed_at is not None:
+        lines += [f"confirmed-at: {confirmed_at}"]
+    lines += ["---", "", "- x", ""]
+    (root / "20-meetings" / f"{stem}.md").write_text(
+        "\n".join(lines), encoding="utf-8")
 
 
 def write_decision(root: Path, project: str, stem: str) -> None:
@@ -470,3 +473,108 @@ def test_a_meeting_alongside_a_note_counts_once(tmp_path):
         encoding="utf-8")
     assert "meetings-7d: 1" in index
     assert "key-people: [priya-nathan]" in index
+
+
+# --- confirmation time (dryrun issue 1) -------------------------------------
+#
+# A tick folded *after* the project's last state update must queue the meeting
+# even when the meeting itself happened before that update. Without the stamp
+# the predicate compared meeting time alone and dropped it forever, and the
+# self-check read "meeting older than state-updated" as proof it had been
+# incorporated — which is false when the confirmation came later.
+
+
+def test_meeting_confirmed_after_state_update_queues(tmp_path):
+    root = make_vault(tmp_path)
+    write_project(root, "alpha", last_updated="2026-06-12",
+                  state_updated="2026-06-12T18:00")
+    write_meeting(root, "old-but-just-confirmed", date_value="2026-06-10T10:00",
+                  projects=["alpha"], confirmed_at="2026-06-13T09:00")
+    result = updatequeue.run(root, "2026-06-13", "owner-morgan")
+    queued = {e["slug"]: e for e in result["projectsNeedingUpdate"]}
+    assert "alpha" in queued
+    assert queued["alpha"]["newFiles"] == ["20-meetings/old-but-just-confirmed.md"]
+    assert not [w for w in result["warnings"] if "SELF-CHECK" in w]
+
+
+def test_meeting_confirmed_before_state_update_stays_incorporated(tmp_path):
+    """Confirmed at 09:00, state written at 18:00: the evening run saw it.
+    Neither the queue nor the self-check may re-raise it."""
+    root = make_vault(tmp_path)
+    write_project(root, "alpha", last_updated="2026-06-12",
+                  state_updated="2026-06-12T18:00")
+    write_meeting(root, "seen", date_value="2026-06-10T10:00",
+                  projects=["alpha"], confirmed_at="2026-06-12T09:00")
+    result = updatequeue.run(root, "2026-06-13", "owner-morgan")
+    assert result["projectsNeedingUpdate"] == []
+    assert not [w for w in result["warnings"] if "SELF-CHECK" in w]
+
+
+def test_meeting_without_stamp_behaves_exactly_as_before(tmp_path):
+    """Every already-confirmed note in a deployed vault lacks the stamp. It
+    must fall back to the meeting datetime alone — no reprocessing storm on
+    the first run after upgrade."""
+    root = make_vault(tmp_path)
+    write_project(root, "alpha", last_updated="2026-06-12",
+                  state_updated="2026-06-12T18:00")
+    write_meeting(root, "legacy", date_value="2026-06-10T10:00",
+                  projects=["alpha"])
+    result = updatequeue.run(root, "2026-06-13", "owner-morgan")
+    assert result["projectsNeedingUpdate"] == []
+    assert not [w for w in result["warnings"] if "SELF-CHECK" in w]
+
+
+def test_self_check_warns_when_a_late_confirmation_is_dropped():
+    """The bug's second half: the sweep used to suppress its flag on
+    `datetime < state-updated`, treating an older meeting as incorporated. A
+    confirmation stamped after state-updated is the counter-evidence, and the
+    flag must fire — naming the stamp, so the reader knows why."""
+    confirmed = [{"file": "20-meetings/m.md", "date": date(2026, 6, 10),
+                  "datetime": datetime(2026, 6, 10, 10, 0),
+                  "confirmed_at": datetime(2026, 6, 13, 9, 0),
+                  "projects": ["alpha"], "attendees": []}]
+    stamps = {"alpha": (date(2026, 6, 12), datetime(2026, 6, 12, 18, 0))}
+    warnings = updatequeue.self_check(confirmed, queued_slugs=set(),
+                                      active_stamps=stamps)
+    assert len(warnings) == 1 and "SELF-CHECK" in warnings[0]
+    assert "confirmed-at 2026-06-13T09:00" in warnings[0]
+    # Queued, it is silent; confirmed before the state was written, silent.
+    assert updatequeue.self_check(confirmed, {"alpha"}, stamps) == []
+    confirmed[0]["confirmed_at"] = datetime(2026, 6, 12, 9, 0)
+    assert updatequeue.self_check(confirmed, set(), stamps) == []
+
+
+def test_unparseable_confirmed_at_warns_and_falls_back(tmp_path):
+    root = make_vault(tmp_path)
+    write_project(root, "alpha", last_updated="2026-06-12",
+                  state_updated="2026-06-12T18:00")
+    write_meeting(root, "odd", date_value="2026-06-10T10:00",
+                  projects=["alpha"], confirmed_at="garbage")
+    result = updatequeue.run(root, "2026-06-13", "owner-morgan")
+    assert result["projectsNeedingUpdate"] == []
+    assert any("confirmed-at" in w and "odd.md" in w for w in result["warnings"])
+
+
+def test_reconcile_then_queue_picks_up_the_late_tick(tmp_path):
+    """End to end, the shape the field report describes: yesterday's evening
+    run touched the project; today the vault owner ticks yesterday's meeting;
+    tonight's run must queue it."""
+    from vaultlib import syncjob
+    root = make_vault(tmp_path)
+    write_project(root, "alpha", last_updated="2026-06-12",
+                  state_updated="2026-06-12T18:00")
+    write_meeting(root, "yesterday", date_value="2026-06-12T10:00",
+                  review_status="needs-review", projects=["alpha"])
+    text = (root / "20-meetings" / "yesterday.md").read_text(encoding="utf-8")
+    (root / "20-meetings" / "yesterday.md").write_text(
+        text.replace("review_status: needs-review",
+                     "review_status: needs-review\nreviewed: true"),
+        encoding="utf-8")
+
+    folded = syncjob.reconcile_reviews(root, timestamp="2026-06-13T11:00")
+    assert folded["flipped"] == ["20-meetings/yesterday.md"]
+
+    result = updatequeue.run(root, "2026-06-13", "owner-morgan")
+    assert [e["slug"] for e in result["projectsNeedingUpdate"]] == ["alpha"]
+    assert result["projectsNeedingUpdate"][0]["newFiles"] == [
+        "20-meetings/yesterday.md"]

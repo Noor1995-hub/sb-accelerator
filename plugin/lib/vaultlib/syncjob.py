@@ -421,7 +421,7 @@ def collide(root: Path, start_local: str, duration_min: int) -> dict:
     return {"matches": matches, "checked": checked, "warnings": warnings}
 
 
-def reconcile_reviews(root: Path) -> dict:
+def reconcile_reviews(root: Path, *, timestamp: Optional[str] = None) -> dict:
     """Fold triage ticks back into review_status: reviewed true flips
     needs-review -> confirmed. One-way and narrow: a tick on a note that still
     carries a `conflicts-with` edge is surfaced for a human, never
@@ -430,7 +430,22 @@ def reconcile_reviews(root: Path) -> dict:
     bless two notes for one meeting. Clearing the edge is how a human says the
     duplicate is resolved; the next run folds the tick. `archived` is never
     read by any pipeline.
+
+    Every flip also stamps `confirmed-at` (ISO to the minute, `timestamp` or
+    now). The update queue compares a project's `state-updated` against the
+    *later* of a meeting's datetime and this stamp: a meeting that happened
+    before the project's last state update but was confirmed after it used
+    to fall out of the queue permanently, because meeting time alone said it
+    had already been seen. Notes confirmed before the stamp existed carry no
+    field and keep comparing on datetime alone — nothing is reprocessed.
     """
+    if timestamp is None:
+        stamp = datetime.now().isoformat(timespec="minutes")
+    else:
+        try:
+            stamp = project._require_iso_datetime(timestamp, "--timestamp")
+        except project.ProjectError as exc:
+            raise SyncError(str(exc)) from exc
     flipped: List[str] = []
     conflict_ticks: List[str] = []
     warnings: List[str] = []
@@ -460,12 +475,14 @@ def reconcile_reviews(root: Path) -> dict:
         try:
             updated = markdown.replace_scalar_field(
                 text, "review_status", "confirmed")
+            updated = markdown.upsert_scalar_field(updated, "confirmed-at", stamp)
         except ValueError as exc:
             warnings.append(f"{rel}: {exc}")
             continue
         vault.atomic_write(path, updated)
         flipped.append(rel)
     return {"flipped": flipped, "conflict_ticks": conflict_ticks,
+            "confirmed_at": stamp,
             "warnings": warnings}
 
 
