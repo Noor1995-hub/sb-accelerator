@@ -23,7 +23,12 @@ this migration replaces with the `Recent decisions`/`Recent meetings`
 queries, so carrying them forward would duplicate the query, not preserve a
 human's words.
 
-Touches no template-managed file. Frontmatter is untouched.
+Touches no template-managed file. Frontmatter is untouched. A vault upgraded
+1→2→3 keeps the structure-version-2 ontology (`body_sections: [Decisions,
+Open Items, Related Meetings]`) that migration 001 wrote until the
+consultant accepts the template refresh in `/upgrade-vault`'s consent step,
+because the ontology is a template-managed file this migration deliberately
+does not touch.
 """
 from __future__ import annotations
 

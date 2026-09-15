@@ -68,7 +68,7 @@ def test_body_carries_the_four_ontology_sections(tmp_path):
     result = project.scaffold(root, **BASE)
     _, body = md.split_frontmatter((root / result["path"]).read_text(encoding="utf-8"))
     titles = [title for title, _ in md.split_sections(body) if title]
-    assert titles == ["Coming up", "Recent meetings", "Recent decisions", "Background"]
+    assert titles == schema.body_sections("project")
 
 
 def test_decisions_dataview_hardcodes_this_project_slug(tmp_path):

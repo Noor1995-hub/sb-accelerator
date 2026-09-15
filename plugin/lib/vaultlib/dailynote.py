@@ -134,13 +134,6 @@ def _clean_region_text(value, label: str) -> str:
     return text
 
 
-_WIKILINK_RE = links.WIKILINK_RE   # kept for callers/tests that import it
-
-
-def _resolve_link(root: Path, target: str):
-    return links.resolve(root, target)
-
-
 def _check_links(root: Path, text: str, label: str,
                  warnings: List[str]) -> List[str]:
     """Every wikilink resolves; every identity alias matches the vault.

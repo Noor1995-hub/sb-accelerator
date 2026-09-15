@@ -24,9 +24,7 @@ next-milestone-date:
 
 ## Coming up
 
-| When | What |
-|---|---|
-| Sun 1 Feb | _None; project closed 2026-02-01. The three-yard follow-on is tracked separately under [[meridian-yard-automation-program]]._ |
+_none scheduled_
 
 ## Recent meetings
 
@@ -72,6 +70,7 @@ Reference material for the evening run and for when you need the detail. Folded 
 
 > [!warning]- Watch list
 > - The pilot vendor is embedded at the pilot site, so whatever follows inherits that platform choice
+> - None; project closed 2026-02-01. The three-yard follow-on is tracked separately under [[meridian-yard-automation-program]].
 
 > [!info]- Context
 > - **Contacts** — Leo Marchetti (COO, executive sponsor)
