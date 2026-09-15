@@ -15,7 +15,7 @@ delivers them.
 
 ## Unreleased
 
-- A Plaud recording is no longer synced twice when the connector changes how it spells the recording's id: `plaud:of_<hash>` and `plaud:<hash>` now count as one recording in the ledger, the skip list and every meeting write, and new notes store the id in one canonical form. (#TBD)
+- A Plaud recording is no longer synced twice when the connector changes how it spells the recording's id: `plaud:of_<hash>` and `plaud:<hash>` now count as one recording in the ledger, the skip list and every meeting write, and new notes store the id in one canonical form. (#180)
 
 ## v0.10.34 — 2026-09-15
 
