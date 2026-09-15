@@ -1107,3 +1107,72 @@ def test_routing_signals_stays_compact(tmp_path):
     make_routing_person(root, "morgan-ellery")
     result = syncjob.routing_signals(root)
     assert len(json.dumps(result)) < 1024
+
+
+# One recording, two spellings. Plaud listed recordings as a bare 32-hex id
+# until 2026-09-15 and as `of_<hex>` from then on — the same storage hash under
+# Plaud's object-type prefix. A ledger keyed on the literal string wrote two
+# meeting notes for one recording, once per spelling.
+HEX = "0123456789abcdef0123456789abcdef"
+
+
+def test_canonical_id_strips_plauds_object_prefix_and_nothing_else():
+    assert syncjob.canonical_id(f"plaud:of_{HEX}") == f"plaud:{HEX}"
+    assert syncjob.canonical_id(f"plaud:{HEX}") == f"plaud:{HEX}"
+    assert syncjob.canonical_id("plaud:of_of_x") == "plaud:of_x"
+    # `of_` means nothing outside the plaud namespace: left exactly as given.
+    assert syncjob.canonical_id("inbox:of_abc") == "inbox:of_abc"
+    assert syncjob.canonical_id("m365:of_abc") == "m365:of_abc"
+
+
+def test_known_recording_ids_keys_both_plaud_id_forms_on_the_hash(tmp_path):
+    root = make_vault(tmp_path)
+    write_meeting(root, "15-09-26-morning-run", f"plaud:{HEX}")
+    ids, _ = syncjob.known_recording_ids(root)
+    assert ids == {f"plaud:{HEX}": "20-meetings/15-09-26-morning-run.md"}
+    (root / "20-meetings" / "15-09-26-morning-run.md").unlink()
+    write_meeting(root, "15-09-26-afternoon-run", f"plaud:of_{HEX}")
+    ids, _ = syncjob.known_recording_ids(root)
+    assert ids == {f"plaud:{HEX}": "20-meetings/15-09-26-afternoon-run.md"}
+
+
+@pytest.mark.parametrize("in_vault, discovered", [
+    (f"plaud:{HEX}", f"plaud:of_{HEX}"),
+    (f"plaud:of_{HEX}", f"plaud:{HEX}"),
+])
+def test_dedup_recognises_a_recording_synced_under_the_other_id_form(
+        tmp_path, in_vault, discovered):
+    """The live incident: synced under the bare id in the morning, listed as
+    of_<hex> in the afternoon, synced again."""
+    root = make_vault(tmp_path)
+    write_meeting(root, "15-09-26-once", in_vault)
+    result = syncjob.dedup(root, [discovered])
+    assert result["new"] == []
+    assert result["synced"] == {discovered: "20-meetings/15-09-26-once.md"}
+
+
+def test_dedup_answers_in_the_ids_it_was_given(tmp_path):
+    """The orchestrator matches `new` back to listing entries by id, so dedup
+    compares in canonical form but never rewrites what it echoes."""
+    root = make_vault(tmp_path)
+    result = syncjob.dedup(root, [f"plaud:of_{HEX}"])
+    assert result["new"] == [f"plaud:of_{HEX}"]
+
+
+def test_skip_list_matches_across_plaud_id_forms(tmp_path):
+    root = make_vault(tmp_path)
+    syncjob.skip(root, f"plaud:of_{HEX}", reason="tiny clip: 12s recording")
+    assert syncjob.read_skip_list(root) == {f"plaud:{HEX}"}
+    again = syncjob.skip(root, f"plaud:{HEX}")
+    assert again["already_present"] is True
+    skip_file = root / syncjob.SKIP_FILE_RELPATH
+    assert skip_file.read_text(encoding="utf-8").count(HEX) == 1
+    assert syncjob.dedup(root, [f"plaud:of_{HEX}"])["skipped"] == [f"plaud:of_{HEX}"]
+
+
+def test_a_skip_line_already_in_the_of_form_still_suppresses(tmp_path):
+    root = make_vault(tmp_path)
+    skip_file = root / syncjob.SKIP_FILE_RELPATH
+    skip_file.parent.mkdir(parents=True)
+    skip_file.write_text(f"plaud:of_{HEX}\n", encoding="utf-8")
+    assert syncjob.dedup(root, [f"plaud:{HEX}"])["skipped"] == [f"plaud:{HEX}"]

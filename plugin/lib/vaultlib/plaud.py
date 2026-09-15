@@ -16,7 +16,7 @@ from datetime import datetime, timezone as _timezone
 from pathlib import Path
 from typing import Optional, Tuple
 
-from . import dates
+from . import dates, syncjob
 
 ENRICHMENT_HEADER = "## Enrichment (recorder summary)"
 
@@ -198,10 +198,17 @@ def reassemble(meta_path: str, transcript_paths, note_path: Optional[str],
     rec_id = str(meta["id"])
     if "/" in rec_id or "\\" in rec_id or ".." in rec_id:
         raise PlaudError(f"meta id {rec_id!r} is not usable as a filename")
+    # The ledger key: the connector's id with Plaud's `of_` object prefix
+    # stripped (syncjob.canonical_id). The blob keeps the connector's own id
+    # in its filename — that is scratch, not ledger.
+    recording_id = syncjob.canonical_id(f"plaud:{rec_id}")
     transcript = _load_all(transcript_paths, "transcript")
     for page in transcript:
+        # Meta and page may spell one recording differently (the listing and
+        # the transcript endpoint changed spelling on different days).
         if isinstance(page, dict) and page.get("file_id") \
-                and str(page["file_id"]) != rec_id:
+                and syncjob.canonical_id(f"plaud:{page['file_id']}") \
+                != recording_id:
             raise PlaudError(
                 f"transcript page carries file_id {page['file_id']!r} but "
                 f"the meta is recording {rec_id!r} — wrong meta/transcript "
@@ -253,7 +260,7 @@ def reassemble(meta_path: str, transcript_paths, note_path: Optional[str],
 
     duration_ms = max_end_ms or int(meta.get("duration") or 0)
     return {
-        "recording_id": f"plaud:{rec_id}",
+        "recording_id": recording_id,
         "duration_min": round(duration_ms / 60000),
         "recorded_local": recorded_local,
         "has_enrichment": summary is not None,
