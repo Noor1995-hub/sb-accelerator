@@ -16,7 +16,7 @@ from __future__ import annotations
 import re
 import sys
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 _LIB = Path(__file__).resolve().parents[2] / "lib"
 if str(_LIB) not in sys.path:
@@ -37,10 +37,15 @@ _LEGACY_CALLOUT_RE = re.compile(r"\A>\s*\[!\w+\][+-]?\s*\*\*(Now|Context)\*\*")
 
 
 def _split_items(text: str) -> List[str]:
-    """One bullet per item: split on ` · ` first, then on `; `."""
+    """One bullet per item: split on ` · ` first; a chunk splits further on
+    `; ` only when it holds two or more `;` — one `;` is prose, two or more
+    is a chained list (the same threshold `projectstate.validate` refuses:
+    ≥ 2 `;` in one rendered item means it chains several tasks in one
+    bullet). A single `;` inside a chunk is left exactly as written."""
     items: List[str] = []
     for chunk in re.split(r"\s·\s", text):
-        for piece in re.split(r";\s+", chunk):
+        pieces = re.split(r";\s+", chunk) if chunk.count(";") >= 2 else [chunk]
+        for piece in pieces:
             piece = piece.strip().rstrip(";").strip()
             if piece and piece not in _PLACEHOLDERS:
                 items.append(piece)
@@ -50,17 +55,21 @@ def _split_items(text: str) -> List[str]:
 def _collect_owe(text: str, groups: Dict[str, List[str]]) -> None:
     """Fold a v1 Owe line into `groups` (owner -> tasks), insertion-ordered.
 
-    ` · ` separates owner chunks; `; ` separates tasks. A task that itself
-    opens with `Name:` starts a new owner (Open Items wrote
-    `Priya: a; Jamie: b`); one that does not inherits the chunk's owner
-    (the Now callout wrote `📤 Priya: a; b · 📤 Leo: c`). A task with no
-    owner anywhere lands under "Unassigned". A task phrased `Anthropic:
-    push harder` reads as owner "Anthropic" — acceptable for a reshape the
-    next evening run rewrites.
+    ` · ` separates owner chunks; a chunk splits further on `; ` only when
+    it holds two or more `;` — one `;` is prose, two or more is a chained
+    list (the same threshold `projectstate.validate` refuses: ≥ 2 `;` in one
+    rendered item means it chains several tasks in one bullet). A task that
+    itself opens with `Name:` starts a new owner (Open Items wrote
+    `Priya: a; Jamie: b; Renee: c`); one that does not inherits the chunk's
+    owner (the Now callout wrote `📤 Priya: a; b; c · 📤 Leo: c`). A task
+    with no owner anywhere lands under "Unassigned". A task phrased
+    `Anthropic: push harder` reads as owner "Anthropic" — acceptable for a
+    reshape the next evening run rewrites.
     """
     for chunk in re.split(r"\s·\s", text or ""):
         owner = "Unassigned"
-        for piece in re.split(r";\s+", chunk):
+        pieces = re.split(r";\s+", chunk) if chunk.count(";") >= 2 else [chunk]
+        for piece in pieces:
             piece = piece.strip().rstrip(";").strip()
             if not piece or piece in _PLACEHOLDERS:
                 continue

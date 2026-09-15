@@ -13,7 +13,6 @@ from test_vaultlib_vault import make_vault
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 M002 = REPO_ROOT / "plugin" / "migrations" / "002-structure-version-3" / "migrate.py"
-FIXTURE_ROOT = REPO_ROOT / "fixtures" / "demo-vault"
 
 
 def load():
@@ -40,9 +39,9 @@ last-updated: 2026-06-01
 > [!summary]+ **Now** — as of 01-06-26
 > - **Stage** — Yard 1 commissioned; yards 2–3 being re-scoped.
 > - **Defining decision** — [[2026-05-20-single-vendor-strategy-adopted]]
-> - **Next event** — Vendor contract signature, target 2026-09-01; steering call, Thursday 4 June
-> - **Owe** — 📤 Priya Nathan: revised commissioning schedule to Leo; align with Renee · 📤 Leo Marchetti: confirm the sponsor date
-> - **Watch** — Roughly six weeks of slip; Renee was not in the room when it was agreed
+> - **Next event** — Vendor contract signature, target 2026-09-01; steering call, Thursday 4 June; budget review, Tuesday 9 June
+> - **Owe** — 📤 Priya Nathan: revised commissioning schedule to Leo; align with Renee; flag risk to steering · 📤 Leo Marchetti: confirm the sponsor date
+> - **Watch** — Roughly six weeks of slip; Renee was not in the room when it was agreed; the mitigation plan is not yet costed
 
 > [!info]- **Context**
 > - **Contacts** — Leo Marchetti (COO), Renee Castillo (IT Director)
@@ -58,8 +57,8 @@ FROM "30-projects/meridian-yard-automation-program/decisions"
 
 ## Open Items
 
-- **📤 Owe** — Priya Nathan: revised commissioning schedule to Leo (by 2026-06-15); Jamie Ellwood: floor walk with the vendor
-- **👤 Awaiting** — Consolidated integration estimate from the yard-1 vendor; Renee's availability for the July cut-over
+- **📤 Owe** — Priya Nathan: revised commissioning schedule to Leo (by 2026-06-15); Jamie Ellwood: floor walk with the vendor; Renee Castillo: confirm yard-3 walkthrough
+- **👤 Awaiting** — Consolidated integration estimate from the yard-1 vendor; Renee's availability for the July cut-over; confirm scope with IT security
 - **❓ Question** — Whether yard 3's PLC refresh sits inside this scope
 - **⏳ Pending** — _none yet_
 
@@ -102,19 +101,49 @@ def test_parse_v1_body_splits_the_mega_lines():
     assert parsed["stage"] == "Yard 1 commissioned; yards 2–3 being re-scoped."
     assert parsed["defining_decision"] == "[[2026-05-20-single-vendor-strategy-adopted]]"
     assert [r["what"] for r in parsed["coming_up"]] == [
-        "Vendor contract signature, target 2026-09-01", "steering call, Thursday 4 June"]
+        "Vendor contract signature, target 2026-09-01", "steering call, Thursday 4 June",
+        "budget review, Tuesday 9 June"]
     owe = {g["owner"]: g["items"] for g in parsed["owe"]}
     assert owe["Priya Nathan"] == ["revised commissioning schedule to Leo", "align with Renee",
+                                   "flag risk to steering",
                                    "revised commissioning schedule to Leo (by 2026-06-15)"]
     assert owe["Leo Marchetti"] == ["confirm the sponsor date"]
     assert owe["Jamie Ellwood"] == ["floor walk with the vendor"]
+    assert owe["Renee Castillo"] == ["confirm yard-3 walkthrough"]
     assert parsed["awaiting"] == ["Consolidated integration estimate from the yard-1 vendor",
-                                  "Renee's availability for the July cut-over"]
+                                  "Renee's availability for the July cut-over",
+                                  "confirm scope with IT security"]
     assert parsed["questions"] == ["Whether yard 3's PLC refresh sits inside this scope"]
     assert parsed["pending"] == []
-    assert parsed["watch"] == ["Roughly six weeks of slip", "Renee was not in the room when it was agreed"]
+    assert parsed["watch"] == ["Roughly six weeks of slip", "Renee was not in the room when it was agreed",
+                               "the mitigation plan is not yet costed"]
     assert parsed["context"] == {"contacts": "Leo Marchetti (COO), Renee Castillo (IT Director)",
                                  "source": "Follow-on from the Phase 0 warehouse pilot"}
+
+
+def test_a_single_semicolon_is_prose_and_stays_one_item():
+    """`;` inside one chunk only splits it when it holds two or more of
+    them — one `;` reads as ordinary prose punctuation, not a chained list."""
+    module = load()
+    body = (
+        "> [!summary]+ **Now** — as of 01-06-26\n"
+        "> - **Watch** — Nothing dated; the monthly review pack is the "
+        "standing obligation\n")
+    parsed = module.parse_v1_body(body)
+    assert parsed["watch"] == [
+        "Nothing dated; the monthly review pack is the standing obligation"]
+
+
+def test_two_semicolons_still_split_into_three_items():
+    module = load()
+    body = (
+        "> [!summary]+ **Now** — as of 01-06-26\n"
+        "> - **Watch** — Nothing dated; the monthly review pack is the "
+        "standing obligation; also flag the offsite\n")
+    parsed = module.parse_v1_body(body)
+    assert parsed["watch"] == [
+        "Nothing dated", "the monthly review pack is the standing obligation",
+        "also flag the offsite"]
 
 
 def test_apply_reshapes_and_keeps_every_sentence(tmp_path):
