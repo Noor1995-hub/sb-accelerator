@@ -96,7 +96,7 @@ From whatever you get, extract only what is actually there. Do not invent:
 
 | Extract | Into |
 |---|---|
-| One line on where this stands right now | `--stage` |
+| One line for the *Where it stands* card | `--stage` |
 | Named people and their roles | `--contacts` |
 | How this arrived — referral, inbound mail, a meeting | `--source` |
 | Deadlines or urgency signals | mention in your summary; the index has no field for it yet |
@@ -183,7 +183,8 @@ Report, briefly:
 1. **Never hand-write the files.** Every write goes through the CLI. It
    validates against the ontology; you do not.
 2. **One folder per project.** `index.md` is the queryable object; artifacts
-   sit beside it.
+   sit beside it. Its body is machine-rendered by `project state write`; the
+   owner's own notes go under a trailing `## Notes` heading.
 3. **Do not invent context.** A placeholder is better than a plausible
    fabrication — this vault is read as a record.
 4. **Do not put the entity name in the project name** — it is already a field

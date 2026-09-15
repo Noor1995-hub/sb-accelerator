@@ -119,10 +119,13 @@ python3 "$VAULTLIB" daily-note read --vault "$VAULT" --date <recap_from>
 ```
 
 `exists: false` is a normal first-run state — note it and move on. Otherwise
-collect per-meeting `jottings` and `end_of_day` bullets: they are context for
-the recap (stage 6) and decision candidates (stage 4). The note itself is the
-archive of the day — **never modify it**, and never route jottings into other
-notes; in v1 they inform, nothing more.
+collect, per meeting, `notes` (the owner's bullets under `#### Notes`, or
+bullets directly under the heading on a note written before v2) and
+`actions` (`{text, done}` from the `- [ ]` / `- [x]` list under
+`#### Actions`), plus the `end_of_day` bullets. All of it is context for the
+recap (stage 6) and decision candidates (stage 4); an action is a jotting
+the owner marked as a task, nothing routes it anywhere yet. The note itself
+is the archive of the day — **never modify it**.
 
 ## Stage 3 — Sync, refresh
 
@@ -180,22 +183,44 @@ The instructions each subagent gets:
 
 1. Read the `newFiles` meetings end-to-end — Key Takeaways, Debrief, Action
    Items.
-2. Rewrite the `> [!summary]+ **Now**` callout in `indexPath` — **exactly 5
-   bullets**: Stage · Defining decision (wikilink) · Next event · Owe ·
-   Watch. Rewrite `## Open Items` (add new, remove resolved — vocabulary:
-   📤 Owe · 👤 Awaiting · ❓ Question · ⏳ Pending). Touch **nothing else in
-   the body** — the Dataview blocks render themselves.
-3. Frontmatter goes through the CLI, never your editor:
+2. Compose the project's **state** as JSON and write it to
+   `$SCRATCH/project-state-<slug>.json`. The CLI renders the whole index body
+   from it and refuses anything over its caps, naming the field:
 
 ```bash
-python3 "$VAULTLIB" project touch --vault "$VAULT" --slug <slug> --date <today> --next-milestone "<one line>" --next-milestone-date <ISO>
+cat > "$SCRATCH/project-state-<slug>.json" <<'JSON'
+{
+  "as_of": "<today>",
+  "stage": "one or two sentences, ≤ 60 words",
+  "hot_potatoes": [{"signal": "red", "text": "≤ 30 words — needs the owner's hand this week"},
+                   {"signal": "amber", "text": "≤ 30 words — a risk building, nothing to do yet"}],
+  "insights": ["≤ 30 words, at most two"],
+  "defining_decision": "<decision stem under this project, or null>",
+  "coming_up": [{"when": "Wed 16 Sept", "what": "≤ 40 words", "date": "2026-09-16"}],
+  "owe": [{"owner": "Full Name", "items": ["one task per item — never chain with ';'"]}],
+  "awaiting": ["…"], "questions": ["…"], "pending": ["…"], "watch": ["…"],
+  "context": {"contacts": "…", "source": "…"},
+  "next_milestone": {"text": "one line", "date": "<ISO>"}
+}
+JSON
+python3 "$VAULTLIB" project state write --vault "$VAULT" --slug <slug> \
+  --state "$SCRATCH/project-state-<slug>.json" --today <today>
 ```
 
-   (Omit the milestone pair when no concrete next event was identified.)
-   `touch` also stamps `state-updated` with the current time — that timestamp,
-   not the day in `last-updated`, is what the next run's update queue compares
-   meeting datetimes against, so a meeting confirmed later the same day still
-   queues.
+   Start from the index as it stands (read it: the current card, Coming up,
+   and every Background list are your prior state) and fold the new meetings
+   in — carry items that are still open, drop the ones the meetings closed,
+   never invent. `hot_potatoes` are the ≤ 3 things the owner must act on or
+   watch this week; `insights` are patterns, not events. `coming_up` holds
+   dated events only, ≤ 10 rows, the `date` sorts them. Omit
+   `next_milestone` when no concrete next event exists. Identity names
+   (entities, projects, people) go in as `[[slug]]` wikilinks — the CLI
+   rewrites them to links that open. A refusal names the field and the cap;
+   fix that field and retry once. `state write` also stamps `last-updated`
+   and `state-updated`, so do **not** call `project touch` separately.
+3. Never edit `index.md` with your editor — the body is machine-rendered and
+   a hand edit is overwritten on the next run; the owner's own `## Notes`
+   section at the bottom, if present, is the one thing the CLI preserves.
 4. Decision capture: extract candidates from the new meetings AND the
    harvest jottings, then follow
    `${CLAUDE_PLUGIN_ROOT}/skills/log-decision/SKILL.md` in **background mode**
@@ -204,7 +229,7 @@ python3 "$VAULTLIB" project touch --vault "$VAULT" --slug <slug> --date <today> 
    the engagement AND changes a stakeholder's behaviour), dedup against
    `existingDecisions`, supersession only on explicit conflict language,
    never delete, status flips only. Writing nothing is a valid outcome.
-5. Return a fenced JSON block: `{"slug", "indexUpdated": bool,
+5. Return a fenced JSON block: `{"slug", "stateWritten": bool,
    "decisionsWritten": [stems], "decisionsSkipped": N, "notes"}`. A subagent
    that fails or returns no block becomes a warning, not a retry.
 
@@ -212,9 +237,8 @@ Pin the model rather than letting it inherit. This pipeline is built to run
 unattended every evening, and a subagent spawned with no `model` runs at
 whatever the session costs — a scheduled run started from an expensive
 session quietly bills every project at that rate. The work is bounded: read
-the named meetings, rewrite five bullets and an open-items list, apply the
-material-decision test. `/sync-recordings`'s own fan-out in stage 3 pins the
-same way.
+the named meetings, compose the state JSON, apply the material-decision
+test. `/sync-recordings`'s own fan-out in stage 3 pins the same way.
 
 **Why this is a hard batching rule and not a warning.** A live cost analysis
 of this pipeline found a run whose orchestrator dispatched a 4th subagent
@@ -290,8 +314,13 @@ filter and sort) then never needed again; keeping it in context past that
 point is pure waste that every later turn in the run pays for again. Read it
 back from the file to filter out all-day and cancelled events; sort by start
 time; render times in the vault owner's local timezone. For each event, build
-one prep line — **Attendees:** names · **Last meeting:** date + one-liner ·
-**Context:** one line from the entity dossier and the project's Now callout.
+the prep as **three fields**: `attendees` (names, organizer first),
+`last_meeting` (a wikilink to the most recent note for this entity or
+project with a one-line what-happened, or `none on file`), and `context`
+(one line from the entity dossier and the project's *Where it stands* card,
+or, with no confident match, one line from the event alone and `No tracked
+project.`). Each field is one line; the CLI renders them under `#### Prep`
+and adds empty `#### Notes` and `#### Actions` lists for the owner.
 The lookups: match attendee email domains and subject keywords against
 `40-entities/*/` and active projects in `30-projects/*/index.md` (same
 signals, same order, as `/sync-recordings` step 3); read the matched dossier
@@ -309,8 +338,10 @@ nothing" — say which one happened in the summary.
 
 Compose the recap from: the recap window's meetings (everything in
 `20-meetings/` dated within `recap_from`..`recap_to`), decisions written in
-stage 4, harvest jottings worth carrying forward, and watch items
-(conflicts, unresolved duplicates, self-check warnings). Respect the
+stage 4, harvest jottings worth carrying forward, content risks worth the
+owner's attention, and the run's own mechanics (conflicts, unresolved
+duplicates, self-check warnings) — the last group is `sync_notes`, never
+`watch`. Respect the
 language and depth preferences in
 `99-workflow-config/context/preferences-and-constraints.md`.
 
@@ -330,23 +361,42 @@ from the recap-bound keys, never from `today_day_name`.) This is the one
 error a reader always catches, because they are reading it on the day it is
 wrong about.
 
-**A flat list of meetings is not a recap.** Required shape, in order:
+**A flat list of meetings is not a recap.** The CLI renders the recap from
+fields; you supply the judgment. Caps are enforced by field, and a refusal
+names the field, so one retry always suffices.
 
-1. `> [!info] At a glance` — one line: N meetings · entities touched · themes.
-2. **Themes** — with ≥2 meetings in the window, 2–4 bullets, each a pattern
-   *across* meetings and each naming what it draws on. With one meeting, say
-   what it means, not that it happened.
-3. **Project pulse** — one line per project touched: where it stands (from
-   the project's `Now` callout) and what moved this window.
-4. **Decisions logged** — from stage 4, wikilinked.
-5. **Watch** — conflicts, unresolved duplicates, `SELF-CHECK` lines.
-6. **Carried forward** — jottings worth carrying.
+- `glance.headlines` — 1–4 items, each `{label, text ≤ 20 words}` with
+  `label` one of `Needs your hand` · `Moved` · `New` · `Decided` · `Quiet`.
+  `glance.entities` — the entity slugs touched. The first line (meeting
+  count, window, theme and decision counts) is computed by the CLI; never
+  write it.
+- `themes` — 0–4 patterns *across* meetings: `headline` ≤ 12 words, `body`
+  ≤ 80 words, `sources` as `{stem, label}` meeting or daily-note stems. With
+  one meeting, say what it means, not that it happened.
+- `pulse` — one row per project touched: `project` slug, `signal`, `text`
+  ≤ 40 words on where it stands and what moved. Signals: **red** = needs the
+  owner's hand this week · **amber** = a risk building, nothing to do yet ·
+  **green** = moved forward · **quiet** = no activity in the window.
+- `decisions` — the stems stage 4 wrote; the CLI renders each with its
+  summary and project.
+- `watch` — **content risks only**, one line each (≤ 40 words).
+  **Watch is content only**: every conflict, unresolved duplicate, fetch
+  error, refusal, out-of-reach transcript and `SELF-CHECK` line goes in
+  `sync_notes`, which renders folded, and never in `watch`.
+- `carried_forward` — jottings worth carrying, one line each.
+- `sync_notes` — the mechanics, one line each; also in the run summary.
+
+The catch-up banner is the CLI's: `dates plan`'s `is_catchup` becomes the
+callout on write, and a banner you put in a payload is stripped with a
+warning.
 
 **Every entity, person and project you name is a wikilink to the object you
 looked up — never a name you recalled.**
 `daily-note write` refuses a link that resolves to nothing, and where the
 target is an **entity, person or project** it refuses `[[slug|Display Name]]`
-whose display name disagrees with the vault. Meeting, decision and
+whose display name disagrees with the vault. Write them as `[[slug]]`; the
+CLI rewrites identity links to the path form that opens the object in
+Obsidian. Meeting, decision and
 daily-note aliases are free prose — "Friday's status call" is a reference,
 not a claim about what something is called. A plain-prose name it cannot
 check at all, which is exactly why the linked form is required. If a name
@@ -362,10 +412,25 @@ cat > "$SCRATCH/daily-note.payload.json" <<'JSON'
   "date": "<next_business_day>",
   "recap_window": {"from": "<recap_from>", "to": "<recap_to>",
                    "detailed_from": "<recap_detail_from, only when capped>"},
-  "recap": "> [!info] At a glance\n> {N meetings · entities · themes}\n\n**Themes**\n- {pattern across meetings}\n\n**Project pulse**\n- [[project-slug]] — {where it stands; what moved}",
+  "recap": {
+    "glance": {
+      "entities": ["<entity-slug>"],
+      "headlines": [{"label": "Needs your hand", "text": "<≤ 20 words>"},
+                    {"label": "Moved", "text": "<≤ 20 words>"}]
+    },
+    "themes": [{"headline": "<≤ 12 words>", "body": "<≤ 80 words>",
+                "sources": [{"stem": "<meeting-stem>", "label": "<short label>"}]}],
+    "pulse": [{"project": "<project-slug>", "signal": "green", "text": "<≤ 40 words>"}],
+    "decisions": ["<decision-stem>"],
+    "watch": ["<content risk, one line>"],
+    "carried_forward": ["<jotting worth carrying>"],
+    "sync_notes": ["<mechanical item, one line>"]
+  },
   "meetings": [
-    {"time": "09:00", "subject": "Weekly Status", "entity": "acme-industries",
-     "prep": "**Attendees:** … · **Last meeting:** … · **Context:** …"}
+    {"time": "09:00", "subject": "Weekly Status", "entity": "<entity-slug>",
+     "prep": {"attendees": "<names>",
+              "last_meeting": "[[<meeting-stem>|<date — one-liner>]]",
+              "context": "[[<project-slug>]] · <one line>"}}
   ]
 }
 JSON
@@ -488,4 +553,6 @@ python3 "$VAULTLIB" runlog append --vault "$VAULT" --routine evening-sync \
     the banner comes from the CLI; one note covers the whole window.
 11. **Names in a machine region are looked up, not recalled.** Entities,
     people and projects appear as wikilinks to objects that exist. The CLI
-    refuses the rest — treat a refusal as a lookup you skipped.
+    refuses the rest — treat a refusal as a lookup you skipped. Write them
+    as `[[slug]]`; the CLI rewrites identity links to the path form that
+    opens the object in Obsidian.

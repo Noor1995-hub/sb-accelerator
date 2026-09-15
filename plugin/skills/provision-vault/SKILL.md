@@ -141,7 +141,7 @@ target that already has files in it, makes the copy writable (a read-only
 plugin cache — Cowork's is one — would otherwise hand its read-only modes
 to every file and folder in the new vault), and verifies afterward that
 the vault accepts a write, that `.obsidian/` arrived, and that
-`structure-version` reads `2` before reporting success. It also attempts
+`structure-version` reads `3` before reporting success. It also attempts
 the `.claude → claude` symlink as part of the same run (see step 3).
 
 Read `ok` first. On `ok: false`, **surface `error` and `hint` verbatim**.
