@@ -15,7 +15,7 @@ delivers them.
 
 ## Unreleased
 
-- The People base gains a **Direct reports** view; set `relationship: direct-report` on a person to show them there. (#PR)
+- The People base gains a **Direct reports** view; set `relationship: direct-report` on a person to show them there. (#177)
 
 ## v0.10.33 — 2026-09-07
 
