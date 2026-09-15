@@ -207,6 +207,13 @@ enums:
 - `relationship: null` (key present, value empty) = **uncurated** — that is
   what People.base's "Uncurated" view filters on. `keys_present` means the
   key itself must exist even when its value is null.
+- `relationship: direct-report` is what places a person in People.base's
+  "Direct reports" view. `company` and `role` are expected to be filled for a
+  direct report — the sync creates people with all three empty, so that view
+  stays empty until someone curates.
+- Optional body convention for direct-report notes: a `## Development`
+  section with `### Feedback History` (a dated table) and `### Growth Areas`.
+  Nothing in the plugin reads or writes it; it is a place, not a pipeline.
 - Auto-created from meeting attendees; enriched manually via People Base.
 - Example: `50-people/jordan-reyes.md`
 

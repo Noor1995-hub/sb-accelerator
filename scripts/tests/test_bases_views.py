@@ -95,6 +95,9 @@ EXPECTED = [
     ("50-people/People.base", "All", ALL_PEOPLE),
     # jamie-ellwood is the only fixture person with `relationship` empty.
     ("50-people/People.base", "Uncurated", {PEOPLE.format("jamie-ellwood")}),
+    # The two fixture people curated as `relationship: direct-report`.
+    ("50-people/People.base", "Direct reports",
+     {PEOPLE.format("omar-siddiqui"), PEOPLE.format("sam-okafor")}),
 ]
 
 BASE_FILES = sorted({base for base, _, _ in EXPECTED})
