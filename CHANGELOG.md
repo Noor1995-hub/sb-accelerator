@@ -15,6 +15,8 @@ delivers them.
 
 ## Unreleased
 
+## v0.10.36 — 2026-09-15
+
 - A meeting you tick as reviewed *after* its project's evening update no longer slips past the next run: the tick is stamped `confirmed-at`, the update queue treats that moment as when the meeting became new to the project, and the evening pipeline folds ticks once more right before building the queue. Meetings confirmed before this release are unaffected. (#185)
 
 ## v0.10.35 — 2026-09-15
