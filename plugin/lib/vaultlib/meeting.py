@@ -235,6 +235,13 @@ def write(root: Path, payload: dict) -> dict:
     _require_keys(payload)
     _validate_scalars(payload)
     _validate_confidence(payload)
+    if payload.get("source-recording-id") is not None:
+        # Written in canonical form, so the ledger converges on one spelling
+        # per recording going forward — the lookup below compares the same
+        # way, so a recording already synced under the other spelling is
+        # refused rather than written twice.
+        payload = {**payload, "source-recording-id":
+                   syncjob.canonical_id(payload["source-recording-id"])}
     # A note is the one capture that legitimately names nobody — a voice memo
     # musing, a pasted paragraph. Every meeting has attendees by definition.
     attendees = _require_slug_list(

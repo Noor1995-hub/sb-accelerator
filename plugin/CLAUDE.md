@@ -91,6 +91,21 @@ else, and the vault would be telling two stories about one decision. The
 sidecar says which of the three cases it is, because a re-park of an id
 suppressed before reasons existed writes a reason that is genuinely new.
 
+### Recording ids are compared in canonical form
+
+Plaud listed a recording as its bare 32-hex hash until 2026-09-15 and as
+`of_<hex>` from then on; the bare form now 404s on every Plaud endpoint.
+Both spell one recording, and an exact-match ledger wrote it twice. Every
+id comparison and every write — `known_recording_ids`, the skip list,
+`sync dedup`, `meeting write`, `plaud reassemble` — goes through
+`syncjob.canonical_id()`, which strips that prefix for the `plaud`
+namespace only. Stored ids converge on the bare hash (what every deployed
+vault already holds); `sync dedup` answers in the caller's own spelling so
+the orchestrator can match `new` ids back to listing entries. The `of_` id
+the connector emitted stays in the scratch meta file and the blob filename
+— that is what `get_transcript` needs, and it is never reconstructed from
+the stored form.
+
 ### The mode flag decides an audit field
 
 `decision write` requires exactly one of `--foreground` or `--background`, and
