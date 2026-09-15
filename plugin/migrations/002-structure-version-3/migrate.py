@@ -9,6 +9,20 @@ Context). Text is moved and re-bulleted, never dropped: the `·`/`;`-joined
 mega-lines become one bullet per item. The next evening run then rewrites
 the prose through `project state write`, which is where it gets short.
 
+`LOSSY = None` is lossless by construction, not by convention. Anything the
+parser cannot classify — an `## Open Items` written as a prose paragraph
+instead of the expected `- **Owe** —` bullets, a `Now`/`Context` callout
+bullet under a label the parser does not map, stray preamble prose outside
+the title and the two callouts, or an entire extra `## ` section the v1
+format never defined — is carried verbatim into a `### Carried over by the
+structure-version 3 upgrade` block under `## Notes` (appended to an
+existing Notes tail, or a fresh one) rather than dropped on the floor. The
+one exception: the Dataview fences inside `## Decisions` and
+`## Related Meetings` are not carried — those two blocks are exactly what
+this migration replaces with the `Recent decisions`/`Recent meetings`
+queries, so carrying them forward would duplicate the query, not preserve a
+human's words.
+
 Touches no template-managed file. Frontmatter is untouched.
 """
 from __future__ import annotations
@@ -38,6 +52,25 @@ _LEGACY_CALLOUT_RE = re.compile(r"\A>\s*\[!\w+\][+-]?\s*\*\*(Now|Context)\*\*")
 # owners' entries — Open Items writes `Priya: a; Jamie: b` with exactly one
 # `;`, and it must split there regardless of the ≥2 rule below.
 _OWNER_SPLIT_RE = re.compile(r";\s+(?=(?:📤\s*)?[A-Z][\w'’.\- ]{1,40}:\s)")
+_QUOTE_PREFIX_RE = re.compile(r"\A[ \t]*>[ \t]?")
+
+# The bullet labels each callout maps into `parse_v1_body`'s output. A
+# callout bullet under any other label is unclassified and gets carried —
+# see `_scan_preamble`.
+_NOW_LABELS = {"Stage", "Defining decision", "Next event", "Owe", "Watch"}
+_CONTEXT_LABELS = {"Contacts", "Source"}
+# v1 H2 sections `parse_v1_body` already accounts for by name. `Notes` is
+# excluded from carrying (not "unclassified") because it is the destination
+# the carried content itself lands in — see `_carry_over_tail`.
+_KNOWN_V1_SECTIONS = set(V1_SECTIONS) | {"Notes"}
+_CARRY_HEADING = "### Carried over by the structure-version 3 upgrade"
+
+
+def _unquote(line: str) -> str:
+    """One level of `>` removed. Content carried out of a Now/Context
+    callout into the flat `## Notes` tail should not keep the blockquote
+    marker that only meant something inside the callout box."""
+    return _QUOTE_PREFIX_RE.sub("", line, count=1)
 
 
 def _split_items(text: str) -> List[str]:
@@ -94,37 +127,86 @@ def _collect_owe(text: str, groups: Dict[str, List[str]]) -> None:
                     groups[owner].append(piece)
 
 
-def _callout_bullets(preamble: str, title: str) -> Dict[str, str]:
-    """`label -> text` for the bullets of the `**title**` callout in the preamble."""
-    out: Dict[str, str] = {}
-    inside = False
+def _scan_preamble(preamble: str):
+    """`(now bullets, context bullets, carried lines)` from the preamble.
+
+    Single pass, because "carried" is everything the other two do *not*
+    claim: a Now/Context callout bullet under a label `_NOW_LABELS`/
+    `_CONTEXT_LABELS` does not list, any other `>`-prefixed line inside
+    those callouts that is not a bullet at all, and any non-blank preamble
+    line outside the H1 title and the two callouts. Carried callout content
+    is unquoted (`_unquote`) since it is leaving the callout box; carried
+    lines from outside a callout keep whatever they looked like (a stray
+    prose paragraph, or even some other callout the v1 format never
+    defined) verbatim.
+    """
+    now: Dict[str, str] = {}
+    context: Dict[str, str] = {}
+    carried: List[str] = []
+    inside = None  # None | "Now" | "Context"
+    seen_title = False
     for line in preamble.split("\n"):
         header = _LEGACY_CALLOUT_RE.match(line)
         if header:
-            inside = header.group(1) == title
+            inside = header.group(1)
             continue
-        if not line.startswith(">"):
-            inside = False
-            continue
-        if inside:
-            bullet = _CALLOUT_BULLET_RE.match(line.strip())
+        if inside and line.startswith(">"):
+            stripped = line.strip()
+            known = _NOW_LABELS if inside == "Now" else _CONTEXT_LABELS
+            target = now if inside == "Now" else context
+            bullet = _CALLOUT_BULLET_RE.match(stripped)
             if bullet:
-                out[bullet.group(1).strip()] = bullet.group(2).strip()
-    return out
+                label, text = bullet.group(1).strip(), bullet.group(2).strip()
+                if label in known:
+                    target[label] = text
+                else:
+                    carried.append(_unquote(line).rstrip())
+            elif stripped not in ("", ">"):
+                carried.append(_unquote(line).rstrip())
+            continue
+        inside = None
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if not seen_title and stripped.startswith("# ") and not stripped.startswith("## "):
+            seen_title = True  # the H1 title — not carried
+            continue
+        carried.append(line.rstrip())
+    return now, context, carried
 
 
 def parse_v1_body(body: str) -> dict:
     sections = markdown.split_sections(body, level=2)
     preamble = sections[0][1]
-    now = _callout_bullets(preamble, "Now")
-    context = _callout_bullets(preamble, "Context")
+    now, context, carry = _scan_preamble(preamble)
     open_items: Dict[str, str] = {}
+    carry_open_items: List[str] = []
+    other_sections: List[str] = []
     for title, content in sections[1:]:
         if title == "Open Items":
             for line in content.split("\n"):
-                match = _OPEN_ITEM_RE.match(line.strip())
+                stripped = line.strip()
+                if not stripped:
+                    continue
+                match = _OPEN_ITEM_RE.match(stripped)
                 if match:
                     open_items[match.group(1)] = match.group(2).strip()
+                else:
+                    carry_open_items.append(line.rstrip())
+        elif title not in _KNOWN_V1_SECTIONS:
+            # Every other v1 H2 section is one the parser never defined —
+            # e.g. a hand-added `## Links` — and its whole content is
+            # carried, not just individual lines.
+            trimmed = content.strip("\n")
+            if trimmed:
+                other_sections.append(f"#### {title}\n\n{trimmed}")
+    carry_blocks: List[str] = []
+    if carry:
+        carry_blocks.append("\n".join(carry))
+    if carry_open_items:
+        carry_blocks.append("\n".join(carry_open_items))
+    carry_blocks.extend(other_sections)
+
     stage = now.get("Stage", "").strip()
     decision = now.get("Defining decision", "").strip()
     owe_groups: Dict[str, List[str]] = {}
@@ -143,12 +225,33 @@ def parse_v1_body(body: str) -> dict:
             "contacts": (context.get("Contacts") or "").strip() or None,
             "source": (context.get("Source") or "").strip() or None,
         },
+        # Not a `render_body` field — `_reshape` pops this to build the
+        # Notes tail and never passes it through. `parse_v1_body` is tested
+        # directly, so it stays part of this function's own contract.
+        "carry": carry_blocks,
     }
 
 
 def _is_v1(body: str) -> bool:
     titles = {title for title, _ in markdown.split_sections(body, level=2)}
     return bool(titles & set(V1_SECTIONS)) and not ({"Background"} <= titles)
+
+
+def _carry_over_tail(existing_tail: str, carry: List[str]) -> str:
+    """The `## Notes` tail `_reshape` should write: `existing_tail` with the
+    carried content appended under `_CARRY_HEADING`, or a fresh `## Notes`
+    section holding just that if there was no tail. No carry means no
+    change — `render_body` gets back exactly the tail that was already
+    there (including None), which is what keeps a fully-classifiable index
+    (nothing carried) producing no `## Notes` section at all.
+    """
+    if not carry:
+        return existing_tail
+    block = _CARRY_HEADING + "\n\n" + "\n\n".join(carry) + "\n"
+    if existing_tail:
+        prefix = existing_tail if existing_tail.endswith("\n") else existing_tail + "\n"
+        return prefix + "\n" + block
+    return "\n## Notes\n\n" + block
 
 
 def _reshape(path: Path, root: Path) -> None:
@@ -161,11 +264,12 @@ def _reshape(path: Path, root: Path) -> None:
     if not vault.ISO_DATE_RE.match(as_of):
         as_of = "1970-01-01"
     state = parse_v1_body(body)
+    carry = state.pop("carry")
     state["as_of"] = as_of
     for row in state["coming_up"]:
         row["when"] = row["when"] or "—"
-    _, tail = projectstate.split_notes_tail(body)
-    state["notes_tail"] = tail
+    _, existing_tail = projectstate.split_notes_tail(body)
+    state["notes_tail"] = _carry_over_tail(existing_tail, carry)
     vault.atomic_write(path, head + projectstate.render_body(name, slug, state))
 
 

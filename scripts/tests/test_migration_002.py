@@ -82,6 +82,113 @@ def vault_with_v1_index(tmp_path):
     return root
 
 
+# `## Open Items` written as a hand-typed prose paragraph instead of the
+# `- **Owe** —` bullet shapes the parser expects — the real shape found in
+# fixtures/demo-vault's meridian-warehouse-pilot-phase-0 that silently
+# vanished before the carry-over fix.
+PROSE_OPEN_ITEMS_INDEX = """---
+type: project
+project-name: "Warehouse Pilot"
+slug: meridian-warehouse-pilot
+status: completed
+project-type: initiative
+entity: meridian-freight-holdings
+owner: priya-nathan
+created: 2025-10-01
+last-updated: 2026-02-01
+---
+
+# Warehouse Pilot
+
+> [!summary]+ **Now** — as of 01-02-26
+> - **Stage** — Closed. Delivered on schedule.
+> - **Defining decision** — _none recorded_
+> - **Next event** — _none; project closed_
+> - **Owe** — _nothing outstanding_
+> - **Watch** — _none_
+
+> [!info]- **Context**
+> - **Contacts** — Leo Marchetti (COO)
+> - **Source** — First engagement with Meridian Freight
+
+## Decisions
+
+```dataview
+TABLE WITHOUT ID
+  link(file.path, dateformat(date, "dd-MM-yy")) AS "Date"
+FROM "30-projects/meridian-warehouse-pilot/decisions"
+```
+
+## Open Items
+
+_None — closed with nothing outstanding. The three-yard follow-on is tracked
+separately under [[meridian-yard-automation-program]]._
+
+## Related Meetings
+
+```dataview
+TABLE WITHOUT ID
+  link(file.path, dateformat(date, "dd-MM HH:mm")) AS "Date"
+FROM "20-meetings"
+WHERE econtains(projects, this.slug)
+```
+"""
+
+# A v1 index that added its own `## Links` section — a v1 H2 the parser
+# never defined and must not silently drop.
+LINKS_SECTION_INDEX = """---
+type: project
+project-name: "Widget Program"
+slug: meridian-widget-program
+status: active
+project-type: initiative
+entity: meridian-freight-holdings
+owner: priya-nathan
+created: 2026-01-01
+last-updated: 2026-06-01
+---
+
+# Widget Program
+
+> [!summary]+ **Now** — as of 01-06-26
+> - **Stage** — Scoping.
+> - **Defining decision** — _none yet_
+> - **Next event** — _none yet_
+> - **Owe** — _none yet_
+> - **Watch** — _none yet_
+
+> [!info]- **Context**
+> - **Contacts** — Leo Marchetti (COO)
+> - **Source** — Spin-off from the yard program
+
+## Decisions
+
+```dataview
+TABLE WITHOUT ID
+  link(file.path, dateformat(date, "dd-MM-yy")) AS "Date"
+FROM "30-projects/meridian-widget-program/decisions"
+```
+
+## Open Items
+
+- **⏳ Pending** — _none yet_
+
+## Links
+
+- [Vendor RFP tracker](https://example.com/rfp)
+- [Steering deck](https://example.com/deck)
+
+## Related Meetings
+
+```dataview
+TABLE WITHOUT ID
+  link(file.path, dateformat(date, "dd-MM HH:mm")) AS "Date"
+FROM "20-meetings"
+WHERE econtains(projects, this.slug)
+```
+"""
+
+
 def test_module_contract():
     module = load()
     assert module.TARGET_VERSION == 3
@@ -190,6 +297,66 @@ def test_apply_is_idempotent_and_skips_v2(tmp_path):
     result = module.apply(root)
     assert result["reshaped"] == [] and result["skipped"] == ["meridian-yard-automation-program"]
     assert (root / "30-projects" / "meridian-yard-automation-program" / "index.md").read_bytes() == once
+
+
+def test_fully_classifiable_v1_index_gets_no_notes_section(tmp_path):
+    """The brief's `V1_INDEX` is fully classifiable — every Now/Context
+    bullet has a known label, every Open Items line matches, no extra H2
+    section — so nothing is carried and no `## Notes` section is added."""
+    module = load()
+    root = vault_with_v1_index(tmp_path)
+    module.apply(root)
+    text = (root / "30-projects" / "meridian-yard-automation-program"
+             / "index.md").read_text(encoding="utf-8")
+    assert "## Notes" not in text
+
+
+def test_apply_carries_a_prose_open_items_paragraph_into_notes(tmp_path):
+    module = load()
+    root = make_vault(tmp_path)
+    folder = root / "30-projects" / "meridian-warehouse-pilot"
+    (folder / "decisions").mkdir(parents=True)
+    (folder / "index.md").write_text(PROSE_OPEN_ITEMS_INDEX, encoding="utf-8")
+    (root / "structure-version").write_text("2\n", encoding="utf-8")
+    result = module.apply(root)
+    assert result["reshaped"] == ["meridian-warehouse-pilot"]
+    text = (folder / "index.md").read_text(encoding="utf-8")
+    assert "## Notes" in text
+    assert "### Carried over by the structure-version 3 upgrade" in text
+    assert ("_None — closed with nothing outstanding. The three-yard follow-on is tracked\n"
+            "separately under [[meridian-yard-automation-program]]._") in text
+    module.verify(root)
+
+
+def test_apply_carries_an_unknown_h2_section_under_its_own_heading(tmp_path):
+    module = load()
+    root = make_vault(tmp_path)
+    folder = root / "30-projects" / "meridian-widget-program"
+    (folder / "decisions").mkdir(parents=True)
+    (folder / "index.md").write_text(LINKS_SECTION_INDEX, encoding="utf-8")
+    (root / "structure-version").write_text("2\n", encoding="utf-8")
+    result = module.apply(root)
+    assert result["reshaped"] == ["meridian-widget-program"]
+    text = (folder / "index.md").read_text(encoding="utf-8")
+    assert "### Carried over by the structure-version 3 upgrade" in text
+    assert "#### Links" in text
+    assert "[Vendor RFP tracker](https://example.com/rfp)" in text
+    assert "[Steering deck](https://example.com/deck)" in text
+    module.verify(root)
+
+
+def test_idempotency_holds_for_an_index_with_a_carried_notes_tail(tmp_path):
+    module = load()
+    root = make_vault(tmp_path)
+    folder = root / "30-projects" / "meridian-warehouse-pilot"
+    (folder / "decisions").mkdir(parents=True)
+    (folder / "index.md").write_text(PROSE_OPEN_ITEMS_INDEX, encoding="utf-8")
+    (root / "structure-version").write_text("2\n", encoding="utf-8")
+    module.apply(root)
+    once = (folder / "index.md").read_bytes()
+    result = module.apply(root)
+    assert result["reshaped"] == [] and result["skipped"] == ["meridian-warehouse-pilot"]
+    assert (folder / "index.md").read_bytes() == once
 
 
 def test_verify_fails_when_a_v1_heading_survives(tmp_path):
