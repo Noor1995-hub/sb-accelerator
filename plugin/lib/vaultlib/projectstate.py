@@ -7,6 +7,15 @@ are normalised, and the one human area (a trailing `## Notes` section) is
 preserved verbatim. `render_body` has no validation on purpose — `scaffold`
 renders placeholders through it and migration 002 renders legacy prose that
 may exceed the caps; only `write` (the evening run) enforces them.
+
+Two different contracts share this module, and they are not the same shape:
+`render_body` takes any subset of `state`'s keys (`scaffold` passes only
+`as_of`/`stage`/`context`; migration 002 passes whatever legacy prose it can
+recover) and renders placeholders for everything absent. `validate` (and
+therefore `write`, the evening run's entry point) is stricter: `as_of` and
+`stage` are both required there — the card always leads with a stage line,
+and the stage-4 subagent synthesizing a state update starts from the prior
+state, so it always has one to report. Every other key stays optional.
 """
 from __future__ import annotations
 
@@ -146,6 +155,13 @@ def _norm(root, text, label, offenders, warnings) -> str:
 
 
 def validate(root: Path, slug: str, raw) -> Tuple[dict, List[str], List[str]]:
+    """Refuse a state payload that breaks a §4.2 cap or an identity link.
+
+    Unlike `render_body`, this is strict about the two fields the card
+    always needs: `as_of` and `stage` are required (a missing `stage` is
+    refused by name, not defaulted to a placeholder) — every other key is
+    optional and falls back to a placeholder in the rendered body.
+    """
     if not isinstance(raw, dict):
         raise ProjectStateError("state must be a JSON object")
     unknown = sorted(set(raw) - set(_ALLOWED))
@@ -218,7 +234,7 @@ def validate(root: Path, slug: str, raw) -> Tuple[dict, List[str], List[str]]:
             raise ProjectStateError(f"owe[{i}] needs exactly owner and items")
         items = _list(group["items"], f"owe[{i}].items")
         for j, item in enumerate(items):
-            if item.count(";") >= 3:
+            if item.count(";") >= 2:
                 raise ProjectStateError(
                     f"owe[{i}].items[{j}] chains several tasks with ';' — one item per bullet")
         state["owe"].append({

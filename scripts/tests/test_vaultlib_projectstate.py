@@ -120,6 +120,31 @@ def test_caps_are_refused_by_field(tmp_path, mutate, message):
         projectstate.write(root, slug=slug, payload=payload, today="2026-06-15")
 
 
+def test_stage_is_required_even_though_most_fields_are_optional(tmp_path):
+    # render_body accepts any subset of state's keys (scaffold and migration
+    # 002 both pass partial state through it unvalidated), but validate/write
+    # require as_of and stage — the card always leads with a stage line.
+    root, slug = scaffolded(tmp_path)
+    with pytest.raises(projectstate.ProjectStateError, match="stage"):
+        projectstate.write(root, slug=slug, payload={"as_of": "2026-06-15"}, today="2026-06-15")
+
+
+def test_owe_item_semicolon_boundary(tmp_path):
+    # Two or more ';' means tasks were chained onto one bullet; a single ';'
+    # is ordinary prose and is accepted.
+    root, slug = scaffolded(tmp_path)
+    payload = state()
+    payload["owe"][0]["items"][0] = "Call Bob; email Sue; update the doc"
+    with pytest.raises(projectstate.ProjectStateError, match="one item per bullet"):
+        projectstate.write(root, slug=slug, payload=payload, today="2026-06-15")
+
+    payload = state()
+    payload["owe"][0]["items"][0] = "Call Bob; email Sue about the change"
+    projectstate.write(root, slug=slug, payload=payload, today="2026-06-15")
+    body = (root / "30-projects" / slug / "index.md").read_text(encoding="utf-8")
+    assert "Call Bob; email Sue about the change" in body
+
+
 def test_identity_links_in_free_text_are_normalised_and_bad_ones_refused(tmp_path):
     root, slug = scaffolded(tmp_path)
     payload = state()
