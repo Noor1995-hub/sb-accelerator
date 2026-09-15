@@ -1274,6 +1274,42 @@ def test_v2_payload_merges_into_a_v1_note(tmp_path):
     assert "#### Notes" not in merged   # sub-headings are never retro-fitted
 
 
+def test_read_splits_notes_and_actions_under_a_v2_meeting(tmp_path):
+    root = v2_vault(tmp_path)
+    dailynote.write(root, v2_payload())
+    note = root / "60-daily-notes" / "2026-06-15.md"
+    text = note.read_text(encoding="utf-8")
+    text = text.replace("#### Notes\n- \n\n#### Actions\n- [ ] \n\n### 14:00",
+                        "#### Notes\n- shortlist looks final\n- Sam wants a demo\n\n"
+                        "#### Actions\n- [ ] send the scoring sheet\n- [x] book the demo\n\n### 14:00")
+    note.write_text(text, encoding="utf-8")
+    data = dailynote.read(root, "2026-06-15")
+    first = data["meetings"][0]
+    assert first["time"] == "09:00" and first["entity"] == "acme-industries"
+    assert first["notes"] == ["shortlist looks final", "Sam wants a demo"]
+    assert first["actions"] == [{"text": "send the scoring sheet", "done": False},
+                                {"text": "book the demo", "done": True}]
+    assert first["jottings"] == ["shortlist looks final", "Sam wants a demo",
+                                 "send the scoring sheet", "book the demo"]
+    assert first["prep"].startswith("**Attendees** — Sam Okafor")
+    second = data["meetings"][1]
+    assert second["notes"] == [] and second["actions"] == []
+
+
+def test_read_keeps_v1_bullets_as_notes(tmp_path):
+    root = make_vault(tmp_path)
+    dailynote.write(root, payload())
+    note = root / "60-daily-notes" / "2026-06-15.md"
+    text = note.read_text(encoding="utf-8").replace(
+        "<!-- evening-sync:prep:end -->\n- \n\n### 14:00",
+        "<!-- evening-sync:prep:end -->\n- old style jot\n\n### 14:00")
+    note.write_text(text, encoding="utf-8")
+    data = dailynote.read(root, "2026-06-15")
+    assert data["meetings"][0]["notes"] == ["old style jot"]
+    assert data["meetings"][0]["actions"] == []
+    assert data["meetings"][0]["jottings"] == ["old style jot"]
+
+
 def test_parse_heading_accepts_both_forms():
     assert dailynote.parse_heading("09:00 — Weekly Status · [[acme-industries]]") == (
         "09:00", "Weekly Status", "acme-industries")

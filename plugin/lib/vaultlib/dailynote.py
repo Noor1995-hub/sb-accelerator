@@ -43,6 +43,7 @@ _TIME_RE = re.compile(r"\A([01]\d|2[0-3]):[0-5]\d\Z")
 _HEADING_RE = re.compile(
     r"\A(\d{2}:\d{2}) — (.*?)"
     r"(?: · \[\[(?:40-entities/)?([a-z0-9-]+)(?:/dossier)?(?:\|[^\]]*)?\]\])?\Z")
+_TASK_RE = re.compile(r"\A- \[( |x|X)\]\s*(.*)\Z")
 _ALLOWED_KEYS = ("date", "recap", "meetings", "meetings_note", "recap_window")
 _ALLOWED_MEETING_KEYS = ("time", "subject", "entity", "prep")
 _ALLOWED_WINDOW_KEYS = ("from", "to", "detailed_from")
@@ -706,6 +707,7 @@ def read(root: Path, date_iso_raw) -> dict:
     other_lines: List[str] = []
     current: Optional[dict] = None
     section = ""
+    sub = ""
     fm_end = _frontmatter_end_line(lines)
     for index, line in enumerate(lines):
         if index <= fm_end:
@@ -722,24 +724,35 @@ def read(root: Path, date_iso_raw) -> dict:
         if line.startswith("## "):
             section = line[3:].strip()
             current = None
+            sub = ""
             continue
         if line.startswith("# "):
             continue
         if section == "Meetings" and line.startswith("### "):
             heading = line[4:].strip()
-            match = _HEADING_RE.match(heading)
+            parsed = parse_heading(heading)
             current = {
                 "heading": heading,
-                "time": match.group(1) if match else None,
-                "subject": match.group(2) if match else heading,
-                "entity": match.group(3) if match else None,
-                "prep": None,
-                "jottings": [],
+                "time": parsed[0] if parsed else None,
+                "subject": parsed[1] if parsed else heading,
+                "entity": parsed[2] if parsed else None,
+                "prep": None, "notes": [], "actions": [], "jottings": [],
             }
             meetings.append(current)
+            sub = ""
+            continue
+        if section == "Meetings" and line.startswith("#### ") and current is not None:
+            sub = line[5:].strip().lower()      # "prep" | "notes" | "actions" | anything
             continue
         stripped = line.strip()
         if not stripped:
+            continue
+        task = _TASK_RE.match(stripped)
+        if task and section == "Meetings" and current is not None:
+            text_value = task.group(2).strip()
+            if text_value:
+                current["actions"].append({"text": text_value, "done": task.group(1) != " "})
+                current["jottings"].append(text_value)
             continue
         content = stripped[2:].strip() if stripped.startswith("- ") else (
             "" if stripped == "-" else stripped)
@@ -748,6 +761,9 @@ def read(root: Path, date_iso_raw) -> dict:
         if section == "End of day":
             end_of_day.append(content)
         elif section == "Meetings" and current is not None:
+            if sub == "prep":
+                continue            # a prep line outside the markers is still prep
+            current["notes"].append(content)
             current["jottings"].append(content)
         else:
             other_lines.append(content)
