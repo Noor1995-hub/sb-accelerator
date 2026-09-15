@@ -70,3 +70,12 @@
 .mod-root .markdown-preview-view .metadata-container.is-collapsed .collapse-icon svg.svg-icon {
   transform: none;
 }
+
+/* Daily-note recap v2 callout types. Obsidian's documented mechanism:
+   --callout-color (r, g, b) and --callout-icon (a Lucide icon id). An
+   unknown type falls back to the default "note" look, so a vault whose
+   snippet is behind still renders — just without the accents. */
+.callout[data-callout="glance"] { --callout-color: 14, 165, 233; --callout-icon: lucide-eye; }
+.callout[data-callout="theme"]  { --callout-color: 168, 85, 247; --callout-icon: lucide-git-merge; }
+.callout[data-callout="hot"]    { --callout-color: 239, 68, 68;  --callout-icon: lucide-flame; }
+.callout[data-callout="sync"]   { --callout-color: 148, 163, 184; --callout-icon: lucide-wrench; opacity: 0.85; }

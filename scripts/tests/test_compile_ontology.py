@@ -48,7 +48,7 @@ def test_project_type_enum_is_the_two_value_axis():
 def test_body_sections_are_carried_for_project_and_entity():
     objects = co.compile_schema()["objects"]
     assert objects["project"]["body_sections"] == [
-        "Decisions", "Open Items", "Related Meetings",
+        "Coming up", "Recent meetings", "Recent decisions", "Background",
     ]
     assert objects["entity"]["body_sections"] == [
         "Context", "Stakeholders", "Relationship History",

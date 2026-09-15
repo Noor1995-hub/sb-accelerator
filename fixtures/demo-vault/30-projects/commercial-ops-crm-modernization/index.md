@@ -19,46 +19,62 @@ next-milestone-date: 2026-08-30
 
 # CRM Data Modernization
 
-> [!summary]+ **Now** — as of 01-06-26
+> [!summary] Where it stands — 1 June
 > - **Stage** — Three-vendor shortlist approved; RFP out, with scoring that weights integration effort above sticker price.
 > - **Defining decision** — [[2026-06-01-vendor-shortlist-approved]]
-> - **Next event** — Vendor selection finalized, target 2026-08-30
-> - **Owe** — RFP scoring criteria sign-off to Sam Okafor
-> - **Watch** — Regional pipeline-stage definitions still differ. That is a governance question, and it will land in whatever schema the vendor builds
 
-> [!info]- **Context**
-> - **Contacts** — Sam Okafor (VP Commercial Operations, delivery owner), Omar Siddiqui (Analytics Lead, target schema and RFP scoring)
-> - **Source** — Scoped at the CRM data modernization kickoff workshop, 2026-04-20
+## Coming up
 
-## Decisions
+| When | What |
+|---|---|
+| Sun 30 Aug | Vendor selection finalized, target 2026-08-30 |
 
-```dataview
-TABLE WITHOUT ID
-  link(file.path, dateformat(date, "dd-MM-yy")) AS "Date",
-  status AS "Status",
-  summary AS "Decision"
-FROM "30-projects/commercial-ops-crm-modernization/decisions"
-SORT status ASC, date DESC
-LIMIT 20
-```
-
-## Open Items
-
-- **Owe** — RFP scoring criteria sign-off to Sam Okafor (Morgan Ellery)
-- **Awaiting** — Omar Siddiqui's target schema draft from the April workshop
-- **Question** — Whether regional stage definitions get standardised in this project or handed to [[commercial-ops-pipeline-governance]]
-- **Pending** — Three RFP responses, due ahead of vendor selection on 2026-08-30
-
-## Related Meetings
+## Recent meetings
 
 ```dataview
 TABLE WITHOUT ID
-  link(file.path, dateformat(date, "dd-MM HH:mm")) AS "Date",
-  slice(attendees, 0, 3) AS "Attendees",
-  recording-duration AS "Min",
-  calendar-subject AS "Subject"
+  link(file.path, dateformat(date, "ccc dd-MM")) AS "Date",
+  calendar-subject AS "Subject",
+  slice(attendees, 0, 3) AS "With",
+  recording-duration AS "Min"
 FROM "20-meetings"
 WHERE econtains(projects, this.slug)
 SORT date DESC
-LIMIT 15
+LIMIT 10
 ```
+
+## Recent decisions
+
+```dataview
+TABLE WITHOUT ID
+  link(file.path, dateformat(date, "dd-MM")) AS "Date",
+  summary AS "Decision",
+  status AS "Status"
+FROM "30-projects/commercial-ops-crm-modernization/decisions"
+SORT date DESC
+LIMIT 10
+```
+
+## Background
+
+Reference material for the evening run and for when you need the detail. Folded by default.
+
+> [!todo]- 📤 Owe — by owner
+> - **Morgan Ellery**
+>   - RFP scoring criteria sign-off to Sam Okafor
+
+> [!info]- 👤 Awaiting
+> - Omar Siddiqui's target schema draft from the April workshop
+
+> [!question]- ❓ Open questions
+> - Whether regional stage definitions get standardised in this project or handed to [[commercial-ops-pipeline-governance]]
+
+> [!note]- ⏳ Pending
+> - Three RFP responses, due ahead of vendor selection on 2026-08-30
+
+> [!warning]- Watch list
+> - Regional pipeline-stage definitions still differ. That is a governance question, and it will land in whatever schema the vendor builds
+
+> [!info]- Context
+> - **Contacts** — Sam Okafor (VP Commercial Operations, delivery owner), Omar Siddiqui (Analytics Lead, target schema and RFP scoring)
+> - **Source** — Scoped at the CRM data modernization kickoff workshop, 2026-04-20
