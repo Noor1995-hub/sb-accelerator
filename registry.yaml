@@ -52,8 +52,8 @@ clients:
   notes: exco pilot; vault owner (exec) to be recorded at Session 1
 - client: internal-xander
   owner: XV
-  plugin_version: 0.10.32
-  structure_version: '2'
+  plugin_version: 0.11.1
+  structure_version: '3'
   archetype: commercial-leader
   care_package: none
   delivery_path: E
