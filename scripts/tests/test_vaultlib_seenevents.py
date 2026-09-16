@@ -405,6 +405,8 @@ def test_triage_defers_an_occurrence_that_has_not_ended(tmp_path):
     assert result["deferred"] == [{"id": "AAMkAGId1",
                                    "start_utc": "2026-09-03T14:00:00",
                                    "subject": "Weekly sync",
+                                   "event_uri":
+                                       "calendar:///events/AAMkAGId1",
                                    "reason": "not-ended"}]
 
 
@@ -577,7 +579,9 @@ def test_organizer_outside_home_domains_is_external(tmp_path):
     assert result["fetch"] == []
     assert result["external"] == [{
         "id": "AAMkAGId1", "start_utc": "2026-08-28T14:00:00",
-        "subject": "Weekly sync", "organizer": "someone@other-org.example",
+        "subject": "Weekly sync",
+        "event_uri": "calendar:///events/AAMkAGId1",
+        "organizer": "someone@other-org.example",
     }]
     assert result["filtered"]["external"] == 1
 
@@ -706,3 +710,65 @@ def test_triage_fails_open_on_an_unrecognized_outcome_value_on_disk(tmp_path):
     result = seenevents.triage(root, [listing_event()], NOW)
     assert [e["id"] for e in result["fetch"]] == ["AAMkAGId1"]
     assert result["fetch"][0]["reason"] == "unseen"
+
+
+# --- triage hands back the event URI, so nobody rebuilds it ---------------
+#
+# Issue #205: the orchestrator hand-percent-encoded a base64url event id into
+# m365_routing.json's `uri`, turning `-` into `%2F`, and every worker
+# dispatched with it got a 400 from Graph. triage already holds the listing
+# id, so it emits the URI too — the routing step copies an opaque string
+# instead of transforming one.
+
+BASE64URL_ID = "AAkALgAAAAAAHYQDEapmEc2byACqAC-EWg0A0ceR5yDk4k28EdzA-CuLTwAA"
+
+
+def test_triage_emits_an_event_uri_for_every_fetch_survivor(tmp_path):
+    root = make_vault(tmp_path)
+    result = seenevents.triage(root, [listing_event(event_id=BASE64URL_ID)],
+                               NOW)
+    assert result["fetch"][0]["event_uri"] == (
+        f"calendar:///events/{BASE64URL_ID}")
+
+
+def test_triage_never_encodes_a_hyphen_as_a_slash(tmp_path):
+    """The regression, at the layer the orchestrator actually reads."""
+    root = make_vault(tmp_path)
+    result = seenevents.triage(root, [listing_event(event_id=BASE64URL_ID)],
+                               NOW)
+    assert "%2F" not in result["fetch"][0]["event_uri"]
+
+
+def test_triage_emits_the_event_uri_on_deferred_and_external_entries(tmp_path):
+    """A probe dispatch and an external-tenant report both name the
+    occurrence; neither should have to rebuild its URI either."""
+    root = make_vault(tmp_path)
+    future = seenevents.triage(
+        root,
+        [listing_event(event_id=BASE64URL_ID,
+                       start="2026-09-30T14:00:00.0000000",
+                       end="2026-09-30T15:00:00.0000000")],
+        NOW)
+    assert future["deferred"][0]["reason"] == "not-ended"
+    assert future["deferred"][0]["event_uri"] == (
+        f"calendar:///events/{BASE64URL_ID}")
+
+    outside = seenevents.triage(
+        root,
+        [{**listing_event(event_id=BASE64URL_ID),
+          "organizer": "someone@other-tenant.example"}],
+        NOW, home_domains=["example.com"])
+    assert outside["external"][0]["event_uri"] == (
+        f"calendar:///events/{BASE64URL_ID}")
+
+
+def test_triage_emits_the_event_uri_on_an_unkeyable_entry(tmp_path):
+    """No parseable start still means a fetchable event — and the fetch
+    needs a URI."""
+    root = make_vault(tmp_path)
+    event = listing_event(event_id=BASE64URL_ID)
+    event["start"] = {"dateTime": "not-a-date", "timeZone": "UTC"}
+    result = seenevents.triage(root, [event], NOW)
+    assert result["fetch"][0]["reason"] == "unkeyed"
+    assert result["fetch"][0]["event_uri"] == (
+        f"calendar:///events/{BASE64URL_ID}")

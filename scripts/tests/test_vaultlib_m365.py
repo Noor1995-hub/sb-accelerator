@@ -6,6 +6,7 @@ read whose content is VTT-like cue text without speaker attribution (the
 tenant toggle), with the attributed <v> form covered for when it flips on.
 """
 import json
+from urllib.parse import unquote
 
 import pytest
 
@@ -273,3 +274,56 @@ def test_an_event_missing_its_transcript_url_is_not_reassemblable(tmp_path):
         m365.reassemble(write_json(tmp_path, "e.json", event),
                         write_json(tmp_path, "t.json", TRANSCRIPT),
                         str(tmp_path), utc_offset="+02:00")
+
+
+# --- event_uri: the URI is derived, never retyped -------------------------
+#
+# The live failure this exists for (issue #205): the orchestrator built
+# m365_routing.json's `uri` by treating a base64url event id as standard
+# base64 and percent-encoding it by hand, so every `-` became `%2F`. The
+# connector then decoded that back to a raw `/` and spliced it into the Graph
+# path unencoded — 400 RequestBroker--ParseUri, every run, for as long as the
+# re-encoding kept happening. The ids were copied byte-perfectly at every
+# hop; only the value a model had to *transform* came out wrong. So the
+# transform moves here.
+
+BASE64URL_ID = "AAkALgAAAAAAHYQDEapmEc2byACqAC-EWg0A0ceR5yDk4k28EdzA-CuLTwAA"
+PADDED_ID = "AAkBOQAICN8ThXOLgAAuAAAAAB2EAxGqZhHNm8gAqgAvxFoNANHHkecg5OA6-ftpYAABA="
+
+
+def test_event_uri_leaves_a_base64url_id_alone():
+    assert m365.event_uri(BASE64URL_ID) == (
+        f"calendar:///events/{BASE64URL_ID}")
+
+
+def test_event_uri_never_turns_a_hyphen_into_an_encoded_slash():
+    """The exact regression. `-` is base64url's 62nd character, not a `/`."""
+    uri = m365.event_uri(BASE64URL_ID)
+    assert "%2F" not in uri
+    assert uri.count("-") == BASE64URL_ID.count("-")
+
+
+def test_event_uri_percent_encodes_the_padding():
+    assert m365.event_uri(PADDED_ID) == (
+        f"calendar:///events/{PADDED_ID[:-1]}%3D")
+
+
+def test_event_uri_encodes_a_standard_base64_id_reserved_character():
+    """An id that really does carry `/` or `+` is encoded, not passed raw —
+    a raw `/` is what Graph mis-reads as another path segment."""
+    assert m365.event_uri("AA/BB+CC=") == (
+        "calendar:///events/AA%2FBB%2BCC%3D")
+
+
+@pytest.mark.parametrize("event_id", [BASE64URL_ID, PADDED_ID, "AA/BB+CC="])
+def test_event_uri_round_trips_back_to_the_id(event_id):
+    """The one invariant the connector cares about: decoding the path
+    segment once returns the id the listing gave, byte for byte."""
+    uri = m365.event_uri(event_id)
+    assert unquote(uri[len("calendar:///events/"):]) == event_id
+
+
+def test_event_uri_refuses_an_empty_or_non_string_id():
+    for bad in ("", "   ", None, 17):
+        with pytest.raises(m365.M365Error, match="event id"):
+            m365.event_uri(bad)
