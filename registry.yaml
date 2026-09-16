@@ -50,3 +50,17 @@ clients:
   provisioned: '2026-09-03'
   token_minted: '2026-09-03'
   notes: exco pilot; vault owner (exec) to be recorded at Session 1
+- client: internal-xander
+  owner: XV
+  plugin_version: 0.10.32
+  structure_version: '2'
+  archetype: commercial-leader
+  care_package: none
+  delivery_path: E
+  feedback_repo: DLW-INT-BTA-BELUX/sb-internal-xander
+  dist_channel: dryrun
+  provisioned: '2026-09-12'
+  token_minted: '2026-09-12'
+  notes: internal self-test deployment by the maintainer; delivered as a manual ZIP
+    upload; feedback repo name predates the sb-client-<slug> convention this script
+    derives, so never re-provision this slug without --register-only
