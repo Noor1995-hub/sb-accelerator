@@ -418,3 +418,26 @@ def test_recorded_local_is_accepted_verbatim_by_both_consumers(tmp_path):
     assert stamp == "2026-05-20T11:03"
     assert meeting._DATETIME_RE.match(stamp)
     assert syncjob._COLLIDE_START_RE.match(stamp)
+
+
+def test_reassemble_reports_the_canonical_plaud_id(tmp_path):
+    """The connector lists recordings as of_<hex> since 2026-09-15; the
+    ledger keys on the hash. The blob keeps the connector's own id — it is a
+    scratch filename, not a ledger key."""
+    hex_id = "0123456789abcdef0123456789abcdef"
+    result = plaud.reassemble(
+        write_json(tmp_path, "m.json", {**META, "id": f"of_{hex_id}"}),
+        write_json(tmp_path, "t.json", {**SEGMENTS, "file_id": f"of_{hex_id}"}),
+        None, str(tmp_path / "scratch"), utc_offset="+02:00")
+    assert result["recording_id"] == f"plaud:{hex_id}"
+    assert Path(result["blob_path"]).name == f"of_{hex_id}.blob.md"
+    assert Path(result["blob_path"]).is_file()
+
+
+def test_a_transcript_page_in_the_other_id_form_is_the_same_recording(tmp_path):
+    hex_id = "0123456789abcdef0123456789abcdef"
+    result = plaud.reassemble(
+        write_json(tmp_path, "m.json", {**META, "id": hex_id}),
+        write_json(tmp_path, "t.json", {**SEGMENTS, "file_id": f"of_{hex_id}"}),
+        None, str(tmp_path / "scratch"), utc_offset="+02:00")
+    assert result["recording_id"] == f"plaud:{hex_id}"

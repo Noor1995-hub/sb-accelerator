@@ -740,3 +740,30 @@ The first draft of this entry said seven, because the snapshot behind it was
 taken while #155 was still open; #155's "No issues found" comment landed 58
 seconds before it merged. The review on #157 caught exactly that — its own
 small proof that the Sonnet-pinned reviewer still reads carefully.
+
+---
+
+## 2026-09-15 — a connector changed the spelling of its ids, and the exact-match ledger synced every recording twice
+
+**What went wrong.** The Plaud MCP connector listed recordings as a bare
+32-hex id from the first sync through the morning run of 2026-09-15, then
+as `of_<hex>` — the same hash under Plaud's object-type prefix (its storage
+paths hold the audio at `of_<hex>/oc_at_<hex>.mp3`) — from the afternoon
+run on. The bare form now 404s on `get_file` and `get_transcript`. The
+ledger keyed on the literal `source-recording-id` string, so a recording
+synced in the morning was `new` again in the afternoon and got a second
+meeting note. Two duplicates in the dry-run vault, resolved by hand.
+
+Nothing errored. `sync dedup` did exactly what it was written to do, the
+worker fetched a complete transcript, `meeting write` wrote a conformant
+note. The only symptom was two notes for one meeting.
+
+**The rule.** An id from an external system is a *reference*, not a string:
+decide what its identity is (here the hash) and canonicalise at every
+comparison **and** every write — `syncjob.canonical_id()` — so the ledger
+converges instead of forking on the next upstream cosmetic change. Compare
+canonical, but answer in the caller's spelling where the caller has to match
+the answer back to the upstream listing (`sync dedup`). And this is the third
+instance of the 2026-08-26 lesson: when a skill hands an external tool's
+output to the CLI, spend one live call reading the envelope — the id shape
+included — before trusting what was written down last time.

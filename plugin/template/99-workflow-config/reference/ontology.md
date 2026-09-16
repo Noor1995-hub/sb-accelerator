@@ -43,7 +43,8 @@ required: [date, type, calendar-subject, calendar_match, attendees, projects,
            review_status, recording-duration, source, processed]
 optional: [attendee-emails, organizer, location, recurring, start-time,
            source-recording-id, source-filename, conflicts-with,
-           confidence, confidence-reasons, reviewed, archived, entities]
+           confidence, confidence-reasons, reviewed, archived, entities,
+           confirmed-at]
 enums:
   type: [meeting, "1:1", steerco, workshop, brainstorm, status-update, note]
   review_status: [needs-review, confirmed]
@@ -66,7 +67,13 @@ confidence_reasons:
   one-click confirm; `archived` — hides the row from triage views (noise
   disposal; the file stays).
 - Write-once; only triage fields (`attendees`, `projects`, `review_status`,
-  `reviewed`, `archived`) are edited later.
+  `reviewed`, `archived`) are edited later — plus `confirmed-at`, which
+  `sync reconcile-reviews` stamps (ISO to the minute) on the note when it
+  folds a tick into `review_status: confirmed`. The evening run's update
+  queue compares a project's `state-updated` against the later of a
+  meeting's `date` and this stamp, so a meeting ticked *after* its project's
+  last state update still queues however old the meeting is. Notes confirmed
+  before the stamp existed carry no field and compare on `date` alone.
 - **`projects[]` and `attendees[]` hold bare slugs, never wikilinks.** A
   hand-typed `[[slug]]` dangles (the project is a folder, so the link
   resolves to nothing and clicking it spawns a stray note in the vault
@@ -189,7 +196,8 @@ body_sections: [Coming up, Recent meetings, Recent decisions, Background]
 - `state-updated` is a full ISO timestamp (`YYYY-MM-DDTHH:MM`) written by
   `project touch` alongside `last-updated`. `last-updated` stays the
   human-facing day; `state-updated` is what the evening run's update queue
-  compares meeting datetimes against, so a meeting confirmed on the same day
+  compares each meeting's activity moment against — its `date`, or its
+  `confirmed-at` stamp when that is later — so a meeting confirmed after
   the state was last written still queues. Projects that predate the field
   fall back to a day-granularity comparison that errs toward queuing until
   their first touch.

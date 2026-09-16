@@ -74,4 +74,6 @@ Payload rules the CLI enforces (so get them right the first time):
 - `source-recording-id` is **required** on every write — it IS the dedup
   ledger. For inbox files it is the `recording_id` from `sync scan`; for
   Plaud and Microsoft 365 it comes from `plaud reassemble` /
-  `m365 reassemble`.
+  `m365 reassemble`. The CLI stores it in canonical form — Plaud's `of_`
+  object prefix stripped — so a note carries `plaud:<hex>` for a recording
+  the connector lists as `of_<hex>`; both spellings dedup as one.

@@ -40,7 +40,10 @@ The JSON envelope and interpreter resolution are documented in the plugin's
 1. **Every write goes through `meeting write`.** No hand-authored
    frontmatter, ever.
 2. **`source-recording-id` on every synced meeting.** The vault is the only
-   ledger; an id that is missing makes the recording sync twice.
+   ledger; an id that is missing makes the recording sync twice. Ids are
+   compared in canonical form: the CLI strips Plaud's `of_` object prefix,
+   so `plaud:of_<hex>` and `plaud:<hex>` are one recording. Pass ids
+   exactly as the connector lists them and let the CLI normalise.
 3. **Transcript-first.** Recorder summaries and calendar data enrich; the
    transcript is the source of record.
 4. **Never overwrite a confirmed meeting.** The CLI guards this; if you see
@@ -170,6 +173,10 @@ data dependency on the other (rule 9):
 python3 "$VAULTLIB" sync reconcile-reviews --vault "$VAULT"
 python3 "$VAULTLIB" sync scan --vault "$VAULT"
 ```
+
+Each note it flips is also stamped `confirmed-at` with the current minute —
+that stamp is how the evening run's update queue sees a meeting that was
+ticked after its project's state was last written, so never strip it.
 
 Report `flipped` in the summary; surface any `conflict_ticks` for a human — a
 note that still carries a `conflicts-with` edge is a duplicate nobody has

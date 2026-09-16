@@ -419,3 +419,28 @@ def test_date_from_stem_returns_none_for_a_non_conforming_stem():
 def test_date_prefix_round_trips_through_date_from_stem():
     stem = f"{meeting._date_prefix('2026-05-20T11:00')}-vendor-strategy"
     assert meeting.date_from_stem(stem).isoformat() == "2026-05-20"
+
+
+def test_write_refuses_the_other_plaud_id_form_of_a_synced_recording(tmp_path):
+    """Regression for the 2026-09-15 duplicates: one recording written once as
+    plaud:<hex> and once as plaud:of_<hex>, because the ledger compared the
+    literal strings."""
+    root = make_vault(tmp_path)
+    hex_id = "0123456789abcdef0123456789abcdef"
+    meeting.write(root, payload(**{"source-recording-id": f"plaud:{hex_id}"}))
+    with pytest.raises(meeting.MeetingError, match="already synced"):
+        meeting.write(root, payload(
+            title="same meeting, second listing",
+            **{"source-recording-id": f"plaud:of_{hex_id}"}))
+
+
+def test_write_stores_the_plaud_id_in_canonical_form(tmp_path):
+    from vaultlib import markdown
+    root = make_vault(tmp_path)
+    hex_id = "0123456789abcdef0123456789abcdef"
+    result = meeting.write(
+        root, payload(**{"source-recording-id": f"plaud:of_{hex_id}"}))
+    assert result["recording_id"] == f"plaud:{hex_id}"
+    data, _ = markdown.split_frontmatter(
+        (root / result["path"]).read_text(encoding="utf-8"))
+    assert data["source-recording-id"] == f"plaud:{hex_id}"

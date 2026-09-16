@@ -314,6 +314,10 @@ def build_parser() -> argparse.ArgumentParser:
              "ticked; a note still carrying conflicts-with is reported, "
              "not flipped")
     _add_vault_argument(sync_rec)
+    sync_rec.add_argument(
+        "--timestamp",
+        help="ISO datetime YYYY-MM-DDTHH:MM stamped as confirmed-at on every "
+             "note flipped; defaults to now")
 
     sync_archive = sync_sub.add_parser(
         "archive",
@@ -716,7 +720,8 @@ def _dispatch(args: argparse.Namespace) -> int:
             return _ok(syncjob.skip(root, args.recording_id,
                                     reason=args.reason))
         if args.action == "reconcile-reviews":
-            return _ok(syncjob.reconcile_reviews(root))
+            return _ok(syncjob.reconcile_reviews(root,
+                                                 timestamp=args.timestamp))
         if args.action == "archive":
             return _ok(syncjob.archive(root, args.path,
                                        vault.today_iso(args.today)))

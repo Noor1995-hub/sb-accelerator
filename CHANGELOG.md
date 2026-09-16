@@ -17,6 +17,14 @@ delivers them.
 
 - **The daily note and project pages are rewritten for reading, not just for the model.** The recap opens with an at-a-glance card, themes fold behind a headline, the project pulse is a table with a 🔴🟠🟢⚪ signal, Watch holds only real risks and the sync mechanics fold away; each meeting now has a **Prep** block plus **Notes** and **Actions** lists for you. Project pages lead with a *Where it stands* card, a dated *Coming up* table and the last ten meetings and decisions, with everything else folded under *Background*. Links to projects and organisations now open the right page. Run `/upgrade-vault` to reshape existing project pages (structure-version 3). (#189)
 
+## v0.10.36 — 2026-09-15
+
+- A meeting you tick as reviewed *after* its project's evening update no longer slips past the next run: the tick is stamped `confirmed-at`, the update queue treats that moment as when the meeting became new to the project, and the evening pipeline folds ticks once more right before building the queue. Meetings confirmed before this release are unaffected. (#185)
+
+## v0.10.35 — 2026-09-15
+
+- A Plaud recording is no longer synced twice when the connector changes how it spells the recording's id: `plaud:of_<hash>` and `plaud:<hash>` now count as one recording in the ledger, the skip list and every meeting write, and new notes store the id in one canonical form. (#180)
+
 ## v0.10.34 — 2026-09-15
 
 - The People base gains a **Direct reports** view; set `relationship: direct-report` on a person to show them there. (#177)

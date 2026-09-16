@@ -2,8 +2,9 @@
 under /sync-recordings.
 
 The vault itself is the ledger — a recording is synced iff its namespaced
-source-recording-id appears in some 20-meetings/*.md. There is no second
-ledger to reconcile, so a failed item (which wrote nothing) retries
+source-recording-id appears in some 20-meetings/*.md, compared in canonical
+form (canonical_id: one recording, one key, whichever spelling the connector
+used). There is no second ledger to reconcile, so a failed item (which wrote nothing) retries
 naturally on the next run. The skip list exists for the one case the ledger
 cannot express: a human said "never propose this one again". It carries the
 reason alongside the id, because a permanent suppression no one can explain
@@ -73,8 +74,34 @@ def _cached_content_id(root: Path, path: Path, cache: dict) -> str:
     return recording_id
 
 
-def _validate_id(recording_id: str) -> str:
+def canonical_id(recording_id) -> str:
+    """One recording, one ledger key, whichever spelling the connector used.
+
+    Plaud listed a recording as its bare 32-hex storage hash until
+    2026-09-15 and as `of_<hex>` from then on — the hash under Plaud's
+    object-type prefix (its own storage paths hold the audio at
+    `of_<hex>/oc_at_<hex>.mp3`). Both spellings name one recording, and a
+    ledger that compared the literal strings wrote one recording twice, once
+    per spelling. The hash is the identity, so the prefix is stripped: every
+    deployed vault already holds the bare form on months of notes, and
+    stripping a tag is safe where inventing one would not be.
+
+    Every comparison and every write goes through here. `of_` means nothing
+    in the other namespaces and is left exactly as given there.
+    """
     text = str(recording_id or "").strip()
+    namespace, sep, rest = text.partition(":")
+    if sep and namespace == "plaud" and rest.startswith(_PLAUD_OBJECT_PREFIX):
+        return f"{namespace}:{rest[len(_PLAUD_OBJECT_PREFIX):]}"
+    return text
+
+
+_PLAUD_OBJECT_PREFIX = "of_"
+
+
+def _validate_id(recording_id: str) -> str:
+    """The canonical form of a well-namespaced id, or SyncError."""
+    text = canonical_id(recording_id)
     prefix = text.split(":", 1)[0] if ":" in text else ""
     if prefix not in NAMESPACES or not text.split(":", 1)[1]:
         raise SyncError(
@@ -133,7 +160,10 @@ def known_recording_ids(root: Path, cache: Optional[dict] = None
         if entry.get("warning"):
             warnings.append(entry["warning"])
         if entry.get("recording_id"):
-            ids[entry["recording_id"]] = rel
+            # The cache holds the id as the note spells it; the key is the
+            # canonical form, so a note written under either Plaud spelling
+            # answers for the recording without a cache rebuild.
+            ids[canonical_id(entry["recording_id"])] = rel
     scancache.prune(cache, "ledger", live)
     if owns_cache:
         scancache.save(root, cache)
@@ -177,8 +207,10 @@ def _format_skip_line(record: dict) -> str:
 def _parse_skip_line(line: str) -> dict:
     fields = [field.strip() for field in line.split("\t")]
     fields += [""] * (3 - len(fields))
-    return {"recording_id": fields[0], "reason": fields[1] or None,
-            "source_name": fields[2] or None}
+    # Canonical on read: a line written in the other Plaud spelling still
+    # suppresses, and skip() finds it rather than appending a twin.
+    return {"recording_id": canonical_id(fields[0]),
+            "reason": fields[1] or None, "source_name": fields[2] or None}
 
 
 def read_skip_records(root: Path) -> List[dict]:
@@ -293,15 +325,23 @@ def scan(root: Path) -> dict:
 
 
 def dedup(root: Path, ids: List[str]) -> dict:
-    """Filter an adapter's discovery list against the ledger and skip list."""
-    validated = [_validate_id(rid) for rid in ids]
+    """Filter an adapter's discovery list against the ledger and skip list.
+
+    Compares in canonical form but answers in the caller's own spelling: the
+    orchestrator matches `new` back to the connector's listing entries by
+    id, so what went in is what comes out.
+    """
+    given = [str(rid or "").strip() for rid in ids]
+    keys = [_validate_id(rid) for rid in given]
     known, warnings = known_recording_ids(root)
     skipped_ids = read_skip_list(root)
     return {
-        "new": [rid for rid in validated
-                if rid not in known and rid not in skipped_ids],
-        "synced": {rid: known[rid] for rid in validated if rid in known},
-        "skipped": [rid for rid in validated if rid in skipped_ids],
+        "new": [rid for rid, key in zip(given, keys)
+                if key not in known and key not in skipped_ids],
+        "synced": {rid: known[key] for rid, key in zip(given, keys)
+                   if key in known},
+        "skipped": [rid for rid, key in zip(given, keys)
+                    if key in skipped_ids],
         "warnings": warnings,
     }
 
@@ -381,7 +421,7 @@ def collide(root: Path, start_local: str, duration_min: int) -> dict:
     return {"matches": matches, "checked": checked, "warnings": warnings}
 
 
-def reconcile_reviews(root: Path) -> dict:
+def reconcile_reviews(root: Path, *, timestamp: Optional[str] = None) -> dict:
     """Fold triage ticks back into review_status: reviewed true flips
     needs-review -> confirmed. One-way and narrow: a tick on a note that still
     carries a `conflicts-with` edge is surfaced for a human, never
@@ -390,7 +430,22 @@ def reconcile_reviews(root: Path) -> dict:
     bless two notes for one meeting. Clearing the edge is how a human says the
     duplicate is resolved; the next run folds the tick. `archived` is never
     read by any pipeline.
+
+    Every flip also stamps `confirmed-at` (ISO to the minute, `timestamp` or
+    now). The update queue compares a project's `state-updated` against the
+    *later* of a meeting's datetime and this stamp: a meeting that happened
+    before the project's last state update but was confirmed after it used
+    to fall out of the queue permanently, because meeting time alone said it
+    had already been seen. Notes confirmed before the stamp existed carry no
+    field and keep comparing on datetime alone — nothing is reprocessed.
     """
+    if timestamp is None:
+        stamp = datetime.now().isoformat(timespec="minutes")
+    else:
+        try:
+            stamp = project._require_iso_datetime(timestamp, "--timestamp")
+        except project.ProjectError as exc:
+            raise SyncError(str(exc)) from exc
     flipped: List[str] = []
     conflict_ticks: List[str] = []
     warnings: List[str] = []
@@ -420,12 +475,14 @@ def reconcile_reviews(root: Path) -> dict:
         try:
             updated = markdown.replace_scalar_field(
                 text, "review_status", "confirmed")
+            updated = markdown.upsert_scalar_field(updated, "confirmed-at", stamp)
         except ValueError as exc:
             warnings.append(f"{rel}: {exc}")
             continue
         vault.atomic_write(path, updated)
         flipped.append(rel)
     return {"flipped": flipped, "conflict_ticks": conflict_ticks,
+            "confirmed_at": stamp,
             "warnings": warnings}
 
 

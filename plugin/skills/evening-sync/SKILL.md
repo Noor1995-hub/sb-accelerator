@@ -131,10 +131,9 @@ is the archive of the day — **never modify it**.
 
 **Sync:** run the `/sync-recordings` workflow (follow
 `${CLAUDE_PLUGIN_ROOT}/skills/sync-recordings/SKILL.md`) — unattended when this run is
-unattended, interactive otherwise. Its step 1 already runs
-`sync reconcile-reviews`, which IS this pipeline's reconcile stage — do not
-run it a second time. Record what it reports: synced stems, folded ticks,
-conflicts, per-adapter lines.
+unattended, interactive otherwise. Its step 1 runs `sync reconcile-reviews`,
+which IS this pipeline's reconcile stage. Record what it reports: synced
+stems, folded ticks, conflicts, per-adapter lines.
 
 **Repair:** re-derive `entities` from `projects` on every meeting note —
 `meeting write` derives it once at creation, but nothing keeps the two in
@@ -152,8 +151,17 @@ left untouched, not silently skipped) into the final summary.
 **Refresh:**
 
 ```bash
+python3 "$VAULTLIB" sync reconcile-reviews --vault "$VAULT"
 python3 "$VAULTLIB" sync update-queue --vault "$VAULT" --today <today> --owner <owner-slug>
 ```
+
+The second `reconcile-reviews` is deliberate, and it is the only place this
+pipeline repeats a step: a sync with recordings to process can run for the
+better part of an hour, and a tick placed in Meetings.base during that window
+would otherwise fold tomorrow evening instead of tonight. It is one cheap
+read of `20-meetings/`; add anything it `flipped` to the folded-ticks count
+you recorded above, and surface its `conflict_ticks` the same way step 1's
+were.
 
 This writes `meetings-7d` / `meetings-30d` / `key-people` on active projects
 and `meetings-7d` / `meetings-30d` on people (confirmed meetings only — the
@@ -217,7 +225,11 @@ python3 "$VAULTLIB" project state write --vault "$VAULT" --slug <slug> \
    (entities, projects, people) go in as `[[slug]]` wikilinks — the CLI
    rewrites them to links that open. A refusal names the field and the cap;
    fix that field and retry once. `state write` also stamps `last-updated`
-   and `state-updated`, so do **not** call `project touch` separately.
+   and `state-updated` — that timestamp, not the day in `last-updated`, is
+   what the next run's update queue compares against each meeting's
+   datetime or, when later, its `confirmed-at` stamp; so a meeting ticked
+   after tonight's write queues tomorrow, however old the meeting itself
+   is. Do **not** call `project touch` separately.
 3. Never edit `index.md` with your editor — the body is machine-rendered and
    a hand edit is overwritten on the next run; the owner's own `## Notes`
    section at the bottom, if present, is the one thing the CLI preserves.
