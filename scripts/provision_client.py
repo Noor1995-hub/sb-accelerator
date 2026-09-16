@@ -8,11 +8,17 @@ minted via API).
 
 Usage:
     provision_client.py <slug> --owner NAME [--delivery-path A..E]
-        [--dist-channel client|dryrun] [--archetype commercial-leader]
-        [--care-package active|lapsed|none] [--notes TEXT]
-        [--token-minted [YYYY-MM-DD]] [--register-only] [--update] [--dry-run]
-        [--org DLW-INT-BTA-BELUX] [--feedback-repo ORG/REPO]
+        [--audience client|internal] [--dist-channel client|dryrun]
+        [--archetype commercial-leader] [--care-package active|lapsed|none]
+        [--notes TEXT] [--token-minted [YYYY-MM-DD]] [--register-only]
+        [--update] [--dry-run] [--org DLW-INT-BTA-BELUX]
         [--registry registry.yaml]
+
+Two naming routes, picked by `--audience`: a client's feedback repo is
+`sb-client-<slug>`, a delaware colleague's is `sb-internal-<slug>`. That is a
+separate question from `--dist-channel`, which says whether the vault is fed
+dryrun builds or real releases — an internal deployment dogfooding real
+releases is `--audience internal --dist-channel client`.
 
 `--register-only` skips every `gh` call and only writes the registry entry
 — use this for a vault that already has (or never needs) a real feedback
@@ -24,11 +30,9 @@ two flags unless you mean to call `gh` for real.
 
 `--update` is non-destructive by design: it restamps `plugin_version` and
 `structure_version` from this checkout and leaves every other field at its
-registered value unless you pass that field's flag. `feedback_repo` is one
-of those fields: a deployment whose channel is not named `sb-client-<slug>`
-(the internal test vaults are `sb-internal-<name>`) keeps its registered
-name through every --update, and `--feedback-repo ORG/REPO` is how you say
-one out loud. So recording a release against an existing deployment is the
+registered value unless you pass that field's flag. `feedback_repo` is one of
+those fields: it is derived once, when the deployment is registered, and then
+kept as written. So recording a release against an existing deployment is the
 whole command —
 
     provision_client.py <slug> --update --register-only
@@ -80,14 +84,21 @@ DEFAULT_ORG = "DLW-INT-BTA-BELUX"
 
 SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]{1,39}$")
 
-# `<org>/<repo>`, as GitHub spells an owner and a repository name. Only used
-# for an explicit --feedback-repo: a registered value is trusted as written.
-REPO_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._-]*$")
+# Who the vault owner is, which is the only thing that decides what the
+# feedback repo is called. Deliberately *not* `dist_channel`: that says which
+# release channel feeds the vault (a test build or the real one), and an
+# internal deployment can sit on the client channel — a colleague dogfooding
+# real releases rather than dryrun builds.
+REPO_PREFIXES = {
+    "client": "sb-client",
+    "internal": "sb-internal",
+}
 
 # What a field falls back to when it is left off the command line *and* there
 # is no existing entry to inherit it from. On an --update the registered value
 # wins over every one of these — a flag you don't type changes nothing.
 CREATE_DEFAULTS = {
+    "audience": "client",
     "delivery_path": "E",
     "dist_channel": "client",
     "archetype": "commercial-leader",
@@ -100,10 +111,6 @@ class SlugError(ValueError):
     """Slug does not match SLUG_RE."""
 
 
-class FeedbackRepoError(ValueError):
-    """--feedback-repo is not `<org>/<repo>`."""
-
-
 class DuplicateClientError(Exception):
     """Slug already has a registry.yaml entry and --update was not given."""
 
@@ -114,6 +121,10 @@ class UnknownClientError(Exception):
 
 class MissingOwnerError(ValueError):
     """Creating an entry without an owner. Only an --update may omit it."""
+
+
+class AudienceError(ValueError):
+    """`audience` is not one of REPO_PREFIXES — a hand-edited registry row."""
 
 
 class GhCommandError(RuntimeError):
@@ -139,21 +150,6 @@ def _slug_type(value: str) -> str:
     try:
         return validate_slug(value)
     except SlugError as exc:
-        raise argparse.ArgumentTypeError(str(exc)) from exc
-
-
-def validate_feedback_repo(repo: str) -> str:
-    if not REPO_RE.match(repo):
-        raise FeedbackRepoError(
-            f"invalid feedback repo {repo!r} — must be <org>/<repo>, e.g. "
-            f"{DEFAULT_ORG}/sb-internal-acme")
-    return repo
-
-
-def _feedback_repo_type(value: str) -> str:
-    try:
-        return validate_feedback_repo(value)
-    except FeedbackRepoError as exc:
         raise argparse.ArgumentTypeError(str(exc)) from exc
 
 
@@ -371,7 +367,7 @@ class ProvisionOptions:
     notes: Optional[str] = None
     token_minted: Optional[date] = None
     org: Optional[str] = None
-    feedback_repo: Optional[str] = None
+    audience: Optional[str] = None
     register_only: bool = False
     update: bool = False
     dry_run: bool = False
@@ -405,6 +401,12 @@ def provision(opts: ProvisionOptions, runner: GhRunner, registry_path: Path,
 
     existing = clients[index] if index is not None else {}
 
+    def field(name: str):
+        given = getattr(opts, name)
+        if given is not None:
+            return given
+        return existing.get(name, CREATE_DEFAULTS[name])
+
     # The org is sticky, read back off the registered `feedback_repo` — so a
     # deployment registered in a non-default org keeps it through a bare
     # --update, and the gh calls below (and the printed recipe) address that
@@ -418,29 +420,27 @@ def provision(opts: ProvisionOptions, runner: GhRunner, registry_path: Path,
     else:
         org = DEFAULT_ORG
 
-    # The repo *name* is sticky for the same reason the org is: it is a
-    # registered field, not a function of the slug. `sb-client-<slug>` is only
-    # the default for a name nobody has recorded yet — an internal test vault
-    # on `sb-internal-<name>` used to have that rewritten to a non-existent
-    # repo by every --update, silently, while --help promised the opposite.
-    if opts.feedback_repo is not None:
-        feedback_repo = validate_feedback_repo(opts.feedback_repo)
-    elif registered_name:
+    # Two routes, one per audience: a client's channel is `sb-client-<slug>`,
+    # a delaware colleague's is `sb-internal-<slug>`. The name is derived once,
+    # when the deployment is registered, and then sticky — a registered name is
+    # a fact about a repo that exists, and rebuilding it on every --update
+    # silently repointed deployments at repos that do not (the internal test
+    # vaults), while --help promised every unnamed field keeps its value.
+    audience = field("audience")
+    if audience not in REPO_PREFIXES:
+        raise AudienceError(
+            f"unknown audience {audience!r} — must be one of "
+            f"{', '.join(sorted(REPO_PREFIXES))}")
+    if registered_name:
         feedback_repo = f"{org}/{registered_name}"
     else:
-        feedback_repo = f"{org}/sb-client-{slug}"
+        feedback_repo = f"{org}/{REPO_PREFIXES[audience]}-{slug}"
 
     owner = opts.owner if opts.owner is not None else existing.get("owner")
     if not owner:
         raise MissingOwnerError(
             f"--owner is required to register {slug!r} — it is only optional "
             "on an --update, which inherits the registered owner")
-
-    def field(name: str):
-        given = getattr(opts, name)
-        if given is not None:
-            return given
-        return existing.get(name, CREATE_DEFAULTS[name])
 
     # The deployment's birth date: written once, never moved. `token_minted`
     # is the clock the 1-year feedback token expires against, and it only
@@ -463,6 +463,7 @@ def provision(opts: ProvisionOptions, runner: GhRunner, registry_path: Path,
         "structure_version": _structure_version(),
         "archetype": field("archetype"),
         "care_package": field("care_package"),
+        "audience": audience,
         "delivery_path": field("delivery_path"),
         "feedback_repo": feedback_repo,
         "dist_channel": field("dist_channel"),
@@ -547,12 +548,11 @@ def parse_args(argv):
                          help="GitHub org that owns client repos (default "
                               f"{DEFAULT_ORG}; on --update, the org this "
                               "deployment is already registered under)")
-    parser.add_argument("--feedback-repo", type=_feedback_repo_type, default=None,
-                         metavar="ORG/REPO",
-                         help="Full name of this deployment's feedback repo, "
-                              "for a channel not named sb-client-<slug> (the "
-                              "internal test vaults). Registered once and then "
-                              "sticky: a bare --update keeps it")
+    parser.add_argument("--audience", choices=sorted(REPO_PREFIXES), default=None,
+                         help="Who the vault owner is, which names the feedback "
+                              "repo: client -> sb-client-<slug> (default), "
+                              "internal -> sb-internal-<slug> for a delaware "
+                              "colleague. Independent of --dist-channel")
     parser.add_argument("--registry", type=Path, default=None,
                          help="Path to registry.yaml (default: repo root's registry.yaml)")
     return parser.parse_args(argv)
@@ -583,7 +583,7 @@ def main(argv=None) -> int:
         update=args.update,
         dry_run=args.dry_run,
         org=args.org,
-        feedback_repo=args.feedback_repo,
+        audience=args.audience,
     )
 
     runner: GhRunner = RecordingRunner(echo=True) if opts.dry_run else SubprocessRunner()

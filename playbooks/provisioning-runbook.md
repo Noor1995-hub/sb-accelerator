@@ -198,11 +198,13 @@ the assistant's machine the same way everything else does, over Sync.
    clients. Pass `--register-only` instead if the repo already exists and
    only the registry entry is missing (never run the script without
    `--register-only` or `--dry-run` unless you mean to create or modify a
-   real GitHub repo). If that existing repo is not named `sb-client-<slug>`
-   — an internal test vault on `sb-internal-<name>`, say — name it with
-   `--feedback-repo <org>/<repo>`. The registered name then sticks: the
-   README, the repo description, the token recipe and every later
-   `--update` all read it back rather than rebuilding it from the slug.
+   real GitHub repo). For a delaware colleague rather than a
+   client, pass `--audience internal`: the repo is then
+   `sb-internal-<slug>` instead of `sb-client-<slug>`, and the README, the
+   repo description and the token recipe all name it. That is a separate
+   question from `--dist-channel`, which says whether the vault is fed
+   dryrun builds or real releases. The name is derived once here and then
+   kept as written, so a later `--update` never moves it.
 2. Follow the recipe the script prints, verbatim: mint a token scoped
    **fine-grained**, **`issues: read` + `issues: write` on that repo
    only** — **no `contents` scope**. This is the leak blast-radius control:
