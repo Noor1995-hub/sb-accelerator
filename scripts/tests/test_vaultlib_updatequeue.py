@@ -153,16 +153,17 @@ def test_queue_membership_and_projection(tmp_path):
     assert entry["existingDecisions"][0]["summary"] == "A prior decision."
 
 
-def test_upserts_metrics_when_fields_are_absent_and_writes_only_on_change(tmp_path):
+def test_upserts_metrics_when_fields_are_absent_and_writes_only_on_change(
+        tmp_path, mark_stale):
     root = make_vault(tmp_path)
     index = write_project(root, "alpha", with_metrics=False,
                           last_updated="2026-06-12")
     updatequeue.run(root, today="2026-06-12", owner="owner-morgan")
     text = index.read_text(encoding="utf-8")
     assert "meetings-7d: 0" in text and "key-people: []" in text
-    before = index.stat().st_mtime_ns
+    stale = mark_stale(index)  # a rewrite has to move the stamp by decades
     updatequeue.run(root, today="2026-06-12", owner="owner-morgan")
-    assert index.stat().st_mtime_ns == before  # unchanged content -> no rewrite
+    assert index.stat().st_mtime_ns == stale  # unchanged content -> no rewrite
 
 
 def test_broken_files_warn_and_the_run_continues(tmp_path):
