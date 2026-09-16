@@ -723,7 +723,8 @@ def test_sync_m365_triage_and_record_round_trip_through_the_cli(
     assert code == 0
     assert payload["result"]["fetch"][0] == {
         "id": "AAMkAGId1", "start_utc": "2026-08-25T14:00:00",
-        "subject": "Weekly sync", "reason": "unseen"}
+        "subject": "Weekly sync",
+        "event_uri": "calendar:///events/AAMkAGId1", "reason": "unseen"}
 
     outcomes = tmp_path / "outcomes.json"
     outcomes.write_text(json.dumps([{
@@ -814,7 +815,9 @@ def test_sync_m365_triage_filters_external_with_home_domains_configured(
     assert payload["result"]["fetch"] == []
     assert payload["result"]["external"] == [{
         "id": "AAMkAGId1", "start_utc": "2026-08-25T14:00:00",
-        "subject": "Weekly sync", "organizer": "someone@other-org.example"}]
+        "subject": "Weekly sync",
+        "event_uri": "calendar:///events/AAMkAGId1",
+        "organizer": "someone@other-org.example"}]
     assert payload["result"]["filtered"]["external"] == 1
     assert not any("home_domains is unset" in w
                    for w in payload["result"]["warnings"])

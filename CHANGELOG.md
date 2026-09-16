@@ -15,6 +15,8 @@ delivers them.
 
 ## Unreleased
 
+- Teams meetings no longer go missing from the vault because of a mangled calendar link. A meeting whose internal Outlook id contained certain characters could fail to pull its transcript on every run, with nothing to show for it but a count in the run log — the evening sync now builds that link itself instead of retyping it. Meetings affected before this release sync on the next run; nothing needs re-running by hand. (#207)
+
 ## v0.11.1 — 2026-09-16
 
 - The structure-version 3 upgrade now files every existing Owe / Awaiting / Question / Pending bullet into the project page's Background callouts, whatever spelling the evening run used for it, instead of carrying them to the Notes tail. (#192)

@@ -767,3 +767,65 @@ the answer back to the upstream listing (`sync dedup`). And this is the third
 instance of the 2026-08-26 lesson: when a skill hands an external tool's
 output to the CLI, spend one live call reading the envelope — the id shape
 included — before trusting what was written down last time.
+
+---
+
+## 2026-09-16 — an instruction said "never rebuild this" twice, and the orchestrator rebuilt it anyway
+
+**What went wrong.** Two `sync-worker-m365` subagents were dispatched with
+calendar URIs carrying `%2F` where `outlook_calendar_search` had emitted
+`-`. Both retried three times and returned `fetch-error`; Graph answered
+400 `RequestBroker--ParseUri` every time. Two meetings went unsynced with
+nothing to show for it but a count in the run log.
+
+Event ids from that listing arrive in Outlook's URL-safe base64 variant,
+and the listing percent-encodes only the padding `=` as `%3D`. The
+orchestrator reversed that substitution and percent-encoded the result by
+hand, so every `-` became `%2F`. Downstream, the connector decodes the id
+out of the URI and splices the resulting raw `/` into the Graph request
+path without re-encoding, so Graph reads the tail as unknown path
+segments. `%2F` in a `calendar:///events/` URI is a strong fingerprint of
+a rebuilt URI — someone re-encoded the `id`, or lifted `webLink`'s
+`itemid` (the one field that carries the un-substituted spelling).
+
+**A second lesson rode along, from the review of the fix.** The first
+version of this entry, and of the docstring, called that encoding
+"base64url". It is not: RFC 4648 §5 substitutes `-` for `+` (62) and `_`
+for `/` (63), and Outlook's variant is the **inverse** — measured on three
+paired `uri`/`webLink` values, `-` ↔ `/` and `_` ↔ `+`. The reviewer
+caught the contradiction and proposed inverting the mapping to match the
+RFC, which would have contradicted the wire and reintroduced the bug. The
+defect was the *label*, not the mapping. Naming a format by a standard it
+does not follow invites exactly that well-meaning correction, so the docs
+now say which variant it is and that it is not the RFC's, and the test
+fixtures carry both `-` and `_` so the correction fails in CI rather than
+in a client vault.
+
+The same review caught a false positive in the first fix: a rule refusing
+any URI containing `%2F` would also have refused a *correctly* derived one,
+because `event_uri()` encodes a literal `/` if an un-substituted id ever
+arrives. A spelling cannot distinguish "rebuilt" from "legitimately
+encoded"; Graph's own `RequestBroker--ParseUri` code, read after the
+failure, can. Diagnose on the failure, not on the shape.
+
+`SKILL.md` already forbade this **twice** — "values verbatim from the
+listing, never rebuilt", and for `uri` specifically "never decode or
+reconstruct it". Prose was not the missing piece.
+
+**The rule.** Read the failure precisely before deciding whose bug it is.
+The `id` was copied byte-perfectly at every hop — orchestrator routing file,
+worker briefing, tool call. Only the value that had to be **transformed**
+came out wrong. A model copying an opaque string is reliable; the same model
+applying an encoding rule to it is not. So when a value must cross a
+model-authored boundary, make the boundary a copy and put the transform in
+the CLI (`m365.event_uri()`, surfaced as triage's `event_uri`). Restating
+a rule the model already read and violated buys nothing.
+
+**The corollary for triage.** The first reading of this was "connector bug,
+file it upstream" — the brief that opened the investigation said so. One
+live call each way disproved it: the listing's own `uri` returned 200 and
+the hand-encoded form returned 400, which locates the defect above the
+connector, not inside it. The connector's decode-without-re-encode is real
+but latent, because nothing in the normal path emits that form. Two calls
+were the difference between a fix and three weeks of chasing the wrong
+layer.
