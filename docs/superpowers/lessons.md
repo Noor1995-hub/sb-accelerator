@@ -878,3 +878,23 @@ recap (so no fixture exercised the v2 callouts at all), and
 attribute. A new rendered shape needs a fixture that *is* that shape, on the
 surface the probe actually visits, or the tier is green on a screen the product
 no longer draws.
+
+**A fourth part, found by the Windows job in the same PR.** The fixture that
+finally exercised the v2 recap was also the first to carry an
+`<!-- evening-sync:recap:begin inputs=… -->` stamp, and Windows CI immediately
+disagreed with macOS and Ubuntu about its value — `ce0435975b22effb` against
+`1f298595a5c7118b`. Reproduced in a minute by rewriting the fixture tree to
+CRLF locally, which is what a runner with `core.autocrlf=true` checks out.
+`recap_fingerprint` hashed `path.read_bytes()`, so the stamp forked on line
+endings; since a mismatched stamp *regenerates* the region, a Windows-hosted
+vault overwrote a recap the vault owner had already read on every run.
+
+`provenance.digest` had normalised CRLF to LF since the day it was written, and
+its module docstring already gives this exact reason. The rule: **before
+writing a content hash over vault files, look for the repo's existing digest
+helper — do not reach for `hashlib` directly.** Three places had already met
+this problem (the `plugin/vendor/**` `-text` rule in `.gitattributes`,
+`provenance.digest`, and `asset_bytes()` in `test_migration_001`) and each
+solved it locally; a fourth site that skipped the search shipped the bug. The
+corollary for review: a hash of file bytes is a portability decision, so ask
+what happens to it on the other platform before the CI matrix asks for you.
