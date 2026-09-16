@@ -15,6 +15,10 @@ delivers them.
 
 ## Unreleased
 
+- Teams meetings no longer go missing from the vault because of a mangled calendar link. A meeting whose internal Outlook id contained certain characters could fail to pull its transcript on every run, with nothing to show for it but a count in the run log — the evening sync now builds that link itself instead of retyping it. Meetings affected before this release sync on the next run; nothing needs re-running by hand. (#207)
+- The daily note's recap cards get their colour back: **At a glance** is blue, each theme violet, **Watch** red, and the sync notes a muted grey. They shipped in v0.11.0 with their icons but no colour coding at all, because the snippet wrote the accent colour in a form current Obsidian no longer reads. Run `/upgrade-vault` — or just reinstall the plugin — to pick it up. (#206)
+- On a Windows-hosted vault, the evening run no longer rewrites a recap you have already read: the fingerprint that decides whether the recap needs regenerating was sensitive to line endings, so a Windows host recomputed a different value for identical content every run. Vaults on macOS, Linux or Cowork were never affected and see no change. (#206)
+
 ## v0.11.1 — 2026-09-16
 
 - The structure-version 3 upgrade now files every existing Owe / Awaiting / Question / Pending bullet into the project page's Background callouts, whatever spelling the evening run used for it, instead of carrying them to the Notes tail. (#192)

@@ -767,3 +767,134 @@ the answer back to the upstream listing (`sync dedup`). And this is the third
 instance of the 2026-08-26 lesson: when a skill hands an external tool's
 output to the CLI, spend one live call reading the envelope — the id shape
 included — before trusting what was written down last time.
+
+---
+
+## 2026-09-16 — an instruction said "never rebuild this" twice, and the orchestrator rebuilt it anyway
+
+**What went wrong.** Two `sync-worker-m365` subagents were dispatched with
+calendar URIs carrying `%2F` where `outlook_calendar_search` had emitted
+`-`. Both retried three times and returned `fetch-error`; Graph answered
+400 `RequestBroker--ParseUri` every time. Two meetings went unsynced with
+nothing to show for it but a count in the run log.
+
+Event ids from that listing arrive in Outlook's URL-safe base64 variant,
+and the listing percent-encodes only the padding `=` as `%3D`. The
+orchestrator reversed that substitution and percent-encoded the result by
+hand, so every `-` became `%2F`. Downstream, the connector decodes the id
+out of the URI and splices the resulting raw `/` into the Graph request
+path without re-encoding, so Graph reads the tail as unknown path
+segments. `%2F` in a `calendar:///events/` URI is a strong fingerprint of
+a rebuilt URI — someone re-encoded the `id`, or lifted `webLink`'s
+`itemid` (the one field that carries the un-substituted spelling).
+
+**A second lesson rode along, from the review of the fix.** The first
+version of this entry, and of the docstring, called that encoding
+"base64url". It is not: RFC 4648 §5 substitutes `-` for `+` (62) and `_`
+for `/` (63), and Outlook's variant is the **inverse** — measured on three
+paired `uri`/`webLink` values, `-` ↔ `/` and `_` ↔ `+`. The reviewer
+caught the contradiction and proposed inverting the mapping to match the
+RFC, which would have contradicted the wire and reintroduced the bug. The
+defect was the *label*, not the mapping. Naming a format by a standard it
+does not follow invites exactly that well-meaning correction, so the docs
+now say which variant it is and that it is not the RFC's, and the test
+fixtures carry both `-` and `_` so the correction fails in CI rather than
+in a client vault.
+
+The same review caught a false positive in the first fix: a rule refusing
+any URI containing `%2F` would also have refused a *correctly* derived one,
+because `event_uri()` encodes a literal `/` if an un-substituted id ever
+arrives. A spelling cannot distinguish "rebuilt" from "legitimately
+encoded"; Graph's own `RequestBroker--ParseUri` code, read after the
+failure, can. Diagnose on the failure, not on the shape.
+
+`SKILL.md` already forbade this **twice** — "values verbatim from the
+listing, never rebuilt", and for `uri` specifically "never decode or
+reconstruct it". Prose was not the missing piece.
+
+**The rule.** Read the failure precisely before deciding whose bug it is.
+The `id` was copied byte-perfectly at every hop — orchestrator routing file,
+worker briefing, tool call. Only the value that had to be **transformed**
+came out wrong. A model copying an opaque string is reliable; the same model
+applying an encoding rule to it is not. So when a value must cross a
+model-authored boundary, make the boundary a copy and put the transform in
+the CLI (`m365.event_uri()`, surfaced as triage's `event_uri`). Restating
+a rule the model already read and violated buys nothing.
+
+**The corollary for triage.** The first reading of this was "connector bug,
+file it upstream" — the brief that opened the investigation said so. One
+live call each way disproved it: the listing's own `uri` returned 200 and
+the hand-encoded form returned 400, which locates the defect above the
+connector, not inside it. The connector's decode-without-re-encode is real
+but latent, because nothing in the normal path emits that form. Two calls
+were the difference between a fix and three weeks of chasing the wrong
+layer.
+
+---
+
+## 2026-09-16 — the callout accents shipped inert, and the icon rendering is what hid it
+
+**What went wrong.** 0.11.0's recap callouts declared
+`--callout-color: 14, 165, 233` — the `r, g, b` triplet Obsidian used to
+compose a tint from via `rgba(var(--callout-color), 0.1)`. Obsidian 1.13
+consumes a *whole colour* through
+`color-mix(in oklch, var(--callout-color) 10%, transparent)` instead, and its
+app.css contains no `rgba(var(--callout-color)` at all. A triplet makes those
+`color-mix()` calls invalid at computed-value time, so `background-color` falls
+back to its initial `transparent`. Every recap callout in a released vault
+rendered with no tint, no border, and a title in plain body text. The vault
+owner reported it off the first real v2 daily note.
+
+Nothing errored, the snippet loaded, and `--callout-icon` worked perfectly —
+an icon id is read by JS and never goes through colour maths. So each callout
+showed its correct custom Lucide icon and no colour, which reads like a theme
+problem. The declared value and `getPropertyValue('--callout-color')` both look
+right while it is broken; only `getComputedStyle(el).backgroundColor` shows the
+collapse. `[!quote]`, on Obsidian's own built-in `#9e9e9e`, kept its tint in the
+same render — the control that isolates it to our four declarations.
+
+**The rule, three parts.**
+
+*Read the consuming stylesheet, not the docs.* The triplet form is still what
+the community docs describe. One regex over
+`Obsidian.app/Contents/Resources/obsidian.asar` settled it in a minute and gave
+the exact `color-mix()` expression to reason about. When a CSS custom property
+feeds a function, the function's arity and unit expectations are the contract —
+and they change between app versions, silently, because a bad custom-property
+substitution is not an error, it is a fallback.
+
+*A partly-working feature is worse than a broken one.* The icon working is the
+whole reason this survived review, a release, and a vault upgrade. When two
+mechanisms in one declaration fail independently, assert both — the render test
+here checks the tint **and** the icon, so a snippet that stops loading entirely
+is distinguishable from one whose values are wrong.
+
+*The visual tier can only see what it tours.* Three separate gaps had to be
+closed before the render tier could have caught this: the probe toured the
+*earliest* daily note (so the capture showed the oldest recap shape in the
+fixture set), `fixtures/demo-vault`'s latest daily note still carried a **v1**
+recap (so no fixture exercised the v2 callouts at all), and
+`test_fixtures_ontology`'s marker regex rejected the CLI-owned `inputs=`
+attribute. A new rendered shape needs a fixture that *is* that shape, on the
+surface the probe actually visits, or the tier is green on a screen the product
+no longer draws.
+
+**A fourth part, found by the Windows job in the same PR.** The fixture that
+finally exercised the v2 recap was also the first to carry an
+`<!-- evening-sync:recap:begin inputs=… -->` stamp, and Windows CI immediately
+disagreed with macOS and Ubuntu about its value — `ce0435975b22effb` against
+`1f298595a5c7118b`. Reproduced in a minute by rewriting the fixture tree to
+CRLF locally, which is what a runner with `core.autocrlf=true` checks out.
+`recap_fingerprint` hashed `path.read_bytes()`, so the stamp forked on line
+endings; since a mismatched stamp *regenerates* the region, a Windows-hosted
+vault overwrote a recap the vault owner had already read on every run.
+
+`provenance.digest` had normalised CRLF to LF since the day it was written, and
+its module docstring already gives this exact reason. The rule: **before
+writing a content hash over vault files, look for the repo's existing digest
+helper — do not reach for `hashlib` directly.** Three places had already met
+this problem (the `plugin/vendor/**` `-text` rule in `.gitattributes`,
+`provenance.digest`, and `asset_bytes()` in `test_migration_001`) and each
+solved it locally; a fourth site that skipped the search shipped the bug. The
+corollary for review: a hash of file bytes is a portability decision, so ask
+what happens to it on the other platform before the CI matrix asks for you.

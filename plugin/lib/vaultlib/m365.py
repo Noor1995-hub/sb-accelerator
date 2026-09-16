@@ -16,10 +16,12 @@ import re
 from datetime import datetime, timedelta, timezone as _timezone
 from pathlib import Path
 from typing import List, Optional, Tuple
+from urllib.parse import quote
 
 from . import dates
 
 URL_PREFIX = "meeting-transcript:///events/"
+EVENT_URI_PREFIX = "calendar:///events/"
 # A transcript on a recurring series' unscoped URL may belong to another
 # occurrence; anything created outside the event window plus this pad is
 # filtered out rather than filed under the wrong meeting.
@@ -88,6 +90,40 @@ def _canonical(event: dict) -> Tuple[str, str, str]:
         raise M365Error(f"meetingTranscriptUrl {url!r} carries no token")
     start = _event_start(event)
     return token, start.strftime("%Y-%m-%dT%H:%M:%S"), url
+
+
+def event_uri(event_id) -> str:
+    """The `calendar:///events/<id>` URI for one listing entry's event id.
+
+    This exists so that nothing above it ever *transforms* an event id.
+
+    The calendar-search listing returns ids in Outlook's URL-safe base64
+    variant, which is **not** RFC 4648 §5 base64url: measured against paired
+    `uri`/`webLink` values from one mailbox, `-` stands in for `/` and `_`
+    for `+` — the inverse of base64url's substitution. Do not "correct" that
+    to the RFC's mapping; the substitution below is what the wire actually
+    carries, and `webLink`'s `itemid` is where the un-substituted spelling
+    (`%2F`, `%2B`) shows up.
+
+    A caller that reverses that substitution and percent-encodes the result
+    by hand turns every `-` into `%2F`. The connector then decodes it back
+    to a raw `/` and splices it into the Graph request path unencoded, so
+    Graph reads the tail as unknown path segments and answers 400
+    `RequestBroker--ParseUri`. That cost two meetings a transcript on every
+    run until someone read the run log.
+
+    Percent-encoding with an empty safe set is the whole job: `-` and `_`
+    are unreserved, so the substituted alphabet passes through untouched,
+    while the padding `=` — plus a literal `/` or `+`, should an id ever
+    arrive un-substituted — comes out encoded exactly once. `unquote` on the
+    result returns the id byte for byte, which is the only property the
+    connector cares about.
+    """
+    if not isinstance(event_id, str) or not event_id.strip():
+        raise M365Error(
+            f"event id {event_id!r} is empty or not a string — a URI cannot "
+            "be derived from it")
+    return f"{EVENT_URI_PREFIX}{quote(event_id, safe='')}"
 
 
 def derive_id(event: dict) -> dict:

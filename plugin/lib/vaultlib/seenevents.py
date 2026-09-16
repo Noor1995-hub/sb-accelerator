@@ -29,7 +29,7 @@ from pathlib import Path
 from typing import List, Optional, Tuple
 
 from . import vault
-from .m365 import _parse_graph_dt, M365Error
+from .m365 import _parse_graph_dt, event_uri, M365Error
 
 CACHE_RELPATH = Path("99-workflow-config") / "sync-state" / "seen-events.json"
 CACHE_VERSION = 1
@@ -221,11 +221,14 @@ def triage(root: Path, events, now_utc: datetime, home_domains=None) -> dict:
                 f"event {event_id} ({subject!r}) has no parseable start — "
                 "uncacheable, fetching it every run")
             fetch.append({"id": event_id, "start_utc": None,
-                          "subject": subject, "reason": "unkeyed"})
+                          "subject": subject,
+                          "event_uri": event_uri(event_id),
+                          "reason": "unkeyed"})
             continue
         start_utc = start.strftime(_KEY_FMT)
         candidate = {"id": event_id, "start_utc": start_utc,
-                     "subject": subject}
+                     "subject": subject,
+                     "event_uri": event_uri(event_id)}
         # The external-organizer filter outranks both the not-ended
         # deferral and the cache lookup below it: a future external meeting
         # is still external, and an occurrence cached as forbidden/no-access
