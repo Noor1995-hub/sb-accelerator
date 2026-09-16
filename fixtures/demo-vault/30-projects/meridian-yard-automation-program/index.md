@@ -20,46 +20,62 @@ next-milestone-date: 2026-09-01
 
 # Yard Automation Program
 
-> [!summary]+ **Now** — as of 01-06-26
+> [!summary] Where it stands — 1 June
 > - **Stage** — Yard 1 commissioned on the Phase 0 vendor's platform; yards 2–3 being re-scoped onto it after the May consolidation.
 > - **Defining decision** — [[2026-05-20-single-vendor-strategy-adopted]]
-> - **Next event** — Vendor contract signature, target 2026-09-01
-> - **Owe** — Revised commissioning schedule for yards 2–3 to Leo Marchetti
-> - **Watch** — Roughly six weeks of slip against the original phased plan. Renee Castillo owns the integration work the consolidation created, and she was not in the room when it was agreed.
 
-> [!info]- **Context**
-> - **Contacts** — Leo Marchetti (COO, executive sponsor), Renee Castillo (IT Director), Jamie Ellwood (floor operations)
-> - **Source** — Follow-on from the Phase 0 warehouse pilot, delivered 2026-02
+## Coming up
 
-## Decisions
+| When | What |
+|---|---|
+| Tue 1 Sept | Vendor contract signature, target 2026-09-01 |
 
-```dataview
-TABLE WITHOUT ID
-  link(file.path, dateformat(date, "dd-MM-yy")) AS "Date",
-  status AS "Status",
-  summary AS "Decision"
-FROM "30-projects/meridian-yard-automation-program/decisions"
-SORT status ASC, date DESC
-LIMIT 20
-```
-
-## Open Items
-
-- **Owe** — Revised commissioning schedule for yards 2–3 to Leo Marchetti (Priya Nathan, by 2026-06-15)
-- **Awaiting** — Consolidated integration estimate from the yard-1 vendor
-- **Question** — Whether yard 3's PLC refresh sits inside this scope or in a follow-on phase
-- **Pending** — Single-vendor contract signature, target 2026-09-01
-
-## Related Meetings
+## Recent meetings
 
 ```dataview
 TABLE WITHOUT ID
-  link(file.path, dateformat(date, "dd-MM HH:mm")) AS "Date",
-  slice(attendees, 0, 3) AS "Attendees",
-  recording-duration AS "Min",
-  calendar-subject AS "Subject"
+  link(file.path, dateformat(date, "ccc dd-MM")) AS "Date",
+  calendar-subject AS "Subject",
+  slice(attendees, 0, 3) AS "With",
+  recording-duration AS "Min"
 FROM "20-meetings"
 WHERE econtains(projects, this.slug)
 SORT date DESC
-LIMIT 15
+LIMIT 10
 ```
+
+## Recent decisions
+
+```dataview
+TABLE WITHOUT ID
+  link(file.path, dateformat(date, "dd-MM")) AS "Date",
+  summary AS "Decision",
+  status AS "Status"
+FROM "30-projects/meridian-yard-automation-program/decisions"
+SORT date DESC
+LIMIT 10
+```
+
+## Background
+
+Reference material for the evening run and for when you need the detail. Folded by default.
+
+> [!todo]- 📤 Owe — by owner
+> - **Priya Nathan**
+>   - Revised commissioning schedule for yards 2–3 to Leo Marchetti, by 2026-06-15
+
+> [!info]- 👤 Awaiting
+> - Consolidated integration estimate from the yard-1 vendor
+
+> [!question]- ❓ Open questions
+> - Whether yard 3's PLC refresh sits inside this scope or in a follow-on phase
+
+> [!note]- ⏳ Pending
+> - Single-vendor contract signature, target 2026-09-01
+
+> [!warning]- Watch list
+> - Roughly six weeks of slip against the original phased plan. Renee Castillo owns the integration work the consolidation created, and she was not in the room when it was agreed.
+
+> [!info]- Context
+> - **Contacts** — Leo Marchetti (COO, executive sponsor), Renee Castillo (IT Director), Jamie Ellwood (floor operations)
+> - **Source** — Follow-on from the Phase 0 warehouse pilot, delivered 2026-02

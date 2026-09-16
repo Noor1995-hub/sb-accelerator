@@ -16,10 +16,18 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-from . import dates, markdown, meeting, naming, vault
+from . import dates, links, markdown, meeting, naming, recap, vault
 
 DAILY_NOTES_DIR = vault.DAILY_NOTES_DIR
 NO_MEETINGS_LINE = "*No meetings scheduled.*"
+
+PREP_HEADING = "#### Prep"
+NOTES_BLOCK = "#### Notes\n- "
+ACTIONS_BLOCK = "#### Actions\n- [ ] "
+_PREP_KEYS = ("attendees", "last_meeting", "context")
+_PREP_LABELS = (("attendees", "Attendees"), ("last_meeting", "Last meeting"),
+                ("context", "Context"))
+_BANNER_FIRST_LINE = "> [!warning] Catch-up note"
 
 _MARKER_RE = re.compile(
     r"\A<!-- evening-sync:([a-z-]+):(begin|end)"
@@ -33,16 +41,22 @@ _ALLOWED_ATTRS = {("recap", "begin"): frozenset({"inputs"})}
 _KNOWN_REGIONS = ("recap", "prep")
 _TIME_RE = re.compile(r"\A([01]\d|2[0-3]):[0-5]\d\Z")
 _HEADING_RE = re.compile(
-    r"\A(\d{2}:\d{2}) — (.*?)(?: · \[\[([a-z0-9-]+)\]\])?\Z")
+    r"\A(\d{2}:\d{2}) — (.*?)"
+    r"(?: · \[\[(?:40-entities/)?([a-z0-9-]+)(?:/dossier)?(?:\|[^\]]*)?\]\])?\Z")
+_TASK_RE = re.compile(r"\A- \[( |x|X)\]\s*(.*)\Z")
 _ALLOWED_KEYS = ("date", "recap", "meetings", "meetings_note", "recap_window")
 _ALLOWED_MEETING_KEYS = ("time", "subject", "entity", "prep")
 _ALLOWED_WINDOW_KEYS = ("from", "to", "detailed_from")
 _DIGEST_LENGTH = 16
 
-# `#heading` is stripped before resolution; `|alias` is the display-name
-# claim. `!?` catches embeds, which make the same claim as a plain link.
-_WIKILINK_RE = re.compile(
-    r"!?\[\[([^\[\]|#]+)(?:#[^\[\]|]*)?(?:\|([^\[\]]*))?\]\]")
+
+def parse_heading(text: str):
+    """(time, subject, entity slug) for a v1 `· [[slug]]` or v2
+    `· [[40-entities/slug/dossier|Name]]` heading; None when not a meeting heading."""
+    match = _HEADING_RE.match(str(text).strip())
+    if not match:
+        return None
+    return match.group(1), match.group(2), match.group(3)
 
 
 class DailyNoteError(Exception):
@@ -120,83 +134,36 @@ def _clean_region_text(value, label: str) -> str:
     return text
 
 
-def _resolve_link(root: Path, target: str):
-    """(kind, path, display-name key) for a wikilink target, or three Nones.
-
-    Identity objects come first: they are the ones whose *name* an alias
-    claims, and a slug that is both a person note and a project folder is a
-    collision the vault should not have. Event objects resolve but make no
-    name claim — "Friday's Acme sync" is a reference, not a name.
-    """
-    candidates = (
-        ("entity", root / vault.ENTITIES_DIR / target / "dossier.md",
-         "entity-name"),
-        ("person", root / vault.PEOPLE_DIR / f"{target}.md", "person-name"),
-        ("project", root / vault.PROJECTS_DIR / target / "index.md",
-         "project-name"),
-        ("meeting", root / vault.MEETINGS_DIR / f"{target}.md", None),
-        ("daily note", root / DAILY_NOTES_DIR / f"{target}.md", None),
-    )
-    for kind, path, name_key in candidates:
-        if path.is_file():
-            return kind, path, name_key
-    projects = root / vault.PROJECTS_DIR
-    for folder in sorted(projects.glob("*/decisions")) if projects.is_dir() else []:
-        path = folder / f"{target}.md"
-        if path.is_file():
-            return "decision", path, None
-    return None, None, None
-
-
 def _check_links(root: Path, text: str, label: str,
                  warnings: List[str]) -> List[str]:
     """Every wikilink resolves; every identity alias matches the vault.
 
-    Decision 19. A plain-prose name cannot be checked by anything, which is
-    why the skill mandates the wikilink form — this is the half that a
-    machine can hold.
-
-    Every unresolvable target and every identity-alias mismatch is
-    collected and returned rather than raised immediately (issue #78): a
-    recap with two independently-bad links used to exhaust the skill's
-    single retry on the first offender and still fail on the second, with
-    no note written for tomorrow. The caller raises once, across every
-    region, so a single retry always has everything it needs.
+    v1 payloads are *checked* here and left as written (byte-identical
+    rendering is pinned); v2 payloads are normalised by `recap.py` and the
+    prep renderer, which call `links.normalise` and pass its offenders
+    through the same single-raise path.
     """
-    offenders: List[str] = []
-    for match in _WIKILINK_RE.finditer(text):
-        target = match.group(1).strip()
-        alias = match.group(2)
-        kind, path, name_key = _resolve_link(root, target)
-        if kind is None:
-            offenders.append(
-                f"{label}: [[{target}]] resolves to no vault object — link "
-                "only to objects that exist (create one with /update-entity "
-                "or /new-project first), or leave the name out. Never write "
-                "a name you have not looked up.")
-            continue
-        if alias is None or name_key is None:
-            continue
-        try:
-            frontmatter, _ = markdown.split_frontmatter(
-                path.read_text(encoding="utf-8"))
-        except ValueError as exc:
-            warnings.append(
-                f"{label}: [[{target}]] resolves but its frontmatter could "
-                f"not be read ({exc}) — display name not verified")
-            continue
-        actual = str(frontmatter.get(name_key) or "").strip()
-        if not actual:
-            warnings.append(
-                f"{label}: [[{target}]] carries no {name_key} — display name "
-                "not verified")
-            continue
-        if alias.strip() != actual:
-            offenders.append(
-                f"{label}: [[{target}|{alias}]] — that {kind} is called "
-                f"{actual!r}. Display names come from the vault, never from "
-                "the model.")
+    _, offenders, new_warnings = links.normalise(root, text, label)
+    warnings.extend(new_warnings)
     return offenders
+
+
+def _strip_model_banner(text: str) -> Tuple[str, bool]:
+    """Drop a model-written catch-up callout from a v1 recap string."""
+    lines = text.split("\n")
+    if not lines or lines[0].strip() != _BANNER_FIRST_LINE:
+        return text, False
+    index = 1
+    while index < len(lines) and lines[index].startswith(">"):
+        index += 1
+    while index < len(lines) and not lines[index].strip():
+        index += 1
+    rest = "\n".join(lines[index:]).rstrip()
+    if not rest.strip():
+        raise DailyNoteError(
+            "recap held only a Catch-up note callout — the CLI writes that "
+            "banner itself; the payload must carry the recap content")
+    return rest, True
 
 
 def _validate(root: Path, payload) -> Tuple[dict, List[str]]:
@@ -209,12 +176,11 @@ def _validate(root: Path, payload) -> Tuple[dict, List[str]]:
         raise DailyNoteError(f"unknown payload key(s) {unknown}")
     date_iso = _require_date(payload.get("date"))
     window = _validate_window(payload, date_iso)
-    recap = _clean_region_text(payload.get("recap"), "recap")
-    link_offenders.extend(_check_links(root, recap, "recap", warnings))
     raw_meetings = payload.get("meetings")
     if not isinstance(raw_meetings, list):
         raise DailyNoteError("meetings must be a list (possibly empty)")
     meetings: List[dict] = []
+    prep_forms: set = set()
     for position, entry in enumerate(raw_meetings, 1):
         if not isinstance(entry, dict):
             raise DailyNoteError(f"meeting {position}: must be an object")
@@ -246,12 +212,59 @@ def _validate(root: Path, payload) -> Tuple[dict, List[str]]:
                     f"meeting {position}: entity {entity!r} has no dossier at "
                     f"{vault.ENTITIES_DIR}/{entity}/dossier.md — pass null "
                     "rather than guessing")
-        prep = _clean_region_text(entry.get("prep"),
-                                  f"meeting {position} prep")
-        link_offenders.extend(
-            _check_links(root, prep, f"meeting {position} prep", warnings))
+        raw_prep = entry.get("prep")
+        if isinstance(raw_prep, dict):
+            unknown_prep = sorted(set(raw_prep) - set(_PREP_KEYS))
+            missing_prep = [k for k in _PREP_KEYS if not str(raw_prep.get(k) or "").strip()]
+            if unknown_prep or missing_prep:
+                raise DailyNoteError(
+                    f"meeting {position} prep: needs exactly attendees, last_meeting, "
+                    f"context (missing {missing_prep}, unknown {unknown_prep})")
+            fields = {}
+            for key in _PREP_KEYS:
+                text = str(raw_prep[key]).strip()
+                if "\n" in text or "evening-sync:" in text:
+                    raise DailyNoteError(f"meeting {position} prep.{key} must be one line without markers")
+                text, bad, warn = links.normalise(root, text, f"meeting {position} prep.{key}")
+                link_offenders.extend(bad)
+                warnings.extend(warn)
+                fields[key] = text
+            prep = "\n".join(f"**{label}** — {fields[key]}" for key, label in _PREP_LABELS)
+            prep_forms.add("v2")
+        else:
+            prep = _clean_region_text(raw_prep, f"meeting {position} prep")
+            link_offenders.extend(
+                _check_links(root, prep, f"meeting {position} prep", warnings))
+            prep_forms.add("v1")
         meetings.append({"time": time_text, "subject": subject,
                          "entity": entity, "prep": prep})
+    if len(prep_forms) > 1:
+        raise DailyNoteError(
+            "meetings: every prep must use the same form — all strings (v1) "
+            "or all {attendees, last_meeting, context} objects (v2)")
+    v2_prep = prep_forms == {"v2"}
+    raw_recap = payload.get("recap")
+    recap_clean = None
+    recap_text = None
+    if isinstance(raw_recap, dict):
+        if window is None:
+            raise DailyNoteError(
+                "recap_window is required with a structured (v2) recap — the "
+                "CLI computes the glance's meeting count and window label from it")
+        try:
+            recap_clean, bad, warn = recap.validate(root, raw_recap)
+        except recap.RecapError as exc:
+            raise DailyNoteError(str(exc)) from exc
+        link_offenders.extend(bad)
+        warnings.extend(warn)
+    else:
+        recap_text = _clean_region_text(raw_recap, "recap")
+        recap_text, stripped = _strip_model_banner(recap_text)
+        if stripped:
+            warnings.append(
+                "recap: a Catch-up note callout in the payload was stripped — "
+                "the CLI writes the banner itself")
+        link_offenders.extend(_check_links(root, recap_text, "recap", warnings))
     meetings_note = payload.get("meetings_note")
     if meetings_note is not None:
         if meetings:
@@ -264,7 +277,10 @@ def _validate(root: Path, payload) -> Tuple[dict, List[str]]:
             _check_links(root, meetings_note, "meetings_note", warnings))
     if link_offenders:
         raise DailyNoteError("\n".join(link_offenders))
-    return ({"date": date_iso, "recap": recap, "meetings": meetings,
+    contract = "v2" if recap_clean is not None or v2_prep else "v1"
+    return ({"date": date_iso, "recap_clean": recap_clean,
+             "recap_text": recap_text, "v2_prep": v2_prep,
+             "contract": contract, "meetings": meetings,
              "meetings_note": meetings_note, "recap_window": window},
             warnings)
 
@@ -378,9 +394,31 @@ def recap_fingerprint(root: Path, window: dict) -> str:
     return digest[:_DIGEST_LENGTH]
 
 
+def meetings_in_window(root: Path, start: date, end: date) -> int:
+    """Meeting notes dated inside [start, end] — the same set the recap
+    fingerprint hashes, so the glance never disagrees with the digest."""
+    return sum(1 for relpath, _ in _fingerprint_inputs(root, start, end)
+               if relpath.startswith(f"{vault.MEETINGS_DIR}/"))
+
+
+def _window_label(window: dict) -> str:
+    start, end = window["from"], window["to"]
+    first = dates.DAY_NAMES[start.weekday()]
+    last = dates.DAY_NAMES[end.weekday()]
+    return first if start == end else f"{first}–{last}"
+
+
 def _recap_body(root: Path, data: dict) -> str:
     banner = _catchup_banner(root, data["recap_window"])
-    return f"{banner}\n\n{data['recap']}" if banner else data["recap"]
+    if data["recap_clean"] is not None:
+        window = data["recap_window"]
+        body = recap.render(
+            root, data["recap_clean"],
+            meetings=meetings_in_window(root, window["from"], window["to"]),
+            window_label=_window_label(window))
+    else:
+        body = data["recap_text"]
+    return f"{banner}\n\n{body}" if banner else body
 
 
 def _marker_line(name: str, kind: str,
@@ -395,10 +433,15 @@ def _region(name: str, content: str, attrs: Optional[dict] = None) -> str:
             f"{_marker_line(name, 'end')}")
 
 
-def _heading(meeting: dict) -> str:
+def _heading(meeting: dict, root: Optional[Path] = None, v2: bool = False) -> str:
     heading = f"{meeting['time']} — {meeting['subject']}"
     if meeting["entity"]:
-        heading += f" · [[{meeting['entity']}]]"
+        if v2 and root is not None:
+            path = root / vault.ENTITIES_DIR / meeting["entity"] / "dossier.md"
+            shown = links.display_name(path, "entity-name") or meeting["entity"]
+            heading += f" · [[{links.path_target(root, path)}|{shown}]]"
+        else:
+            heading += f" · [[{meeting['entity']}]]"
     return heading
 
 
@@ -412,9 +455,14 @@ def _render(root: Path, data: dict, fingerprint: Optional[str]) -> str:
     if data["meetings"]:
         chunks = []
         for meeting in data["meetings"]:
-            heading = f"### {_heading(meeting)}"
-            chunks.append("\n".join([heading,
-                                     _region("prep", meeting["prep"]), "- "]))
+            heading = f"### {_heading(meeting, root, data['v2_prep'])}"
+            if data["v2_prep"]:
+                chunks.append("\n".join([
+                    heading, PREP_HEADING, _region("prep", meeting["prep"]), "",
+                    NOTES_BLOCK, "", ACTIONS_BLOCK]))
+            else:
+                chunks.append("\n".join([heading,
+                                         _region("prep", meeting["prep"]), "- "]))
         parts.append("\n\n".join(chunks))
     else:
         parts.append(_region("prep",
@@ -521,8 +569,9 @@ def _merge(root: Path, text: str, data: dict,
                 "but the payload carries meetings — the meeting structure "
                 f"changed since this note was written. {_STRUCTURAL_HINT}"
             )
-        expected_headings = [_heading(m) for m in data["meetings"]]
-        if prep_headings != expected_headings:
+        expected = [(m["time"], m["subject"], m["entity"]) for m in data["meetings"]]
+        actual = [parse_heading(h) for h in prep_headings]
+        if actual != expected:
             raise DailyNoteError(
                 "the note's meeting headings don't match the payload — the "
                 f"meeting structure changed since this note was written. "
@@ -595,6 +644,7 @@ def write(root: Path, payload) -> dict:
         "recap_skipped": recap_skipped,
         "recap_inputs": fingerprint,
         "warnings": warnings,
+        "contract": data["contract"],
     }
 
 
@@ -650,6 +700,7 @@ def read(root: Path, date_iso_raw) -> dict:
     other_lines: List[str] = []
     current: Optional[dict] = None
     section = ""
+    sub = ""
     fm_end = _frontmatter_end_line(lines)
     for index, line in enumerate(lines):
         if index <= fm_end:
@@ -666,24 +717,35 @@ def read(root: Path, date_iso_raw) -> dict:
         if line.startswith("## "):
             section = line[3:].strip()
             current = None
+            sub = ""
             continue
         if line.startswith("# "):
             continue
         if section == "Meetings" and line.startswith("### "):
             heading = line[4:].strip()
-            match = _HEADING_RE.match(heading)
+            parsed = parse_heading(heading)
             current = {
                 "heading": heading,
-                "time": match.group(1) if match else None,
-                "subject": match.group(2) if match else heading,
-                "entity": match.group(3) if match else None,
-                "prep": None,
-                "jottings": [],
+                "time": parsed[0] if parsed else None,
+                "subject": parsed[1] if parsed else heading,
+                "entity": parsed[2] if parsed else None,
+                "prep": None, "notes": [], "actions": [], "jottings": [],
             }
             meetings.append(current)
+            sub = ""
+            continue
+        if section == "Meetings" and line.startswith("#### ") and current is not None:
+            sub = line[5:].strip().lower()      # "prep" | "notes" | "actions" | anything
             continue
         stripped = line.strip()
         if not stripped:
+            continue
+        task = _TASK_RE.match(stripped)
+        if task and section == "Meetings" and current is not None:
+            text_value = task.group(2).strip()
+            if text_value:
+                current["actions"].append({"text": text_value, "done": task.group(1) != " "})
+                current["jottings"].append(text_value)
             continue
         content = stripped[2:].strip() if stripped.startswith("- ") else (
             "" if stripped == "-" else stripped)
@@ -692,6 +754,9 @@ def read(root: Path, date_iso_raw) -> dict:
         if section == "End of day":
             end_of_day.append(content)
         elif section == "Meetings" and current is not None:
+            if sub == "prep":
+                continue            # a prep line outside the markers is still prep
+            current["notes"].append(content)
             current["jottings"].append(content)
         else:
             other_lines.append(content)

@@ -5,6 +5,7 @@ cover the contract between a skill and the CLI it calls: a skill that
 references a subcommand that does not exist fails at the worst possible
 moment, in front of a client.
 """
+import json
 import re
 from pathlib import Path
 
@@ -1073,3 +1074,35 @@ def test_sync_recordings_probes_summary_line():
     )
     assert "still-no-transcript" in summary
     assert "transcript-found" in summary
+
+
+def _heredoc_json(text: str, filename: str) -> dict:
+    """The JSON body of `cat > "$SCRATCH/<filename>" <<'JSON' … JSON`."""
+    start = text.index(filename)
+    open_tag = text.index("<<'JSON'\n", start) + len("<<'JSON'\n")
+    close_tag = text.index("\nJSON\n", open_tag)
+    return json.loads(text[open_tag:close_tag])
+
+
+def test_evening_sync_payload_example_is_the_v2_contract():
+    text = read_skill("evening-sync")
+    payload = _heredoc_json(text, "daily-note.payload.json")
+    assert isinstance(payload["recap"], dict), "recap must be the structured v2 object"
+    assert {"glance", "themes", "pulse", "decisions", "watch", "carried_forward", "sync_notes"} <= set(payload["recap"])
+    assert "meetings" not in payload["recap"]["glance"], "the glance's first line is computed by the CLI"
+    assert set(payload["meetings"][0]["prep"]) == {"attendees", "last_meeting", "context"}
+    assert "recap_window" in payload
+
+
+def test_evening_sync_project_state_example_matches_the_cli():
+    text = read_skill("evening-sync")
+    state = _heredoc_json(text, "project-state")
+    assert {"as_of", "stage", "hot_potatoes", "coming_up", "owe"} <= set(state)
+    assert "project state write" in text
+    assert "Rewrite the `> [!summary]+ **Now**` callout" not in text
+
+
+def test_evening_sync_routes_mechanics_to_sync_notes():
+    text = read_skill("evening-sync")
+    assert "sync_notes" in text
+    assert "Watch is content only" in text or "**Watch** is content only" in text

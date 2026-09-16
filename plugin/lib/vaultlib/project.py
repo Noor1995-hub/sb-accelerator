@@ -20,8 +20,6 @@ PROJECT_QUOTE_KEYS = frozenset({"project-name", "next-milestone"})
 # never written — the field is minute-precision, like a meeting's `date`.
 ISO_DATETIME_RE = re.compile(r"\A\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?\Z")
 
-_PLACEHOLDER = "_none yet_"
-
 
 class ProjectError(Exception):
     """A project argument the caller must fix."""
@@ -113,62 +111,6 @@ def _validate_inputs(root: Path, slug: str, project_type: str,
         )
 
 
-def _render_body(slug: str, name: str, today_display: str, stage: Optional[str],
-                 contacts: Optional[str], source: Optional[str]) -> str:
-    return f"""
-# {name}
-
-> [!summary]+ **Now** — as of {today_display}
-> - **Stage** — {stage or "_newly created; awaiting first meeting or intake_"}
-> - **Defining decision** — {_PLACEHOLDER}
-> - **Next event** — _none scheduled_
-> - **Owe** — {_PLACEHOLDER}
-> - **Watch** — {_PLACEHOLDER}
-
-> [!info]- **Context**
-> - **Contacts** — {contacts or _PLACEHOLDER}
-> - **Source** — {source or _PLACEHOLDER}
-
-## Decisions
-
-```dataview
-TABLE WITHOUT ID
-  link(file.path, dateformat(date, "dd-MM-yy")) AS "Date",
-  status AS "Status",
-  summary AS "Decision"
-FROM "{PROJECTS_DIR}/{slug}/decisions"
-SORT status ASC, date DESC
-LIMIT 20
-```
-
-## Open Items
-
-- **Owe** — {_PLACEHOLDER}
-- **Awaiting** — {_PLACEHOLDER}
-- **Question** — {_PLACEHOLDER}
-- **Pending** — {_PLACEHOLDER}
-
-## Related Meetings
-
-```dataview
-TABLE WITHOUT ID
-  link(file.path, dateformat(date, "dd-MM HH:mm")) AS "Date",
-  slice(attendees, 0, 3) AS "Attendees",
-  recording-duration AS "Min",
-  calendar-subject AS "Subject"
-FROM "20-meetings"
-WHERE econtains(projects, this.slug)
-SORT date DESC
-LIMIT 15
-```
-"""
-
-
-def _display_date(iso: str) -> str:
-    year, month, day = iso.split("-")
-    return f"{day}-{month}-{year[2:]}"
-
-
 def scaffold(root: Path, *, name: str, project_type: str, entity: str,
              owner: str, today: str, parent: Optional[str] = None,
              stage: Optional[str] = None, contacts: Optional[str] = None,
@@ -226,7 +168,10 @@ def scaffold(root: Path, *, name: str, project_type: str, entity: str,
             + "; ".join(problems)
         )
 
-    body = _render_body(slug, name, _display_date(today), stage, contacts, source)
+    from . import projectstate   # local import: projectstate imports project for touch
+    body = projectstate.render_body(name, slug, {
+        "as_of": today, "stage": stage,
+        "context": {"contacts": contacts, "source": source}})
     text = markdown.emit_frontmatter(frontmatter, PROJECT_QUOTE_KEYS) + body
 
     folder = root / PROJECTS_DIR / slug
@@ -338,10 +283,11 @@ def touch(root, *, slug: str, date_iso: str, timestamp: Optional[str] = None,
           next_milestone=None, next_milestone_date=None) -> dict:
     """Bump the auto-maintained frontmatter of a project-state update.
 
-    Stage-5 subagents own the Now callout and Open Items as body prose; the
-    frontmatter half comes through here so no model ever authors it. Only
-    last-updated, state-updated (and, together, the milestone pair) can
-    change; every other byte of index.md stays put.
+    Stage-4 subagents send the project state as JSON and `project state
+    write` renders the body; the frontmatter half comes through here (state
+    write calls touch itself). Only last-updated, state-updated (and,
+    together, the milestone pair) can change; every other byte of index.md
+    stays put.
 
     `last-updated` stays the human-facing day. `state-updated` records the
     minute the state was actually synthesized, and that is what the evening

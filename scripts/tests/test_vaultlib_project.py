@@ -63,7 +63,7 @@ def test_scaffold_creates_the_decisions_directory(tmp_path):
     assert result["decisions_dir"] == f"30-projects/{BASE_SLUG}/decisions"
 
 
-def test_body_carries_the_three_ontology_sections(tmp_path):
+def test_body_carries_the_four_ontology_sections(tmp_path):
     root = vault_with_entity(tmp_path)
     result = project.scaffold(root, **BASE)
     _, body = md.split_frontmatter((root / result["path"]).read_text(encoding="utf-8"))

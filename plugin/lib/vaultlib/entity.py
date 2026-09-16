@@ -52,8 +52,9 @@ ROLE_VOCABULARY = ("sponsor", "champion", "evaluator", "influencer", "blocker")
 STANCE_VOCABULARY = ("champion", "neutral", "blocker")
 
 # Context and Sensitivities render as callouts so a dossier carries the same
-# visual weight as a project index, which opens with `> [!summary]+ **Now**`
-# and `> [!info]- **Context**`. That is a contract, not styling: it puts a
+# visual weight as a project index, which opens with
+# `> [!summary] Where it stands` and `> [!info]- **Context**`. That is a
+# contract, not styling: it puts a
 # `> ` in front of every bullet those two sections hold, and every matcher in
 # this module has to look past it.
 CONTEXT_CALLOUT = "> [!info]+ **Standing context**"

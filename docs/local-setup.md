@@ -167,7 +167,7 @@ python3 plugin/lib/vaultlib/cli.py entity read \
 Every call prints one JSON object with an `ok` field. Confirm the created
 project's frontmatter matches
 `plugin/template/99-workflow-config/reference/ontology.md`, and that its body carries
-the three H2 sections the ontology's `body_sections` declares.
+the four H2 sections the ontology's `body_sections` declares.
 
 ### 6. Tear down and recreate
 

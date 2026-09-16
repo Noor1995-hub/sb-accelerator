@@ -13,7 +13,7 @@ Everything runs off your daily note in `60-daily-notes`, and one thing drives it
 
 It runs by itself each working evening, as long as this machine is awake with Claude open. If it was shut at the time, the run happens the next time Claude opens and the note says so. To write tomorrow's note right now instead, run **`/evening-sync`**.
 
-Each note has three parts. **Recap** is written for you. **Meetings** is one heading per meeting. **End of day** is yours. Jot whatever you like under any of them — free text is fine, nothing needs a format, and the next evening run reads what you wrote.
+Each note has three parts. **Recap** is written for you. **Meetings** is one heading per meeting, with **Prep** written for you and **Notes** and **Actions** left for you — tick an action when it is done. **End of day** is yours. Jot whatever you like under any of them — free text is fine, nothing needs a format, and the next evening run reads what you wrote.
 
 ## The five tables
 

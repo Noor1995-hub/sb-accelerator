@@ -169,9 +169,18 @@ enums:
   status: [active, paused, completed, cancelled]
   project-type: [initiative, area-of-responsibility]
   type: [project]
-body_sections: [Decisions, Open Items, Related Meetings]
+body_sections: [Coming up, Recent meetings, Recent decisions, Background]
 ```
 
+- **Body is machine-rendered** by `project state write` from a state object:
+  a `> [!summary] Where it stands — {d Month}` card (Stage · up to three
+  Hot potatoes 🔴/🟠 · up to two Insights · Defining decision), `## Coming up`
+  (a When/What table, ≤ 10 rows), `## Recent meetings` and
+  `## Recent decisions` (Dataview, `LIMIT 10`), and `## Background` — folded
+  callouts for 📤 Owe (grouped by owner, one item per bullet), 👤 Awaiting,
+  ❓ Open questions, ⏳ Pending, Watch list and Context. A trailing
+  `## Notes` section, if the owner adds one, is the single human area and
+  is preserved verbatim.
 - **Edges:** `parent` (project slug) · `stakeholders[]` (person slugs).
 - **Auto-maintained:** `meetings-7d`, `meetings-30d`, `key-people`,
   `state-updated`.
@@ -365,7 +374,7 @@ Empty sections carry `*No entries yet.*` — replaced on first real entry.
 **Two sections are callouts, and that is part of the contract, not styling.**
 `## Context` and `## Sensitivities` render as Obsidian callouts so a dossier
 carries the same visual weight as a project index, which opens with
-`> [!summary]+ **Now**` and `> [!info]- **Context**`. The consequence for
+`> [!summary] Where it stands` and `> [!info]- **Context**`. The consequence for
 writers: every bullet in those two sections is prefixed `> `, and the merge
 matches the bullet label *after* stripping that prefix. A bullet appended
 without the prefix lands outside the callout and renders as loose text below
@@ -437,6 +446,24 @@ body_sections: [Recap, Meetings, End of day]
 - **Everything outside the markers is human territory**: jotting bullets
   under each meeting heading, `## End of day`, anything else. The evening
   harvest reads jottings as input; nothing ever edits or routes them in v1.
+- **Recap v2 is rendered from fields**: `[!glance]` (first line computed by
+  the CLI: meeting count, window, theme and decision counts; then 1–4
+  labelled headlines and the entities touched), folded `[!theme]-` callouts
+  (≤ 4, headline ≤ 12 words, body ≤ 80), a Project pulse table with a
+  🔴/🟠/🟢/⚪ signal per project, Decisions logged as `[[stem|summary]]`,
+  `[!hot] Watch` (content risks only), folded `[!quote]- Carried forward`
+  and folded `[!sync]- Sync notes` (mechanics: duplicates, fetch errors,
+  refusals, SELF-CHECK lines). A `[!warning] Catch-up note` callout is the
+  CLI's; one supplied in a payload is stripped.
+- **Meeting blocks v2**: `### {HH:MM} — {Subject}[ · [[40-entities/{slug}/dossier|{Entity name}]]]`,
+  then `#### Prep` holding the prep region (three lines: **Attendees**,
+  **Last meeting**, **Context**), then `#### Notes` (`- `) and `#### Actions`
+  (`- [ ] `). Notes and Actions are written once at creation and never
+  regenerated; the harvest returns them separately, actions with done state.
+- **Identity links are path links.** Entities and projects are folders, and
+  Obsidian resolves `[[name]]` by file name only, so writers emit
+  `[[40-entities/{slug}/dossier|{Name}]]` / `[[30-projects/{slug}/index|{Name}]]`;
+  the CLI normalises a bare `[[slug]]` to that form.
 - A note is never deleted or rewritten by a later day's run. Times are the
   vault owner's local timezone.
 

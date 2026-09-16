@@ -1087,3 +1087,241 @@ def test_bad_links_in_different_regions_are_reported_together(tmp_path):
     assert "meridian-industrial-holdings" in message
     assert "meeting 1 prep" in message
     assert "ghost-entity" in message
+
+
+# --- v2 contract ----------------------------------------------------------
+
+def v2_vault(tmp_path):
+    root = make_linkable_vault(tmp_path)
+    (root / "30-projects" / "yard-automation" / "index.md").write_text(
+        "---\ntype: project\nproject-name: Yard Automation Program\nslug: yard-automation\n"
+        "entity: acme-industries\n---\n", encoding="utf-8")
+    (root / "30-projects" / "yard-automation" / "decisions" / "2026-06-12-phase-1-deferred.md").write_text(
+        "---\ntype: decision\nproject: yard-automation\ndate: 2026-06-12\nstatus: active\n"
+        'summary: "Phase 1 site nomination deferred"\n---\n', encoding="utf-8")
+    return root
+
+
+def v2_payload(**overrides):
+    base = {
+        "date": "2026-06-15",
+        "recap_window": {"from": "2026-06-12", "to": "2026-06-12"},
+        "recap": {
+            "glance": {"entities": ["acme-industries"],
+                       "headlines": [{"label": "Moved", "text": "Shortlist approved"}]},
+            "themes": [],
+            "pulse": [{"project": "yard-automation", "signal": "green", "text": "Shortlist approved."}],
+            "decisions": ["2026-06-12-phase-1-deferred"],
+            "watch": [],
+            "carried_forward": [],
+            "sync_notes": ["One duplicate flagged."],
+        },
+        "meetings": [
+            {"time": "09:00", "subject": "Weekly Status", "entity": "acme-industries",
+             "prep": {"attendees": "Sam Okafor, Taylor Brooks",
+                      "last_meeting": "[[12-06-26-weekly-status|Friday — status]] · shortlist approved",
+                      "context": "[[yard-automation]] · vendor selection target 2026-08-30"}},
+            {"time": "14:00", "subject": "Deep dive — vendor scoring", "entity": None,
+             "prep": {"attendees": "Omar", "last_meeting": "none on file", "context": "first session"}},
+        ],
+    }
+    base.update(overrides)
+    return base
+
+
+EXPECTED_V2 = """---
+date: 2026-06-15
+type: daily-note
+---
+
+# 2026-06-15 · Monday
+
+## Recap
+<!-- evening-sync:recap:begin inputs={digest} -->
+> [!glance] At a glance
+> **1 meeting** Friday · 1 organisation · 0 themes · 1 decision logged
+> - **Moved:** Shortlist approved
+> - **Touched:** [[40-entities/acme-industries/dossier|Acme]]
+
+**Themes** — none this window.
+
+**Project pulse**
+
+| | Project | What moved |
+|:-:|---|---|
+| 🟢 | [[30-projects/yard-automation/index\\|Yard Automation Program]] · [[40-entities/acme-industries/dossier\\|Acme]] | Shortlist approved. |
+
+🔴 needs your hand · 🟠 watch · 🟢 moving · ⚪ quiet
+
+**Decisions logged**
+- [[2026-06-12-phase-1-deferred|Phase 1 site nomination deferred]] · Yard Automation Program
+
+> [!hot] Watch
+> - nothing needs your hand this window
+
+> [!sync]- Sync notes — 1 item, also in the run log
+> - One duplicate flagged.
+<!-- evening-sync:recap:end -->
+
+## Meetings
+
+### 09:00 — Weekly Status · [[40-entities/acme-industries/dossier|Acme]]
+#### Prep
+<!-- evening-sync:prep:begin -->
+**Attendees** — Sam Okafor, Taylor Brooks
+**Last meeting** — [[12-06-26-weekly-status|Friday — status]] · shortlist approved
+**Context** — [[30-projects/yard-automation/index|Yard Automation Program]] · vendor selection target 2026-08-30
+<!-- evening-sync:prep:end -->
+
+#### Notes
+- 
+
+#### Actions
+- [ ] 
+
+### 14:00 — Deep dive — vendor scoring
+#### Prep
+<!-- evening-sync:prep:begin -->
+**Attendees** — Omar
+**Last meeting** — none on file
+**Context** — first session
+<!-- evening-sync:prep:end -->
+
+#### Notes
+- 
+
+#### Actions
+- [ ] 
+
+## End of day
+- 
+"""
+
+
+def test_v2_fresh_render_matches_the_contract_exactly(tmp_path):
+    root = v2_vault(tmp_path)
+    result = dailynote.write(root, v2_payload())
+    assert result["contract"] == "v2"
+    text = (root / "60-daily-notes" / "2026-06-15.md").read_text(encoding="utf-8")
+    assert text == EXPECTED_V2.replace("{digest}", result["recap_inputs"])
+
+
+def test_v2_recap_requires_a_window(tmp_path):
+    root = v2_vault(tmp_path)
+    payload = v2_payload()
+    del payload["recap_window"]
+    with pytest.raises(dailynote.DailyNoteError, match="recap_window"):
+        dailynote.write(root, payload)
+
+
+def test_v2_link_offenders_across_recap_and_prep_raise_once(tmp_path):
+    root = v2_vault(tmp_path)
+    payload = v2_payload()
+    payload["recap"]["pulse"][0]["project"] = "ghost-project"
+    payload["meetings"][1]["prep"]["context"] = "[[ghost-meeting]]"
+    with pytest.raises(dailynote.DailyNoteError) as info:
+        dailynote.write(root, payload)
+    assert "ghost-project" in str(info.value) and "ghost-meeting" in str(info.value)
+    assert not (root / "60-daily-notes" / "2026-06-15.md").exists()
+
+
+def test_v2_prep_requires_three_fields_and_one_form(tmp_path):
+    root = v2_vault(tmp_path)
+    payload = v2_payload()
+    del payload["meetings"][0]["prep"]["context"]
+    with pytest.raises(dailynote.DailyNoteError, match="context"):
+        dailynote.write(root, payload)
+    payload = v2_payload()
+    payload["meetings"][1]["prep"] = "**Attendees:** Omar"
+    with pytest.raises(dailynote.DailyNoteError, match="same form"):
+        dailynote.write(root, payload)
+
+
+def test_v1_string_recap_with_a_model_written_banner_is_stripped_with_a_warning(tmp_path):
+    root = make_windowed_vault(tmp_path)
+    text = ("> [!warning] Catch-up note\n> Covers 2026-06-12 → 2026-06-12 — 1 business day.\n\n"
+            "> [!info] At a glance\n> 1 meeting Friday")
+    result = dailynote.write(root, payload(
+        date="2026-06-15", recap=text,
+        recap_window={"from": "2026-06-12", "to": "2026-06-12"}))
+    written = (root / "60-daily-notes" / "2026-06-15.md").read_text(encoding="utf-8")
+    assert written.count("Catch-up note") <= 1
+    assert "> [!info] At a glance\n> 1 meeting Friday" in written
+    assert any("Catch-up" in w and "stripped" in w for w in result["warnings"])
+
+
+def test_v2_payload_merges_into_a_v1_note(tmp_path):
+    """A note written by the previous plugin version (bare heading, prep
+    directly under it, a `- ` jot line) must accept a v2 re-run: regions are
+    replaced, headings compared by (time, subject, entity), nothing else moves."""
+    root = v2_vault(tmp_path)
+    v1 = payload(date="2026-06-15", meetings=[
+        {"time": "09:00", "subject": "Weekly Status", "entity": "acme-industries",
+         "prep": "**Attendees:** Sam · **Last meeting:** none · **Context:** x."},
+        {"time": "14:00", "subject": "Deep dive — vendor scoring", "entity": None,
+         "prep": "**Attendees:** Omar · **Last meeting:** none · **Context:** first session."}])
+    dailynote.write(root, v1)
+    note = root / "60-daily-notes" / "2026-06-15.md"
+    original = note.read_text(encoding="utf-8").replace("<!-- evening-sync:prep:end -->\n- \n\n### 14:00",
+                                                        "<!-- evening-sync:prep:end -->\n- my jotting\n\n### 14:00")
+    note.write_text(original, encoding="utf-8")
+    result = dailynote.write(root, v2_payload())
+    merged = note.read_text(encoding="utf-8")
+    assert result["created"] is False
+    assert "- my jotting" in merged
+    assert "### 09:00 — Weekly Status · [[acme-industries]]" in merged   # heading is the user's now
+    assert "**Attendees** — Sam Okafor, Taylor Brooks" in merged
+    assert "#### Notes" not in merged   # sub-headings are never retro-fitted
+
+
+def test_read_splits_notes_and_actions_under_a_v2_meeting(tmp_path):
+    root = v2_vault(tmp_path)
+    dailynote.write(root, v2_payload())
+    note = root / "60-daily-notes" / "2026-06-15.md"
+    text = note.read_text(encoding="utf-8")
+    text = text.replace("#### Notes\n- \n\n#### Actions\n- [ ] \n\n### 14:00",
+                        "#### Notes\n- shortlist looks final\n- Sam wants a demo\n\n"
+                        "#### Actions\n- [ ] send the scoring sheet\n- [x] book the demo\n\n### 14:00")
+    note.write_text(text, encoding="utf-8")
+    data = dailynote.read(root, "2026-06-15")
+    first = data["meetings"][0]
+    assert first["time"] == "09:00" and first["entity"] == "acme-industries"
+    assert first["notes"] == ["shortlist looks final", "Sam wants a demo"]
+    assert first["actions"] == [{"text": "send the scoring sheet", "done": False},
+                                {"text": "book the demo", "done": True}]
+    assert first["jottings"] == ["shortlist looks final", "Sam wants a demo",
+                                 "send the scoring sheet", "book the demo"]
+    assert first["prep"].startswith("**Attendees** — Sam Okafor")
+    second = data["meetings"][1]
+    assert second["notes"] == [] and second["actions"] == []
+
+
+def test_read_keeps_v1_bullets_as_notes(tmp_path):
+    root = make_vault(tmp_path)
+    dailynote.write(root, payload())
+    note = root / "60-daily-notes" / "2026-06-15.md"
+    text = note.read_text(encoding="utf-8").replace(
+        "<!-- evening-sync:prep:end -->\n- \n\n### 14:00",
+        "<!-- evening-sync:prep:end -->\n- old style jot\n\n### 14:00")
+    note.write_text(text, encoding="utf-8")
+    data = dailynote.read(root, "2026-06-15")
+    assert data["meetings"][0]["notes"] == ["old style jot"]
+    assert data["meetings"][0]["actions"] == []
+    assert data["meetings"][0]["jottings"] == ["old style jot"]
+
+
+def test_parse_heading_accepts_both_forms():
+    assert dailynote.parse_heading("09:00 — Weekly Status · [[acme-industries]]") == (
+        "09:00", "Weekly Status", "acme-industries")
+    assert dailynote.parse_heading(
+        "09:00 — Weekly Status · [[40-entities/acme-industries/dossier|Acme]]") == (
+        "09:00", "Weekly Status", "acme-industries")
+    assert dailynote.parse_heading("09:00 — Weekly Status") == ("09:00", "Weekly Status", None)
+    assert dailynote.parse_heading("no time here") is None
+
+
+def test_meetings_in_window_counts_meeting_notes_only(tmp_path):
+    from datetime import date
+    root = make_windowed_vault(tmp_path)
+    assert dailynote.meetings_in_window(root, date(2026, 6, 12), date(2026, 6, 12)) == 1
+    assert dailynote.meetings_in_window(root, date(2026, 6, 13), date(2026, 6, 14)) == 0

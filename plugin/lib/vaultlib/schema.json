@@ -188,9 +188,10 @@
     },
     "project": {
       "body_sections": [
-        "Decisions",
-        "Open Items",
-        "Related Meetings"
+        "Coming up",
+        "Recent meetings",
+        "Recent decisions",
+        "Background"
       ],
       "enums": {
         "project-type": [

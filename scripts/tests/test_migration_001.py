@@ -607,18 +607,31 @@ def test_discover_finds_migration_001():
 # --- assets ---------------------------------------------------------------
 
 def test_assets_match_template():
+    """These assets are the structure-version 2 vintage of each file — the
+    shape migration 001 is contracted to write when it bootstraps an old
+    (pre-002) vault straight to what 002 expects to find. `ontology.md` is
+    deliberately excluded from this equality: it is `MANAGED_CONSENT_ALWAYS`
+    in `template.py`, refreshed from the *live* template independently of
+    the migration chain, and the live template now describes
+    structure-version 3 (migration 002's project-index reshape, task 7's
+    daily-note v2 fields) — content a vault that has only run 001 must not
+    see yet. `test_readmes_and_ontology_written` below still pins the asset
+    itself against what 001 writes, so a regression in the frozen snapshot
+    is still caught; only the "must equal whatever the template says today"
+    assumption is gone, because that stopped being true the day the template
+    ontology moved past structure-version 2.
+    """
     pairs = {
         "config.json": TEMPLATE / "99-workflow-config" / "config.json",
         "10-inbox-README.md": TEMPLATE / "10-inbox" / "README.md",
         "90-archive-README.md": TEMPLATE / "90-archive" / "README.md",
-        "ontology.md": (TEMPLATE / "99-workflow-config" / "reference"
-                        / "ontology.md"),
     }
     for name, template_path in pairs.items():
         asset = ASSETS / name
         assert asset.is_file(), f"missing asset {name}"
         assert asset.read_bytes() == template_path.read_bytes(), (
             f"asset {name} has drifted from {template_path}")
+    assert (ASSETS / "ontology.md").is_file(), "missing asset ontology.md"
     inbox_asset = (ASSETS / "claude-inbox-discipline.md").read_text(
         encoding="utf-8")
     assert inbox_asset.splitlines()[0] == "## Inbox Discipline"

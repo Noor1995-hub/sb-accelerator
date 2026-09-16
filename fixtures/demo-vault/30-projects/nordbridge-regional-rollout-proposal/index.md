@@ -19,46 +19,62 @@ next-milestone-date: 2026-09-15
 
 # Regional Rollout Proposal
 
-> [!summary]+ **Now** — as of 12-06-26
+> [!summary] Where it stands — 12 June
 > - **Stage** — Proposal in drafting for a September submission; Phase 1 site still unresolved after Liège came off the table.
 > - **Defining decision** — [[2026-03-02-pilot-site-selection-withdrawn]]
-> - **Next event** — Submit regional rollout proposal, target 2026-09-15
-> - **Owe** — Phased proposal draft that keeps Liège out of Phase 1
-> - **Watch** — Six months from intro call to submission with no paid work in between; the only substantive contact so far is one call
 
-> [!info]- **Context**
-> - **Contacts** — Dana Whitfield (VP Procurement, buyer-side lead)
-> - **Source** — Intro call 2026-03-02, off a conference introduction
+## Coming up
 
-## Decisions
+| When | What |
+|---|---|
+| Tue 15 Sept | Submit regional rollout proposal, target 2026-09-15 |
 
-```dataview
-TABLE WITHOUT ID
-  link(file.path, dateformat(date, "dd-MM-yy")) AS "Date",
-  status AS "Status",
-  summary AS "Decision"
-FROM "30-projects/nordbridge-regional-rollout-proposal/decisions"
-SORT status ASC, date DESC
-LIMIT 20
-```
-
-## Open Items
-
-- **Owe** — Phased proposal draft excluding Liège from Phase 1 (Jordan Vance, ahead of the 2026-09-15 submission)
-- **Awaiting** — Nordbridge's preferred Phase 1 site now that Liège is frozen
-- **Question** — Whether all three plants go into one proposal or Phase 1 stands on its own
-- **Pending** — Proposal submission, target 2026-09-15
-
-## Related Meetings
+## Recent meetings
 
 ```dataview
 TABLE WITHOUT ID
-  link(file.path, dateformat(date, "dd-MM HH:mm")) AS "Date",
-  slice(attendees, 0, 3) AS "Attendees",
-  recording-duration AS "Min",
-  calendar-subject AS "Subject"
+  link(file.path, dateformat(date, "ccc dd-MM")) AS "Date",
+  calendar-subject AS "Subject",
+  slice(attendees, 0, 3) AS "With",
+  recording-duration AS "Min"
 FROM "20-meetings"
 WHERE econtains(projects, this.slug)
 SORT date DESC
-LIMIT 15
+LIMIT 10
 ```
+
+## Recent decisions
+
+```dataview
+TABLE WITHOUT ID
+  link(file.path, dateformat(date, "dd-MM")) AS "Date",
+  summary AS "Decision",
+  status AS "Status"
+FROM "30-projects/nordbridge-regional-rollout-proposal/decisions"
+SORT date DESC
+LIMIT 10
+```
+
+## Background
+
+Reference material for the evening run and for when you need the detail. Folded by default.
+
+> [!todo]- 📤 Owe — by owner
+> - **Jordan Vance**
+>   - Phased proposal draft excluding Liège from Phase 1, ahead of the 2026-09-15 submission
+
+> [!info]- 👤 Awaiting
+> - Nordbridge's preferred Phase 1 site now that Liège is frozen
+
+> [!question]- ❓ Open questions
+> - Whether all three plants go into one proposal or Phase 1 stands on its own
+
+> [!note]- ⏳ Pending
+> - Proposal submission, target 2026-09-15
+
+> [!warning]- Watch list
+> - Six months from intro call to submission with no paid work in between; the only substantive contact so far is one call
+
+> [!info]- Context
+> - **Contacts** — Dana Whitfield (VP Procurement, buyer-side lead)
+> - **Source** — Intro call 2026-03-02, off a conference introduction

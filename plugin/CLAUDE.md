@@ -194,6 +194,20 @@ because by then the note may hold human text that outranks the calendar.
 Surface that error; do not delete the note to force a rewrite unless the user
 says so.
 
+Two payload forms are accepted. **v1** — `recap` and every `prep` are
+Markdown strings — renders byte-identically to earlier versions (pinned by
+test). **v2** — `recap` is an object (`recap.validate`/`render`) and every
+`prep` is `{attendees, last_meeting, context}` — renders the recap as
+callouts and a pulse table, and each meeting as `### heading` → `#### Prep`
+(region) → `#### Notes` → `#### Actions`. Mixing prep forms in one payload
+is refused. A v2 payload merges into a v1 note (regions only; the
+sub-headings are never retro-fitted), and headings are compared as
+`(time, subject, entity)` so the v1 `· [[slug]]` and v2 `· [[path|Name]]`
+forms match. A v1 recap that opens with a `Catch-up note` callout has it
+stripped with a warning — the CLI writes the banner. `daily-note read`
+returns `notes[]` and `actions[] = {text, done}` per meeting; `jottings[]`
+is their union for older callers.
+
 Matching counts are not enough, so the `### {HH:MM} — {Subject}[ · [[entity]]]`
 headings are compared too: they sit *outside* the markers, nothing regenerates
 them, and a calendar that swapped one meeting for another between runs would
@@ -227,15 +241,16 @@ re-run replacing a recap the vault owner already read with a
 differently-worded, occasionally worse one.
 
 What the stamp does **not** cover is project indexes, and the recap does
-read from them (project pulse comes from each project's `Now` callout). The
-tradeoff is deliberate: stage 4 touches `last-updated` on every project it
-visits, so hashing the indexes would churn the digest on essentially every
-run and the guard would never fire. So read the stamp as *"the window's
-meetings, jottings and decisions are unchanged"*, not *"nothing anywhere
-changed"*. The visible consequence: a re-run whose stage 4 rewrote a project
-index but wrote no new decision — a valid outcome — skips the recap, leaving
-project pulse one revision behind. A guard that holds beats a guard that
-covers everything and fires always.
+read from them (the recap's `pulse` text is composed by the model from each
+project's *Where it stands* card). The tradeoff is deliberate: stage 4
+touches `last-updated` on every project it visits, so hashing the indexes
+would churn the digest on essentially every run and the guard would never
+fire. So read the stamp as *"the window's meetings, jottings and decisions
+are unchanged"*, not *"nothing anywhere changed"*. The visible consequence:
+a re-run whose stage 4 rewrote a project index but wrote no new decision —
+a valid outcome — skips the recap, leaving project pulse one revision
+behind. A guard that holds beats a guard that covers everything and fires
+always.
 
 The stamp lives on the marker line rather than in frontmatter (which a merge
 may never touch) or a sidecar file (which the design rules out), and a
@@ -274,6 +289,16 @@ re-sends what it read corrupts the value; here, a caller that writes a name
 it *remembers* instead of one it looked up publishes a plausible fiction
 into the vault owner's daily note. An unreadable dossier is a warning rather
 than a refusal: one mangled file must not cost the vault owner their note.
+
+### Project index body is CLI-rendered
+
+`project state write` replaces everything between the `# {name}` heading and
+the end of `## Background` with a rendering of the JSON state it is given —
+skills and subagents never hand-edit a project index. A trailing `## Notes`
+section, if the note has one, is preserved verbatim: that is the one part of
+the body that belongs to the owner. The call also stamps `last-updated` and
+`state-updated` itself, so it calls `project touch` internally — a caller
+never runs `project touch` separately after a `state write`.
 
 ## After changing the ontology
 
