@@ -11,10 +11,10 @@ the prose through `project state write`, which is where it gets short.
 
 `LOSSY = None` is lossless by construction, not by convention. Anything the
 parser cannot classify — an `## Open Items` written as a prose paragraph
-instead of the expected `- **Owe** —` bullets, a `Now`/`Context` callout
-bullet under a label the parser does not map, stray preamble prose outside
-the title and the two callouts, or an entire extra `## ` section the v1
-format never defined — is carried verbatim into a `### Carried over by the
+instead of one of the bullet shapes below, a `Now`/`Context` callout bullet
+under a label the parser does not map, stray preamble prose outside the
+title and the two callouts, or an entire extra `## ` section the v1 format
+never defined — is carried verbatim into a `### Carried over by the
 structure-version 3 upgrade` block under `## Notes` (appended to an
 existing Notes tail, or a fresh one) rather than dropped on the floor. The
 one exception: the Dataview fences inside `## Decisions` and
@@ -22,6 +22,14 @@ one exception: the Dataview fences inside `## Decisions` and
 this migration replaces with the `Recent decisions`/`Recent meetings`
 queries, so carrying them forward would duplicate the query, not preserve a
 human's words.
+
+An `## Open Items` bullet matches regardless of where the emoji sits
+relative to the bold — `- **📤 Owe** — text` (the original shape), `-
+📤 **Owe** — text` (the majority shape a real vault's evening runs wrote),
+and `- 📤 Owe — text` (no bold at all) all parse identically, as does
+`- ❗ **Action** — text` (an owe-type item under a different label). A
+category commonly holds several bullets — one per task — and every one of
+them survives into the project state, not just the last.
 
 Touches no template-managed file. Frontmatter is untouched. A vault upgraded
 1→2→3 keeps the structure-version-2 ontology (`body_sections: [Decisions,
@@ -50,7 +58,20 @@ V1_SECTIONS = ("Decisions", "Open Items", "Related Meetings")
 V2_SECTIONS = ("Coming up", "Recent meetings", "Recent decisions", "Background")
 _PLACEHOLDERS = {"_none yet_", "_none scheduled_", "none yet", ""}
 _CALLOUT_BULLET_RE = re.compile(r"\A>\s*-\s*\*\*(.+?)\*\*\s*[—:-]\s*(.*)\Z")
-_OPEN_ITEM_RE = re.compile(r"\A-\s*\*\*(?:[^\w\s]+\s*)?(Owe|Awaiting|Question|Pending)\*\*\s*[—:-]\s*(.*)\Z")
+# Evening runs across a real vault wrote at least four shapes for the same
+# bullet: emoji inside the bold (`- **📤 Owe** —`, the original shape),
+# emoji before the bold (`- 📤 **Owe** —`, the majority shape), no bold at
+# all (`- 📤 Owe —`), and `Action` — an owe-type label, not a spelling of
+# Owe — as `- ❗ **Action** —`. The two optional emoji/symbol runs (one on
+# each side of an independently optional `**`) accept the emoji landing on
+# either side of the bold, or no bold at all; `_split_items`/`_collect_owe`
+# do not care which shape produced the label, only that a bullet matched.
+_OPEN_ITEM_RE = re.compile(
+    r"\A-\s*(?:[^\w\s]+\s*)?(?:\*\*)?(?:[^\w\s]+\s*)?"
+    r"(Owe|Awaiting|Question|Pending|Action)(?:\*\*)?\s*[—:-]\s*(.*)\Z")
+# `Action` is an owe-type item under a different label; every other
+# `_OPEN_ITEM_RE` label already names its own `parse_v1_body` bucket.
+_OPEN_ITEM_ALIASES = {"Action": "Owe"}
 _OWNER_RE = re.compile(r"\A(?:📤\s*)?([A-Z][\w'’.\- ]{1,40}?)\s*:\s+(.*)\Z")
 _LEGACY_CALLOUT_RE = re.compile(r"\A>\s*\[!\w+\][+-]?\s*\*\*(Now|Context)\*\*")
 # A `;` immediately followed by another owner prefix always separates two
@@ -180,11 +201,22 @@ def _scan_preamble(preamble: str):
     return now, context, carried
 
 
+def _collect_list(open_items: Dict[str, List[str]], label: str) -> List[str]:
+    """Every bullet stored under `label`, each split through `_split_items`
+    and extended in order — one Open Items category commonly holds several
+    bullets (one per task), and every one of them must survive, not just
+    the last."""
+    items: List[str] = []
+    for text in open_items.get(label, []):
+        items.extend(_split_items(text))
+    return items
+
+
 def parse_v1_body(body: str) -> dict:
     sections = markdown.split_sections(body, level=2)
     preamble = sections[0][1]
     now, context, carry = _scan_preamble(preamble)
-    open_items: Dict[str, str] = {}
+    open_items: Dict[str, List[str]] = {}
     carry_open_items: List[str] = []
     other_sections: List[str] = []
     for title, content in sections[1:]:
@@ -195,7 +227,8 @@ def parse_v1_body(body: str) -> dict:
                     continue
                 match = _OPEN_ITEM_RE.match(stripped)
                 if match:
-                    open_items[match.group(1)] = match.group(2).strip()
+                    label = _OPEN_ITEM_ALIASES.get(match.group(1), match.group(1))
+                    open_items.setdefault(label, []).append(match.group(2).strip())
                 else:
                     carry_open_items.append(line.rstrip())
         elif title not in _KNOWN_V1_SECTIONS:
@@ -216,15 +249,16 @@ def parse_v1_body(body: str) -> dict:
     decision = now.get("Defining decision", "").strip()
     owe_groups: Dict[str, List[str]] = {}
     _collect_owe(now.get("Owe", ""), owe_groups)
-    _collect_owe(open_items.get("Owe", ""), owe_groups)
+    for bullet in open_items.get("Owe", []):
+        _collect_owe(bullet, owe_groups)
     return {
         "stage": stage if stage not in _PLACEHOLDERS else None,
         "defining_decision": decision if decision not in _PLACEHOLDERS else None,
         "coming_up": [{"when": "", "what": item} for item in _split_items(now.get("Next event", ""))],
         "owe": [{"owner": owner, "items": tasks} for owner, tasks in owe_groups.items()],
-        "awaiting": _split_items(open_items.get("Awaiting", "")),
-        "questions": _split_items(open_items.get("Question", "")),
-        "pending": _split_items(open_items.get("Pending", "")),
+        "awaiting": _collect_list(open_items, "Awaiting"),
+        "questions": _collect_list(open_items, "Question"),
+        "pending": _collect_list(open_items, "Pending"),
         "watch": _split_items(now.get("Watch", "")),
         "context": {
             "contacts": (context.get("Contacts") or "").strip() or None,

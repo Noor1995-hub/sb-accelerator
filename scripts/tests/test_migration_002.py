@@ -190,6 +190,81 @@ WHERE econtains(projects, this.slug)
 """
 
 
+# The bullet shapes an evening run actually wrote, surveyed off the first
+# real vault: emoji-before-bold (`- 📤 **Owe** —`), no bold at all
+# (`- 📤 Owe —`), and `Action` as an owe-type label (`- ❗ **Action** —`).
+# Every category here carries several bullets — the common case — to prove
+# each bullet survives instead of the last one winning.
+REAL_SHAPES_OPEN_ITEMS = """- 📤 **Owe** — Priya Nathan: send the schedule
+- 📤 **Owe** — Priya Nathan: align with Renee
+- 📤 Owe — book the site visit
+- ❗ **Action** — Leo: sign the SOW
+- ❓ **Question** — Whether the pilot fleet covers refrigerated units
+- ❓ **Question** — Whether the telemetry vendor needs a new DPA
+- ❓ **Question** — Whether Jamie owns the rollout comms
+- ❓ Question — Whether the steering group needs a mid-point checkpoint
+- 👤 Awaiting — Sign-off from procurement on the vendor contract
+- ⏳ **Pending** — Confirmation of the go-live date"""
+
+
+def _real_shapes_index(open_items: str) -> str:
+    return f"""---
+type: project
+project-name: "Fleet Telematics Rollout"
+slug: meridian-fleet-telematics-rollout
+status: active
+project-type: initiative
+entity: meridian-freight-holdings
+owner: priya-nathan
+created: 2026-03-01
+last-updated: 2026-07-01
+---
+
+# Fleet Telematics Rollout
+
+> [!summary]+ **Now** — as of 01-07-26
+> - **Stage** — Pilot fleet fitted; rollout plan being finalised.
+> - **Defining decision** — _none yet_
+> - **Next event** — _none yet_
+> - **Owe** — _none yet_
+> - **Watch** — _none yet_
+
+> [!info]- **Context**
+> - **Contacts** — Leo Marchetti (COO)
+> - **Source** — Spin-off from the yard automation program
+
+## Decisions
+
+```dataview
+TABLE WITHOUT ID
+  link(file.path, dateformat(date, "dd-MM-yy")) AS "Date"
+FROM "30-projects/meridian-fleet-telematics-rollout/decisions"
+```
+
+## Open Items
+
+{open_items}
+
+## Related Meetings
+
+```dataview
+TABLE WITHOUT ID
+  link(file.path, dateformat(date, "dd-MM HH:mm")) AS "Date"
+FROM "20-meetings"
+WHERE econtains(projects, this.slug)
+```
+"""
+
+
+REAL_SHAPES_INDEX = _real_shapes_index(REAL_SHAPES_OPEN_ITEMS)
+
+# Same Open Items, plus one line that still does not match any bullet shape
+# (no `- ` marker at all) — it must still be carried into Notes rather than
+# silently dropped or mis-parsed.
+REAL_SHAPES_INDEX_WITH_STRAY = _real_shapes_index(
+    REAL_SHAPES_OPEN_ITEMS + "\n📤 **Michael** — something stray with no bullet marker")
+
+
 def test_module_contract():
     module = load()
     assert module.TARGET_VERSION == 3
@@ -407,3 +482,87 @@ def test_run_through_the_framework_bumps_to_3(tmp_path):
     assert result["applied"][0]["target_version"] == 3
     assert result["applied"][0]["apply"]["reshaped"] == ["meridian-yard-automation-program"]
     assert result["structure_version"] == 3
+
+
+# --- real bullet shapes found on the first real vault ------------------
+
+def test_owe_and_action_bullets_group_by_owner_one_item_per_bullet():
+    """`- 📤 **Owe** —` (emoji before bold) and `- 📤 Owe —` (no bold at
+    all) must both match, and each bullet is its own item — not just the
+    last one surviving into the owner's list."""
+    module = load()
+    _, body = md.split_frontmatter(REAL_SHAPES_INDEX)
+    parsed = module.parse_v1_body(body)
+    owe = {g["owner"]: g["items"] for g in parsed["owe"]}
+    assert owe["Priya Nathan"] == ["send the schedule", "align with Renee"]
+    assert owe["Unassigned"] == ["book the site visit"]
+
+
+def test_action_label_is_an_owe_type_item():
+    """`- ❗ **Action** —` is not spelled Owe but is one: it must land in
+    the owe groups, not be dropped or carried."""
+    module = load()
+    _, body = md.split_frontmatter(REAL_SHAPES_INDEX)
+    parsed = module.parse_v1_body(body)
+    owe = {g["owner"]: g["items"] for g in parsed["owe"]}
+    assert owe["Leo"] == ["sign the SOW"]
+
+
+def test_four_question_bullets_in_mixed_shapes_all_survive_in_order():
+    module = load()
+    _, body = md.split_frontmatter(REAL_SHAPES_INDEX)
+    parsed = module.parse_v1_body(body)
+    assert parsed["questions"] == [
+        "Whether the pilot fleet covers refrigerated units",
+        "Whether the telemetry vendor needs a new DPA",
+        "Whether Jamie owns the rollout comms",
+        "Whether the steering group needs a mid-point checkpoint"]
+
+
+def test_awaiting_and_pending_bullets_each_land_in_their_own_list():
+    module = load()
+    _, body = md.split_frontmatter(REAL_SHAPES_INDEX)
+    parsed = module.parse_v1_body(body)
+    assert parsed["awaiting"] == ["Sign-off from procurement on the vendor contract"]
+    assert parsed["pending"] == ["Confirmation of the go-live date"]
+
+
+def test_apply_files_every_real_shape_bullet_with_no_notes_carry(tmp_path):
+    """Every bullet in `REAL_SHAPES_OPEN_ITEMS` matches a known shape, so
+    nothing is unclassified: the Background callouts hold every item and no
+    `## Notes` carry-over block is written."""
+    module = load()
+    root = make_vault(tmp_path)
+    folder = root / "30-projects" / "meridian-fleet-telematics-rollout"
+    (folder / "decisions").mkdir(parents=True)
+    (folder / "index.md").write_text(REAL_SHAPES_INDEX, encoding="utf-8")
+    (root / "structure-version").write_text("2\n", encoding="utf-8")
+    result = module.apply(root)
+    assert result["reshaped"] == ["meridian-fleet-telematics-rollout"]
+    text = (folder / "index.md").read_text(encoding="utf-8")
+    assert "## Notes" not in text
+    for sentence in ("send the schedule", "align with Renee", "book the site visit",
+                     "sign the SOW", "refrigerated units", "new DPA",
+                     "rollout comms", "mid-point checkpoint",
+                     "Sign-off from procurement on the vendor contract",
+                     "Confirmation of the go-live date"):
+        assert sentence in text, sentence
+    module.verify(root)
+
+
+def test_apply_still_carries_an_unmatched_open_items_line_into_notes(tmp_path):
+    """A line inside `## Open Items` with no `- ` bullet marker at all
+    (`📤 **Michael** — something...`) does not match any bullet shape and
+    must still be carried, not silently dropped."""
+    module = load()
+    root = make_vault(tmp_path)
+    folder = root / "30-projects" / "meridian-fleet-telematics-rollout"
+    (folder / "decisions").mkdir(parents=True)
+    (folder / "index.md").write_text(REAL_SHAPES_INDEX_WITH_STRAY, encoding="utf-8")
+    (root / "structure-version").write_text("2\n", encoding="utf-8")
+    result = module.apply(root)
+    assert result["reshaped"] == ["meridian-fleet-telematics-rollout"]
+    text = (folder / "index.md").read_text(encoding="utf-8")
+    assert "### Carried over by the structure-version 3 upgrade" in text
+    assert "📤 **Michael** — something stray with no bullet marker" in text
+    module.verify(root)
