@@ -130,6 +130,56 @@ def test_snippet_collapses_properties_by_default():
             assert line.startswith(".mod-root "), f"unscoped properties selector: {line}"
 
 
+# --- recap callout accents ---------------------------------------------------
+
+RECAP_CALLOUTS = ("glance", "theme", "hot", "sync")
+
+
+def _callout_colors() -> dict:
+    """Every `--callout-color` the snippet declares, keyed by callout type."""
+    import re
+    css = SNIPPET.read_text(encoding="utf-8")
+    pattern = re.compile(
+        r'\.callout\[data-callout="(?P<type>[a-z-]+)"\]'
+        r'[^{}]*\{[^{}]*?--callout-color:\s*(?P<value>[^;}]+)')
+    return {m.group("type"): m.group("value").strip()
+            for m in pattern.finditer(css)}
+
+
+def test_every_recap_callout_declares_a_colour_and_an_icon():
+    colors = _callout_colors()
+    assert set(colors) == set(RECAP_CALLOUTS), (
+        f"recap callout types drifted: {sorted(colors)}")
+    css = SNIPPET.read_text(encoding="utf-8")
+    for kind in RECAP_CALLOUTS:
+        assert f'[data-callout="{kind}"]' in css and "--callout-icon" in css
+
+
+def test_callout_colours_are_colour_values_not_rgb_triplets():
+    """A bare `r, g, b` triplet renders the callout with no tint at all.
+
+    Obsidian used to compose the tint as `rgba(var(--callout-color), 0.1)`,
+    which needs the triplet. Current Obsidian does not: `.callout` declares
+    `--callout-color: var(--callout-default)` — a whole colour — and consumes
+    it through `color-mix(in oklch, var(--callout-color) 10%, transparent)`
+    for the background and a matching `color-mix` for the border (verified by
+    reading app.css out of Obsidian 1.13's bundle; it contains zero
+    occurrences of `rgba(var(--callout-color)`).
+
+    Feed `color-mix()` a triplet and the function is invalid at
+    computed-value time, so `background-color` falls back to its initial
+    `transparent` — while `--callout-icon` keeps working, because an icon id
+    is read by JS and never goes through colour maths. That asymmetry is what
+    shipped in 0.11.0: the recap callouts rendered with their custom icons
+    and no colour coding, and it looked like a theme problem rather than a
+    snippet one."""
+    offenders = {k: v for k, v in _callout_colors().items() if "," in v}
+    assert not offenders, (
+        "these --callout-color values are legacy rgb triplets; current "
+        "Obsidian feeds the value to color-mix(), which rejects them and "
+        f"renders no tint: {offenders}")
+
+
 # --- .base property namespacing ---------------------------------------------
 
 def test_base_property_keys_are_namespaced():

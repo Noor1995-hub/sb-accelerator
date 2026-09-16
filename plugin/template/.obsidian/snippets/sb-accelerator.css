@@ -71,11 +71,21 @@
   transform: none;
 }
 
-/* Daily-note recap v2 callout types. Obsidian's documented mechanism:
-   --callout-color (r, g, b) and --callout-icon (a Lucide icon id). An
-   unknown type falls back to the default "note" look, so a vault whose
-   snippet is behind still renders — just without the accents. */
-.callout[data-callout="glance"] { --callout-color: 14, 165, 233; --callout-icon: lucide-eye; }
-.callout[data-callout="theme"]  { --callout-color: 168, 85, 247; --callout-icon: lucide-git-merge; }
-.callout[data-callout="hot"]    { --callout-color: 239, 68, 68;  --callout-icon: lucide-flame; }
-.callout[data-callout="sync"]   { --callout-color: 148, 163, 184; --callout-icon: lucide-wrench; opacity: 0.85; }
+/* Daily-note recap v2 callout types: --callout-color plus a Lucide
+   --callout-icon. An unknown type falls back to the default "note" look, so a
+   vault whose snippet is behind still renders — just without the accents.
+
+   --callout-color must be a whole colour, not the `r, g, b` triplet older
+   Obsidian wanted. Obsidian 1.13's app.css declares
+   `--callout-color: var(--callout-default)` and consumes it through
+   `color-mix(in oklch, var(--callout-color) 10%, transparent)` for the
+   background, a matching color-mix for the border, and the raw value for the
+   title text — it contains no `rgba(var(--callout-color)` at all. A triplet
+   makes those color-mix() calls invalid at computed-value time, so the
+   background falls back to `transparent` and the callout renders with its
+   custom icon and no colour coding. That shipped in 0.11.0; the icon still
+   working is what made it read as a theme bug. */
+.callout[data-callout="glance"] { --callout-color: #0ea5e9; --callout-icon: lucide-eye; }
+.callout[data-callout="theme"]  { --callout-color: #a855f7; --callout-icon: lucide-git-merge; }
+.callout[data-callout="hot"]    { --callout-color: #ef4444; --callout-icon: lucide-flame; }
+.callout[data-callout="sync"]   { --callout-color: #94a3b8; --callout-icon: lucide-wrench; opacity: 0.85; }

@@ -222,6 +222,54 @@ def test_evening_sync_markers_are_hidden_in_live_preview(note_surfaces):
             "Live Preview")
 
 
+def _has_no_tint(background: str) -> bool:
+    """True when a computed background-color paints nothing.
+
+    Chromium serialises a working `color-mix(in oklch, #0ea5e9 10%,
+    transparent)` as an oklab()/color() value carrying a non-zero alpha; a
+    color-mix() that was invalid at computed-value time leaves
+    background-color at its initial value, which serialises as
+    `rgba(0, 0, 0, 0)`."""
+    flat = (background or "").replace(" ", "").lower()
+    return (not flat or flat == "transparent" or flat == "rgba(0,0,0,0)"
+            or flat.endswith("/0)"))
+
+
+def test_recap_callouts_render_their_colour_tint(note_surfaces):
+    """The recap callouts carried `--callout-color: 14, 165, 233` — the rgb
+    triplet older Obsidian wanted — while 1.13 feeds the value to
+    `color-mix(in oklch, var(--callout-color) 10%, transparent)`. The mix was
+    invalid at computed-value time, so every recap callout rendered with its
+    custom Lucide icon and no colour coding at all, in a released vault
+    (0.11.0).
+
+    Icons are asserted alongside the tint on purpose: the icon working was
+    exactly what disguised this as a theme problem. A snippet that stopped
+    loading altogether would drop both."""
+    dailies = {k: v for k, v in note_surfaces.items() if k.startswith("daily-")}
+    if not dailies:
+        pytest.skip("tour captured no daily note with evening-sync markers")
+    checked = 0
+    for key, payload in dailies.items():
+        callouts = payload["dom"].get("callouts")
+        assert callouts is not None, (
+            f"{key}: capture predates the callouts payload — re-run "
+            "`obsidian_probe tour`")
+        recap = [c for c in callouts
+                 if c.get("type") in {"glance", "theme", "hot", "sync"}]
+        assert recap, (
+            f"{key}: no recap callouts in the capture — the fixture daily note "
+            "must carry a v2 recap or this test verifies nothing")
+        flat = [c for c in recap if _has_no_tint(c.get("background"))]
+        assert not flat, (
+            f"{key}: these callouts computed no background tint, so they render "
+            f"uncoloured: {[(c['type'], c['background']) for c in flat]}")
+        iconless = [c["type"] for c in recap if not c.get("hasIcon")]
+        assert not iconless, f"{key}: callouts rendered no icon: {iconless}"
+        checked += len(recap)
+    assert checked, "no recap callout was actually asserted"
+
+
 def test_triage_controls_survive_a_1440_window(tour, base_surfaces):
     """#66: at 1440x900 (a 13" client laptop) Meetings.base Triage used to
     stop rendering columns before reaching ✓ Reviewed — the one-click confirm,

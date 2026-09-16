@@ -456,14 +456,51 @@ import shutil
 
 FRESH_FIXTURE_PAYLOAD = {
     "date": "2026-06-15",
-    "recap": (
-        "> [!info] At a glance\n"
-        "> 1 meeting Friday · Nordbridge Components · 1 decision queued · 1 duplicate capture flagged\n"
-        "- [[12-06-26-jordan-1on1]] — proposal drafting on track for the September submission; Phase 1 site nomination handed to Nordbridge.\n"
-        "- Decision logged: [[2026-06-12-phase-1-site-nomination-deferred]] — unattended capture, waiting in the review queue.\n"
-        "- Duplicate recorder capture written as [[12-06-26-jordan-1on1-v2]] — needs attention in triage.\n"
-        "- Jotting carried forward: follow up with Dana Whitfield on rollout scope this week."
-    ),
+    # A v2 payload: `recap` is a recap.validate() object and `recap_window` is
+    # mandatory with it, because the CLI composes the glance's meeting count
+    # and window label itself rather than trusting prose. Preps stay v1
+    # strings — a v2 recap beside v1 preps is accepted, and it is the shape a
+    # vault reaches when an upgraded plugin merges into an existing note.
+    "recap_window": {"from": "2026-06-12", "to": "2026-06-12"},
+    "recap": {
+        "glance": {
+            "headlines": [
+                {"label": "Decided",
+                 "text": "Phase 1 site nomination handed to Nordbridge, around their ERP freeze"},
+                {"label": "Needs your hand",
+                 "text": "a duplicate recorder capture is still waiting in triage"},
+                {"label": "Quiet",
+                 "text": "no Meridian or CRM meeting fell in this window"},
+            ],
+            "entities": ["nordbridge-components"],
+        },
+        "themes": [
+            {"headline": "Phase 1 site choice moves to Nordbridge",
+             "body": "The proposal now asks Nordbridge to nominate the plant their ERP freeze can absorb first, rather than naming one for them — which unblocks the September submission without committing to a sequence nobody has validated.",
+             "sources": [{"stem": "12-06-26-jordan-1on1", "label": "Jordan 1:1"}]},
+            {"headline": "One conversation was captured twice",
+             "body": "Friday's 1:1 arrived from both the recorder and the calendar adapter, so it is written twice; the second copy needs dispositioning in triage before it double-counts in the Nordbridge meeting log.",
+             "sources": [{"stem": "12-06-26-jordan-1on1-v2", "label": "duplicate capture"}]},
+        ],
+        "pulse": [
+            {"project": "nordbridge-regional-rollout-proposal", "signal": "green",
+             "text": "Site nomination handed to Nordbridge; proposal drafting on track for the September submission."},
+            {"project": "commercial-ops-crm-modernization", "signal": "amber",
+             "text": "Untouched this window — the scoring weights agreed at the dry run still need a governance answer on stage definitions."},
+            {"project": "meridian-yard-automation-program", "signal": "quiet",
+             "text": "Nothing moved; the revised commissioning schedule is still owed."},
+        ],
+        "decisions": ["2026-06-12-phase-1-site-nomination-deferred"],
+        "watch": [
+            "The duplicate Jordan capture is still in triage; until it is dispositioned the Nordbridge meeting log double-counts Friday.",
+        ],
+        "carried_forward": [
+            "Follow up with Dana Whitfield on rollout scope this week.",
+        ],
+        "sync_notes": [
+            "1 duplicate recorder capture written as a `-v2` sibling rather than merged — needs an interactive call in triage.",
+        ],
+    },
     "meetings": [
         {
             "time": "08:30",
