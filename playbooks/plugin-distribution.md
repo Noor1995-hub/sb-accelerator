@@ -106,6 +106,25 @@ history. `release.yml` already clones them `--depth 1`, and a consultant's
 marketplace sync fetches a tree, not history, so this is accepted — but bump
 pins when there is a reason to, not on a schedule.
 
+## Two plugin stores: pick one surface
+
+**Cowork and Claude Code install plugins in entirely different places, and
+neither one reports the other's version.** Use one surface per deployment, or
+keep the two deliberately in sync. Assuming they match is the mistake, and it
+is an easy one: the same plugin name sits in both, at different versions,
+with no warning anywhere.
+
+- **Claude Code** (CLI, and the desktop app's Code tab): `~/.claude/plugins`,
+  driven by `claude plugin list` / `marketplace update` / `update`.
+- **Cowork**: the plugin attached to the Claude account, under
+  **Home → Customize → Plugins**.
+
+Two rules follow. Verify the deployed version on the surface the vault owner
+actually uses, which for a client executive is Cowork, and its Customize →
+Plugins header states it. And after any update, restart and open a **new**
+session: a session answers from the plugin it loaded at startup, including
+its migration set, so a stale session will report a stale vault as up to date.
+
 ## Choosing a delivery path
 
 Pick per engagement, in this order of preference.
@@ -216,11 +235,14 @@ and `plugin-<version>.zip.sha256` from the tag's GitHub Release, check the
 sha256 matches (`shasum -a 256 -c plugin-<version>.zip.sha256`), then upload
 the zip as-is. It's built with `.claude-plugin/plugin.json` at the zip
 root (not nested under a `plugin/` folder) on the reasoning that a
-single-plugin ZIP upload expects the package rooted there — **not yet
-verified against a real upload.** Owner action: the first time a Release
-exists, spend five minutes uploading its zip under Organization settings →
-Plugins once, confirm it's accepted, and note the result here (or file a
-fix if the layout is wrong).
+single-plugin ZIP upload expects the package rooted there.
+
+**The layout is verified: upload the release zip as-is.** The zip root is
+correct, so no repacking, no nesting and no manifest edit. Uploading a new
+version over an existing plugin replaces that entry in place rather than
+adding a second one. And the upload needs no org admin: the same mechanism
+exists per-account under Home → Customize → Plugins, which is what makes
+path E usable for an internal test before anything is published org-wide.
 
 ## The release train, concretely
 
