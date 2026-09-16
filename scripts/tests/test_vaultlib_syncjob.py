@@ -447,24 +447,33 @@ def test_unparseable_meeting_warning_is_replayed_from_cache(tmp_path,
     assert [r for r in reads if "broken.md" in r] == []
 
 
-def test_a_quiet_run_does_not_rewrite_the_cache(tmp_path):
+def test_a_quiet_run_does_not_rewrite_the_cache(tmp_path, mark_stale):
     """known_recording_ids is a pure read when nothing changed. meeting.write
     calls it on every write, and /sync-recordings fans out four of those in
-    parallel — a needless write there is a side effect on a hot path."""
+    parallel — a needless write there is a side effect on a hot path.
+
+    The mtime is back-dated before each scan rather than sampled from the
+    previous one: two writes inside one timer tick share a stamp, and a
+    rewrite that reads as no rewrite would pass the first assertion and fail
+    the second.
+    """
     root = make_vault(tmp_path)
     write_meeting(root, "20-08-26-one", "plaud:abc123")
     (root / "10-inbox" / "fresh.txt").write_text("t", encoding="utf-8")
     syncjob.scan(root)
 
     cache_path = root / "99-workflow-config" / "sync-state" / "scan-cache.json"
-    before = cache_path.stat().st_mtime_ns
+    stale = mark_stale(cache_path)
     syncjob.scan(root)
-    assert cache_path.stat().st_mtime_ns == before
+    assert cache_path.stat().st_mtime_ns == stale
 
     # ...and it still writes when something actually changed.
+    mark_stale(cache_path)
     write_meeting(root, "20-08-26-two", "plaud:def456")
     syncjob.scan(root)
-    assert cache_path.stat().st_mtime_ns != before
+    assert cache_path.stat().st_mtime_ns != stale
+    cache = json.loads(cache_path.read_text(encoding="utf-8"))
+    assert "20-meetings/20-08-26-two.md" in cache["ledger"]
 
 
 def test_a_meeting_with_no_recording_id_is_still_cached(tmp_path, monkeypatch):
