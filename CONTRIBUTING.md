@@ -95,8 +95,9 @@ Opening a non-draft PR also triggers `claude-review`, which posts findings as in
 ## Cutting a release
 
 Owner-run, not part of the normal PR flow — repo secrets and tag-push access
-aren't given to every contributor. Mechanics: `playbooks/plugin-distribution.md`.
-Steps, on `main`:
+aren't given to every contributor. What the two channels are and who reads
+them: `docs/distribution-channels.md`. Client-side delivery mechanics:
+`playbooks/plugin-distribution.md`. Steps, on `main`:
 
 1. Open a release PR that turns `CHANGELOG.md`'s `## Unreleased` heading into
    a dated `## v<version> —` section (moving its bullets down with it) and
