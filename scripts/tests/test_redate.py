@@ -215,6 +215,28 @@ def test_determinism_same_demo_day_same_output(tmp_path):
         assert (target_a / rel).read_bytes() == (target_b / rel).read_bytes()
 
 
+@pytest.mark.parametrize("demo_day", WEEK)
+def test_prep_last_meeting_link_and_its_date_shift_together(tmp_path, demo_day):
+    """A v2 prep's `**Last meeting**` carries the same date twice — once as
+    the `DD-MM-YY` filename stem it links to, once as the ISO date in its
+    alias — and the two are shifted by different regexes. A prep that reads
+    `[[28-08-26-…|2026-06-05 — …]]` after a re-date is the kind of quietly
+    wrong demo content nothing else here would catch, since the link still
+    resolves.
+    """
+    target = _build(tmp_path, demo_day, name=f"vault-{demo_day.isoformat()}")
+    _, recap_from = weekday_aligned_shift(ANCHOR, demo_day)
+    note = target / "60-daily-notes" / f"{recap_from.isoformat()}.md"
+    links = re.findall(
+        r'^\*\*Last meeting\*\* — \[\[(\d{2}-\d{2}-\d{2}-[^|\]]+)\|'
+        r'(\d{4}-\d{2}-\d{2}) — ',
+        note.read_text(encoding="utf-8"), re.MULTILINE)
+    assert len(links) == 5, f"expected 5 linked preps, found {len(links)}"
+    for stem, iso in links:
+        assert (target / "20-meetings" / f"{stem}.md").is_file()
+        assert redate.date_from_stem(stem) == date.fromisoformat(iso)
+
+
 def test_committed_fixture_never_written(tmp_path):
     before = _hash_tree(FIXTURE_ROOT)
     for demo_day in (date(2026, 9, 10), date(2026, 8, 31), date(2026, 9, 1)):
