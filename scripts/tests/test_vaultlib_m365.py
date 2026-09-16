@@ -279,28 +279,36 @@ def test_an_event_missing_its_transcript_url_is_not_reassemblable(tmp_path):
 # --- event_uri: the URI is derived, never retyped -------------------------
 #
 # The live failure this exists for (issue #205): the orchestrator built
-# m365_routing.json's `uri` by treating a base64url event id as standard
-# base64 and percent-encoding it by hand, so every `-` became `%2F`. The
+# m365_routing.json's `uri` by reversing the id's URL-safe substitution and
+# percent-encoding the result by hand, so every `-` became `%2F`. The
 # connector then decoded that back to a raw `/` and spliced it into the Graph
 # path unencoded — 400 RequestBroker--ParseUri, every run, for as long as the
 # re-encoding kept happening. The ids were copied byte-perfectly at every
 # hop; only the value a model had to *transform* came out wrong. So the
 # transform moves here.
+#
+# Outlook's variant is NOT RFC 4648 base64url. Measured against paired
+# uri/webLink values from one mailbox, the id's `-` corresponds to `/` and
+# its `_` to `+` — the inverse of base64url's substitution. These constants
+# carry both characters so a future "correction" to the RFC mapping fails
+# here rather than in a client vault.
 
-BASE64URL_ID = "AAkALgAAAAAAHYQDEapmEc2byACqAC-EWg0A0ceR5yDk4k28EdzA-CuLTwAA"
+URLSAFE_ID = "AAkALgAAAAAAHYQDEapmEc2byACqAC-EWg0A0ceR5yDk4k28EdzA-CuLTw_AA"
 PADDED_ID = "AAkBOQAICN8ThXOLgAAuAAAAAB2EAxGqZhHNm8gAqgAvxFoNANHHkecg5OA6-ftpYAABA="
 
 
 def test_event_uri_leaves_a_base64url_id_alone():
-    assert m365.event_uri(BASE64URL_ID) == (
-        f"calendar:///events/{BASE64URL_ID}")
+    assert m365.event_uri(URLSAFE_ID) == (
+        f"calendar:///events/{URLSAFE_ID}")
 
 
-def test_event_uri_never_turns_a_hyphen_into_an_encoded_slash():
-    """The exact regression. `-` is base64url's 62nd character, not a `/`."""
-    uri = m365.event_uri(BASE64URL_ID)
-    assert "%2F" not in uri
-    assert uri.count("-") == BASE64URL_ID.count("-")
+def test_event_uri_leaves_the_url_safe_substitutes_untouched():
+    """The exact regression: `-` and `_` are unreserved, so neither may come
+    back as `%2F` or `%2B` however the underlying base64 spells them."""
+    uri = m365.event_uri(URLSAFE_ID)
+    assert "%2F" not in uri and "%2B" not in uri
+    assert uri.count("-") == URLSAFE_ID.count("-") >= 1
+    assert uri.count("_") == URLSAFE_ID.count("_") >= 1
 
 
 def test_event_uri_percent_encodes_the_padding():
@@ -308,14 +316,18 @@ def test_event_uri_percent_encodes_the_padding():
         f"calendar:///events/{PADDED_ID[:-1]}%3D")
 
 
-def test_event_uri_encodes_a_standard_base64_id_reserved_character():
-    """An id that really does carry `/` or `+` is encoded, not passed raw —
-    a raw `/` is what Graph mis-reads as another path segment."""
+def test_event_uri_encodes_a_reserved_character_rather_than_passing_it_raw():
+    """Defence in depth: the listing substitutes `/` and `+` away, but if an
+    un-substituted id ever arrives, it must come out encoded — a raw `/` is
+    exactly what Graph mis-reads as another path segment. Note this means
+    `%2F` in a derived URI is not by itself proof of a hand-built one, which
+    is why the worker contract keys its diagnostic on Graph's ParseUri code
+    instead."""
     assert m365.event_uri("AA/BB+CC=") == (
         "calendar:///events/AA%2FBB%2BCC%3D")
 
 
-@pytest.mark.parametrize("event_id", [BASE64URL_ID, PADDED_ID, "AA/BB+CC="])
+@pytest.mark.parametrize("event_id", [URLSAFE_ID, PADDED_ID, "AA/BB+CC="])
 def test_event_uri_round_trips_back_to_the_id(event_id):
     """The one invariant the connector cares about: decoding the path
     segment once returns the id the listing gave, byte for byte."""

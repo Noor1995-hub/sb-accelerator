@@ -21,9 +21,14 @@ Your briefing carries the event's URI, verbatim, and your scratch stem
 (`m365_probe_<n>`):
 
 1. One `read_resource` call on the event URI you were given, **exactly as
-   given** — the listing's own `uri` field, a URL-encoded
+   given** — triage's CLI-derived `event_uri`, a URL-encoded
    `calendar:///events/<id>` form that may carry `%3D` and similar
-   escapes — never decode, rebuild, or re-scope it. Write the raw result
+   escapes — never decode, rebuild, or re-scope it, and never re-derive it
+   from an id. If it fails, it is still not yours to repair: a 400 whose
+   Graph code is `RequestBroker--ParseUri` means the URI was rebuilt
+   somewhere upstream rather than copied (issue #205), so reply
+   `fetch-error: event uri rejected by Graph (ParseUri — rebuilt upstream?)`
+   rather than trying other spellings. Write the raw result
    to `$SCRATCH/m365_probe_<n>.event.json` verbatim (this matches the
    `m365_*.json` sweep pattern `scratch sweep` deletes by).
 2. Write the one-element array `$SCRATCH/m365_probe_<n>.events.json` (the

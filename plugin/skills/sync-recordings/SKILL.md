@@ -422,13 +422,13 @@ It is the same `calendar:///events/<id>` string the listing's own `uri`
 field carries, derived by the CLI — and it is the one field here you must
 never produce yourself, by any route: not from the listing's `uri`, not
 from `webLink`, and above all not by percent-encoding the `id`. Event ids
-are **base64url** (`-` is the 62nd character, not a slash), so encoding one
-as if it were standard base64 turns every `-` into `%2F`; the connector
-decodes that back to a raw `/`, Graph reads the tail as unknown path
-segments, and the worker gets a 400 `RequestBroker--ParseUri` on every
-retry, every run. That silently cost two meetings their transcripts
-(issue #205). `event_uri` exists so this step copies an opaque string
-instead of transforming one.
+arrive in Outlook's URL-safe base64 variant, where `-` stands in for `/`
+and `_` for `+`, so "un-escaping" one before encoding it turns every `-`
+into `%2F`; the connector decodes that back to a raw `/`, Graph reads the
+tail as unknown path segments, and the worker gets a 400
+`RequestBroker--ParseUri` on every retry, every run. That silently cost
+two meetings their transcripts (issue #205). `event_uri` exists so this
+step copies an opaque string instead of transforming one.
 
 There is no full event read and no id
 derivation here any more: the worker fetches its own event, derives its

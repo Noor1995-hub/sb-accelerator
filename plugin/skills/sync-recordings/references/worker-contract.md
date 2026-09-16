@@ -46,12 +46,13 @@ event and derive your own ids before you touch a transcript:
 1. One `read_resource` call on the event URI you were given, **exactly as
    given**. It is a CLI-derived `calendar:///events/<id>` form that may
    carry `%3D` and similar escapes — never decode, rebuild, or re-scope it,
-   and never re-derive it from an id you see in the event you fetch. A
-   `%2F` where the id has a `-` is the signature of a URI someone rebuilt
-   by hand; it fails with a 400 `RequestBroker--ParseUri` on every retry
-   (issue #205). If your URI carries `%2F`, do not try to repair it — reply
-   `fetch-error: event uri carries %2F (rebuilt upstream)` so a human sees
-   it. Write the raw result to `$SCRATCH/m365_event_<n>.json` verbatim.
+   and never re-derive it from an id you see in the event you fetch. If it
+   fails, it is still not yours to repair: a 400 whose Graph code is
+   `RequestBroker--ParseUri` means the URI was rebuilt somewhere upstream
+   rather than copied (issue #205), so reply
+   `fetch-error: event uri rejected by Graph (ParseUri — rebuilt upstream?)`
+   and let a human see it, instead of trying other spellings. Write the raw
+   result to `$SCRATCH/m365_event_<n>.json` verbatim.
 2. Write the one-element array `$SCRATCH/m365_event_<n>.ids-in.json`
    (the event you just fetched) and derive its dedup id:
 
