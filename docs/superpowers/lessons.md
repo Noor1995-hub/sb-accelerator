@@ -778,16 +778,35 @@ calendar URIs carrying `%2F` where `outlook_calendar_search` had emitted
 400 `RequestBroker--ParseUri` every time. Two meetings went unsynced with
 nothing to show for it but a count in the run log.
 
-Event ids from that listing are **base64url** — `-` is the 62nd character,
-not a slash — and the listing percent-encodes only the padding `=` as
-`%3D`. The orchestrator read one as *standard* base64 and percent-encoded
-it by hand, so every `-` became `%2F`. Downstream, the connector decodes
-the id out of the URI and splices the resulting raw `/` into the Graph
-request path without re-encoding, so Graph reads the tail as unknown path
-segments. `%2F` in a `calendar:///events/` URI is therefore always a
-fingerprint: it means someone rebuilt the URI, either by re-encoding the
-`id` or by lifting `webLink`'s `itemid` (the one field that legitimately
-carries the standard-base64 spelling).
+Event ids from that listing arrive in Outlook's URL-safe base64 variant,
+and the listing percent-encodes only the padding `=` as `%3D`. The
+orchestrator reversed that substitution and percent-encoded the result by
+hand, so every `-` became `%2F`. Downstream, the connector decodes the id
+out of the URI and splices the resulting raw `/` into the Graph request
+path without re-encoding, so Graph reads the tail as unknown path
+segments. `%2F` in a `calendar:///events/` URI is a strong fingerprint of
+a rebuilt URI — someone re-encoded the `id`, or lifted `webLink`'s
+`itemid` (the one field that carries the un-substituted spelling).
+
+**A second lesson rode along, from the review of the fix.** The first
+version of this entry, and of the docstring, called that encoding
+"base64url". It is not: RFC 4648 §5 substitutes `-` for `+` (62) and `_`
+for `/` (63), and Outlook's variant is the **inverse** — measured on three
+paired `uri`/`webLink` values, `-` ↔ `/` and `_` ↔ `+`. The reviewer
+caught the contradiction and proposed inverting the mapping to match the
+RFC, which would have contradicted the wire and reintroduced the bug. The
+defect was the *label*, not the mapping. Naming a format by a standard it
+does not follow invites exactly that well-meaning correction, so the docs
+now say which variant it is and that it is not the RFC's, and the test
+fixtures carry both `-` and `_` so the correction fails in CI rather than
+in a client vault.
+
+The same review caught a false positive in the first fix: a rule refusing
+any URI containing `%2F` would also have refused a *correctly* derived one,
+because `event_uri()` encodes a literal `/` if an un-substituted id ever
+arrives. A spelling cannot distinguish "rebuilt" from "legitimately
+encoded"; Graph's own `RequestBroker--ParseUri` code, read after the
+failure, can. Diagnose on the failure, not on the shape.
 
 `SKILL.md` already forbade this **twice** — "values verbatim from the
 listing, never rebuilt", and for `uri` specifically "never decode or
