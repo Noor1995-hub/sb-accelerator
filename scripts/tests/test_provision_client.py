@@ -16,6 +16,7 @@ import provision_client
 from provision_client import (
     DEFAULT_ORG,
     DuplicateClientError,
+    FeedbackRepoError,
     GhCommandError,
     MissingOwnerError,
     ProvisionOptions,
@@ -27,6 +28,7 @@ from provision_client import (
     resolve_token_minted,
     save_registry,
     token_recipe,
+    validate_feedback_repo,
     validate_slug,
 )
 
@@ -277,6 +279,71 @@ def test_update_can_still_move_a_deployment_to_another_org(tmp_path):
     provision(update_opts(org="NEW-CORP"), RecordingRunner(), registry_path, LATER)
 
     assert only_client(registry_path)["feedback_repo"] == "NEW-CORP/sb-client-acme"
+
+
+def test_update_keeps_a_feedback_repo_that_is_not_named_sb_client_slug(tmp_path):
+    """The bug this guards: `feedback_repo` was rebuilt from the slug on every
+    --update, so an internal test vault on `sb-internal-<name>` had its
+    channel silently repointed at a repo that does not exist — while --help
+    promised every unnamed field keeps its registered value."""
+    registry_path = make_registry(tmp_path)
+    provision(base_opts(slug="internal-xander",
+                        feedback_repo=f"{DEFAULT_ORG}/sb-internal-xander"),
+              RecordingRunner(), registry_path, TODAY)
+
+    provision(update_opts(slug="internal-xander"), RecordingRunner(),
+              registry_path, LATER)
+
+    assert only_client(registry_path)["feedback_repo"] == \
+        f"{DEFAULT_ORG}/sb-internal-xander"
+
+
+def test_moving_orgs_keeps_a_non_conventional_repo_name(tmp_path):
+    """`--org` moves the owner, not the repo name: the two halves of
+    `<org>/<repo>` are independent, and only the one you name changes."""
+    registry_path = make_registry(tmp_path)
+    provision(base_opts(feedback_repo="ACME-CORP/sb-internal-acme"),
+              RecordingRunner(), registry_path, TODAY)
+
+    provision(update_opts(org="NEW-CORP"), RecordingRunner(), registry_path, LATER)
+
+    assert only_client(registry_path)["feedback_repo"] == "NEW-CORP/sb-internal-acme"
+
+
+def test_feedback_repo_flag_renames_the_channel_on_an_update(tmp_path):
+    registry_path = make_registry(tmp_path)
+    provision(base_opts(), RecordingRunner(), registry_path, TODAY)
+
+    provision(update_opts(feedback_repo=f"{DEFAULT_ORG}/sb-internal-acme"),
+              RecordingRunner(), registry_path, LATER)
+
+    assert only_client(registry_path)["feedback_repo"] == \
+        f"{DEFAULT_ORG}/sb-internal-acme"
+
+
+def test_a_non_conventional_repo_name_reaches_every_human_facing_string(tmp_path):
+    """The recipe tells a human which repo to scope the token to, and the
+    seeded README names the repo it lives in. Both used to spell
+    `sb-client-<slug>` regardless of where the issues actually go."""
+    registry_path = make_registry(tmp_path)
+    runner = RecordingRunner()
+
+    result = provision(base_opts(slug="internal-xander", register_only=False,
+                                 feedback_repo=f"{DEFAULT_ORG}/sb-internal-xander"),
+                       runner, registry_path, TODAY)
+
+    assert "Only select repositories -> sb-internal-xander" in result["recipe"]
+    assert "sb-client-internal-xander" not in result["recipe"]
+    seeded = " ".join(str(c.get("input") or "") + " ".join(c["args"])
+                      for c in runner.calls)
+    assert "sb-client-internal-xander" not in seeded
+
+
+@pytest.mark.parametrize("repo", ["", "sb-internal-acme", "ORG/", "/repo",
+                                  "ORG/repo/extra", "-ORG/repo"])
+def test_invalid_feedback_repo_refused(repo):
+    with pytest.raises(FeedbackRepoError):
+        validate_feedback_repo(repo)
 
 
 def test_update_of_a_row_with_no_feedback_repo_falls_back_to_the_default_org(tmp_path):

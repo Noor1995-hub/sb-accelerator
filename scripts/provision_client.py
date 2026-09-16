@@ -11,7 +11,8 @@ Usage:
         [--dist-channel client|dryrun] [--archetype commercial-leader]
         [--care-package active|lapsed|none] [--notes TEXT]
         [--token-minted [YYYY-MM-DD]] [--register-only] [--update] [--dry-run]
-        [--org DLW-INT-BTA-BELUX] [--registry registry.yaml]
+        [--org DLW-INT-BTA-BELUX] [--feedback-repo ORG/REPO]
+        [--registry registry.yaml]
 
 `--register-only` skips every `gh` call and only writes the registry entry
 — use this for a vault that already has (or never needs) a real feedback
@@ -23,8 +24,12 @@ two flags unless you mean to call `gh` for real.
 
 `--update` is non-destructive by design: it restamps `plugin_version` and
 `structure_version` from this checkout and leaves every other field at its
-registered value unless you pass that field's flag. So recording a release
-against an existing deployment is the whole command —
+registered value unless you pass that field's flag. `feedback_repo` is one
+of those fields: a deployment whose channel is not named `sb-client-<slug>`
+(the internal test vaults are `sb-internal-<name>`) keeps its registered
+name through every --update, and `--feedback-repo ORG/REPO` is how you say
+one out loud. So recording a release against an existing deployment is the
+whole command —
 
     provision_client.py <slug> --update --register-only
 
@@ -75,6 +80,10 @@ DEFAULT_ORG = "DLW-INT-BTA-BELUX"
 
 SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]{1,39}$")
 
+# `<org>/<repo>`, as GitHub spells an owner and a repository name. Only used
+# for an explicit --feedback-repo: a registered value is trusted as written.
+REPO_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._-]*$")
+
 # What a field falls back to when it is left off the command line *and* there
 # is no existing entry to inherit it from. On an --update the registered value
 # wins over every one of these — a flag you don't type changes nothing.
@@ -89,6 +98,10 @@ CREATE_DEFAULTS = {
 
 class SlugError(ValueError):
     """Slug does not match SLUG_RE."""
+
+
+class FeedbackRepoError(ValueError):
+    """--feedback-repo is not `<org>/<repo>`."""
 
 
 class DuplicateClientError(Exception):
@@ -126,6 +139,21 @@ def _slug_type(value: str) -> str:
     try:
         return validate_slug(value)
     except SlugError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from exc
+
+
+def validate_feedback_repo(repo: str) -> str:
+    if not REPO_RE.match(repo):
+        raise FeedbackRepoError(
+            f"invalid feedback repo {repo!r} — must be <org>/<repo>, e.g. "
+            f"{DEFAULT_ORG}/sb-internal-acme")
+    return repo
+
+
+def _feedback_repo_type(value: str) -> str:
+    try:
+        return validate_feedback_repo(value)
+    except FeedbackRepoError as exc:
         raise argparse.ArgumentTypeError(str(exc)) from exc
 
 
@@ -233,8 +261,17 @@ def _structure_version() -> str:
 # repo provisioning steps
 # ---------------------------------------------------------------------------
 
+def _repo_name(feedback_repo: str) -> str:
+    """The repository half of `<org>/<repo>`. Every human-facing string that
+    used to spell `sb-client-<slug>` reads this instead — a deployment whose
+    channel is named something else (the internal test vaults) would
+    otherwise get a README, a description and a token recipe all naming a
+    repo that does not exist."""
+    return feedback_repo.split("/", 1)[-1]
+
+
 def _seed_files(slug: str, feedback_repo: str) -> list:
-    repo_name = f"sb-client-{slug}"
+    repo_name = _repo_name(feedback_repo)
     rendered = []
     for dest, tmpl_rel in SEED_FILES:
         text = (SEED_ROOT / tmpl_rel).read_text(encoding="utf-8")
@@ -274,7 +311,7 @@ def _provision_repo(runner: GhRunner, feedback_repo: str, slug: str) -> list:
     if _repo_exists(runner, feedback_repo):
         actions.append(f"{feedback_repo} already exists — skipped create")
     else:
-        description = f"delaware feedback channel for sb-client-{slug} — see README"
+        description = f"delaware feedback channel for {_repo_name(feedback_repo)} — see README"
         runner.run(["repo", "create", feedback_repo, "--private", "--description", description])
         actions.append(f"created {feedback_repo}")
 
@@ -299,7 +336,7 @@ def token_recipe(feedback_repo: str, slug: str, org: str) -> str:
     return (
         "Mint the feedback token by hand (fine-grained PATs cannot be minted via API):\n"
         f"  - Resource owner: {org}\n"
-        f"  - Repository access: Only select repositories -> sb-client-{slug}\n"
+        f"  - Repository access: Only select repositories -> {_repo_name(feedback_repo)}\n"
         "  - Permissions: Issues -> Read and write\n"
         "  - Contents: leave at No access — no Contents permission on this token\n"
         "  - Expiration: 1 year, counted from this deployment's `token_minted`\n"
@@ -334,6 +371,7 @@ class ProvisionOptions:
     notes: Optional[str] = None
     token_minted: Optional[date] = None
     org: Optional[str] = None
+    feedback_repo: Optional[str] = None
     register_only: bool = False
     update: bool = False
     dry_run: bool = False
@@ -367,18 +405,30 @@ def provision(opts: ProvisionOptions, runner: GhRunner, registry_path: Path,
 
     existing = clients[index] if index is not None else {}
 
-    # The org is sticky too, and `feedback_repo` is derived from it rather
-    # than stored independently — so a deployment registered in a non-default
-    # org keeps it through a bare --update, and the gh calls below (and the
-    # printed recipe) address that org rather than silently the default one.
+    # The org is sticky, read back off the registered `feedback_repo` — so a
+    # deployment registered in a non-default org keeps it through a bare
+    # --update, and the gh calls below (and the printed recipe) address that
+    # org rather than silently the default one.
     registered_repo = str(existing.get("feedback_repo") or "")
+    registered_org, _, registered_name = registered_repo.partition("/")
     if opts.org is not None:
         org = opts.org
-    elif "/" in registered_repo:
-        org = registered_repo.split("/", 1)[0]
+    elif registered_name:
+        org = registered_org
     else:
         org = DEFAULT_ORG
-    feedback_repo = f"{org}/sb-client-{slug}"
+
+    # The repo *name* is sticky for the same reason the org is: it is a
+    # registered field, not a function of the slug. `sb-client-<slug>` is only
+    # the default for a name nobody has recorded yet — an internal test vault
+    # on `sb-internal-<name>` used to have that rewritten to a non-existent
+    # repo by every --update, silently, while --help promised the opposite.
+    if opts.feedback_repo is not None:
+        feedback_repo = validate_feedback_repo(opts.feedback_repo)
+    elif registered_name:
+        feedback_repo = f"{org}/{registered_name}"
+    else:
+        feedback_repo = f"{org}/sb-client-{slug}"
 
     owner = opts.owner if opts.owner is not None else existing.get("owner")
     if not owner:
@@ -497,6 +547,12 @@ def parse_args(argv):
                          help="GitHub org that owns client repos (default "
                               f"{DEFAULT_ORG}; on --update, the org this "
                               "deployment is already registered under)")
+    parser.add_argument("--feedback-repo", type=_feedback_repo_type, default=None,
+                         metavar="ORG/REPO",
+                         help="Full name of this deployment's feedback repo, "
+                              "for a channel not named sb-client-<slug> (the "
+                              "internal test vaults). Registered once and then "
+                              "sticky: a bare --update keeps it")
     parser.add_argument("--registry", type=Path, default=None,
                          help="Path to registry.yaml (default: repo root's registry.yaml)")
     return parser.parse_args(argv)
@@ -527,6 +583,7 @@ def main(argv=None) -> int:
         update=args.update,
         dry_run=args.dry_run,
         org=args.org,
+        feedback_repo=args.feedback_repo,
     )
 
     runner: GhRunner = RecordingRunner(echo=True) if opts.dry_run else SubprocessRunner()
