@@ -829,3 +829,52 @@ connector, not inside it. The connector's decode-without-re-encode is real
 but latent, because nothing in the normal path emits that form. Two calls
 were the difference between a fix and three weeks of chasing the wrong
 layer.
+
+---
+
+## 2026-09-16 — the callout accents shipped inert, and the icon rendering is what hid it
+
+**What went wrong.** 0.11.0's recap callouts declared
+`--callout-color: 14, 165, 233` — the `r, g, b` triplet Obsidian used to
+compose a tint from via `rgba(var(--callout-color), 0.1)`. Obsidian 1.13
+consumes a *whole colour* through
+`color-mix(in oklch, var(--callout-color) 10%, transparent)` instead, and its
+app.css contains no `rgba(var(--callout-color)` at all. A triplet makes those
+`color-mix()` calls invalid at computed-value time, so `background-color` falls
+back to its initial `transparent`. Every recap callout in a released vault
+rendered with no tint, no border, and a title in plain body text. The vault
+owner reported it off the first real v2 daily note.
+
+Nothing errored, the snippet loaded, and `--callout-icon` worked perfectly —
+an icon id is read by JS and never goes through colour maths. So each callout
+showed its correct custom Lucide icon and no colour, which reads like a theme
+problem. The declared value and `getPropertyValue('--callout-color')` both look
+right while it is broken; only `getComputedStyle(el).backgroundColor` shows the
+collapse. `[!quote]`, on Obsidian's own built-in `#9e9e9e`, kept its tint in the
+same render — the control that isolates it to our four declarations.
+
+**The rule, three parts.**
+
+*Read the consuming stylesheet, not the docs.* The triplet form is still what
+the community docs describe. One regex over
+`Obsidian.app/Contents/Resources/obsidian.asar` settled it in a minute and gave
+the exact `color-mix()` expression to reason about. When a CSS custom property
+feeds a function, the function's arity and unit expectations are the contract —
+and they change between app versions, silently, because a bad custom-property
+substitution is not an error, it is a fallback.
+
+*A partly-working feature is worse than a broken one.* The icon working is the
+whole reason this survived review, a release, and a vault upgrade. When two
+mechanisms in one declaration fail independently, assert both — the render test
+here checks the tint **and** the icon, so a snippet that stops loading entirely
+is distinguishable from one whose values are wrong.
+
+*The visual tier can only see what it tours.* Three separate gaps had to be
+closed before the render tier could have caught this: the probe toured the
+*earliest* daily note (so the capture showed the oldest recap shape in the
+fixture set), `fixtures/demo-vault`'s latest daily note still carried a **v1**
+recap (so no fixture exercised the v2 callouts at all), and
+`test_fixtures_ontology`'s marker regex rejected the CLI-owned `inputs=`
+attribute. A new rendered shape needs a fixture that *is* that shape, on the
+surface the probe actually visits, or the tier is green on a screen the product
+no longer draws.
