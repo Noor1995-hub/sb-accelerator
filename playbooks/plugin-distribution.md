@@ -106,6 +106,36 @@ history. `release.yml` already clones them `--depth 1`, and a consultant's
 marketplace sync fetches a tree, not history, so this is accepted — but bump
 pins when there is a reason to, not on a schedule.
 
+## Two plugin stores, one per surface
+
+**Cowork and Claude Code do not read plugins from the same place.** Observed
+on a consultant's own machine, 2026-09-16:
+
+- **Claude Code** (the CLI, and the desktop app's Code tab) reads
+  `~/.claude/plugins`: `known_marketplaces.json`, `installed_plugins.json`,
+  and a `cache/<marketplace>/<plugin>/<version>/` tree per install. This is
+  what `claude plugin list`, `claude plugin marketplace update` and
+  `claude plugin update` act on.
+- **Cowork** reads the plugin attached to the Claude account, shown under
+  **Home → Customize → Plugins**. A path-E ZIP is uploaded there, and that
+  upload is the only thing a Cowork session sees.
+
+So the two surfaces can sit on different versions indefinitely, and neither
+one reports the other's. On that machine Claude Code was updated to 0.11.1
+from the `sb-dist` marketplace while Cowork stayed on the 0.10.32 ZIP
+uploaded four days earlier, and the Cowork session's `/upgrade-vault`
+correctly reported nothing pending — because *its* plugin knew only migration
+001. **`claude plugin list` is not evidence about what a client's Cowork is
+running.** The Customize → Plugins header is, and it states the version.
+
+Two practical consequences:
+
+- Verify the deployed version on the surface the vault owner actually uses,
+  which for a client executive is Cowork.
+- A session holds the plugin it loaded at startup. After any update, restart
+  the app and start a *new* session; a running session will keep answering
+  from the old version, including its migration set.
+
 ## Choosing a delivery path
 
 Pick per engagement, in this order of preference.
@@ -216,11 +246,23 @@ and `plugin-<version>.zip.sha256` from the tag's GitHub Release, check the
 sha256 matches (`shasum -a 256 -c plugin-<version>.zip.sha256`), then upload
 the zip as-is. It's built with `.claude-plugin/plugin.json` at the zip
 root (not nested under a `plugin/` folder) on the reasoning that a
-single-plugin ZIP upload expects the package rooted there — **not yet
-verified against a real upload.** Owner action: the first time a Release
-exists, spend five minutes uploading its zip under Organization settings →
-Plugins once, confirm it's accepted, and note the result here (or file a
-fix if the layout is wrong).
+single-plugin ZIP upload expects the package rooted there.
+
+**The layout is verified.** Two real uploads on the internal self-test
+deployment (`internal-xander`), both accepted as-is with no repacking, no
+nesting and no manifest edit:
+
+- **0.10.32, 2026-09-12.** Customize → Plugins afterwards listed the plugin
+  with all 11 skills and 3 agents.
+- **0.11.1, 2026-09-16**, uploaded over the 0.10.32 entry, which replaces it
+  in place rather than adding a second one. A Cowork session started after
+  the upload then applied structure migration 002, which only 0.11.1 ships,
+  so the new bytes were live.
+
+A consultant's own upload does not need an org admin: it goes under
+**Home → Customize → Plugins** on their account, which is the surface the
+internal self-test used, and where the version string is shown. Organization
+settings → Plugins is the same mechanism for a whole org.
 
 ## The release train, concretely
 
