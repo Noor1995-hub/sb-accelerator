@@ -15,6 +15,8 @@ delivers them.
 
 ## Unreleased
 
+## v0.11.0 — 2026-09-16
+
 - **The daily note and project pages are rewritten for reading, not just for the model.** The recap opens with an at-a-glance card, themes fold behind a headline, the project pulse is a table with a 🔴🟠🟢⚪ signal, Watch holds only real risks and the sync mechanics fold away; each meeting now has a **Prep** block plus **Notes** and **Actions** lists for you. Project pages lead with a *Where it stands* card, a dated *Coming up* table and the last ten meetings and decisions, with everything else folded under *Background*. Links to projects and organisations now open the right page. Run `/upgrade-vault` to reshape existing project pages (structure-version 3). (#189)
 
 ## v0.10.36 — 2026-09-15
