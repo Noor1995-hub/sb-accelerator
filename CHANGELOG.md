@@ -15,7 +15,7 @@ delivers them.
 
 ## Unreleased
 
-- The structure-version 3 upgrade now files every existing Owe / Awaiting / Question / Pending bullet into the project page's Background callouts, whatever spelling the evening run used for it, instead of carrying them to the Notes tail. (#PR)
+- The structure-version 3 upgrade now files every existing Owe / Awaiting / Question / Pending bullet into the project page's Background callouts, whatever spelling the evening run used for it, instead of carrying them to the Notes tail. (#192)
 
 ## v0.11.0 — 2026-09-16
 
