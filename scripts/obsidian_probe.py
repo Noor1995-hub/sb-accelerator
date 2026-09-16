@@ -614,15 +614,20 @@ def capture_dom(surface: dict, **kw) -> dict:
               # [].every() is vacuously true, so a note with no markers must
               # report null rather than "hidden" or the check passes for free.
               "markerLinesHidden:markerLines.length?markerLines.every(e=>getComputedStyle(e).display==='none'):null,"
-              # Computed colours, not the declared ones: a --callout-color the
-              # snippet declares in a form Obsidian cannot consume still shows
-              # up in the stylesheet and in getPropertyValue(), and the icon
-              # still renders. Only the *computed* background reveals that the
-              # tint collapsed to transparent.
+              # Two independent failures, so two independent readings.
+              # `declared` answers "did our rule match at all?" — with the
+              # snippet off it collapses to the theme's --callout-default
+              # (#6c99bb on Minimal) for every custom type. `background` is the
+              # *computed* value and answers "can Obsidian consume what we
+              # declared?" — a --callout-color in a form color-mix() rejects
+              # still reads back fine from getPropertyValue() while the tint
+              # collapses to transparent. Neither substitutes for the other.
               "callouts:q('.callout').map(e=>({"
               "type:e.getAttribute('data-callout'),"
+              "declared:getComputedStyle(e).getPropertyValue('--callout-color').trim(),"
               "background:getComputedStyle(e).backgroundColor,"
-              "hasIcon:!!e.querySelector('.callout-icon svg')"
+              "iconClass:(e.querySelector('.callout-icon svg')"
+              "?.getAttribute('class'))||''"
               "})),"
               "headings:[...new Set(q('.markdown-preview-view h2, .cm-header-2')"
               ".map(e=>e.innerText.trim()))].slice(0,8)"

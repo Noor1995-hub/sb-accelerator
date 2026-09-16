@@ -135,24 +135,37 @@ def test_snippet_collapses_properties_by_default():
 RECAP_CALLOUTS = ("glance", "theme", "hot", "sync")
 
 
-def _callout_colors() -> dict:
-    """Every `--callout-color` the snippet declares, keyed by callout type."""
+def _callout_declarations(prop: str) -> dict:
+    """Every value the snippet declares for `prop`, keyed by callout type.
+
+    Scoped per rule, deliberately. A whole-file `prop in css` substring check
+    is loop-invariant — it cannot name which rule is missing a declaration,
+    and the prose comment above these rules mentions both property names, so
+    such a check passes even with all four declarations deleted.
+    """
     import re
-    css = SNIPPET.read_text(encoding="utf-8")
     pattern = re.compile(
         r'\.callout\[data-callout="(?P<type>[a-z-]+)"\]'
-        r'[^{}]*\{[^{}]*?--callout-color:\s*(?P<value>[^;}]+)')
+        r'[^{}]*\{[^{}]*?' + re.escape(prop) + r':\s*(?P<value>[^;}]+)')
     return {m.group("type"): m.group("value").strip()
-            for m in pattern.finditer(css)}
+            for m in pattern.finditer(SNIPPET.read_text(encoding="utf-8"))}
+
+
+def _callout_colors() -> dict:
+    return _callout_declarations("--callout-color")
 
 
 def test_every_recap_callout_declares_a_colour_and_an_icon():
-    colors = _callout_colors()
+    colors = _callout_declarations("--callout-color")
+    icons = _callout_declarations("--callout-icon")
     assert set(colors) == set(RECAP_CALLOUTS), (
-        f"recap callout types drifted: {sorted(colors)}")
-    css = SNIPPET.read_text(encoding="utf-8")
-    for kind in RECAP_CALLOUTS:
-        assert f'[data-callout="{kind}"]' in css and "--callout-icon" in css
+        f"recap callout types missing a --callout-color: {sorted(colors)}")
+    assert set(icons) == set(RECAP_CALLOUTS), (
+        f"recap callout types missing a --callout-icon: {sorted(icons)}")
+    # An icon id Obsidian does not recognise renders the default pencil, which
+    # looks like a working callout, so the value shape is pinned too.
+    bad = {k: v for k, v in icons.items() if not v.startswith("lucide-")}
+    assert not bad, f"these --callout-icon values are not Lucide ids: {bad}"
 
 
 def test_callout_colours_are_colour_values_not_rgb_triplets():

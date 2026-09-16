@@ -235,17 +235,36 @@ def _has_no_tint(background: str) -> bool:
             or flat.endswith("/0)"))
 
 
-def test_recap_callouts_render_their_colour_tint(note_surfaces):
-    """The recap callouts carried `--callout-color: 14, 165, 233` — the rgb
-    triplet older Obsidian wanted — while 1.13 feeds the value to
-    `color-mix(in oklch, var(--callout-color) 10%, transparent)`. The mix was
-    invalid at computed-value time, so every recap callout rendered with its
-    custom Lucide icon and no colour coding at all, in a released vault
-    (0.11.0).
+RECAP_CALLOUT_ACCENTS = {
+    "glance": ("#0ea5e9", "lucide-eye"),
+    "theme": ("#a855f7", "lucide-git-merge"),
+    "hot": ("#ef4444", "lucide-flame"),
+    "sync": ("#94a3b8", "lucide-wrench"),
+}
 
-    Icons are asserted alongside the tint on purpose: the icon working was
-    exactly what disguised this as a theme problem. A snippet that stopped
-    loading altogether would drop both."""
+
+def test_recap_callouts_render_their_colour_tint(note_surfaces):
+    """Two independent failures, so two independent assertions.
+
+    *Did our rule match at all?* — `declared`. Verified live by toggling the
+    snippet off on a running instance: `--callout-color` collapses to the
+    theme's own `--callout-default` (`#6c99bb` on Minimal) for all four types,
+    while the background stays perfectly non-transparent. So non-transparency
+    alone cannot tell "our accent applied" from "the snippet is not loading" —
+    only the value can.
+
+    *Can Obsidian consume what we declared?* — `background`. 0.11.0 shipped
+    `--callout-color: 14, 165, 233`, the rgb triplet older Obsidian composed
+    its tint from. 1.13 feeds the value to
+    `color-mix(in oklch, var(--callout-color) 10%, transparent)` instead, which
+    rejects a triplet, so the mix was invalid at computed-value time and
+    `background-color` fell back to its initial `transparent`. That value reads
+    back from `getPropertyValue()` looking entirely fine, which is why the
+    declared check cannot stand in for this one either.
+
+    The icon id is pinned too — strictly more than "an icon rendered", which an
+    unknown callout type also satisfies via Obsidian's default `lucide-pencil`.
+    """
     dailies = {k: v for k, v in note_surfaces.items() if k.startswith("daily-")}
     if not dailies:
         pytest.skip("tour captured no daily note with evening-sync markers")
@@ -255,17 +274,36 @@ def test_recap_callouts_render_their_colour_tint(note_surfaces):
         assert callouts is not None, (
             f"{key}: capture predates the callouts payload — re-run "
             "`obsidian_probe tour`")
-        recap = [c for c in callouts
-                 if c.get("type") in {"glance", "theme", "hot", "sync"}]
+        recap = [c for c in callouts if c.get("type") in RECAP_CALLOUT_ACCENTS]
         assert recap, (
             f"{key}: no recap callouts in the capture — the fixture daily note "
             "must carry a v2 recap or this test verifies nothing")
-        flat = [c for c in recap if _has_no_tint(c.get("background"))]
+
+        wrong_colour = [
+            (c["type"], c.get("declared"))
+            for c in recap
+            if (c.get("declared") or "").lower()
+            != RECAP_CALLOUT_ACCENTS[c["type"]][0]
+        ]
+        assert not wrong_colour, (
+            f"{key}: these callouts did not take the snippet's accent — the "
+            "rule did not match, or the snippet is not loading at all: "
+            f"{wrong_colour}")
+
+        flat = [(c["type"], c.get("background")) for c in recap
+                if _has_no_tint(c.get("background"))]
         assert not flat, (
-            f"{key}: these callouts computed no background tint, so they render "
-            f"uncoloured: {[(c['type'], c['background']) for c in flat]}")
-        iconless = [c["type"] for c in recap if not c.get("hasIcon")]
-        assert not iconless, f"{key}: callouts rendered no icon: {iconless}"
+            f"{key}: these callouts computed no background tint, so they "
+            f"render uncoloured despite a correct declared colour: {flat}")
+
+        wrong_icon = [
+            (c["type"], c.get("iconClass"))
+            for c in recap
+            if RECAP_CALLOUT_ACCENTS[c["type"]][1]
+            not in (c.get("iconClass") or "").split()
+        ]
+        assert not wrong_icon, (
+            f"{key}: these callouts rendered the wrong icon: {wrong_icon}")
         checked += len(recap)
     assert checked, "no recap callout was actually asserted"
 

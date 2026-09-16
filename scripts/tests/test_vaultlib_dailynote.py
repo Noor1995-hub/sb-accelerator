@@ -7,6 +7,7 @@ import json
 import re
 import subprocess
 import sys
+from datetime import date
 from pathlib import Path
 
 import pytest
@@ -627,6 +628,42 @@ def test_fresh_fixture_is_exactly_what_daily_note_write_renders(tmp_path):
         "content (headings, markers, prep/recap content); hand-written jottings "
         "outside markers are the only exemption"
     )
+
+
+def test_recap_fingerprint_ignores_line_endings(tmp_path):
+    """The stamp must not fork on CRLF.
+
+    It hashes the recap's input notes, and hashing raw bytes made a Windows
+    host — or a Mac<->Windows synced vault — compute a different digest for
+    byte-identical content. Since a mismatched stamp regenerates the region,
+    that meant overwriting a recap the vault owner had already read on every
+    single run. `provenance.digest` normalises CRLF to LF for exactly this
+    reason and is the repo's stated convention for a vault-content hash.
+
+    The Windows CI job caught it the first time a fixture carried a stamp at
+    all (PR #206): macOS and Ubuntu agreed on 1f298595a5c7118b while Windows,
+    whose checkout has core.autocrlf=true, computed ce0435975b22effb.
+    """
+    window = {"from": date(2026, 6, 12), "to": date(2026, 6, 12)}
+
+    def fingerprint_of(crlf: bool) -> str:
+        root = tmp_path / ("crlf" if crlf else "lf")
+        shutil.copytree(FIXTURE_ROOT, root)
+        if crlf:
+            for path in root.rglob("*.md"):
+                raw = path.read_bytes().replace(b"\r\n", b"\n")
+                path.write_bytes(raw.replace(b"\n", b"\r\n"))
+        return dailynote.recap_fingerprint(root, window)
+
+    lf = fingerprint_of(False)
+    assert fingerprint_of(True) == lf, (
+        "the recap stamp changed with line endings — a CRLF checkout or a "
+        "Windows host will regenerate the recap on every run")
+    # Normalisation is a no-op on LF content, so the digest every already
+    # stamped vault holds must be unchanged by this.
+    assert lf == "1f298595a5c7118b", (
+        f"the LF digest moved to {lf} — every stamped vault would regenerate "
+        "its recap once. If that is intended, say so in the PR.")
 
 
 def test_find_regions_reads_an_inputs_attribute():
