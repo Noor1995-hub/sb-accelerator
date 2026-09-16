@@ -572,7 +572,13 @@ def test_owner_attends_every_meeting():
 
 # --- Daily-note fixtures model the evening-sync contract ---
 
-DAILY_MARKER_RE = re.compile(r"<!-- evening-sync:(recap|prep):(begin|end) -->")
+# A begin marker may carry CLI-owned `key=value` attributes — today only the
+# recap's `inputs=<16 hex>` digest. Matching the bare form alone made every
+# marker on a stamped note invisible here, so a stamped fixture read as having
+# no regions at all rather than as unbalanced. Mirrors dailynote._MARKER_RE.
+DAILY_MARKER_RE = re.compile(
+    r"<!-- evening-sync:(recap|prep):(begin|end)"
+    r"((?: [a-z][a-z0-9-]*=[A-Za-z0-9._-]+)*) -->")
 
 
 def test_daily_note_filename_is_its_date():
@@ -589,7 +595,7 @@ def test_daily_note_machine_regions_are_balanced():
     for path in files:
         text = path.read_text(encoding="utf-8")
         stack = []
-        for name, kind in DAILY_MARKER_RE.findall(text):
+        for name, kind, _attrs in DAILY_MARKER_RE.findall(text):
             if kind == "begin":
                 stack.append(name)
             else:

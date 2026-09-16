@@ -16,7 +16,7 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-from . import dates, links, markdown, meeting, naming, recap, vault
+from . import dates, links, markdown, meeting, naming, provenance, recap, vault
 
 DAILY_NOTES_DIR = vault.DAILY_NOTES_DIR
 NO_MEETINGS_LINE = "*No meetings scheduled.*"
@@ -384,12 +384,21 @@ def recap_fingerprint(root: Path, window: dict) -> str:
     recap is built from, the input *file set* moves with them. If they move
     without changing either the banner or the file set, the rendered region
     is byte-identical and skipping it is the right answer.
+
+    Input files are hashed through `provenance.digest`, which normalises
+    CRLF to LF first — the convention that module already states for exactly
+    this reason. Hashing raw bytes made the stamp fork on line endings, so a
+    Windows host (or a Mac<->Windows synced vault) recomputed a different
+    digest for byte-identical content and regenerated a recap the vault
+    owner had already read, on every run. Caught by the Windows CI job the
+    first time a fixture carried a stamp at all. LF content hashes the same
+    either way, so no already-stamped vault sees a change.
     """
     start, end = window["from"], window["to"]
     banner = _catchup_banner(root, window) or ""
     lines = [f"banner\t{hashlib.sha256(banner.encode('utf-8')).hexdigest()}"]
     for relpath, path in sorted(_fingerprint_inputs(root, start, end)):
-        lines.append(f"{relpath}\t{hashlib.sha256(path.read_bytes()).hexdigest()}")
+        lines.append(f"{relpath}\t{provenance.digest(path.read_bytes())}")
     digest = hashlib.sha256("\n".join(lines).encode("utf-8")).hexdigest()
     return digest[:_DIGEST_LENGTH]
 
