@@ -7,6 +7,7 @@ import json
 import re
 import subprocess
 import sys
+from datetime import date
 from pathlib import Path
 
 import pytest
@@ -436,6 +437,50 @@ def test_read_parses_every_daily_note_fixture():
         assert result["recap"], f"{path}: fixture recap region is empty"
 
 
+def _fixture_daily_notes():
+    return sorted((FIXTURE_ROOT / "60-daily-notes").glob("*.md"))
+
+
+def test_only_the_newest_fixture_daily_note_is_v2():
+    """The mix of contract versions in the fixture is deliberate, not drift.
+
+    `plugin/CLAUDE.md`: a v2 payload merging into a v1 note replaces region
+    interiors and never retro-fits the `#### Prep` / `#### Notes` /
+    `#### Actions` sub-headings. So a demo vault where every note was v2
+    would assert a migration the product does not perform — and would leave
+    `dailynote.read`'s v1 path with no real artifact to parse. The newest
+    note is what a demo opens on and what `obsidian_probe.surfaces()` tours,
+    so that one is current; the days behind it are history, and a vault
+    upgraded mid-life genuinely holds both shapes.
+
+    Converting the older three is therefore a decision to take deliberately,
+    not a tidy-up — which is what this assertion is here to force.
+    """
+    notes = _fixture_daily_notes()
+    v2 = [p.stem for p in notes
+          if dailynote.PREP_HEADING in p.read_text(encoding="utf-8")]
+    assert v2 == [notes[-1].stem], (
+        "exactly the newest daily-note fixture carries the v2 sub-headings; "
+        f"found {v2} against a newest note of {notes[-1].stem}")
+
+
+def test_read_returns_notes_and_actions_from_the_v2_fixture():
+    """The reader's `notes[]`/`actions[]` split, against a real artifact.
+
+    Every other test of it builds its own note, so nothing would notice if
+    the fixture stopped exercising the tick states the vault owner actually
+    types.
+    """
+    newest = _fixture_daily_notes()[-1]
+    result = dailynote.read(FIXTURE_ROOT, newest.stem)
+    meetings = result["meetings"]
+    assert [len(m["notes"]) for m in meetings] == [2, 2, 1, 2, 0, 1]
+    assert [len(m["actions"]) for m in meetings] == [1, 2, 1, 1, 0, 1]
+    done = [a for m in meetings for a in m["actions"] if a["done"]]
+    assert len(done) == 1, "one ticked action, so the done path has an artifact"
+    assert len(result["end_of_day"]) == 3
+
+
 def test_cli_read_envelope(tmp_path):
     root = make_vault(tmp_path)
     (root / "60-daily-notes" / "2026-06-12.md").write_text(
@@ -456,62 +501,117 @@ import shutil
 
 FRESH_FIXTURE_PAYLOAD = {
     "date": "2026-06-15",
-    "recap": (
-        "> [!info] At a glance\n"
-        "> 1 meeting Friday · Nordbridge Components · 1 decision queued · 1 duplicate capture flagged\n"
-        "- [[12-06-26-jordan-1on1]] — proposal drafting on track for the September submission; Phase 1 site nomination handed to Nordbridge.\n"
-        "- Decision logged: [[2026-06-12-phase-1-site-nomination-deferred]] — unattended capture, waiting in the review queue.\n"
-        "- Duplicate recorder capture written as [[12-06-26-jordan-1on1-v2]] — needs attention in triage.\n"
-        "- Jotting carried forward: follow up with Dana Whitfield on rollout scope this week."
-    ),
+    # A fully v2 payload: `recap` is a recap.validate() object (and
+    # `recap_window` is mandatory with it, because the CLI composes the
+    # glance's meeting count and window label itself rather than trusting
+    # prose), and every `prep` is {attendees, last_meeting, context}. This is
+    # what the product emits today, so it is what the newest fixture note —
+    # the one `obsidian_probe.surfaces()` tours — has to be.
+    "recap_window": {"from": "2026-06-12", "to": "2026-06-12"},
+    "recap": {
+        "glance": {
+            "headlines": [
+                {"label": "Decided",
+                 "text": "Phase 1 site nomination handed to Nordbridge, around their ERP freeze"},
+                {"label": "Needs your hand",
+                 "text": "a duplicate recorder capture is still waiting in triage"},
+                {"label": "Quiet",
+                 "text": "no Meridian or CRM meeting fell in this window"},
+            ],
+            "entities": ["nordbridge-components"],
+        },
+        "themes": [
+            {"headline": "Phase 1 site choice moves to Nordbridge",
+             "body": "The proposal now asks Nordbridge to nominate the plant their ERP freeze can absorb first, rather than naming one for them — which unblocks the September submission without committing to a sequence nobody has validated.",
+             "sources": [{"stem": "12-06-26-jordan-1on1", "label": "Jordan 1:1"}]},
+            {"headline": "One conversation was captured twice",
+             "body": "Friday's 1:1 arrived from both the recorder and the calendar adapter, so it is written twice; the second copy needs dispositioning in triage before it double-counts in the Nordbridge meeting log.",
+             "sources": [{"stem": "12-06-26-jordan-1on1-v2", "label": "duplicate capture"}]},
+        ],
+        "pulse": [
+            {"project": "nordbridge-regional-rollout-proposal", "signal": "green",
+             "text": "Site nomination handed to Nordbridge; proposal drafting on track for the September submission."},
+            {"project": "commercial-ops-crm-modernization", "signal": "amber",
+             "text": "Untouched this window — the scoring weights agreed at the dry run still need a governance answer on stage definitions."},
+            {"project": "meridian-yard-automation-program", "signal": "quiet",
+             "text": "Nothing moved; the revised commissioning schedule is still owed."},
+        ],
+        "decisions": ["2026-06-12-phase-1-site-nomination-deferred"],
+        "watch": [
+            "The duplicate Jordan capture is still in triage; until it is dispositioned the Nordbridge meeting log double-counts Friday.",
+        ],
+        "carried_forward": [
+            "Follow up with Dana Whitfield on rollout scope this week.",
+        ],
+        "sync_notes": [
+            "1 duplicate recorder capture written as a `-v2` sibling rather than merged — needs an interactive call in triage.",
+        ],
+    },
     "meetings": [
         {
             "time": "08:30",
             "subject": "Commercial Operations — Monday Forecast Call",
             "entity": "commercial-operations",
-            "prep": (
-                "**Attendees:** Sam Okafor, Taylor Brooks · **Last meeting:** 2026-06-05 — pipeline governance review; cadence held at monthly · **Context:** first forecast call since the governance review; regional stage definitions still diverge."
-            ),
+            "prep": {
+                "attendees": "Sam Okafor, Taylor Brooks",
+                "last_meeting": "[[05-06-26-pipeline-governance-review|2026-06-05 — pipeline governance review; cadence held at monthly]]",
+                "context": "[[commercial-ops-pipeline-governance]] · first forecast call since the governance review; regional stage definitions still diverge.",
+            },
         },
         {
             "time": "10:00",
             "subject": "Meridian Freight — Yard 2 Re-scope Working Session",
             "entity": "meridian-freight-holdings",
-            "prep": (
-                "**Attendees:** Priya Nathan, Renee Castillo · **Last meeting:** 2026-05-20 — vendor strategy brainstorm; single-vendor consolidation adopted · **Context:** revised commissioning schedule for yards 2–3 owed to Leo Marchetti; Renee was not in the room when consolidation was agreed."
-            ),
+            "prep": {
+                "attendees": "Priya Nathan, Renee Castillo",
+                "last_meeting": "[[20-05-26-meridian-vendor-strategy-brainstorm|2026-05-20 — vendor strategy brainstorm; single-vendor consolidation adopted]]",
+                "context": "[[meridian-yard-automation-program]] · revised commissioning schedule for yards 2–3 owed to Leo Marchetti; Renee was not in the room when consolidation was agreed.",
+            },
         },
         {
             "time": "11:30",
             "subject": "1:1 — Taylor Brooks",
             "entity": "commercial-operations",
-            "prep": (
-                "**Attendees:** Taylor Brooks · **Last meeting:** 2026-06-05 — pipeline governance review · **Context:** quarterly board pack outline due end of month; Taylor owns the draft."
-            ),
+            "prep": {
+                "attendees": "Taylor Brooks",
+                "last_meeting": "[[05-06-26-pipeline-governance-review|2026-06-05 — pipeline governance review]]",
+                "context": "[[commercial-ops-pipeline-governance]] · quarterly board pack outline due end of month; Taylor owns the draft.",
+            },
         },
         {
             "time": "13:00",
             "subject": "CRM Modernization — RFP Scoring Dry Run",
             "entity": "commercial-operations",
-            "prep": (
-                "**Attendees:** Sam Okafor, Omar Siddiqui · **Last meeting:** 2026-06-01 — weekly status update; shortlist approved, phased migration adopted · **Context:** scoring criteria draft was owed Friday; vendor selection target 2026-08-30."
-            ),
+            "prep": {
+                "attendees": "Sam Okafor, Omar Siddiqui",
+                "last_meeting": "[[01-06-26-commercial-ops-status-update|2026-06-01 — weekly status update; shortlist approved, phased migration adopted]]",
+                "context": "[[commercial-ops-crm-modernization]] · scoring criteria draft was owed Friday; vendor selection target 2026-08-30.",
+            },
         },
         {
             "time": "15:00",
             "subject": "Nordbridge — Proposal Working Session",
             "entity": "nordbridge-components",
-            "prep": (
-                "**Attendees:** Jordan Vance · **Last meeting:** 2026-06-12 — 1:1; site nomination deferred to Nordbridge · **Context:** September submission; Friday's duplicate capture still in triage."
-            ),
+            "prep": {
+                "attendees": "Jordan Vance",
+                "last_meeting": "[[12-06-26-jordan-1on1|2026-06-12 — 1:1; site nomination deferred to Nordbridge]]",
+                "context": "[[nordbridge-regional-rollout-proposal]] · September submission; Friday's duplicate capture still in triage.",
+            },
         },
         {
             "time": "16:30",
             "subject": "Exec Leadership Weekly",
             "entity": "commercial-operations",
-            "prep": (
-                "**Attendees:** Taylor Brooks, Sam Okafor, Priya Nathan · **Last meeting:** none on record · **Context:** standing agenda; Meridian's renewal cycle expected to surface before the September commercial review."
-            ),
+            # The one meeting that takes both of the prep contract's fallback
+            # branches: no note on file for a standing exec weekly, and no
+            # single project it belongs to. A demo vault where every prep has
+            # a tidy link on every field would hide what the skill actually
+            # writes when the lookups come back empty.
+            "prep": {
+                "attendees": "Taylor Brooks, Sam Okafor, Priya Nathan",
+                "last_meeting": "none on file",
+                "context": "No tracked project. Standing agenda; Meridian's renewal cycle expected to surface before the September commercial review.",
+            },
         },
     ],
 }
@@ -521,56 +621,55 @@ def test_fresh_fixture_is_exactly_what_daily_note_write_renders(tmp_path):
     """60-daily-notes/2026-06-15.md is the just-written artifact of the
     2026-06-12 evening run — structure (headings, markers, section order) and
     all machine-generated content must match the renderer byte-for-byte. Only
-    hand-written jottings (bullets outside markers) and end-of-day notes are
-    permitted to differ, since those are not generated by the renderer."""
+    the vault owner's own bullets (under `#### Notes`, `#### Actions` and
+    `## End of day`) are permitted to differ, since those are not generated
+    by the renderer."""
+    # The three headings the renderer hands to the vault owner with an empty
+    # affordance under them and never writes into again. Everything else in
+    # the note is machine-generated and must match byte-for-byte.
+    jot_headings = {"#### notes", "#### actions", "## end of day"}
+
     def strip_hand_jottings(text: str) -> str:
-        """Replace hand-written jottings with a single empty bullet, preserving
-        structure. Strips bullets after prep:end markers and in the End of day
-        section, keeping only the first '- ' as empty. Reuses dailynote module's
-        marker parsing for prep region identification."""
+        """Blank the vault owner's bullets, keeping every other byte.
+
+        Under each of `jot_headings` the renderer emits exactly one empty
+        affordance — `- ` for prose, `- [ ] ` for a task — and the fixture
+        fills it in. So the first bullet in such a section is reduced to its
+        own marker and the rest are dropped, which leaves the surrounding
+        structure (headings, blank lines, markers) to be compared as written.
+        Region interiors are never touched: those *are* machine content.
+        """
         lines = text.split("\n")
-        regions = dailynote._find_regions(lines)
-        prep_ends = {region["end"] for region in regions if region["name"] == "prep"}
         region_lines = set()
-        for region in regions:
+        for region in dailynote._find_regions(lines):
             region_lines.update(range(region["begin"], region["end"] + 1))
 
         output = []
-        after_prep_end = False
-        in_end_of_day = False
-        found_bullet_in_section = False
+        in_jot_section = False
+        kept_affordance = False
 
-        for i, line in enumerate(lines):
-            # Track End of day section
-            if line.strip() == "## End of day":
-                in_end_of_day = True
-                found_bullet_in_section = False
+        for index, line in enumerate(lines):
+            if index in region_lines:
                 output.append(line)
                 continue
-
-            # Check if this line immediately follows a prep:end marker
-            if i - 1 in prep_ends:
-                after_prep_end = True
-                found_bullet_in_section = False
-
-            # If we hit a non-bullet line, stop the "after prep end" tracking
-            if (after_prep_end or in_end_of_day) and not line.strip().startswith("- "):
-                after_prep_end = False
-
-            # Inside marker region, preserve exactly
-            if i in region_lines:
+            stripped = line.strip()
+            if stripped.startswith("#"):
+                # Any heading ends the previous section — including the next
+                # `### {HH:MM} — …`, so one meeting's Actions cannot swallow
+                # the following meeting's Notes.
+                in_jot_section = stripped.lower() in jot_headings
+                kept_affordance = False
                 output.append(line)
-            # After prep:end or in End of day, handle bullets specially
-            elif (after_prep_end or in_end_of_day) and line.strip().startswith("- "):
-                if not found_bullet_in_section:
-                    # First bullet in section, keep as empty
-                    indent = len(line) - len(line.lstrip())
-                    output.append(" " * indent + "- ")
-                    found_bullet_in_section = True
-                # else: skip subsequent bullets (jottings)
-            else:
-                # All other lines (headings, sections, region markers, etc.)
-                output.append(line)
+                continue
+            if in_jot_section and stripped.startswith("- "):
+                if kept_affordance:
+                    continue
+                kept_affordance = True
+                indent = " " * (len(line) - len(line.lstrip()))
+                marker = "- [ ] " if stripped.startswith("- [") else "- "
+                output.append(indent + marker)
+                continue
+            output.append(line)
 
         return "\n".join(output)
 
@@ -590,6 +689,42 @@ def test_fresh_fixture_is_exactly_what_daily_note_write_renders(tmp_path):
         "content (headings, markers, prep/recap content); hand-written jottings "
         "outside markers are the only exemption"
     )
+
+
+def test_recap_fingerprint_ignores_line_endings(tmp_path):
+    """The stamp must not fork on CRLF.
+
+    It hashes the recap's input notes, and hashing raw bytes made a Windows
+    host — or a Mac<->Windows synced vault — compute a different digest for
+    byte-identical content. Since a mismatched stamp regenerates the region,
+    that meant overwriting a recap the vault owner had already read on every
+    single run. `provenance.digest` normalises CRLF to LF for exactly this
+    reason and is the repo's stated convention for a vault-content hash.
+
+    The Windows CI job caught it the first time a fixture carried a stamp at
+    all (PR #206): macOS and Ubuntu agreed on 1f298595a5c7118b while Windows,
+    whose checkout has core.autocrlf=true, computed ce0435975b22effb.
+    """
+    window = {"from": date(2026, 6, 12), "to": date(2026, 6, 12)}
+
+    def fingerprint_of(crlf: bool) -> str:
+        root = tmp_path / ("crlf" if crlf else "lf")
+        shutil.copytree(FIXTURE_ROOT, root)
+        if crlf:
+            for path in root.rglob("*.md"):
+                raw = path.read_bytes().replace(b"\r\n", b"\n")
+                path.write_bytes(raw.replace(b"\n", b"\r\n"))
+        return dailynote.recap_fingerprint(root, window)
+
+    lf = fingerprint_of(False)
+    assert fingerprint_of(True) == lf, (
+        "the recap stamp changed with line endings — a CRLF checkout or a "
+        "Windows host will regenerate the recap on every run")
+    # Normalisation is a no-op on LF content, so the digest every already
+    # stamped vault holds must be unchanged by this.
+    assert lf == "1f298595a5c7118b", (
+        f"the LF digest moved to {lf} — every stamped vault would regenerate "
+        "its recap once. If that is intended, say so in the PR.")
 
 
 def test_find_regions_reads_an_inputs_attribute():

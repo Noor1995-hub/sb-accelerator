@@ -130,6 +130,69 @@ def test_snippet_collapses_properties_by_default():
             assert line.startswith(".mod-root "), f"unscoped properties selector: {line}"
 
 
+# --- recap callout accents ---------------------------------------------------
+
+RECAP_CALLOUTS = ("glance", "theme", "hot", "sync")
+
+
+def _callout_declarations(prop: str) -> dict:
+    """Every value the snippet declares for `prop`, keyed by callout type.
+
+    Scoped per rule, deliberately. A whole-file `prop in css` substring check
+    is loop-invariant — it cannot name which rule is missing a declaration,
+    and the prose comment above these rules mentions both property names, so
+    such a check passes even with all four declarations deleted.
+    """
+    import re
+    pattern = re.compile(
+        r'\.callout\[data-callout="(?P<type>[a-z-]+)"\]'
+        r'[^{}]*\{[^{}]*?' + re.escape(prop) + r':\s*(?P<value>[^;}]+)')
+    return {m.group("type"): m.group("value").strip()
+            for m in pattern.finditer(SNIPPET.read_text(encoding="utf-8"))}
+
+
+def _callout_colors() -> dict:
+    return _callout_declarations("--callout-color")
+
+
+def test_every_recap_callout_declares_a_colour_and_an_icon():
+    colors = _callout_declarations("--callout-color")
+    icons = _callout_declarations("--callout-icon")
+    assert set(colors) == set(RECAP_CALLOUTS), (
+        f"recap callout types missing a --callout-color: {sorted(colors)}")
+    assert set(icons) == set(RECAP_CALLOUTS), (
+        f"recap callout types missing a --callout-icon: {sorted(icons)}")
+    # An icon id Obsidian does not recognise renders the default pencil, which
+    # looks like a working callout, so the value shape is pinned too.
+    bad = {k: v for k, v in icons.items() if not v.startswith("lucide-")}
+    assert not bad, f"these --callout-icon values are not Lucide ids: {bad}"
+
+
+def test_callout_colours_are_colour_values_not_rgb_triplets():
+    """A bare `r, g, b` triplet renders the callout with no tint at all.
+
+    Obsidian used to compose the tint as `rgba(var(--callout-color), 0.1)`,
+    which needs the triplet. Current Obsidian does not: `.callout` declares
+    `--callout-color: var(--callout-default)` — a whole colour — and consumes
+    it through `color-mix(in oklch, var(--callout-color) 10%, transparent)`
+    for the background and a matching `color-mix` for the border (verified by
+    reading app.css out of Obsidian 1.13's bundle; it contains zero
+    occurrences of `rgba(var(--callout-color)`).
+
+    Feed `color-mix()` a triplet and the function is invalid at
+    computed-value time, so `background-color` falls back to its initial
+    `transparent` — while `--callout-icon` keeps working, because an icon id
+    is read by JS and never goes through colour maths. That asymmetry is what
+    shipped in 0.11.0: the recap callouts rendered with their custom icons
+    and no colour coding, and it looked like a theme problem rather than a
+    snippet one."""
+    offenders = {k: v for k, v in _callout_colors().items() if "," in v}
+    assert not offenders, (
+        "these --callout-color values are legacy rgb triplets; current "
+        "Obsidian feeds the value to color-mix(), which rejects them and "
+        f"renders no tint: {offenders}")
+
+
 # --- .base property namespacing ---------------------------------------------
 
 def test_base_property_keys_are_namespaced():

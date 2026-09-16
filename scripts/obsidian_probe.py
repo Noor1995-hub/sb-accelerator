@@ -491,7 +491,13 @@ def surfaces(vault: Path) -> list:
     # The daily note goes in Live Preview specifically: that is where the
     # <!-- evening-sync:* --> markers show and where the vault owner actually
     # types.
-    for p in sorted(vault.glob("60-daily-notes/*.md")):
+    #
+    # Newest first, not oldest: daily-note names sort as dates, and the vault's
+    # *latest* note is both what a demo opens on and the one written by the
+    # current renderer. Touring the earliest meant the capture showed the oldest
+    # recap shape in the fixture set, so anything the renderer had changed since
+    # was outside the one surface that could have caught it.
+    for p in sorted(vault.glob("60-daily-notes/*.md"), reverse=True):
         if "evening-sync" in p.read_text(errors="ignore"):
             found.append({"key": f"daily-{p.stem}-livepreview", "kind": "note",
                           "path": p.relative_to(vault).as_posix(), "mode": "source"})
@@ -608,6 +614,21 @@ def capture_dom(surface: dict, **kw) -> dict:
               # [].every() is vacuously true, so a note with no markers must
               # report null rather than "hidden" or the check passes for free.
               "markerLinesHidden:markerLines.length?markerLines.every(e=>getComputedStyle(e).display==='none'):null,"
+              # Two independent failures, so two independent readings.
+              # `declared` answers "did our rule match at all?" — with the
+              # snippet off it collapses to the theme's --callout-default
+              # (#6c99bb on Minimal) for every custom type. `background` is the
+              # *computed* value and answers "can Obsidian consume what we
+              # declared?" — a --callout-color in a form color-mix() rejects
+              # still reads back fine from getPropertyValue() while the tint
+              # collapses to transparent. Neither substitutes for the other.
+              "callouts:q('.callout').map(e=>({"
+              "type:e.getAttribute('data-callout'),"
+              "declared:getComputedStyle(e).getPropertyValue('--callout-color').trim(),"
+              "background:getComputedStyle(e).backgroundColor,"
+              "iconClass:(e.querySelector('.callout-icon svg')"
+              "?.getAttribute('class'))||''"
+              "})),"
               "headings:[...new Set(q('.markdown-preview-view h2, .cm-header-2')"
               ".map(e=>e.innerText.trim()))].slice(0,8)"
               "})})()")

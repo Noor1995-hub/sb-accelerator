@@ -68,7 +68,9 @@ The JSON envelope and interpreter resolution are documented in the plugin's
    let it retry next run. The same verbatim rule covers this context's own
    listing writes — `$SCRATCH/m365_search.json` and
    `$SCRATCH/m365_routing.json` hold the calendar search's own field
-   values unchanged, never rebuilt or retyped. The **full-event JSON**
+   values unchanged, never rebuilt or retyped (`m365_routing.json`'s `uri`
+   is the one field that comes from the triage result instead, and it is
+   copied the same way — step 1 says why). The **full-event JSON**
    verbatim obligation is not this context's problem any more: the m365
    adapter's own full-event and transcript reads happen inside the worker
    now, which writes its own `$SCRATCH/m365_event_<n>.json` under the same
@@ -412,9 +414,23 @@ For each `unseen`/`unkeyed` `fetch` survivor, match its `id` back against
 the calendar-search pages you already hold and write one compact array,
 `$SCRATCH/m365_routing.json`, with — per event, **values verbatim from the
 listing, never rebuilt** — `id`, `subject`, `start`, `end`, `organizer`,
-`attendees`, `location`, `recurrence`, and `uri` (the URL-encoded
-`calendar:///events/<id>` form; never decode or reconstruct it — the
-worker reads it exactly as given). There is no full event read and no id
+`attendees`, `location`, and `recurrence`.
+
+The tenth field, `uri`, does **not** come from the listing: copy it from
+that event's `event_uri` in the `sync m365-triage` result you already hold.
+It is the same `calendar:///events/<id>` string the listing's own `uri`
+field carries, derived by the CLI — and it is the one field here you must
+never produce yourself, by any route: not from the listing's `uri`, not
+from `webLink`, and above all not by percent-encoding the `id`. Event ids
+arrive in Outlook's URL-safe base64 variant, where `-` stands in for `/`
+and `_` for `+`, so "un-escaping" one before encoding it turns every `-`
+into `%2F`; the connector decodes that back to a raw `/`, Graph reads the
+tail as unknown path segments, and the worker gets a 400
+`RequestBroker--ParseUri` on every retry, every run. That silently cost
+two meetings their transcripts (issue #205). `event_uri` exists so this
+step copies an opaque string instead of transforming one.
+
+There is no full event read and no id
 derivation here any more: the worker fetches its own event, derives its
 own ids, and dedups itself before it ever reads a transcript —
 `worker-contract.md`'s Fetching — M365 section has the mechanics. The
@@ -443,8 +459,9 @@ the occurrence surfaces again next run.
 A `recheck-no-transcript` entry's row still lives in the calendar-search
 pages you hold this run (rechecks come from the same triage `fetch` list,
 so they were always in the listing) — it is just not extracted into
-`m365_routing.json` yet. Keep its `id`, `start_utc`, and `uri` on the probe
-dispatch list step 6 needs; nothing else about it is decided here.
+`m365_routing.json` yet. Keep its `id`, `start_utc`, and `event_uri` — all
+three straight off its triage entry — on the probe dispatch list step 6
+needs; nothing else about it is decided here.
 
 An m365 recording's routing starts ahead of plaud's: the listing **is**
 the calendar record. Pre-fill `calendar-subject`, `organizer`, `location`,
@@ -801,9 +818,10 @@ Pass each worker *paths and decisions*, not content:
 - both contract paths above, `$VAULT`, `$SCRATCH`, the `$VAULTLIB` path,
   and the vault timezone;
 - its recording reference and scratch stem: Plaud — the file id and
-  `$SCRATCH/rec_N.meta.json`; M365 — the listing's own `uri` field, verbatim
-  (the URL-encoded `calendar:///events/<id>` form — never decoded or
-  rebuilt), from `m365_routing.json`, and the scratch stem
+  `$SCRATCH/rec_N.meta.json`; M365 — the `uri` field of
+  `m365_routing.json`, copied character for character (it is triage's
+  CLI-derived `event_uri`; never decoded, re-encoded, or rebuilt from the
+  `id` — see step 1's warning), and the scratch stem
   `m365_event_<n>`; there is no pre-read event file and no `transcript_url`
   to pass — the worker fetches the event and derives both itself
   (`worker-contract.md`'s Fetching — M365 section); inbox — the file's
