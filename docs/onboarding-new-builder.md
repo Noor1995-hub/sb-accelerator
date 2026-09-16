@@ -14,6 +14,10 @@
    claude plugin install second-brain@sb-accelerator-dryrun
    ```
 
+   (On Cowork, attach the marketplace under Home → Customize → Plugins
+   instead — the two surfaces are separate plugin stores that do not report
+   each other's versions.)
+
    Every release lands on that channel automatically, and clients only get
    what someone promotes afterwards. Contributors running their own vault on
    dryrun is the only thing standing between a broken release and a client

@@ -98,6 +98,14 @@ You are the reason the dryrun channel is worth having. Pointing your vault at
 the client channel means you find out a release is broken at the same moment a
 client does.
 
+**Pick one surface and stay on it.** Claude Code and Cowork keep plugins in
+entirely different places and neither reports the other's version, so the same
+plugin name can sit in both at different versions with no warning — see
+`playbooks/plugin-distribution.md` § "Two plugin stores". The commands below
+are the **Claude Code** side; on Cowork you attach the marketplace under
+**Home → Customize → Plugins** instead, and that header is where you read the
+installed version back.
+
 First-time setup:
 
 ```bash
@@ -112,8 +120,10 @@ claude plugin marketplace update sb-accelerator-dryrun
 claude plugin update second-brain@sb-accelerator-dryrun
 ```
 
-`claude plugin update` needs a restart to take effect. Skills are then live on
-next use — they are just files the model reads at invocation time.
+**Then restart and open a *new* session.** A session answers from the plugin
+it loaded at startup — including its migration set — so a stale session will
+cheerfully report a stale vault as up to date. Skills are then live on next
+use; they are just files the model reads at invocation time.
 
 **Vault structure and Obsidian changes are not live.** A new plugin version can
 ship `.base` views, `.obsidian` settings, CSS snippets, or a structure
@@ -125,7 +135,10 @@ skill itself and `docs/visual-verification.md`.
 
 ## Checking where things stand
 
-Neither channel's version is inferable from `main`. Read them:
+Neither channel's version is inferable from `main`, and neither is the version
+a given machine has *installed* — read the installed one off the surface that
+machine actually uses (see the two-stores warning above). To read what each
+channel currently publishes:
 
 ```bash
 for r in sb-dist sb-dist-dryrun; do
@@ -163,7 +176,8 @@ migration precisely so that path exists, and it is a manual restore.
 ## Related
 
 - `CONTRIBUTING.md` § "Cutting a release" — the procedure, step by step.
-- `playbooks/plugin-distribution.md` — delivery paths A–E, the owner-only setup
-  (`DIST_PUSH_TOKEN` and its expiry), and platform constraints. Never ships.
+- `playbooks/plugin-distribution.md` — delivery paths A–E, the two plugin
+  stores (Claude Code vs Cowork), the owner-only setup (`DIST_PUSH_TOKEN` and
+  its expiry), and platform constraints. Never ships.
 - `docs/architecture.md` § "Update policy" — why the cadence is what it is.
 - `.github/workflows/release.yml` — the authority for everything on this page.
