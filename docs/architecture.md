@@ -26,8 +26,10 @@ verify the tag, build the dist tree (`scripts/build_dist.py`, which re-runs
 the clean-room linter on the *built* tree), publish it, and cut the GitHub
 Release. A tag push always publishes to the internal `sb-dist-dryrun` first;
 promoting a verified tag to the client-facing `sb-dist` is a separate,
-explicit `workflow_dispatch`. See `playbooks/plugin-distribution.md` and
-`CONTRIBUTING.md`'s "Cutting a release" for the full mechanics and the
+explicit `workflow_dispatch`. See `docs/distribution-channels.md` for what the
+two channels are and the contributor rule that makes the dryrun one worth
+having, `CONTRIBUTING.md`'s "Cutting a release" for the procedure, and
+`playbooks/plugin-distribution.md` for the client-side delivery paths and the
 owner-only setup (`sb-dist`, `DIST_PUSH_TOKEN`) it depends on.
 
 The vault's own marker is `plugin/template/structure-version` — a plain integer,

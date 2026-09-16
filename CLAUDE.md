@@ -102,3 +102,8 @@ Same three things CI runs. To exercise the plugin against a vault, instantiate
   notice — plugin behavior, a skill, the template, a migration. Internal
   changes stay out; git history is that record. Not CI-enforced.
 - Backlog model (labels, milestones, board): `docs/backlog.md`.
+- Merging to `main` publishes nothing. A tag push publishes to the **dryrun**
+  channel only (hardcoded — a tag can never reach clients); promoting to the
+  **client** channel is a separate manual dispatch. Which channel is at which
+  version is not inferable from `main` — read it. Contributors run their own
+  vault on dryrun: `docs/distribution-channels.md`.
