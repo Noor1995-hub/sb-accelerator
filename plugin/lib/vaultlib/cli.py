@@ -32,7 +32,7 @@ if __package__ in (None, ""):
     # the skills invoke it.
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from vaultlib import config, dailynote, dates, decision, entity, feedback, health, lastsync, m365, meeting, migrate, person, plaud, project, projectstate, provenance, runlog, scratch, schema, seenevents, syncjob, template, updatequeue, vault  # noqa: E402
+from vaultlib import config, dailynote, dates, decision, entity, feedback, fetcherrors, health, lastsync, m365, meeting, migrate, person, plaud, project, projectstate, provenance, runlog, scratch, schema, seenevents, syncjob, template, updatequeue, vault  # noqa: E402
 
 
 def _emit(payload: dict) -> None:
@@ -491,6 +491,21 @@ def build_parser() -> argparse.ArgumentParser:
              "recording — values only, never note bodies")
     _add_vault_argument(sync_routing)
 
+    sync_fetch_error = sync_sub.add_parser(
+        "fetch-error",
+        help="count a batch's fetch-error outcomes per recording id; parks "
+             "an id (writes the skip-list line) once it has failed on three "
+             "distinct UTC days, each within 14 days of the previous "
+             "failure — never on repeat attempts within one UTC day. Also "
+             "clears any tracked id the vault's own ledger now shows as "
+             "written.")
+    _add_vault_argument(sync_fetch_error)
+    sync_fetch_error.add_argument(
+        "--outcomes", required=True,
+        help="path to a JSON array of {id, reason} objects, or - for stdin")
+    sync_fetch_error.add_argument(
+        "--now", help="UTC ISO datetime override (tests); defaults to now")
+
     meetings = top.add_parser("meeting", help="meeting notes")
     meetings_sub = meetings.add_subparsers(dest="action", required=True)
     meeting_write = meetings_sub.add_parser(
@@ -871,6 +886,11 @@ def _dispatch(args: argparse.Namespace) -> int:
                                          now_utc))
         if args.action == "routing-signals":
             return _ok(syncjob.routing_signals(root))
+        if args.action == "fetch-error":
+            payload = (json.load(sys.stdin) if args.outcomes == "-"
+                       else json.loads(Path(args.outcomes).read_text(encoding="utf-8")))
+            return _ok(fetcherrors.record(
+                root, payload, fetcherrors.parse_now(args.now)))
     if args.group == "meeting":
         payload = (json.load(sys.stdin) if args.note == "-"
                    else json.loads(Path(args.note).read_text(encoding="utf-8")))
@@ -999,6 +1019,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         return _fail(str(exc), "Fix the named listing or outcome entry and retry.")
     except lastsync.LastSyncError as exc:
         return _fail(str(exc), "Fix --adapter or --utc-to and retry.")
+    except fetcherrors.FetchErrorsError as exc:
+        return _fail(str(exc), "Fix the named id or reason and retry.")
     except plaud.PlaudError as exc:
         return _fail(str(exc), "Check the raw MCP JSON files named in the error.")
     except m365.M365Error as exc:

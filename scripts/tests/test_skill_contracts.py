@@ -1756,3 +1756,117 @@ def test_evening_sync_routes_mechanics_to_sync_notes():
     text = read_skill("evening-sync")
     assert "sync_notes" in text
     assert "Watch is content only" in text or "**Watch** is content only" in text
+
+
+# ---------------------------------------------------------------------------
+# PR C: rule 10 (connector calls are never delegated to a subagent) and
+# CLI-enforced fetch-error parking.
+
+def test_sync_recordings_rules_block_states_connector_calls_are_never_delegated():
+    """Rule 10 is a first statement, not a restatement — grep general-purpose
+    under plugin/ was empty before this PR. The rules block must name every
+    connector tool the rule covers, plus the word 'subagent', and the whole
+    skill must never suggest a generic subagent as the way to make one."""
+    text = read_skill("sync-recordings")
+    rules_block = text.split("## The three adapters")[0]
+    for tool in ("get_current_user", "get_me", "list_files",
+                "outlook_calendar_search"):
+        assert tool in rules_block, (
+            f"rule 10 must name {tool!r} in the rules block")
+    assert "subagent" in rules_block.lower()
+    assert "general-purpose" not in text, (
+        "sync-recordings must never point at a generic subagent for a "
+        "connector call — the only subagents it dispatches are step 6's "
+        "worker and probe agent types"
+    )
+
+
+def test_sync_recordings_names_sync_fetch_error():
+    """The new CLI-enforced parking verb must be named in SKILL.md's step 6,
+    not just exist in cli.py — a skill that never calls it never parks
+    anything."""
+    text = read_skill("sync-recordings")
+    assert "sync fetch-error" in text
+    assert "fetch_errors_batch.json" in text
+
+
+def test_sync_recordings_rule6_states_the_cli_side_counting():
+    text = read_skill("sync-recordings")
+    rules_block = text.split("## The three adapters")[0]
+    assert "Errors are not recorded" in rules_block
+    assert "distinct UTC days" in rules_block
+
+
+def test_sync_recordings_summary_names_parked_after_fetch_errors():
+    text = read_skill("sync-recordings")
+    summary = text.split("## Sync Complete")[1].split("```")[0]
+    assert "**Parked after repeated fetch-errors:**" in summary
+    assert "sync unskip --id" in summary
+
+
+def test_sync_recordings_parked_fetch_error_undo_has_two_shapes_for_m365():
+    """Fix round 1, IMPORTANT-1: mirror PR A's two-shape undo rule — a
+    parked m365 id has two writes (the skip-list line and a seen-events
+    `skipped` entry), so `sync unskip` alone is not the whole story, same
+    as a worker-settled cross-adapter duplicate."""
+    text = read_skill("sync-recordings")
+    summary_block = re.sub(r"\s+", " ", text.split("## Sync Complete")[1].split("```")[0])
+    assert "sync m365-forget --event-id" in summary_block
+    idx = text.index("`Parked after repeated fetch-errors` reports")
+    gloss = re.sub(r"\s+", " ", text[idx: idx + 900])
+    assert "sync m365-forget --event-id" in gloss
+    assert "is a separate matter" not in gloss
+
+
+def test_sync_recordings_worker_and_probe_contracts_gain_the_recording_id_clause():
+    worker = read_ref("sync-recordings", "worker-contract.md")
+    probe = read_ref("sync-recordings", "probe-contract.md")
+    for ref in (worker, probe):
+        assert "recording-id: <ns:id>" in ref
+
+
+def test_sync_recordings_runlog_mentions_fetch_error_parking():
+    text = read_skill("sync-recordings")
+    unattended = text.split("## Unattended mode")[1]
+    assert "fetch-error parked" in unattended or \
+        "fetch-error" in unattended.split("runlog append")[1][:400]
+
+
+# ---------------------------------------------------------------------------
+# Final review of PR C: five minors.
+
+def test_sync_recordings_skipped_errors_line_excludes_parked():
+    """Item 2: 'will retry next run' must not silently include ids the same
+    run just parked — those never retry."""
+    text = read_skill("sync-recordings")
+    summary = text.split("## Sync Complete")[1].split("```")[0]
+    assert "**Skipped / errors:**" in summary
+    line = [l for l in summary.splitlines() if l.startswith("**Skipped / errors:**")][0]
+    assert "excluding any parked this run" in line
+
+
+def test_sync_recordings_fetch_error_never_attributed_to_inbox():
+    """Item 3: an inbox item has no fetch step at all (worker-contract.md's
+    own outcome row names only Plaud and M365), so SKILL.md must not claim
+    an inbox fetch-error line ever carries a recording-id clause."""
+    worker = read_ref("sync-recordings", "worker-contract.md")
+    row = [l for l in worker.splitlines() if l.startswith("| `fetch-error:")][0]
+    assert "Plaud" in row and "M365" in row
+    assert "inbox" not in row.lower()
+
+    text = read_skill("sync-recordings")
+    step6 = text.split("### 6.")[1]
+    assert "Plaud and inbox: always" not in step6
+    assert "Plaud or inbox" not in step6
+    assert "an inbox item has no fetch" in step6.lower() or \
+        "inbox recording never has one" in step6
+
+
+def test_sync_recordings_watermark_gloss_names_the_park():
+    """Item 4: the watermark section already explains a persistently
+    failing item keeps retrying regardless of the watermark — it must also
+    say that retrying stops once sync fetch-error parks it."""
+    text = read_skill("sync-recordings")
+    idx = text.index("A batch's `fetch-error` outcomes do not hold this back")
+    passage = re.sub(r"\s+", " ", text[idx: idx + 400])
+    assert "until `sync fetch-error` parks it on its third failing day" in passage

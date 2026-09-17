@@ -752,6 +752,148 @@ def test_sync_unskip_refuses_an_unknown_id_through_the_cli(capsys, tmp_path):
 
 
 # ---------------------------------------------------------------------------
+# sync fetch-error: PARK_AFTER distinct calendar days, never PARK_AFTER
+# attempts in one day.
+
+def _write_outcomes(tmp_path, entries) -> pathlib.Path:
+    path = tmp_path / "fetch_errors_batch.json"
+    path.write_text(json.dumps(entries), encoding="utf-8")
+    return path
+
+
+def test_sync_fetch_error_first_failure_does_not_park(capsys, tmp_path):
+    root = make_vault(tmp_path)
+    outcomes = _write_outcomes(
+        tmp_path, [{"id": "plaud:abc123", "reason": "transport error"}])
+    code, payload = run(capsys, [
+        "sync", "fetch-error", "--vault", str(root),
+        "--outcomes", str(outcomes), "--now", "2026-09-10T09:00:00",
+    ])
+    assert code == 0
+    assert payload["result"] == {
+        "recorded": ["plaud:abc123"], "parked": [], "cleared": [],
+        "already_parked": []}
+    assert syncjob.read_skip_list(root) == set()
+
+
+def test_sync_fetch_error_parks_on_the_third_distinct_day(capsys, tmp_path):
+    root = make_vault(tmp_path)
+    for day in ("2026-09-10T09:00:00", "2026-09-11T09:00:00",
+               "2026-09-12T09:00:00"):
+        outcomes = _write_outcomes(
+            tmp_path, [{"id": "plaud:abc123", "reason": "oversized transcript"}])
+        code, payload = run(capsys, [
+            "sync", "fetch-error", "--vault", str(root),
+            "--outcomes", str(outcomes), "--now", day,
+        ])
+    assert code == 0
+    assert payload["result"]["parked"] == [
+        {"id": "plaud:abc123", "reason": "oversized transcript"}]
+    assert syncjob.read_skip_records(root) == [{
+        "recording_id": "plaud:abc123",
+        "reason": "parked after 3 fetch-errors: oversized transcript",
+        "source_name": None,
+    }]
+
+
+def test_sync_fetch_error_three_calls_in_one_day_do_not_park(capsys, tmp_path):
+    root = make_vault(tmp_path)
+    for _ in range(3):
+        outcomes = _write_outcomes(
+            tmp_path, [{"id": "plaud:abc123", "reason": "transport error"}])
+        code, payload = run(capsys, [
+            "sync", "fetch-error", "--vault", str(root),
+            "--outcomes", str(outcomes), "--now", "2026-09-10T09:00:00",
+        ])
+    assert payload["result"]["parked"] == []
+    assert syncjob.read_skip_list(root) == set()
+
+
+def test_sync_fetch_error_bad_payload_is_a_structured_error(capsys, tmp_path):
+    root = make_vault(tmp_path)
+    outcomes = _write_outcomes(tmp_path, [{"id": "plaud:abc123"}])
+    code, payload = run(capsys, [
+        "sync", "fetch-error", "--vault", str(root), "--outcomes", str(outcomes),
+    ])
+    assert code == 1
+    assert payload["ok"] is False
+    assert "reason" in payload["error"]
+
+
+def test_sync_fetch_error_help_names_utc_days_not_the_constant():
+    """Final review item 1: user-visible --help text must not leak the
+    Python constant name PARK_AFTER; it should read in plain English. The
+    `help=` string registered on the fetch-error subparser is what `sync
+    --help` lists for it."""
+    import io
+    import contextlib
+    parser = cli.build_parser()
+    buf = io.StringIO()
+    with contextlib.suppress(SystemExit), contextlib.redirect_stdout(buf):
+        parser.parse_args(["sync", "--help"])
+    output = " ".join(buf.getvalue().split())
+    assert "PARK_AFTER" not in output
+    assert "three distinct UTC days" in output
+
+
+def test_sync_fetch_error_undo_is_the_existing_sync_unskip(capsys, tmp_path):
+    """Notes from PR A: sync unskip already exists and is the parked
+    recording's undo hint — this PR must not re-add it."""
+    root = make_vault(tmp_path)
+    for day in ("2026-09-10T09:00:00", "2026-09-11T09:00:00",
+               "2026-09-12T09:00:00"):
+        outcomes = _write_outcomes(
+            tmp_path, [{"id": "plaud:abc123", "reason": "oversized transcript"}])
+        run(capsys, [
+            "sync", "fetch-error", "--vault", str(root),
+            "--outcomes", str(outcomes), "--now", day,
+        ])
+    code, payload = run(capsys, [
+        "sync", "unskip", "--vault", str(root), "--id", "plaud:abc123",
+    ])
+    assert code == 0
+    assert syncjob.read_skip_list(root) == set()
+
+
+def test_sync_fetch_error_rejects_a_non_namespaced_id_immediately(capsys, tmp_path):
+    """Fix round 1, IMPORTANT-2: a bad id must fail on the first call, not
+    silently count for two days and then blow up inside syncjob.skip on the
+    third, aborting a batch that also carried well-formed entries."""
+    root = make_vault(tmp_path)
+    outcomes = _write_outcomes(
+        tmp_path, [{"id": "not-namespaced", "reason": "x"}])
+    code, payload = run(capsys, [
+        "sync", "fetch-error", "--vault", str(root), "--outcomes", str(outcomes),
+    ])
+    assert code == 1
+    assert payload["ok"] is False
+    assert "namespace" in payload["error"]
+
+
+def test_sync_fetch_error_does_not_retrack_an_already_parked_id(capsys, tmp_path):
+    """Fix round 1, MINOR-1: a stale fetch_errors_batch.json resubmitting a
+    just-parked id must not restart its counter at 1."""
+    root = make_vault(tmp_path)
+    for day in ("2026-09-10T09:00:00", "2026-09-11T09:00:00",
+               "2026-09-12T09:00:00"):
+        outcomes = _write_outcomes(
+            tmp_path, [{"id": "plaud:abc123", "reason": "oversized transcript"}])
+        run(capsys, [
+            "sync", "fetch-error", "--vault", str(root),
+            "--outcomes", str(outcomes), "--now", day,
+        ])
+    outcomes = _write_outcomes(
+        tmp_path, [{"id": "plaud:abc123", "reason": "oversized transcript"}])
+    code, payload = run(capsys, [
+        "sync", "fetch-error", "--vault", str(root),
+        "--outcomes", str(outcomes), "--now", "2026-09-12T20:00:00",
+    ])
+    assert code == 0
+    assert payload["result"]["already_parked"] == ["plaud:abc123"]
+    assert payload["result"]["recorded"] == []
+
+
+# ---------------------------------------------------------------------------
 # Fix wave 2, IMPORTANT: sync unskip alone leaves a worker-settled m365
 # duplicate's seen-events entry in place. sync unsettle-duplicate reverses
 # both writes sync settle-duplicate made.

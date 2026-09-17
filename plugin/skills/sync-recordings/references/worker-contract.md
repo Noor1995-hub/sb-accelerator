@@ -324,7 +324,7 @@ orchestrator's summary.
 | `no-transcript` | M365: `m365 ids` returned `skipped: no-transcript-url` (before any fetch), or the transcript read answered `transcripts_empty` |
 | `no-access` | M365: 403 on the transcript read, body carries Graph code 3003 / "does not have access to lookup meeting" — or the body is unreadable / carries no readable Graph error code at all (safer default); the transcript is not reachable from this account, either because the organizer's domain is missing from `adapters.m365.home_domains` (or the list is unset) or because the tenant's Microsoft Graph transcript-access setting is off; permanent |
 | `forbidden` | M365: a 403 on the transcript read whose body positively names a different cause — another tenant, permanent |
-| `fetch-error: <one clause why>` | transport failure, incomplete page set, oversized result — retries next run |
+| `fetch-error: <one clause why>` | transport failure, incomplete page set, oversized result — retries next run; append `(recording-id: <ns:id>)` whenever the id is known — Plaud: always, straight from your briefing; M365: only once your own `m365 ids` call has already succeeded, never before |
 | `auth-error` | connector wants re-authentication — the adapter should stop |
 | `already-synced: <recording_id>` | M365 only: `sync dedup` already reports your derived id `synced` — stop before the transcript read; no payload |
 | `skip-listed: <recording_id>` | M365 only: `sync dedup` already reports your derived id `skipped` — stop before the transcript read; no payload |

@@ -51,7 +51,10 @@ The JSON envelope and interpreter resolution are documented in the plugin's
 5. **`calendar-tool-unavailable` ≠ `no-calendar-match`.** Couldn't look vs
    looked and found nothing.
 6. **Errors are not recorded.** A failed recording writes nothing and
-   reappears next run. Never write a partial note to mark an attempt.
+   reappears next run. Never write a partial note to mark an attempt. The
+   CLI counts the failure on its own, outside the vault: a recording that
+   fails to fetch on three distinct UTC days is parked (`sync fetch-error`,
+   step 6) — never on three attempts within one UTC day.
 7. **Extraction and payload drafting happen only in subagents** — never
    inline, even for a single recording. Step 6 has the mechanics; the
    payload contract lives in `references/payload-contract.md`, which only
@@ -94,6 +97,19 @@ The JSON envelope and interpreter resolution are documented in the plugin's
    meeting's attendees — go in one invocation, separate lines, never
    `&&`-chained — a failed call must not swallow the envelopes behind it.
    Each still prints its own JSON envelope, in order; read `ok` on every one.
+10. **The four listing/identity connector calls are made by this
+    context, never delegated.** `get_current_user`, `get_me`, `list_files`,
+    `outlook_calendar_search`: call the tool yourself and write the raw
+    result to scratch with the Write tool. Never wrap one of these four in
+    a subagent of any type — a generic subagent re-reads the whole base
+    context to make one call, and its result still comes back through this
+    context to be written anyway. This does not cover a worker's or
+    probe's own `get_transcript`/`read_resource` calls — those legitimately
+    happen inside the subagent step 6 dispatches, which exists exactly for
+    that fetch. The subagents this skill dispatches are step 6's worker and
+    probe agent types, or — only on a harness where those plugin agent
+    types do not resolve — the documented generic-subagent fallback with
+    `model: sonnet` passed explicitly (step 6).
 
 ## The three adapters
 
@@ -867,7 +883,15 @@ When a probe batch returns, act on each line:
 - `fetch-error` / `auth-error` — handled exactly as for workers: a
   `fetch-error` banks no outcome line and retries next run; an `auth-error`
   stops dispatching that adapter's remaining probes (and workers) and
-  reports it, re-authentication belonging to the user.
+  reports it, re-authentication belonging to the user. When a `fetch-error`
+  line carries a `(recording-id: <ns:id>)` clause (only once this probe's
+  own `m365 ids` call has succeeded — see `probe-contract.md`), collect
+  `{"id": <ns:id>, "reason": <the clause>}` for this wave's fetch-error
+  batch below — `id` here is that clause's namespaced recording id (e.g.
+  `m365:<hex>`), never the triage entry's own event `id`. Keep this
+  occurrence's own `id`/`start_utc` (the ones triage gave it) held
+  separately, alongside the recording id, so you can still find them later
+  if this recording ends up parked — see below.
 
 **Bank the probe wave's own settled lines immediately, in their own call —
 never deferred to the worker-batch banking below.** A pass whose probes
@@ -887,6 +911,39 @@ python3 "$VAULTLIB" sync m365-record --vault "$VAULT" \
 
 Same per-batch banking doctrine as the worker batches below: crash loss is
 bounded to one probe wave, one cheap re-probe next run.
+
+If this wave collected any `{"id", "reason"}` pairs above, write them fresh
+to `$SCRATCH/fetch_errors_batch.json` — a file for **this wave only**, never
+appended to across calls (an id resubmitted from an earlier, already-parked
+call would otherwise look like a brand-new failure) — and bank them right
+after the call above:
+
+```bash
+python3 "$VAULTLIB" sync fetch-error --vault "$VAULT" \
+  --outcomes "$SCRATCH/fetch_errors_batch.json"
+```
+
+A result whose `parked` list names a recording id means that recording has
+now failed to fetch on three distinct UTC days: the CLI already wrote the
+skip-list line (reason `parked after N fetch-errors: <clause>`). For each
+parked id, using the `id`/`start_utc` you held aside for it above, write
+`{"id": <event id>, "start_utc": <start_utc>, "outcome": "skipped"}` to
+`$SCRATCH/m365_parked.json` and bank it the same way:
+
+```bash
+python3 "$VAULTLIB" sync m365-record --vault "$VAULT" \
+  --outcomes "$SCRATCH/m365_parked.json"
+```
+
+so `sync m365-triage` stops listing the occurrence at all — `record()` is a
+keyed upsert, so this occurrence may already have been banked `skipped` by
+the settled-lines call above; banking it again here is harmless, never a
+duplicate write. Count each parked id in the summary's **Parked after
+repeated fetch-errors** line, with `sync unskip --id <id>` as the undo —
+plus, since this is an m365 recording, `sync m365-forget --event-id <id>
+--start-utc <start_utc>` to also drop the seen-events entry just banked
+(`sync unskip` alone leaves it in place, same as a worker-settled
+cross-adapter duplicate).
 
 **Dispatch Plaud and inbox worker batches, then promoted M365 workers.**
 For each plaud or inbox recording that survived step 1, and each M365
@@ -1059,7 +1116,16 @@ and settles it as already synced.
   tenant's Microsoft Graph transcript-access setting is off — and
   `forbidden` only when the body positively names a different cause
   (another tenant).
-- `fetch-error` — no outcome line is banked; it retries next run.
+- `fetch-error` — no outcome line is banked; it retries next run. An inbox
+  item has no fetch, so this line only ever comes from a Plaud or M365
+  worker; when it carries a `(recording-id: <ns:id>)` clause — Plaud:
+  always, from the recording reference the worker was given; M365: only
+  once its own `m365 ids` call has succeeded — collect `{"id": <ns:id>,
+  "reason": <the clause>}` for this batch's fetch-error file below — `id`
+  here is that clause's namespaced recording id, never the triage entry's
+  own event `id`. For an M365 recording, keep this occurrence's own
+  `id`/`start_utc` (triage's own key) held aside too, alongside the
+  recording id, in case it ends up parked — see below.
 - `auth-error` — stop dispatching that adapter's remaining recordings and
   report it; re-authentication belongs to the user.
 - `possible-duplicate-of: <existing stem> (recording-id: <recording_id>,
@@ -1115,6 +1181,40 @@ The cache merges across calls; Plaud and inbox outcomes have no cache and
 feed only the summary. Banking per batch keeps the maximum crash loss to
 one batch — one cheap worker-side re-fetch next run.
 
+If this batch collected any `{"id", "reason"}` pairs above — Plaud or
+M365, an inbox recording never has one — write them fresh to
+`$SCRATCH/fetch_errors_batch.json` — a file for **this
+batch only**, never appended to across batches (an id resubmitted from an
+earlier, already-parked batch would otherwise look like a brand-new
+failure) — and bank them right after the call above:
+
+```bash
+python3 "$VAULTLIB" sync fetch-error --vault "$VAULT" \
+  --outcomes "$SCRATCH/fetch_errors_batch.json"
+```
+
+A result whose `parked` list names a recording id means that recording has
+now failed to fetch on three distinct UTC days: the CLI already wrote the
+skip-list line (reason `parked after N fetch-errors: <clause>`). For a
+parked **m365** id, using the `id`/`start_utc` you held aside for it above,
+write `{"id": <event id>, "start_utc": <start_utc>, "outcome": "skipped"}`
+to `$SCRATCH/m365_parked.json` and bank it the same way:
+
+```bash
+python3 "$VAULTLIB" sync m365-record --vault "$VAULT" \
+  --outcomes "$SCRATCH/m365_parked.json"
+```
+
+so `sync m365-triage` stops listing the occurrence — `record()` is a keyed
+upsert, so this occurrence may already carry a `skipped` outcome from the
+batch's own settled-lines call above; banking it again here is harmless,
+never a duplicate write. A parked plaud/inbox id has no seen-events entry
+to touch. Count each parked id in the summary's **Parked after repeated
+fetch-errors** line, with `sync unskip --id <id>` as the undo — plus, for
+an m365 id, `sync m365-forget --event-id <id> --start-utc <start_utc>` to
+also drop the seen-events entry just banked (`sync unskip` alone leaves it
+in place, same as a worker-settled cross-adapter duplicate).
+
 There is no separate pre-dispatch banking call any more, and no special
 case for "every candidate deduped away": dispatch happens for every triage
 survivor (the dispatch gate, above), so an already-synced occurrence still
@@ -1154,7 +1254,8 @@ adapter that was `REFUSED`, `unavailable`, or stopped mid-run on
 advancing the mark past that would hide what still needs listing next run.
 A batch's `fetch-error` outcomes do not hold this back — a persistently
 failing item (an oversized transcript, say) retries itself next run inside
-`dates window`'s own 2-day floor regardless of where the watermark sits.
+`dates window`'s own 2-day floor regardless of where the watermark sits,
+until `sync fetch-error` parks it on its third failing day.
 Everything after the window's `utc_to` was never listed this run, so
 stamping "now" instead would silently skip whatever synced late between the
 window and the stamp. The write is monotonic — an earlier `utc_to` than
@@ -1175,7 +1276,8 @@ Count what exists, not what you intended (a lab run once reported
 **Meetings you ticked as reviewed:** {N} now confirmed
 **Possible duplicates:** {N} ({list the stems}) — kept as separate notes; each landed on a meeting that already had a note (one you confirmed, or one written from another source this run), so nothing was overwritten; also includes any imprecise or weak-overlap collision warning appended to a worker's `written:` outcome line this run
 **Cross-adapter duplicates skipped:** {N} ({subject} → already synced as {stem}; undo: `sync unsettle-duplicate --id <id> --event-id <id> --start-utc <utc>` | `sync m365-forget --event-id <id> --start-utc <utc>`)
-**Skipped / errors:** {N} (will retry next run) · {N} tiny clips auto-skipped ({list each with its duration}) — permanent, not a retry
+**Skipped / errors:** {N} (will retry next run) (excluding any parked this run) · {N} tiny clips auto-skipped ({list each with its duration}) — permanent, not a retry
+**Parked after repeated fetch-errors:** {N} ({id} — {reason}; undo `sync unskip --id <id>`, and for an m365 id also `sync m365-forget --event-id <id> --start-utc <utc>`) | none
 **M365 fetches saved:** {N} of {N} listed occurrences answered from the seen-events cache or the home-domain filter ({N} held in the 6h recheck window) | cache cold (first run)
 **Workers dispatched:** {N} ({N} plaud · {N} promoted m365 · {N} inbox) — the m365 count is promoted workers only, never a first-look dispatch; m365 candidates not dispatched were answered by the cache ({N}), were a known cross-adapter duplicate ({N}), were external ({N}), or hadn't ended yet ({N}); worker outcomes: {N} written · {N} already-synced · {N} skip-listed · {N} no-transcript · {N} no-access · {N} forbidden · {N} fetch-error · {N} auth-error · {N} probes ({N} no-transcript · {N} transcript-found · {N} no-access · {N} forbidden · {N} fetch-error)
 **M365 first looks answered by a probe:** {N} — every `unseen`/`unkeyed` occurrence a probe classified this run instead of a full worker
@@ -1218,6 +1320,19 @@ Teams admin center). After the fix:
 Per event, list both a worker's and a probe's `no-access` reply by the
 meeting's subject and date in the in-session summary — that is calendar
 metadata already on screen, and it is never written to a note.
+
+`Parked after repeated fetch-errors` reports what `sync fetch-error`
+parked this run — a recording that has now failed to fetch on three
+distinct UTC days, never one that merely failed three times in one run. It
+appears once, in the run that parks it; a run where nothing new parks
+reports "none", even when the vault already has older parked recordings
+from a previous run. `sync unskip --id <id>` is the whole undo for a
+plaud/inbox recording. For an m365 recording it takes two commands, same
+shape as a worker-settled cross-adapter duplicate's undo below: `sync
+unskip --id <id>` removes the skip-list suppression, and `sync m365-forget
+--event-id <id> --start-utc <utc>` drops the seen-events entry banked
+alongside the park — `sync unskip` alone leaves that entry in place,
+permanently filtering the occurrence out of every future triage.
 
 `Cross-adapter duplicates skipped` counts occurrences settled two
 different ways, and each has its own undo shape — never assume one covers
@@ -1305,6 +1420,13 @@ rules, not negotiable:
 python3 "$VAULTLIB" runlog append --vault "$VAULT" --routine sync-recordings \
   --outcome "<one line: e.g. '3 processed, 1 parked, 0 pending' or 'nothing to do: inbox empty, no new recordings'>"
 ```
+
+   When this run's own `Parked after repeated fetch-errors` count is above
+   zero, name it in that line too, using the literal token
+   `fetch-error-parked: <id>` — never plain "parked", which already means
+   an inbox file parked by `sync park` in this same line — e.g. `'2
+   processed, fetch-error-parked: m365:a1b2c3d4, 0 pending'`. The evening
+   note has no other way to surface a recording that just stopped retrying.
 
    Write it whether the run succeeded, refused an adapter, or found nothing —
    it is the one place a human looks after the fact, in
