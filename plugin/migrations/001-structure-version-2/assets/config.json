@@ -13,7 +13,7 @@
     "signed-in account does not match its hint is refused before any content",
     "is listed. Binding a vault to an account is a conscious act: write the",
     "hint here, explicitly.",
-    "feedback.repo: the delaware-created sb-client-<slug> GitHub repo (owner/name) that /report-feedback files issues on; null until provisioning sets it.",
+    "feedback.repo: the delaware-created GitHub repo (owner/name) that /report-feedback files issues on; null until provisioning sets it.",
     "sync.start-date: the vault's horizon (ISO date), set to the provisioning",
     "date by /setup-my-brain and /provision-vault. No adapter ever lists,",
     "fetches, or writes a meeting dated before it — recurring calendar series",
