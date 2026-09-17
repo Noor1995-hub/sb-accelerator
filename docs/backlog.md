@@ -42,7 +42,7 @@ the previous one exits clean.
 | `Wave 1 — critical fixes` | Nothing silently wrong before re-testing: P0s, silent data loss, broken first instruction |
 | `Wave 2 — DryRun migration + E2E` | Migrate the internal DryRun vault via `/upgrade-vault` + full-loop rehearsal (#107), plus probe/test-infra fixes |
 | `Wave 3 — provisioning` | sb-dist + release pipeline, per-client provisioning, Session-1 playbooks |
-| `Wave 4 — field test` | Internal dry run with a delaware colleague + assistant as fake client (#9) |
+| `Wave 4 — field test` | Internal dry run with a delaware colleague as fake client (#9) |
 | `Unscheduled` | Default for new inflow until triage assigns a wave |
 
 ## How to add work

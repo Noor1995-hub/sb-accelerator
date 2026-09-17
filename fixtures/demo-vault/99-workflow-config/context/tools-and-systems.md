@@ -11,7 +11,6 @@ The systems around the vault. Read by capture and sync skills to know where info
 - Which recorder do you use for non-platform meetings?
 - Where do heavy files live (drive, sites)?
 - Which business systems matter for context (CRM, ERP, BI)?
-- What tooling does your assistant run daily?
 
 ## Content
 

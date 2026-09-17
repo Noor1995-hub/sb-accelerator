@@ -16,7 +16,7 @@ unattended.
 ## Audience
 
 **Consultant-run, at a tune-up, after `claude plugin update`.** This is not
-something to hand the vault owner or their EA to run alone — a migration can
+something to hand the vault owner to run alone — a migration can
 be lossy, and reading the plan and giving the explicit go-ahead is the
 consultant's job at that visit. Run it once right after the plugin update,
 before touching anything else that visit.
@@ -284,7 +284,7 @@ the visit that just ran the migration that created it.
 
 ## 7. Close out
 
-Recommend the vault owner (or EA) restart Obsidian once the visit's changes are
+Recommend the vault owner restart Obsidian once the visit's changes are
 in — a migration or a template refresh can rewrite the vault's ontology,
 config, `.base` views, `.obsidian` settings, or note bodies, and a running
 Obsidian instance may still be holding stale copies of files this run just
@@ -301,7 +301,7 @@ replaced.
 3. **Never attempt to restore a snapshot automatically.** Name it, then
    walk through the manual close-unzip-reopen sequence — restoring is
    always a human decision made with Obsidian closed.
-4. **Never run this against a vault the owner or EA is actively using.**
+4. **Never run this against a vault the owner is actively using.**
    This is a consultant-run, attended operation at a tune-up, not a
    background task.
 5. **Never run `template refresh --all-pending --consent` without reading

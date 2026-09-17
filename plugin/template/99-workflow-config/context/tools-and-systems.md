@@ -13,7 +13,6 @@ The systems around the vault, as narrative — what they are, who runs them, whe
 - Which recorder do you use for non-platform meetings?
 - Where do heavy files live (drive, sites)?
 - Which business systems matter for context (CRM, ERP, BI)?
-- What tooling does your assistant run daily?
 
 ## Content
 

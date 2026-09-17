@@ -18,11 +18,10 @@ Claude Code or Cowork already installed is enough — no repo checkout, no
 
 ## Audience
 
-**Consultant-run, at setup day, once per machine.** Never hand this to the
-vault owner or their EA — it writes into a location that does not exist
-yet, and step 4 touches a credential that must never appear in a chat
-transcript. Run the whole sequence on the vault owner's machine, then
-repeat steps 1–3 on the assistant's; step 4 is one-time, not per-machine.
+**Consultant-run, at setup day.** Never hand this to the vault owner — it
+writes into a location that does not exist yet, and step 4 touches a
+credential that must never appear in a chat transcript. Run the whole
+sequence once, on the vault owner's machine.
 
 ## Requirements
 
@@ -72,10 +71,7 @@ target. Clear it from the machine (not from the VM) before retrying.
 /provision-vault
 ```
 
-Ask for the vault target path and which machine this is (vault owner's or
-assistant's) before running step 1 — step 4 only ever happens once, and
-running it a second time on the second machine would mint a second, unused
-binding intent.
+Ask for the vault target path before running step 1.
 
 **Those two are the only opening questions.** Step 4's question — whether
 to bind the feedback channel now — is asked *after* step 1 reports
@@ -177,9 +173,9 @@ write. Since 0.10.29 step 1 refuses such a vault outright with `ok:
 false`, so this pairing should not occur; the rule stays because it is
 what tells a broken target apart from two coincidences.
 
-Never `git init` the vault. It has no git by design — Obsidian Sync's
-version history and the client's own backups cover recovery, and a `.git`
-directory inside a synced folder causes more problems than it solves.
+Never `git init` the vault. It has no git by design — the client's own
+backups cover recovery, and a `.git` directory inside a cloud-synced vault
+folder causes more problems than it solves.
 
 Then stamp the vault's horizon — today's date, the provisioning date:
 
@@ -295,20 +291,16 @@ python3 "$VAULTLIB" config write --vault "$VAULT" --field feedback.repo --value 
 
 Enumerate these out loud before ending the session, and point at
 `playbooks/provisioning-runbook.md` to finish the rest of setup day — this
-skill covers that runbook's §1–§3 and the config half of §6, not the whole
+skill covers that runbook's §1–§3 and the config half of §4, not the whole
 day:
 
 - **Obsidian's Restricted-Mode "trust author and enable plugins" click** —
-  no file can do this; it happens the first time the vault owner or
-  assistant opens the vault.
-- **Connecting Obsidian Sync and setting (then re-checking) the three sync
-  exclusions on each machine** — `95-private/`, `_heavy-assets/`,
-  `99-workflow-config/snapshots/` — runbook §4–5. Per-device settings, not
-  vault settings; this skill never touches them.
+  no file can do this; it happens the first time the vault owner opens the
+  vault.
 - **Minting or rotating the feedback repo's token** — a manual, out-of-band
   action, described above but never performed by this skill.
 - **Handover** — opening the vault to `Start here` for the vault owner and
-  recording the deployment in `registry.yaml` — runbook §7.
+  recording the deployment in `registry.yaml` — runbook §5.
 
 ## Hard rules
 
@@ -320,6 +312,6 @@ day:
    resolve with the client, not something to route around; a refused,
    unwritable target is a permissions question for the same conversation,
    never a reason for `sudo` or a location picked on your own.
-4. **Never run this against a vault the owner or assistant is actively
-   using.** Step 1's refusal on a non-empty target is a safety net, not
-   permission to retarget an in-use vault at will.
+4. **Never run this against a vault the owner is actively using.** Step 1's
+   refusal on a non-empty target is a safety net, not permission to
+   retarget an in-use vault at will.

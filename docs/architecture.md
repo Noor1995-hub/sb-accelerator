@@ -1,6 +1,5 @@
 # Architecture
 
-Authoritative product design: `superpowers/specs/2026-08-22-second-brain-accelerator-design.md`.
 This page is the short orientation.
 
 ## Repo topology
@@ -9,7 +8,7 @@ busdev (lab) —/propose-upstream→ issues here —/process-upstream→ PR here
 This repo is the source of truth. Releases publish to `sb-dist`
 (client-facing marketplace repo, created at design-doc step 8); clients'
 Claude org admins connect `sb-dist` as a native plugin marketplace, which
-syncs the plugin to exec + EA across Desktop, Cowork, and Claude Code.
+syncs the plugin to the vault owner across Desktop, Cowork, and Claude Code.
 Per-client feedback lands on `sb-client-<slug>` repos, never on shared repos.
 
 ## Update policy

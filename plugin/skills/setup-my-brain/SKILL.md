@@ -190,7 +190,7 @@ Five files, **in this fixed order** — each one gives the next its vocabulary:
 | 1 | `identity` | Who they are, in their own words |
 | 2 | `role-and-responsibilities` | What they own and are judged on |
 | 3 | `communication-style` | How drafts in their name should read |
-| 4 | `preferences-and-constraints` | Privacy, the EA's remit, confidentiality |
+| 4 | `preferences-and-constraints` | Privacy, disclosure boundaries, confidentiality |
 | 5 | `tools-and-systems` | Calendar, recorder, where the files live |
 
 **The questions live in the vault, not in this skill.** Each file carries its
@@ -711,8 +711,8 @@ valid vault.
 
 With no connectors at all the vault is complete and usable: the portfolio is
 filled, entities, projects and people exist, and files dropped into
-`10-inbox/` sync as meetings. Say which connectors the EA is expected to set
-up afterwards, and that re-running `/setup-my-brain` later picks the
+`10-inbox/` sync as meetings. Say which connectors still need to be set up
+afterwards, and that re-running `/setup-my-brain` later picks the
 connection step back up exactly where this session left it.
 
 ## Hard rules
