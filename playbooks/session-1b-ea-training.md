@@ -37,7 +37,7 @@ hand, not what she does instead of it.
 | `/update-entity <entity-slug>` | New context about an organisation surfaces — a person, a fact, a dynamic | The entity's dossier, in the matching section | The `changes` list; any new stakeholder carries `needs-review` on purpose — leave it for a human |
 | `/new-project` | A new engagement, initiative, or standing responsibility starts | `30-projects/<slug>/index.md` and an empty `decisions/` | Whether the dossier's Engagements table picked up the link |
 | `/health-check` | Weekly during hypercare, and before every tune-up | `99-workflow-config/health-reports/{date}.md` | The six numbers, read against last week's |
-| `/report-feedback` | Something broke, confused, or could be better | A GitHub issue on `sb-client-<slug>`, or a draft in `10-inbox/` if the channel isn't wired up | The `issue_url` it hands back, or that the draft actually landed |
+| `/report-feedback` | Something broke, confused, or could be better | A GitHub issue on this deployment's own feedback repo, or a draft in `10-inbox/` if the channel isn't wired up | The `issue_url` it hands back, or that the draft actually landed |
 | `/evening-sync` | The scheduled run didn't fire and tomorrow's note is missing | Tomorrow's (or today's, on a catch-up) daily note | The note opened and reads right; a run-log line in `routine-runs.log` |
 
 None of these need a shell command memorised — they are slash commands, run
