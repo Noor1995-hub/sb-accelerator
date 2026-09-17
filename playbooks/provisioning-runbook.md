@@ -165,7 +165,7 @@ One-time setup, done once the token is ready.
    if it already exists), seeds its `README.md` and
    `.github/ISSUE_TEMPLATE/feedback.md`, ensures the `feedback` /
    `health-report` / `triage:*` labels, and writes the `registry.yaml` entry
-   for you — see step 7. `/report-feedback` and `/health-check` only ever
+   for you — see step 5. `/report-feedback` and `/health-check` only ever
    open issues on this repo; feedback never lands on a repo shared across
    clients. Pass `--register-only` instead if the repo already exists and
    only the registry entry is missing (never run the script without
@@ -224,7 +224,7 @@ One-time setup, done once the token is ready.
    though: nothing else restarts the expiry clock, and a `token_minted` left
    at last year's date is how a channel goes quietly dead. Same command as
    step 2 above. Add `--owner`, `--care-package`, `--delivery-path` or
-   `--dist-channel` to the same run if any of those changed — see step 7.
+   `--dist-channel` to the same run if any of those changed — see step 5.
 6. Vault snapshots (`99-workflow-config/snapshots/`) are full-vault zips, so
    they include the token file too — treat a snapshot copied off the machine
    as carrying a live credential, and rotate the token if one ever leaves the

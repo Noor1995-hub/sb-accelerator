@@ -35,7 +35,7 @@ questions, and browses.
 | `95-private/` | Vault owner's private notes — never read by any skill |
 | `99-workflow-config/` | Context portfolio, object model reference, lessons log |
 | `claude/` | Vault-local Claude Code home — `.claude` symlinks here so skills stay visible in Obsidian |
-| `_heavy-assets/` | Generated binaries (.pptx/.xlsx/.pdf/…) — excluded from sync |
+| `_heavy-assets/` | Generated binaries (.pptx/.xlsx/.pdf/…) |
 
 ## Object Model
 

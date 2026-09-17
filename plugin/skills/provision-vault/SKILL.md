@@ -73,9 +73,9 @@ target. Clear it from the machine (not from the VM) before retrying.
 
 Ask for the vault target path before running step 1.
 
-**Those two are the only opening questions.** Step 4's question — whether
+**That is the only opening question.** Step 4's question — whether
 to bind the feedback channel now — is asked *after* step 1 reports
-`ok: true`, never batched with them. The reason is ordering, not
+`ok: true`, never batched with it. The reason is ordering, not
 tidiness: step 4 asks whether the token file has been placed inside
 `99-workflow-config/secrets/`, and until step 1 runs, that folder does not
 exist, so the only honest answer to a question asked up front is "skip".
