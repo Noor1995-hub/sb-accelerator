@@ -18,17 +18,15 @@ Platform requirements verified against Anthropic's documentation on
 - [ ] **A named Claude administrator** who can connect a plugin marketplace
       and set installation preferences. Without one, delivery falls back to
       each user installing by hand.
-- [ ] Seats for the vault owner **and** the assistant. The assistant runs the
-      operational surface; an owner-only seat means owner-as-operator.
-- [ ] **Cloud sessions disabled for the deployment's users at org level, or
-      both users keep the cloud toggle off.** v1 runs local only, because the
-      vault is a local folder — a Cowork cloud session ("Run new tasks in the
-      cloud") cannot see it.
+- [ ] **Cloud sessions disabled for the vault owner at org level, or the
+      vault owner keeps the cloud toggle off.** v1 runs local only, because
+      the vault is a local folder — a Cowork cloud session ("Run new tasks
+      in the cloud") cannot see it.
 
 ## 2. Device capability — qualifying
 
 Cowork runs its shell and any code inside a **dedicated Linux VM** (Apple
-Virtualization.framework on macOS, Hyper-V on Windows). Both machines need to
+Virtualization.framework on macOS, Hyper-V on Windows). The machine needs to
 be able to run that VM.
 
 - [ ] **macOS:** macOS 11 or later.
@@ -54,17 +52,13 @@ Windows edition: Anthropic's docs do not state whether Home is excluded.
 so Home is *probably* fine — but verify on the client's actual image rather
 than reasoning about it.
 
-## 3. Vault and sync
+## 3. Vault
 
 The setup-day steps themselves live in `provisioning-runbook.md`. These are
 the questions to settle before you get that far.
 
 - [ ] Device/MDM policy permits **Obsidian** and **Claude Desktop**.
-- [ ] Obsidian Sync account available (or an agreed alternative), signed in
-      on both machines.
-- [ ] Sync exclusions agreed: `95-private/` and `_heavy-assets/`. Applying
-      them is per-machine, not per-vault — runbook §4–5.
-- [ ] The `.claude → claude` symlink **can** be created on both machines. On
+- [ ] The `.claude → claude` symlink **can** be created on the machine. On
       Windows this needs `mklink /D` from an elevated shell or Developer
       Mode; if that is off the table the vault still works on a degraded
       path — runbook §3.
@@ -77,16 +71,15 @@ the questions to settle before you get that far.
       setting their console flags as a security risk, and it would not help
       (GitHub's release-asset host is blocked even with it on). The by-hand
       install remains the fallback if the script itself fails — runbook §2.
-- [ ] Vault folder connected in Cowork on both machines. Confirm Cowork
-      picks up the vault's `CLAUDE.md` as folder instructions — it does so by
-      default, and it should appear in Cowork's context panel as
-      "Instructions · CLAUDE.md".
-- [ ] **Vault folder created before the Cowork session is started**, on each
-      machine. Cowork's VM mounts the connected folder at session boot, so a
-      folder created mid-session is invisible to the shell even after you
-      pick it — provisioning cannot write there until the session is
-      restarted. Order matters: create the empty folder, *then* start the
-      session — runbook §0.
+- [ ] Vault folder connected in Cowork. Confirm Cowork picks up the vault's
+      `CLAUDE.md` as folder instructions — it does so by default, and it
+      should appear in Cowork's context panel as "Instructions · CLAUDE.md".
+- [ ] **Vault folder created before the Cowork session is started.**
+      Cowork's VM mounts the connected folder at session boot, so a folder
+      created mid-session is invisible to the shell even after you pick it
+      — provisioning cannot write there until the session is restarted.
+      Order matters: create the empty folder, *then* start the session —
+      runbook §0.
 
 ## 4. Plugin delivery
 
@@ -124,9 +117,6 @@ the questions to settle before you get that far.
 
 ## 6. People and trust boundary
 
-- [ ] **Assistant scope conversation held.** The assistant sees everything
-      outside `95-private/`. Name what that includes out loud, with the vault
-      owner, before any content lands.
 - [ ] Data-flow one-pager signed off by whoever owns information security.
 - [ ] Confirm the client org's conversation retention setting with their
       Claude admin (Anthropic default is 6 years for Cowork session
@@ -144,7 +134,6 @@ When an item above fails, the honest fallback rather than a silent downgrade:
 | No Cowork (VDI, no admin rights) | No operational surface. Claude Code on a permitted machine, or decline the engagement. |
 | No Team/Enterprise | No org-managed plugin. Per-user install by hand; drift is now your problem. |
 | No client GitHub access | ZIP upload path; quarterly updates become a manual handover. |
-| No assistant seat | Owner-as-operator. Materially worse; say so before selling it. |
 | No recording consent | Capture narrows to Teams transcripts, forwarded mail, and typed input. |
 | No Obsidian permitted | Vault still works through Cowork and Chat; the browse tier is gone. |
-| Cloud sessions cannot be disabled org-wide | Agree the toggle-off norm with both users instead; a cloud session that opens the vault anyway sees a missing-path error, not silent corruption. |
+| Cloud sessions cannot be disabled org-wide | Agree the toggle-off norm with the vault owner instead; a cloud session that opens the vault anyway sees a missing-path error, not silent corruption. |

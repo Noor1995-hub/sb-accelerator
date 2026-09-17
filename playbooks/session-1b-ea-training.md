@@ -1,5 +1,17 @@
 # Session 1b — EA operator training
 
+> [!warning] Deprecated — not part of the current delivery flow
+> The product was originally designed around two human operators sharing one
+> vault: the executive (vault owner) and a second-operator executive
+> assistant (EA), kept in sync via Obsidian Sync. That model has been
+> removed as too complex — the product now ships for one vault owner only,
+> and there is no EA role or Obsidian Sync step to train anyone on.
+> This file is kept, unedited, as reference in case a second-operator role
+> is ever reintroduced, rather than deleted and rebuilt from scratch. Do not
+> run this session, and do not treat anything below as current. See
+> `session-1-interview-script.md` and `session-2-habits.md` for the
+> current, single-operator delivery flow.
+
 delaware-side material; never ships. A **2-hour** hands-on session with the
 assistant, run once Session 1 has seeded the vault. Session 1 is the
 executive's interview; this is the EA's cockpit briefing — the day-to-day

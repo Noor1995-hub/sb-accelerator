@@ -1,8 +1,8 @@
 # Session 2 — habits
 
-delaware-side material; never ships. A **1-hour joint session**, one week
-after Session 1 — the executive and the EA together. Session 1 filled the
-vault; this session is about whether the two of them have started actually
+delaware-side material; never ships. A **1-hour session**, one week
+after Session 1, with the vault owner. Session 1 filled the
+vault; this session is about whether they have started actually
 using it, and it is the only planned touchpoint before hypercare properly
 starts.
 
@@ -32,7 +32,7 @@ one that fixes the one that's stuck.
 
 ## Read the first week's numbers together
 
-Run `/health-check` live, with both of them watching, and read the numbers
+Run `/health-check` live, with the vault owner watching, and read the numbers
 out loud — the same content-free counts `hypercare-guide.md` explains how
 to interpret. This is the first real evidence of whether the three moves
 above are landing: a coverage number that's already thin, or meetings still
@@ -55,8 +55,7 @@ Close by agreeing, out loud, two things that carry the next three weeks:
 
 - **The hypercare cadence** — weekly `/health-check` through weeks 2–4,
   per `hypercare-guide.md`.
-- **The EA's weekly rhythm** — when in her week she runs it, and what she
-  does with what it shows (share with delaware on consent, or just read it
-  herself). Session 1b already gave her the mechanics; this is where the
-  schedule for actually using them gets said out loud with the executive
-  present, so it isn't a private assumption on either side.
+- **The vault owner's weekly rhythm** — when in their week they run it, and
+  what they do with what it shows (share with delaware on consent, or just
+  read it themselves), said out loud now rather than left a private
+  assumption.
