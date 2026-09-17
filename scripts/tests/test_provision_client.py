@@ -15,6 +15,7 @@ import yaml
 import provision_client
 from provision_client import (
     DEFAULT_ORG,
+    AudienceError,
     DuplicateClientError,
     GhCommandError,
     MissingOwnerError,
@@ -143,8 +144,8 @@ def test_provision_appends_new_client_with_exact_key_set(tmp_path):
     entry = registry["clients"][0]
     assert set(entry.keys()) == {
         "client", "owner", "plugin_version", "structure_version", "archetype",
-        "care_package", "delivery_path", "feedback_repo", "dist_channel",
-        "provisioned", "token_minted", "notes",
+        "care_package", "audience", "delivery_path", "feedback_repo",
+        "dist_channel", "provisioned", "token_minted", "notes",
     }
     assert entry["client"] == "acme"
     assert entry["owner"] == "MB"
@@ -277,6 +278,106 @@ def test_update_can_still_move_a_deployment_to_another_org(tmp_path):
     provision(update_opts(org="NEW-CORP"), RecordingRunner(), registry_path, LATER)
 
     assert only_client(registry_path)["feedback_repo"] == "NEW-CORP/sb-client-acme"
+
+
+def test_internal_audience_takes_the_sb_internal_route(tmp_path):
+    """Two routes, one per audience. `dist_channel` deliberately does not
+    decide this: a colleague dogfooding real releases is internal *and* on
+    the client channel."""
+    registry_path = make_registry(tmp_path)
+
+    provision(base_opts(slug="xander", audience="internal",
+                        dist_channel="client"),
+              RecordingRunner(), registry_path, TODAY)
+
+    entry = only_client(registry_path)
+    assert entry["audience"] == "internal"
+    assert entry["feedback_repo"] == f"{DEFAULT_ORG}/sb-internal-xander"
+    assert entry["dist_channel"] == "client"
+
+
+def test_client_is_the_default_audience(tmp_path):
+    registry_path = make_registry(tmp_path)
+    provision(ProvisionOptions(slug="acme", owner="MB", register_only=True),
+              RecordingRunner(), registry_path, TODAY)
+
+    entry = only_client(registry_path)
+    assert entry["audience"] == "client"
+    assert entry["feedback_repo"] == f"{DEFAULT_ORG}/sb-client-acme"
+
+
+def test_update_keeps_the_registered_repo_name(tmp_path):
+    """The bug this guards: `feedback_repo` was rebuilt from the slug on every
+    --update, so an internal deployment on `sb-internal-<slug>` had its channel
+    silently repointed at a repo that does not exist — while --help promised
+    every unnamed field keeps its registered value. A registered name is a fact
+    about a repo that exists; the route only derives it the first time."""
+    registry_path = make_registry(tmp_path)
+    provision(base_opts(slug="xander", audience="internal"),
+              RecordingRunner(), registry_path, TODAY)
+
+    provision(update_opts(slug="xander"), RecordingRunner(),
+              registry_path, LATER)
+
+    assert only_client(registry_path)["feedback_repo"] ==         f"{DEFAULT_ORG}/sb-internal-xander"
+
+
+def test_switching_audience_on_an_update_leaves_the_existing_repo_alone(tmp_path):
+    """A registered deployment already has a repo with issues in it. Changing
+    the route records the new audience but must not silently repoint the
+    channel at a repo nobody created — renaming a live channel is a deliberate
+    act, not a side effect of a flag."""
+    registry_path = make_registry(tmp_path)
+    provision(base_opts(), RecordingRunner(), registry_path, TODAY)
+
+    provision(update_opts(audience="internal"), RecordingRunner(),
+              registry_path, LATER)
+
+    entry = only_client(registry_path)
+    assert entry["audience"] == "internal"
+    assert entry["feedback_repo"] == f"{DEFAULT_ORG}/sb-client-acme"
+
+
+def test_moving_orgs_keeps_the_registered_repo_name(tmp_path):
+    """`--org` moves the owner, not the repo name: the two halves of
+    `<org>/<repo>` are independent, and only the one you name changes."""
+    registry_path = make_registry(tmp_path)
+    provision(base_opts(audience="internal"), RecordingRunner(), registry_path, TODAY)
+
+    provision(update_opts(org="NEW-CORP"), RecordingRunner(), registry_path, LATER)
+
+    assert only_client(registry_path)["feedback_repo"] == "NEW-CORP/sb-internal-acme"
+
+
+def test_an_internal_repo_name_reaches_every_human_facing_string(tmp_path):
+    """The recipe tells a human which repo to scope the token to, and the
+    seeded README names the repo it lives in. Both used to spell
+    `sb-client-<slug>` regardless of where the issues actually go."""
+    registry_path = make_registry(tmp_path)
+    runner = RecordingRunner()
+
+    result = provision(base_opts(slug="xander", audience="internal",
+                                 register_only=False),
+                       runner, registry_path, TODAY)
+
+    assert "Only select repositories -> sb-internal-xander" in result["recipe"]
+    assert "sb-client-xander" not in result["recipe"]
+    seeded = " ".join(str(c.get("input") or "") + " ".join(c["args"])
+                      for c in runner.calls)
+    assert "sb-client-xander" not in seeded
+
+
+def test_an_unknown_audience_on_a_registered_row_raises(tmp_path):
+    """Only reachable by hand-editing registry.yaml — argparse rejects the
+    rest. Better a named error than a KeyError deep in the derivation."""
+    registry_path = make_registry(tmp_path)
+    registry = load_registry(registry_path)
+    registry["clients"].append({"client": "acme", "owner": "MB",
+                                "audience": "partner"})
+    save_registry(registry_path, registry)
+
+    with pytest.raises(AudienceError):
+        provision(update_opts(), RecordingRunner(), registry_path, LATER)
 
 
 def test_update_of_a_row_with_no_feedback_repo_falls_back_to_the_default_org(tmp_path):

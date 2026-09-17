@@ -121,8 +121,9 @@ the questions to settle before you get that far.
 - [ ] Confirm the client org's conversation retention setting with their
       Claude admin (Anthropic default is 6 years for Cowork session
       transcripts) and record it in the data-flow one-pager.
-- [ ] Feedback repo `sb-client-<slug>` created; client can raise issues into
-      it via `/report-feedback`.
+- [ ] Feedback repo created (`sb-client-<slug>`, or `sb-internal-<slug>` for
+      an internal deployment); the vault owner can raise issues into it via
+      `/report-feedback`.
 - [ ] Deployment registered in `registry.yaml`.
 
 ## Degradation ladder

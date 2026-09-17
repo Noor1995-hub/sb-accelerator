@@ -161,7 +161,7 @@ One-time setup, done once the token is ready.
      --delivery-path <A..E> --dist-channel client
    ```
 
-   It creates the delaware-owned `sb-client-<slug>` GitHub repo (or reuses it
+   It creates the delaware-owned feedback repo (or reuses it
    if it already exists), seeds its `README.md` and
    `.github/ISSUE_TEMPLATE/feedback.md`, ensures the `feedback` /
    `health-report` / `triage:*` labels, and writes the `registry.yaml` entry
@@ -170,7 +170,13 @@ One-time setup, done once the token is ready.
    clients. Pass `--register-only` instead if the repo already exists and
    only the registry entry is missing (never run the script without
    `--register-only` or `--dry-run` unless you mean to create or modify a
-   real GitHub repo).
+   real GitHub repo). For a delaware colleague rather than a
+   client, pass `--audience internal`: the repo is then
+   `sb-internal-<slug>` instead of `sb-client-<slug>`, and the README, the
+   repo description and the token recipe all name it. That is a separate
+   question from `--dist-channel`, which says whether the vault is fed
+   dryrun builds or real releases. The name is derived once here and then
+   kept as written, so a later `--update` never moves it.
 2. Follow the recipe the script prints, verbatim: mint a token scoped
    **fine-grained**, **`issues: read` + `issues: write` on that repo
    only** — **no `contents` scope**. This is the leak blast-radius control:
@@ -199,7 +205,7 @@ One-time setup, done once the token is ready.
 
    ```bash
    python3 "${CLAUDE_PLUGIN_ROOT}/lib/vaultlib/cli.py" config write --vault <vault> \
-     --field feedback.repo --value <org>/sb-client-<slug>
+     --field feedback.repo --value <org>/sb-client-<slug>   # sb-internal-<slug> when audience: internal
    ```
 
    The script's recipe prints this same command, already filled in — run it

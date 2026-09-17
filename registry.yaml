@@ -13,9 +13,19 @@
 #     structure_version: <template structure-version deployed>
 #     archetype: commercial-leader
 #     care_package: active | lapsed | none
+#     audience: client | internal        (who the vault owner is: a client, or
+#                                         a delaware colleague. This alone names
+#                                         the feedback repo, see below)
 #     delivery_path: A | B | C | D | E   (playbooks/plugin-distribution.md path)
-#     feedback_repo: <org>/sb-client-<client-slug>
-#     dist_channel: client | dryrun
+#     feedback_repo: <org>/sb-client-<slug> for audience: client,
+#                    <org>/sb-internal-<slug> for audience: internal. Derived
+#                    once, at registration, then kept as written: a registered
+#                    name is a fact about a repo that exists. Renaming a live
+#                    channel is a deliberate act, never a side effect.
+#     dist_channel: client | dryrun      (which release channel feeds the vault.
+#                                         Independent of audience: a colleague
+#                                         dogfooding real releases is
+#                                         audience: internal, dist_channel: client)
 #     provisioned: <ISO date>            (the day this deployment was stood
 #                                         up — written once, never moves)
 #     token_minted: <ISO date>           (the day the feedback token was last
@@ -32,35 +42,38 @@ clients:
   structure_version: '3'
   archetype: commercial-leader
   care_package: active
+  audience: internal
   delivery_path: E
   feedback_repo: DLW-INT-BTA-BELUX/sb-client-dryrun
   dist_channel: dryrun
   provisioned: '2026-09-03'
   token_minted: '2026-09-03'
-  notes: internal DryRunVault
+  notes: internal DryRunVault; feedback repo predates the sb-internal-<slug> route
+    and keeps its name
 - client: la-lorraine
   owner: MB
   plugin_version: 0.10.32
   structure_version: '2'
   archetype: commercial-leader
   care_package: none
+  audience: client
   delivery_path: A
   feedback_repo: DLW-INT-BTA-BELUX/sb-client-la-lorraine
   dist_channel: client
   provisioned: '2026-09-03'
   token_minted: '2026-09-03'
   notes: exco pilot; vault owner (exec) to be recorded at Session 1
-- client: internal-xander
+- client: xander
   owner: XV
   plugin_version: 0.11.1
   structure_version: '3'
   archetype: commercial-leader
   care_package: none
+  audience: internal
   delivery_path: E
   feedback_repo: DLW-INT-BTA-BELUX/sb-internal-xander
-  dist_channel: dryrun
+  dist_channel: client
   provisioned: '2026-09-12'
   token_minted: '2026-09-12'
   notes: internal self-test deployment by the maintainer; delivered as a manual ZIP
-    upload; feedback repo name predates the sb-client-<slug> convention this script
-    derives, so never re-provision this slug without --register-only
+    upload
