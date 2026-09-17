@@ -1,6 +1,6 @@
 ---
 name: health-check
-description: Run the vault's content-free hypercare health check — meeting cadence, review backlog, daily-note coverage, staleness — and optionally share the numbers with delaware. Triggers when the user invokes /health-check, or the EA wants a weekly hypercare pulse or a pre-tune-up read.
+description: Run the vault's content-free hypercare health check — meeting cadence, review backlog, daily-note coverage, staleness — and optionally share the numbers with delaware. Triggers when the user invokes /health-check, or the vault owner wants a weekly hypercare pulse or a pre-tune-up read.
 user_invocable: true
 origin: net-new
 ---
@@ -164,13 +164,13 @@ disclosure to:
 ```
 
 Say exactly that: the report could not be sent automatically, and it has
-been saved to the inbox for the EA or consultant to relay once the channel
+been saved to the inbox for the consultant to relay once the channel
 is configured (`feedback.repo` and the token under
 `99-workflow-config/secrets/`). The health report itself already exists at
 `99-workflow-config/health-reports/{generated}.md` regardless of whether
 sharing happened — running this skill is never wasted even offline.
 
-## For the EA
+## Cadence
 
 Run this weekly during hypercare (weeks 2–4), and again before each
 tune-up — that cadence is what turns "is anything drifting" from a guess

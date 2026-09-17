@@ -2,7 +2,7 @@
 
 Auto-created from a display name. The body stays empty on purpose: person
 notes are curated through People.base, and an invented body would be noise
-the assistant has to clear.
+the vault owner has to clear.
 """
 from __future__ import annotations
 

@@ -159,7 +159,7 @@ own EMU tenant, so this did not arise; for a client org it does. Options:
 add their admin as a read-only outside collaborator on `sb-dist`, or give the
 client their own private mirror we push releases into. Decide at provisioning
 and record it in `registry.yaml`. Do not assume the client has usable GitHub
-access at all — many owner/EA environments do not.
+access at all — many client environments do not.
 
 **On the per-client read token** the design spec describes: that model works
 on path B below, where `credentialKind: credentialHelper` can supply a
@@ -316,7 +316,7 @@ Two admin switches matter, and both are survivable:
 - **`isLocalDevMcpEnabled: false`** stops users adding local MCP servers.
   Relevant once the recorder sync needs one: it would have to come through
   the plugin's own `.mcp.json` or through admin-provisioned
-  `managedMcpServers`, not by asking the EA to add it.
+  `managedMcpServers`, not by asking the vault owner to add it.
 
 End users cannot add remote MCP servers themselves under any configuration.
 Plan connectors as plugin-bundled or admin-provisioned from the start.

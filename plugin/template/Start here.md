@@ -53,7 +53,7 @@ Ask in plain language — you don't need to remember commands. Each one below ha
 > [!info] Nothing leaves this vault unless you say so
 > Two commands can talk to delaware, and only these two: `/report-feedback` and `/health-check`. Between them they carry version numbers, which skill was involved, what went wrong, and counts — never a name, never a line of your notes — and never without your yes on the exact text they would send. `95-private` is read by nothing at all.
 
-Your assistant has one more: **`/health-check`** — a numbers-only pulse on the vault, no names and no content in it. Worth running weekly in the first month; it will offer to send the numbers to delaware, and take no for an answer.
+`/health-check` is worth running weekly in the first month — a numbers-only pulse on the vault, no names and no content in it. It will offer to send the numbers to delaware, and take no for an answer.
 
 ## Where things live
 

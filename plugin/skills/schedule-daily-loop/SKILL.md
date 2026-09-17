@@ -11,10 +11,10 @@ origin: net-new
 its own, every working evening, instead of whenever someone remembers.
 
 Run at the end of Session 1 (`/setup-my-brain` phase 4b invokes it), and again
-whenever the answer changes: a new laptop, a different working rhythm, an
-assistant taking the run over, or a routine that turns out to fire at a bad
-hour. It is safe to run as often as you like — it updates the task it already
-made rather than stacking a second one.
+whenever the answer changes: a new laptop, a different working rhythm, or a
+routine that turns out to fire at a bad hour. It is safe to run as often as
+you like — it updates the task it already made rather than stacking a second
+one.
 
 ## Requirements
 
@@ -83,9 +83,8 @@ The task ids this skill owns are:
 | Morning recordings sync (optional) | `second-brain-morning-sync-<owner-slug>` |
 
 The slug is in the id because task ids are global to the machine while a vault
-is not: an assistant who supports two people, or a consultant's own laptop,
-would otherwise have the second vault silently overwrite the first one's
-routine.
+is not: a consultant's own laptop provisioning two clients would otherwise
+have the second vault silently overwrite the first one's routine.
 
 If a task with that id already exists, **read its `path`** and show the user
 what is set today — the time, and when it next runs — before asking anything.
@@ -213,7 +212,7 @@ Say the two consequences plainly:
   read or write. There is no version of this that runs while the laptop is
   closed. That is a real product limit today, not a setup step anyone
   forgot.
-- If the routine is meant to run on a **different machine** — an assistant's,
+- If the routine is meant to run on a **different machine** — a new laptop,
   typically — it has to be created there, from a session that can see this
   vault. Creating it here schedules it here.
 

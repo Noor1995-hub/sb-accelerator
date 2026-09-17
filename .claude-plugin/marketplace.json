@@ -7,7 +7,7 @@
     {
       "name": "second-brain",
       "source": "./plugin",
-      "description": "Second Brain Accelerator — a personal AI operating system for a client executive and their EA, the vault owner and their assistant. Internal development marketplace; client deployments install from the released distribution repo."
+      "description": "Second Brain Accelerator — a personal AI operating system for a client executive, the vault owner. Internal development marketplace; client deployments install from the released distribution repo."
     }
   ]
 }

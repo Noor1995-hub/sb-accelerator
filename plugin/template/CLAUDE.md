@@ -2,18 +2,17 @@
 
 ## What This Vault Is
 
-An Obsidian-based second brain for one vault owner, operated jointly with
-their assistant. The assistant runs capture and processing (transcripts,
-voice memos, dossiers, briefs); the vault owner consumes briefs, asks
-questions, and browses. Claude is the working interface to everything in
-here.
+An Obsidian-based second brain for one vault owner. Claude runs capture and
+processing (transcripts, voice memos, dossiers, briefs) and is the working
+interface to everything in here; the vault owner consumes briefs, asks
+questions, and browses.
 
 ## Golden Rules
 
 1. **Understand before acting** — when context is missing, ask; don't fill
    gaps with guesses. Exception: trivial fixes.
 2. **Human in the loop** — nothing generated here goes to external parties
-   without the vault owner's or assistant's explicit review.
+   without the vault owner's explicit review.
 3. **Be epistemically honest** — state what you know, what you infer, and
    what you guess. Never present a guess as a fact.
 4. **Build on what exists** — check for existing notes, dossiers, and prior
@@ -33,10 +32,10 @@ here.
 | `70-resources/` | Guides, source material, attachments |
 | `80-thoughts-ideas/` | Idea seeds and drafts |
 | `90-archive/` | Completed and historical items |
-| `95-private/` | Vault owner's private notes — excluded from sync, invisible to the assistant |
+| `95-private/` | Vault owner's private notes — never read by any skill |
 | `99-workflow-config/` | Context portfolio, object model reference, lessons log |
 | `claude/` | Vault-local Claude Code home — `.claude` symlinks here so skills stay visible in Obsidian |
-| `_heavy-assets/` | Generated binaries (.pptx/.xlsx/.pdf/…) — excluded from sync |
+| `_heavy-assets/` | Generated binaries (.pptx/.xlsx/.pdf/…) |
 
 ## Object Model
 
@@ -112,7 +111,7 @@ machine credentials, owned by the CLI.
 
 ## Self-Improvement Loop
 
-After any correction or pushback from the vault owner or assistant:
+After any correction or pushback from the vault owner:
 
 1. **Log it** — append the pattern to
    `99-workflow-config/reference/lessons.md` with date, what went wrong, and

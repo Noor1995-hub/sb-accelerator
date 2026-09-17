@@ -36,8 +36,8 @@ def _load_project(root: Path, slug: str) -> Optional[dict]:
 def _compose_slug(entity: str, name: str) -> str:
     """Entity-prefixed slug: `{entity}-{name-slug}`.
 
-    The slug is the triage typing surface — an EA typing `colr` in a meeting's
-    `projects[]` must land on Colruyt's project — and the join namespace is one
+    The slug is the triage typing surface — the vault owner typing `colr` in a
+    meeting's `projects[]` must land on Colruyt's project — and the join namespace is one
     flat folder, so two clients' "AI Transformation" projects must not collide.
     The entity prefix buys both. The name itself stays entity-free (the
     Projects base shows `entity` as its own column); only the slug carries it.

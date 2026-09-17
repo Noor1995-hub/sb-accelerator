@@ -1,7 +1,7 @@
 # Changelog
 
 **Client-visible change only** — what the plugin, a skill, the vault template, or a migration
-does differently for the vault owner and their EA. Internal work (CI, validators, fixtures, delaware-side
+does differently for the vault owner. Internal work (CI, validators, fixtures, delaware-side
 docs and tooling, repo plumbing) is deliberately absent: git history and the PR list already are
 that record, in more detail and without drift.
 
@@ -14,6 +14,8 @@ Entries accumulate under `Unreleased`. At release, that block becomes a
 delivers them.
 
 ## Unreleased
+
+- The vault's own `CLAUDE.md`, `Start here`, and skill prose no longer describe a second human operator (an EA) sharing the vault over Obsidian Sync — the product is single-operator only, for the vault owner. If a deployment already trained a second operator on the old model, say so at the next tune-up; nothing about how the vault itself behaves changes for them today. (#212)
 
 ## v0.11.3 — 2026-09-16
 

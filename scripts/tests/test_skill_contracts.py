@@ -216,7 +216,7 @@ def test_setup_my_brain_writes_machine_decisions_through_config():
     assert "config verify-account --vault \"$VAULT\" --adapter m365" in text
 
 
-# #58 (F5, F6): a summary line is read by the vault owner and the EA, so it may not
+# #58 (F5, F6): a summary line is read by the vault owner, so it may not
 # quote a frontmatter value, a result key, or a retired status at them. The
 # retired-status check covers the whole file, not just the summary block.
 RETIRED_OR_OPAQUE = (

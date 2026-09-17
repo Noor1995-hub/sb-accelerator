@@ -1,6 +1,6 @@
 # Provisioning runbook
 
-Setup day, on the client's machines. delaware-side material; never ships.
+Setup day, on the client's machine. delaware-side material; never ships.
 
 Work through `pre-flight-checklist.md` first — every item there is either
 qualifying or a precondition for a step below. This runbook assumes it came
@@ -12,11 +12,9 @@ vault template and the provisioning scripts ship inside the plugin itself
 machine where the plugin cache is unavailable or you are recovering from a
 broken install.
 
-Do the whole sequence on the vault owner's machine, then repeat §0 and steps
-1–5 on the assistant's. There is no shortcut: Obsidian Sync moves the vault's *content*
-between machines, not its plugin binaries or its symlink. Steps 6–7 happen
-once, after both machines are provisioned. Step 8 is not a step at all — it is
-what Session 1 does about scheduling, and what you should know before it does.
+Do the whole sequence once, on the vault owner's machine. Steps 4–5 happen
+once provisioning is done. Step 6 is not a step at all — it is what Session
+1 does about scheduling, and what you should know before it does.
 
 ## 0. Create the vault folder *before* you start the Cowork session
 
@@ -64,9 +62,9 @@ skipped the dotfile and opened with none of the layout or tables and no
 obvious reason why; this is now checked by the tool that does the copy,
 not by a human remembering to look.
 
-Never initialise git in the vault. It has no git by design; Obsidian Sync's
-version history and the client's own backups cover recovery, and a `.git`
-directory inside a synced folder causes more problems than it solves.
+Never initialise git in the vault. It has no git by design; the client's
+own backups cover recovery, and a `.git` directory inside a cloud-synced
+vault folder causes more problems than it solves.
 
 **Note for the data-flow one-pager:** once `/setup-my-brain` binds the vault
 owner's accounts, `99-workflow-config/config.json` holds their connector identifier
@@ -148,39 +146,13 @@ Developer Mode enabled — Windows restricts symlink creation otherwise.
 The symlink is not a checked-in file on purpose: symlinks do not survive naive
 copies, and they do not survive Windows checkouts without symlink privileges.
 
-If it cannot be created on a given machine, point Claude Code at the `claude/`
+If it cannot be created on this machine, point Claude Code at the `claude/`
 directory directly. The vault still works; only the dot-path convenience is
-lost. Say so out loud rather than leaving it as a silent difference between the
-vault owner's machine and the assistant's.
+lost.
 
-## 4. Set the Obsidian Sync exclusions
+## 4. Create the feedback channel
 
-Exclude three paths from sync:
-
-| Path | Why |
-|---|---|
-| `95-private/` | The owner-private folder. The assistant must never see it, and sync is how it would leak. |
-| `_heavy-assets/` | Generated binaries. Excluded for size, not secrecy. |
-| `99-workflow-config/snapshots/` | The full-vault zips `/upgrade-vault` takes before each migration run. Excluded for size and because a snapshot is only ever needed for restore on the machine that made it — there is nothing for the second machine to gain from carrying it. |
-
-All three are account/device-level Obsidian Sync settings, configured on
-each machine at provisioning — none of this ships as files, and
-`plugin/template/.obsidian` carries no sync configuration to skip that step.
-
-## 5. Connect Obsidian Sync, then verify the exclusions again
-
-Sign in and connect Sync on this machine.
-
-Then re-check all three exclusions **on this machine specifically**. Sync
-exclusions are a per-device setting, not a vault setting — setting them on the
-vault owner's machine does nothing for the assistant's. Getting this wrong on the
-second machine is how `95-private/` ends up shared, and nothing in the vault
-will tell you it happened.
-
-## 6. Create the feedback channel
-
-One-time, not per-machine: the token file lands inside the vault and reaches
-the assistant's machine the same way everything else does, over Sync.
+One-time setup, done once the token is ready.
 
 1. From an accelerator repo checkout, run the script:
 
@@ -193,7 +165,7 @@ the assistant's machine the same way everything else does, over Sync.
    if it already exists), seeds its `README.md` and
    `.github/ISSUE_TEMPLATE/feedback.md`, ensures the `feedback` /
    `health-report` / `triage:*` labels, and writes the `registry.yaml` entry
-   for you — see step 7. `/report-feedback` and `/health-check` only ever
+   for you — see step 5. `/report-feedback` and `/health-check` only ever
    open issues on this repo; feedback never lands on a repo shared across
    clients. Pass `--register-only` instead if the repo already exists and
    only the registry entry is missing (never run the script without
@@ -252,19 +224,19 @@ the assistant's machine the same way everything else does, over Sync.
    though: nothing else restarts the expiry clock, and a `token_minted` left
    at last year's date is how a channel goes quietly dead. Same command as
    step 2 above. Add `--owner`, `--care-package`, `--delivery-path` or
-   `--dist-channel` to the same run if any of those changed — see step 7.
+   `--dist-channel` to the same run if any of those changed — see step 5.
 6. Vault snapshots (`99-workflow-config/snapshots/`) are full-vault zips, so
    they include the token file too — treat a snapshot copied off the machine
    as carrying a live credential, and rotate the token if one ever leaves the
    machine.
 
-## 7. Hand over
+## 5. Hand over
 
 Open the vault and leave the vault owner on **`Start here`** — their own
 orientation note, written for them. Do not walk them through this runbook;
 none of it is theirs.
 
-`registry.yaml` is already written — step 6 ran `scripts/provision_client.py`,
+`registry.yaml` is already written — step 4 ran `scripts/provision_client.py`,
 which wrote the entry as part of creating the feedback channel. Nothing left
 to do here except double-check it landed: `git diff registry.yaml` (or
 `git status`, if this checkout tracks it) should show one new entry for this
@@ -282,12 +254,12 @@ that is otherwise unchanged needs no flags at all:
 python scripts/provision_client.py <slug> --update --register-only
 ```
 
-Both dates survive that (see step 6 for which is which), and you don't have
+Both dates survive that (see step 4 for which is which), and you don't have
 to restate `--owner` or any field you aren't changing. Run it from a
 checkout at the version you actually shipped — that is where the two version
 numbers are read from.
 
-## 8. The standing evening run — know what Session 1 will do
+## 6. The standing evening run — know what Session 1 will do
 
 Provisioning does not schedule anything. **Session 1 does**, at its close:
 `/setup-my-brain` phase 4b invokes `/schedule-daily-loop`, which asks the vault
@@ -295,11 +267,10 @@ owner what time they want tomorrow prepared and creates a Claude scheduled task 
 that machine. Nothing here needs doing on setup day — but four things about
 it are yours to know before you are asked, because you will be:
 
-1. **It runs where it was created.** The task is machine-local. If the evening
-   run is meant to happen on the assistant's machine rather than the vault
-   owner's, it has to be created there, from a session that can see the vault
-   — Session 1 scheduling it on the vault owner's laptop does not put it on
-   the EA's.
+1. **It runs where it was created.** The task is machine-local. If the vault
+   owner later moves to a new laptop, the evening run has to be created
+   there too, from a session that can see the vault — scheduling it once
+   does not follow the vault to a different machine.
 2. **The machine has to be awake with Claude open.** A task due while the app
    is closed fires at next launch instead. `/evening-sync` recovers on its own
    (the recap window widens and the note says so), but there is no version of
@@ -328,5 +299,5 @@ it are yours to know before you are asked, because you will be:
 
 If the scheduler is unavailable on the client's machine, `/schedule-daily-loop`
 hands the job over in writing instead — what, where, who, by when. Make sure
-the "who" is you or the EA by name before you leave, and put it in the
-registry note for the deployment.
+the "who" is named before you leave, and put it in the registry note for
+the deployment.

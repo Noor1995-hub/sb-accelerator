@@ -214,7 +214,7 @@ def test_update_never_moves_the_provisioned_date(tmp_path):
 def test_update_keeps_fields_not_given_on_the_command_line(tmp_path):
     registry_path = make_registry(tmp_path)
     provision(base_opts(owner="AB", delivery_path="A", dist_channel="dryrun",
-                        archetype="ea", care_package="lapsed", notes="exco pilot"),
+                        archetype="trial", care_package="lapsed", notes="exco pilot"),
               RecordingRunner(), registry_path, TODAY)
 
     provision(update_opts(), RecordingRunner(), registry_path, LATER)
@@ -223,7 +223,7 @@ def test_update_keeps_fields_not_given_on_the_command_line(tmp_path):
     assert entry["owner"] == "AB"
     assert entry["delivery_path"] == "A"
     assert entry["dist_channel"] == "dryrun"
-    assert entry["archetype"] == "ea"
+    assert entry["archetype"] == "trial"
     assert entry["care_package"] == "lapsed"
     assert entry["notes"] == "exco pilot"
 

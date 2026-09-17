@@ -6,14 +6,12 @@ Pitfalls prior agent sessions hit: `docs/superpowers/lessons.md`.
 ## What this project is
 
 The product monorepo for the **Second Brain Accelerator**: a personal AI
-operating system for a client executive and their EA — the vault owner and
-their assistant — deployed by delaware consultants inside AI transformation
-engagements and maintained as a versioned product — a Claude Code plugin
-(`plugin/`), a vault template (`plugin/template/`), and structure migrations
-(`plugin/migrations/`), plus the delaware-side playbooks (`playbooks/`) that
-never ship.
+operating system for a client executive — the vault owner — deployed by
+delaware consultants inside AI transformation engagements and maintained as
+a versioned product — a Claude Code plugin (`plugin/`), a vault template
+(`plugin/template/`), and structure migrations (`plugin/migrations/`), plus
+the delaware-side playbooks (`playbooks/`) that never ship.
 
-Authoritative design: `docs/superpowers/specs/2026-08-22-second-brain-accelerator-design.md`.
 Bootstrap rationale and conventions provenance (modeled on bta-agents-portal):
 `docs/superpowers/specs/2026-08-22-sb-accelerator-bootstrap-brief.md`.
 

@@ -40,9 +40,7 @@ Budget the whole session at **two hours**, live, vault open on screen.
 The consultant drives the keyboard. The executive watches the screen and
 answers; they never type the interview themselves — the skill is built as a
 live conversation with a human doing the writing, not a form to hand across
-the table. An EA is welcome to sit in, but this session is the executive's;
-do not let the EA answer for them, even when the EA clearly knows the answer.
-Session 1b is where the EA gets the keyboard.
+the table.
 
 ## The arc
 
@@ -112,8 +110,7 @@ their summary.
 
 - **Won't share something.** Say that anything they would rather keep out of
   the shared vault belongs in `95-private/` — the owner-private folder that
-  is excluded from Obsidian Sync on every machine, so its contents never
-  leave theirs. A real boundary, not a polite one.
+  is never read by any skill. A real boundary, not a polite one.
 - **Won't have their mail read.** The decline path is fine and it is
   recorded as such — file 3's block stands as drafted from the interview,
   and the skill needs no further commentary from you. Do not push back on a
