@@ -15,7 +15,7 @@ delivers them.
 
 ## Unreleased
 
-- The vault's own `CLAUDE.md`, `Start here`, and skill prose no longer describe a second human operator (an EA) sharing the vault over Obsidian Sync — the product is single-operator only, for the vault owner. If a deployment already trained a second operator on the old model, say so at the next tune-up; nothing about how the vault itself behaves changes for them today.
+- The vault's own `CLAUDE.md`, `Start here`, and skill prose no longer describe a second human operator (an EA) sharing the vault over Obsidian Sync — the product is single-operator only, for the vault owner. If a deployment already trained a second operator on the old model, say so at the next tune-up; nothing about how the vault itself behaves changes for them today. (#212)
 
 ## v0.11.3 — 2026-09-16
 
