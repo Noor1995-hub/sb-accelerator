@@ -189,7 +189,7 @@ the assistant's machine the same way everything else does, over Sync.
      --delivery-path <A..E> --dist-channel client
    ```
 
-   It creates the delaware-owned `sb-client-<slug>` GitHub repo (or reuses it
+   It creates the delaware-owned feedback repo (or reuses it
    if it already exists), seeds its `README.md` and
    `.github/ISSUE_TEMPLATE/feedback.md`, ensures the `feedback` /
    `health-report` / `triage:*` labels, and writes the `registry.yaml` entry
@@ -233,7 +233,7 @@ the assistant's machine the same way everything else does, over Sync.
 
    ```bash
    python3 "${CLAUDE_PLUGIN_ROOT}/lib/vaultlib/cli.py" config write --vault <vault> \
-     --field feedback.repo --value <org>/sb-client-<slug>
+     --field feedback.repo --value <org>/sb-client-<slug>   # sb-internal-<slug> when audience: internal
    ```
 
    The script's recipe prints this same command, already filled in — run it

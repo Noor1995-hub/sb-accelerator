@@ -10,7 +10,8 @@ This repo is the source of truth. Releases publish to `sb-dist`
 (client-facing marketplace repo, created at design-doc step 8); clients'
 Claude org admins connect `sb-dist` as a native plugin marketplace, which
 syncs the plugin to exec + EA across Desktop, Cowork, and Claude Code.
-Per-client feedback lands on `sb-client-<slug>` repos, never on shared repos.
+Feedback lands on one repo per deployment (`sb-client-<slug>`, or
+`sb-internal-<slug>` for an internal one), never on shared repos.
 
 ## Update policy
 
