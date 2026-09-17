@@ -51,8 +51,14 @@ event and derive your own ids before you touch a transcript:
    `RequestBroker--ParseUri` means the URI was rebuilt somewhere upstream
    rather than copied (issue #205), so reply
    `fetch-error: event uri rejected by Graph (ParseUri — rebuilt upstream?)`
-   and let a human see it, instead of trying other spellings. Write the raw
-   result to `$SCRATCH/m365_event_<n>.json` verbatim.
+   and let a human see it, instead of trying other spellings. Write the
+   result to `$SCRATCH/m365_event_<n>.json`, restricted to these top-level
+   keys, values verbatim: `id`, `subject`, `start`, `end`,
+   `meetingTranscriptUrl`, `organizer`, `attendees` (each `name`,
+   `address`, `type`) — drop everything else (`body`, `bodyPreview`,
+   `location`, `locations`, `recurrence`, `onlineMeeting`, `webLink`,
+   `@odata.*`, …). Copying a kept value is still verbatim — the rule is
+   which keys you keep, not how you transcribe them.
 2. Write the one-element array `$SCRATCH/m365_event_<n>.ids-in.json`
    (the event you just fetched) and derive its dedup id — with your
    timezone, so the entry also carries `recorded_local` and
@@ -140,22 +146,29 @@ Sanctioned Graph calls: exactly two — your own event, your own transcript.
 You make no other Graph call — not the calendar, not another occurrence.
 
 **Pre-fetched event variant.** Some briefings name an already-fetched event
-file plus its already-derived `recording_id` and a verbatim
-`transcript_url` instead of a URI to fetch — skip only step 1, the Graph
-fetch. Still run step 2's `m365 ids --events <the briefing's event file>
---timezone <timezone from your prompt>` yourself, locally: it is a CLI
-call, not a Graph call, so it costs nothing against the single-call
-ceiling below, and it is the only way you get `recorded_local` and
-`event_duration_min` for your own collision check (the briefing did not
-derive those — only `recording_id` and `transcript_url`). Cross-check the
-`ids` result's `recording_id` and `transcript_url` against the ones your
-briefing already named: any disagreement means the pre-fetch and this
-worker are looking at two different events, so reply
+in two forms — the **object** file (for Reassemble and Attendees below)
+and its one-element **array** wrapping (for the `ids` call right here) —
+plus its already-derived `recording_id` and a verbatim `transcript_url`,
+instead of a URI to fetch — skip only step 1, the Graph fetch. Still run
+step 2's
+`m365 ids --events <the briefing's events-*array* file> --timezone
+<timezone from your prompt>` yourself, locally, against the **array**
+file specifically: `m365 ids` refuses anything that is not a JSON array,
+so the bare object file raises, not derives. It is a CLI call, not a
+Graph call, so it costs nothing against the single-call ceiling below,
+and it is the only way you get `recorded_local` and `event_duration_min`
+for your own collision check (the briefing did not derive those — only
+`recording_id` and `transcript_url`). Cross-check the `ids` result's
+`recording_id` and `transcript_url` against the ones your briefing
+already named: any disagreement means the pre-fetch and this worker are
+looking at two different events, so reply
 `fetch-error: pre-fetched ids disagree` and stop — do not guess which one
-is right. Agreement confirmed, continue at step 3 (dedup) as before. You
-make only the one Graph call step 4 makes (the transcript) — the event
-was never yours to fetch on this path; everything else, including that
-single-Graph-call ceiling, stands as written.
+is right. Agreement confirmed, continue at step 3 (dedup) as before,
+using the **object** file (never the array) for Reassemble and
+Attendees. You make only the one Graph call step 4 makes (the
+transcript) — the event was never yours to fetch on this path;
+everything else, including that single-Graph-call ceiling, stands as
+written.
 
 ## Attendees and confidence (M365 only)
 

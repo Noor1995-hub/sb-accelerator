@@ -401,6 +401,29 @@ def test_sync_probe_m365_agent_frontmatter():
     )
 
 
+# PR B fix round 1, IMPORTANT-1: the agent definition still framed the probe
+# as recheck-only ("Recheck probe for one M365 occurrence"; "previously
+# settled no-transcript on a provisional basis"), contradicting
+# probe-contract.md's own probe-first framing — every M365 first look is
+# probed now, not just a recheck.
+def test_sync_probe_m365_agent_is_framed_as_first_look_capable():
+    agents_dir = SKILLS_DIR.parent / "agents"
+    probe = (agents_dir / "sync-probe-m365.md").read_text(encoding="utf-8")
+    description = probe.split("---")[1]
+    body = re.sub(r"\s+", " ", probe.split("---", 2)[2])
+    assert "previously settled" not in body.lower(), (
+        "the agent must not frame every dispatch as a recheck of an "
+        "already-settled no-transcript occurrence"
+    )
+    assert "recheck probe" not in description.lower(), (
+        "the description must not call this a recheck-only probe"
+    )
+    assert "first look" in body.lower(), (
+        "the body must say the probe also covers a first look, not just a "
+        "recheck"
+    )
+
+
 def test_sync_probe_m365_contract_exists_and_covers_outcomes():
     ref = read_ref("sync-recordings", "probe-contract.md")
     assert "still-no-transcript" in ref
@@ -415,6 +438,33 @@ def test_sync_probe_m365_contract_exists_and_covers_outcomes():
     assert "Fetching" in ref and "M365" in ref, (
         "the probe contract must point at the worker contract's M365 fetch "
         "section, not just name the file")
+
+
+# PR B final-review fix, MINOR: a malformed event (non-UTC end, missing
+# start.dateTime, another required key absent) makes `m365 ids` itself
+# raise — that is not a transcript-existence classification the probe can
+# make, so it must be a named fetch-error, not silently swallowed or
+# misclassified as still-no-transcript.
+def test_sync_probe_m365_contract_names_an_ids_refusal_as_fetch_error():
+    ref = read_ref("sync-recordings", "probe-contract.md")
+    flat = re.sub(r"\s+", " ", ref)
+    ids_idx = flat.index("m365 ids --events")
+    ids_clause = flat[ids_idx: ids_idx + 500]
+    assert "fetch-error" in ids_clause, (
+        "an m365 ids refusal must be named next to the ids call itself, "
+        "not left implicit"
+    )
+    assert "non-UTC" in ids_clause or "end.timeZone" in ids_clause, (
+        "the non-UTC end.timeZone refusal case must be named"
+    )
+    assert "start.dateTime" in ids_clause, (
+        "the missing start.dateTime refusal case must be named"
+    )
+    outcomes_section = ref.split("## The outcome line")[1]
+    assert "m365 ids" in outcomes_section, (
+        "the outcome table's fetch-error row must also cover an ids "
+        "refusal, not just transport failures"
+    )
 
 
 def test_sync_probe_m365_contract_never_extracts_or_touches_the_cache():
@@ -1019,6 +1069,17 @@ def test_sync_recordings_worker_contract_pre_fetched_variant_runs_ids_locally():
         "must state the local m365 ids call does not count against the "
         "single-Graph-call-per-step ceiling"
     )
+    assert "events-*array* file" in flat or "array file" in flat.lower(), (
+        "the ids call must be paired explicitly with the events-array "
+        "file, never the bare event object — m365 ids refuses anything "
+        "that is not a JSON array"
+    )
+    ids_idx = flat.index("m365 ids")
+    ids_clause = flat[ids_idx: ids_idx + 120]
+    assert "array" in ids_clause.lower(), (
+        "the m365 ids invocation itself must be immediately qualified as "
+        "using the array file"
+    )
 
 
 def test_sync_recordings_worker_contract_written_appends_meeting_write_warnings():
@@ -1363,9 +1424,11 @@ def test_sync_recordings_reports_deferred_future_meetings():
 def test_sync_recordings_extends_verbatim_rule_to_event_json():
     rules = read_skill("sync-recordings").split("## The three adapters")[0]
     flat = re.sub(r"\s+", " ", rules)
-    assert "full-event JSON" in flat, (
+    assert "event's kept keys" in flat, (
         "rule 8 must cover event reads — a live run re-typed events from "
-        "memory and garbled transcript URLs and ids before self-correcting")
+        "memory and garbled transcript URLs and ids before self-correcting. "
+        "Events are trimmed to specific keys now, so the obligation is no "
+        "longer phrased as 'full-event JSON'")
 
 
 # Task 4.2: the triage split that routes a recheck-no-transcript survivor to
@@ -1383,6 +1446,43 @@ def test_sync_recordings_triage_splits_fetch_by_reason_for_probes():
     assert "probe dispatch" in flat.lower(), (
         "a recheck-no-transcript survivor must be named as routed to the "
         "probe dispatch list, not the ordinary routing extract"
+    )
+
+
+# PR B (probe-first): #173's parked blocker is met (external-organizer
+# filter from #124 already exists), and the field measurement it asked for
+# found 5 of 8 M365 dispatches in one run ending without a transcript.
+# Every M365 first look becomes a Haiku probe now, not just a recheck.
+def test_sync_recordings_every_fetch_reason_is_probed():
+    text = read_skill("sync-recordings")
+    step1 = text.split("### 1.")[1].split("### 2.")[0]
+    flat = re.sub(r"\s+", " ", step1)
+    assert "ordinary worker in step 6" not in flat, (
+        "an unseen/unkeyed entry must no longer be described as getting a "
+        "worker directly — it goes onto the probe dispatch list first, "
+        "same as a recheck"
+    )
+    split_idx = flat.index("probe dispatch list")
+    clause = flat[max(0, split_idx - 400):split_idx]
+    for reason in ("unseen", "unkeyed", "recheck-no-transcript"):
+        assert reason in clause, (
+            f"the probe dispatch list must be described as holding every "
+            f"fetch reason, missing {reason}"
+        )
+
+
+def test_sync_recordings_no_unseen_worker_dispatch():
+    text = read_skill("sync-recordings")
+    workflow = text.split("## The three adapters")[1].split("### 7.")[0]
+    flat = re.sub(r"\s+", " ", workflow)
+    assert "no m365 worker is ever dispatched" in flat.lower(), (
+        "the dispatch gate must state plainly that no M365 worker is ever "
+        "dispatched except through a probe's promotion"
+    )
+    assert "a worker is dispatched only for the ones a probe promotes" in (
+        flat.lower()), (
+        "M365 worker dispatch must be conditioned on probe promotion, "
+        "never on triage survival alone"
     )
 
 
@@ -1437,6 +1537,165 @@ def test_sync_recordings_probe_outcomes_are_handled():
         "the brief requires this to read as 'route it like any fetch "
         "survivor', not as a special case"
     )
+    assert "recording_id" in found_clause and "transcript_url" in found_clause, (
+        "the promotion briefing must carry both recording_id and "
+        "transcript_url — the promoted worker's pre-fetched cross-check "
+        "(m365 ids run locally against the probe's event file) needs both "
+        "to detect a mismatch"
+    )
+
+
+# PR B fix round 1, IMPORTANT-2: SKILL.md's promotion briefing wrongly told
+# the orchestrator the promoted worker's OWN scratch stem was m365_probe_<n>
+# — contradicting worker-contract.md, which names m365_event_<n>.ids-in.json
+# / .dedup.json / .transcript.json literally, and scopes the probe's stem to
+# the event *file* it hands the worker, never the worker's own stem.
+def test_sync_recordings_promoted_worker_keeps_its_own_scratch_stem():
+    text = read_skill("sync-recordings")
+    step6 = text.split("### 6.")[1].split("### 7.")[0]
+    flat = re.sub(r"\s+", " ", step6)
+    assert "m365_probe_<n>.event.json" in flat, (
+        "the promotion briefing must name the probe's event file path "
+        "explicitly"
+    )
+    assert "m365_event_<n>" in flat, (
+        "the promoted worker's own scratch stem must still be named as "
+        "m365_event_<n>, never the probe's"
+    )
+    assert "the scratch stem is the probe's own" not in flat.lower(), (
+        "the worker's scratch stem must never be described as the "
+        "probe's — only the event file it reads is the probe's"
+    )
+    assert "never `m365_event_<n>`" not in flat.lower(), (
+        "must not claim the worker's stem is anything other than "
+        "m365_event_<n>"
+    )
+
+
+# PR B final-review fix, CRITICAL: `m365 ids` refuses anything but a JSON
+# array, but the promotion briefing only ever named the probe's event
+# *object* file (m365_probe_<n>.event.json) — the array the probe also
+# wrote (m365_probe_<n>.events.json, per probe-contract.md step 2) never
+# reached the worker. Both paths must be named, and it must be clear which
+# call each feeds.
+def test_sync_recordings_promotion_briefing_names_both_probe_event_paths():
+    text = read_skill("sync-recordings")
+    step6 = text.split("### 6.")[1].split("### 7.")[0]
+    flat = re.sub(r"\s+", " ", step6)
+    assert "m365_probe_<n>.event.json" in flat, (
+        "the object file (for reassemble/attendees) must be named"
+    )
+    assert "m365_probe_<n>.events.json" in flat, (
+        "the one-element array file (for the worker's own m365 ids call) "
+        "must also be named — m365 ids refuses a bare object"
+    )
+    events_idx = flat.index("m365_probe_<n>.events.json")
+    events_clause = flat[max(0, events_idx - 50): events_idx + 250]
+    assert "ids" in events_clause, (
+        "the array file must be described next to the ids call it feeds, "
+        "not left for the reader to guess which file goes where"
+    )
+    event_idx = flat.index("m365_probe_<n>.event.json")
+    event_clause = flat[max(0, event_idx - 100): event_idx + 250]
+    assert "reassemble" in event_clause or "attendee" in event_clause, (
+        "the object file must be described next to what it feeds "
+        "(reassemble / attendee reading), distinct from the array file"
+    )
+
+
+# PR B fix round 2 (resolving the tension flagged in fix round 1): under
+# probe-first, an m365 row on the step-5 plan has already been promoted, so
+# its recording_id IS known (the promoting probe's transcript-found line
+# carried it) — "there is no recording id for it yet at step 5" is no
+# longer true, and dropping the row must both bank the seen-events entry
+# (unchanged mechanism) and write the permanent skip-list line, since the
+# id is now known and the skip list is what survives the cache's own
+# retention horizon.
+def test_sync_recordings_step5_m365_drop_is_a_two_write_path():
+    text = read_skill("sync-recordings")
+    step5 = text.split("### 5.")[1].split("### 6.")[0]
+    flat = re.sub(r"\s+", " ", step5)
+    assert "no recording id for it yet at step 5" not in flat.lower(), (
+        "the stale claim must be gone — a promoted row's recording_id is "
+        "already known by step 5"
+    )
+    assert '"outcome": "skipped"' in flat, (
+        "dropping an m365 row must still bank the seen-events entry, "
+        "unchanged from before probe-first"
+    )
+    assert "m365:<hex>" in flat, (
+        "dropping an m365 row must also write the permanent skip-list "
+        "line now that its recording_id is known"
+    )
+    m365_skip_idx = flat.index("--id m365:<hex>")
+    skip_clause = flat[max(0, m365_skip_idx - 40): m365_skip_idx + 200]
+    assert "sync skip" in skip_clause and "--reason" in skip_clause, (
+        "the m365 skip-list write needs a reason, same as any other sync "
+        "skip call"
+    )
+    assert flat.index('"outcome": "skipped"') < m365_skip_idx, (
+        "the seen-events bank and the skip-list write must both be "
+        "described, seen-events first — that's the write that stops "
+        "triage from re-listing the occurrence immediately"
+    )
+    assert "skip-listed" in flat, (
+        "the paragraph must explain why the skip-list write matters: a "
+        "promoted worker's own dedup call checks it and replies "
+        "skip-listed before ever re-fetching a transcript"
+    )
+    assert "sync unskip --id m365:<hex>" in flat, (
+        "the drop's undo must name sync unskip for the skip-list half"
+    )
+    assert "sync m365-forget --event-id <id> --start-utc <utc>" in flat, (
+        "the drop's undo must name sync m365-forget for the seen-events "
+        "half — mirroring step 7's two-write settle-duplicate undo"
+    )
+
+
+# PR B final-review fix, IMPORTANT: step 5 claimed m365 rows are probed
+# before the plan is shown, but nothing said the probe wave (step 6) must
+# run before step 5 in interactive mode, and the transcript-found bullet
+# looped a promoted entry back through "steps 3-5" — which would mean a
+# second plan/confirmation for that one row. Interactive mode must show
+# exactly one plan, after every probe in the wave has settled.
+def test_sync_recordings_interactive_plan_runs_once_after_every_probe():
+    text = read_skill("sync-recordings")
+    step5 = text.split("### 5.")[1].split("### 6.")[0]
+    step6 = text.split("### 6.")[1].split("### 7.")[0]
+    step5_flat = re.sub(r"\s+", " ", step5)
+    step6_flat = re.sub(r"\s+", " ", step6)
+
+    assert "probed first" in step5_flat.lower() or (
+        "every m365 occurrence is probed first" in step5_flat.lower()), (
+        "step 5 must state plainly that probing happens before the plan "
+        "is ever shown, in interactive mode"
+    )
+    assert "second table" in step5_flat.lower() or (
+        "second confirmation" in step5_flat.lower()), (
+        "step 5 must rule out a promoted row getting its own separate "
+        "confirmation"
+    )
+
+    assert "before step 5" in step6_flat.lower(), (
+        "step 6's probe-wave paragraph must point at step 5 and say this "
+        "wave runs before it, in interactive mode"
+    )
+
+    found_clause = step6_flat[step6_flat.index("transcript-found"):]
+    assert "steps 3–5" not in found_clause and "steps 3-5" not in found_clause, (
+        "the transcript-found bullet must not send a promoted row back "
+        "through step 5 individually — step 5 runs once, for every row, "
+        "not per promotion"
+    )
+    assert "steps 3–4" in found_clause or "steps 3-4" in found_clause, (
+        "the transcript-found bullet must still run the routing/confidence "
+        "steps (3-4) for a promoted row, just not step 5 again"
+    )
+    assert "never step 5 again" in found_clause.lower() or (
+        "runs once" in found_clause.lower()), (
+        "the transcript-found bullet must say explicitly that this row "
+        "does not get its own step-5 pass"
+    )
 
 
 def test_sync_recordings_probes_summary_line():
@@ -1444,10 +1703,27 @@ def test_sync_recordings_probes_summary_line():
     summary = text.split("### 7.")[1]
     assert "probes (" in summary, (
         "the workers-dispatched line must report the probe batch: N probes "
-        "(N still-no-transcript · N transcript-found)"
+        "(N no-transcript · N transcript-found · N no-access · N forbidden "
+        "· N fetch-error)"
     )
-    assert "still-no-transcript" in summary
-    assert "transcript-found" in summary
+    probes_clause = summary[summary.index("probes ("):]
+    for outcome in ("no-transcript", "transcript-found", "no-access",
+                    "forbidden", "fetch-error"):
+        assert outcome in probes_clause, (
+            f"the probe sub-tally must cover every probe outcome, missing "
+            f"{outcome}")
+    assert "still-no-transcript" not in probes_clause, (
+        "the summary banks a probe's still-no-transcript reply as a "
+        "no-transcript outcome — the tally must use the banked name"
+    )
+    assert "M365 first looks answered by a probe" in text, (
+        "probe-first needs its own headline count, separate from the "
+        "workers-dispatched line"
+    )
+    assert "promoted m365" in summary, (
+        "the workers-dispatched m365 count must be named as promoted "
+        "workers only, never a first-look dispatch"
+    )
 
 
 def _heredoc_json(text: str, filename: str) -> dict:

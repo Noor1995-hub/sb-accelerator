@@ -72,6 +72,8 @@ def _parse_graph_dt(value, label: str) -> datetime:
 
 def _event_start(event: dict) -> datetime:
     start = event.get("start") or {}
+    if not start.get("dateTime"):
+        raise M365Error("event is missing start.dateTime")
     tz = start.get("timeZone")
     if tz is not None and str(tz).casefold() != "utc":
         raise M365Error(
@@ -79,8 +81,26 @@ def _event_start(event: dict) -> datetime:
     return _parse_graph_dt(start.get("dateTime"), "event start.dateTime")
 
 
+def _event_end(event: dict) -> Optional[datetime]:
+    """Event end as a UTC datetime, or None with no end at all — the
+    calendar-event span is optional throughout this module. When an end IS
+    present, its timeZone is checked exactly as `_event_start` checks
+    start's: a non-UTC end must be refused, not silently misread, or a
+    recurring series' window (`_transcript_window`) and duration fallbacks
+    (`_event_span_ms`, `_event_duration_min`) would mis-scope by the
+    offset."""
+    end = event.get("end") or {}
+    if not end.get("dateTime"):
+        return None
+    tz = end.get("timeZone")
+    if tz is not None and str(tz).casefold() != "utc":
+        raise M365Error(
+            f"event end.timeZone {tz!r} is not UTC — refusing to guess the offset")
+    return _parse_graph_dt(end.get("dateTime"), "event end.dateTime")
+
+
 def _canonical(event: dict) -> Tuple[str, str, str]:
-    """(token, start-utc string, verbatim url) for one full event read."""
+    """(token, start-utc string, verbatim url) for one trimmed event read."""
     url = event.get("meetingTranscriptUrl")
     if not isinstance(url, str) or not url.startswith(URL_PREFIX):
         raise M365Error(
@@ -134,6 +154,14 @@ def derive_id(event: dict) -> dict:
     across runs and distinct per occurrence of a recurring series.
     """
     token, start_utc, url = _canonical(event)
+    # A malformed `end` must never pass silently just because the caller
+    # omitted --timezone/--utc-offset: `_event_end` is otherwise only
+    # reached through `_event_duration_min`/`_event_span_ms`, both gated
+    # behind those flags in `ids()` below — the probe's own `m365 ids`
+    # call never passes either one. Called here, unconditionally, for
+    # every id derivation regardless of the flags; the return value is
+    # only useful for the duration fallbacks, which stay flag-gated.
+    _event_end(event)
     digest = hashlib.sha256(f"{token}|{start_utc}".encode("utf-8")).hexdigest()
     return {
         "recording_id": f"m365:{digest[:16]}",
@@ -158,12 +186,11 @@ def _event_span_ms(event: dict) -> Optional[float]:
     with no `end`. This is `reassemble`'s event-span fallback, factored out
     so `ids` can offer the same number before any transcript exists — at
     that stage there is no cue-derived duration to prefer over it."""
-    end = (event.get("end") or {}).get("dateTime")
-    if not end:
+    end_dt = _event_end(event)
+    if end_dt is None:
         return None
     start_utc = _event_start(event)
-    return (_parse_graph_dt(end, "event end.dateTime")
-            - start_utc).total_seconds() * 1000
+    return (end_dt - start_utc).total_seconds() * 1000
 
 
 def _event_duration_min(event: dict) -> Optional[int]:
@@ -172,18 +199,19 @@ def _event_duration_min(event: dict) -> Optional[int]:
     helper `sync collide`'s occurrence duration uses, so the two never
     silently disagree by a minute at the boundary (both now feed the same
     `strong`-match threshold)."""
-    end = (event.get("end") or {}).get("dateTime")
-    if not end:
+    end_dt = _event_end(event)
+    if end_dt is None:
         return None
     start_utc = _event_start(event)
-    return dates.minutes_between(
-        start_utc, _parse_graph_dt(end, "event end.dateTime"))
+    return dates.minutes_between(start_utc, end_dt)
 
 
 def ids(events, *, timezone: Optional[str] = None,
        utc_offset: Optional[str] = None) -> dict:
-    """Batch id derivation over full event reads, before any transcript
-    fetch. No transcript URL is the normal case, never an error.
+    """Batch id derivation over event reads (the trimmed event file — id,
+    subject, start, end, meetingTranscriptUrl, organizer, attendees —
+    verbatim), before any transcript fetch. No transcript URL is the
+    normal case, never an error.
 
     `timezone`/`utc_offset` are optional and travel together with the same
     "exactly one" rule as everywhere else in this CLI; omitted entirely, a
@@ -192,10 +220,13 @@ def ids(events, *, timezone: Optional[str] = None,
     Supplied, each transcript-bearing entry also gains `recorded_local` (for
     `sync collide --start` and `meeting write`'s `date`) and
     `event_duration_min` (for `sync collide --duration-min`) — the latter
-    only when the event carries an `end`.
+    only when the event carries an `end`. A non-UTC `end.timeZone` is
+    refused unconditionally, via `derive_id`, whether or not `timezone`/
+    `utc_offset` are supplied — validation must not depend on an optional
+    flag a caller (the probe, in particular) may never pass.
     """
     if not isinstance(events, list):
-        raise M365Error("--events must be a JSON array of full event reads")
+        raise M365Error("--events must be a JSON array of event reads")
     derived: List[dict] = []
     skipped: List[dict] = []
     for event in events:
@@ -259,22 +290,28 @@ def _parse_vtt(content: str, transcript_id: str) -> Tuple[List[Tuple[Optional[st
 
 
 def _transcript_window(event: dict) -> Optional[Tuple[datetime, datetime]]:
-    end = (event.get("end") or {}).get("dateTime")
-    if not end:
+    end_dt = _event_end(event)
+    if end_dt is None:
         return None
     pad = timedelta(hours=OCCURRENCE_PAD_HOURS)
     start = _event_start(event)
-    return start - pad, _parse_graph_dt(end, "event end.dateTime") + pad
+    return start - pad, end_dt + pad
 
 
 def reassemble(event_path: str, transcript_path: str, out_dir: str, *,
                timezone: Optional[str] = None,
                utc_offset: Optional[str] = None) -> dict:
     event = _load(event_path, "event")
-    if not isinstance(event, dict) or not (event.get("start") or {}).get("dateTime") \
-            or not event.get("meetingTranscriptUrl"):
-        raise M365Error("event must be the full calendar event read: "
-                        "start.dateTime and meetingTranscriptUrl are required")
+    if not isinstance(event, dict):
+        raise M365Error("event must be a JSON object")
+    if not event.get("meetingTranscriptUrl"):
+        raise M365Error(
+            "event is missing meetingTranscriptUrl — reassemble needs the "
+            "event's kept keys (id, subject, start, end, "
+            "meetingTranscriptUrl, organizer, attendees), not a bare "
+            "listing entry")
+    if not (event.get("start") or {}).get("dateTime"):
+        raise M365Error("event is missing start.dateTime")
     payload = _load(transcript_path, "transcript")
     transcripts = payload.get("transcripts") if isinstance(payload, dict) else None
     if not isinstance(transcripts, list) or not transcripts:

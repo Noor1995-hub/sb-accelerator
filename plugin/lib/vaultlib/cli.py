@@ -523,7 +523,7 @@ def build_parser() -> argparse.ArgumentParser:
         "m365", help="Microsoft 365 / Teams transcript adapter helpers")
     m365_sub = m365_group.add_subparsers(dest="action", required=True)
     m365_ids = m365_sub.add_parser(
-        "ids", help="derive m365: recording ids from full calendar event reads")
+        "ids", help="derive m365: recording ids from event reads (the trimmed event file)")
     m365_ids.add_argument("--events", required=True,
                           help="path to a JSON array of event objects, or - for stdin")
     m365_ids.add_argument(

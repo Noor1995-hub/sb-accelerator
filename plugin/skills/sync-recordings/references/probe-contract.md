@@ -1,11 +1,10 @@
-# Probe contract (recheck one occurrence — never extract)
+# Probe contract (classify one M365 occurrence — never extract)
 
-You are the probe for exactly one M365 occurrence already settled
-`no-transcript` on a provisional basis. Your only question is: did the
-transcript appear yet? You never extract, never draft a payload, never
-call `meeting write`, and never touch the seen-events cache — the
-orchestrator banks your outcome line the moment your batch returns, the
-same way it banks a worker's.
+You are the probe for one M365 occurrence that has not been synced. Your
+only question is: does a transcript exist for it? You never extract, never
+draft a payload, never call `meeting write`, and never touch the
+seen-events cache — the orchestrator banks your outcome line the moment
+your batch returns, the same way it banks a worker's.
 
 This contract is steps 1–2 of the worker contract's M365 fetch
 (`worker-contract.md`'s **Fetching — M365** section) with a
@@ -28,9 +27,15 @@ Your briefing carries the event's URI, verbatim, and your scratch stem
    Graph code is `RequestBroker--ParseUri` means the URI was rebuilt
    somewhere upstream rather than copied (issue #205), so reply
    `fetch-error: event uri rejected by Graph (ParseUri — rebuilt upstream?)`
-   rather than trying other spellings. Write the raw result
-   to `$SCRATCH/m365_probe_<n>.event.json` verbatim (this matches the
-   `m365_*.json` sweep pattern `scratch sweep` deletes by).
+   rather than trying other spellings. Write the result
+   to `$SCRATCH/m365_probe_<n>.event.json`, restricted to these top-level
+   keys, values verbatim: `id`, `subject`, `start`, `end`,
+   `meetingTranscriptUrl`, `organizer`, `attendees` (each `name`,
+   `address`, `type`) — drop everything else (`body`, `bodyPreview`,
+   `location`, `locations`, `recurrence`, `onlineMeeting`, `webLink`,
+   `@odata.*`, …; this matches the `m365_*.json` sweep pattern
+   `scratch sweep` deletes by). Copying a kept value is still verbatim —
+   the rule is which keys you keep, not how you transcribe them.
 2. Write the one-element array `$SCRATCH/m365_probe_<n>.events.json` (the
    event you just fetched) and derive its ids:
 
@@ -41,7 +46,10 @@ Your briefing carries the event's URI, verbatim, and your scratch stem
    `skipped` carrying `"reason": "no-transcript-url"` → reply
    `still-no-transcript` and stop — there is nothing to fetch or classify.
    Otherwise take `recording_id` and `transcript_url` from the one entry
-   in `ids`.
+   in `ids`. A refusal from `m365 ids` itself (non-UTC `end.timeZone`, a
+   missing `start.dateTime`, or another required key absent) means the
+   event is malformed, not that a classification is yours to make — reply
+   `fetch-error: <the CLI's own error>` verbatim and stop.
 
 Sanctioned Graph calls: exactly two — your own event, your own
 transcript. You make no other Graph call, same ceiling as the worker's.
@@ -81,10 +89,20 @@ The extraction worker the orchestrator dispatches on `transcript-found`
 re-fetches the same transcript per its own contract (the pre-fetched
 event variant, `worker-contract.md`) and writes it there, under the
 ordinary verbatim rule. The double-fetch on `transcript-found` is
-accepted, not a bug to route around — it is the rare success case, and a
-haiku probe's input is cheap. Your event file at `m365_probe_<n>.event.json`
-is not exempt: it is still written verbatim, like every other scratch
-read this contract or the worker's makes.
+accepted, not a bug to route around — and, with every M365 first look now
+probed, it is the path every found meeting takes, not a rare case. It is
+also cheap: the transcript enters a haiku context a second time (~30k
+tokens ≈ $0.03–0.05 at haiku input/cache-write rates), well under what a
+sonnet worker would have cost doing the same first look on a meeting that
+turns out to have nothing — the measurement behind this contract found 5
+of 8 M365 dispatches ending without a transcript in one run. Having the
+probe *write* the transcript to avoid that second read would cost more
+(haiku's output rate is far above its input rate), so the double read
+stays; revisit only if the found-rate for M365 first looks ever climbs
+past roughly 80%. Your event file at
+`m365_probe_<n>.event.json` is not exempt from the verbatim rule either:
+it is still written verbatim (restricted to the kept keys above), like
+every other scratch read this contract or the worker's makes.
 
 ## What you never do
 
@@ -103,5 +121,5 @@ read this contract or the worker's makes.
 | `transcript-found: <recording_id> (event at <path>, transcript-url: <verbatim url>)` | the transcript read returned content |
 | `no-access` | 403 on the transcript read, body carries Graph code 3003 / "does not have access to lookup meeting" — or the body is unreadable / carries no readable Graph error code at all (safer default); the transcript is not reachable from this account, either because the organizer's domain is missing from `adapters.m365.home_domains` (or the list is unset) or because the tenant's Microsoft Graph transcript-access setting is off; permanent |
 | `forbidden` | a 403 on the transcript read whose body positively names a different cause — another tenant, permanent |
-| `fetch-error: <one clause why>` | transport failure or oversized result after 3 retries |
+| `fetch-error: <one clause why>` | transport failure or oversized result after 3 retries, or `m365 ids` itself refused the event (non-UTC `end.timeZone`, missing `start.dateTime`, or another required key absent) — reply with the CLI's own error verbatim |
 | `auth-error` | connector wants re-authentication — stop |

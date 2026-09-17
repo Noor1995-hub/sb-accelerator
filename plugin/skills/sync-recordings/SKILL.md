@@ -70,14 +70,19 @@ The JSON envelope and interpreter resolution are documented in the plugin's
    `$SCRATCH/m365_routing.json` hold the calendar search's own field
    values unchanged, never rebuilt or retyped (`m365_routing.json`'s `uri`
    is the one field that comes from the triage result instead, and it is
-   copied the same way — step 1 says why). The **full-event JSON**
+   copied the same way — step 1 says why). The **event's kept keys**
    verbatim obligation is not this context's problem any more: the m365
-   adapter's own full-event and transcript reads happen inside the worker
-   now, which writes its own `$SCRATCH/m365_event_<n>.json` under the same
-   doctrine, stated in its own contract (`worker-contract.md`) — a live run
-   once re-typed an event "from memory" there and garbled three transcript
-   URLs and two ids before catching itself, back when that read still
-   happened in this context. Calendar enrichment (step 2) never reaches a
+   adapter's own event and transcript reads happen inside a probe or a
+   worker now, never here. Each writes its own scratch event file
+   (`$SCRATCH/m365_probe_<n>.event.json` or `$SCRATCH/m365_event_<n>.json`)
+   under the same doctrine, restricted to `id`, `subject`, `start`, `end`,
+   `meetingTranscriptUrl`, `organizer`, `attendees` (each `name`,
+   `address`, `type`) rather than the connector's full payload, values
+   verbatim — stated in its own contract (`probe-contract.md`,
+   `worker-contract.md`) — a live run once re-typed an event "from memory"
+   there and garbled three transcript URLs and two ids before catching
+   itself, back when that read still happened in this context. Calendar
+   enrichment (step 2) never reaches a
    full event either: it scores candidates and pre-fills fields straight
    off the calendar-search listing already in context, so there is nothing
    there to spill to scratch. (A calendar listing is not a transcript —
@@ -350,7 +355,8 @@ first-page-only search silently drops the rest — nothing fails, those
 meetings just never sync.
 
 **A full event read is expensive, so it no longer happens here at all —
-it's the worker's job, gated by triage.** Keep the listing lean: never
+it's a probe's job first, gated by triage, and only a promoted worker's
+after.** Keep the listing lean: never
 search a window wider than `dates window` returned, and write only the
 five fields triage reads — `id`, `subject`, `start`, `end`, `organizer`,
 values verbatim — for each kept event, across every page, as one JSON array
@@ -359,7 +365,7 @@ search selects no fields, so this scratch write is where the listing gets
 trimmed — a live run wrote 53k characters of raw listing for 33 events
 when 11 mattered and five fields per event were ever read. (A listing is
 not a transcript — rule 8 does not apply.) Then ask the seen-events cache
-which occurrences still need a worker at all:
+which occurrences still need a probe or worker at all:
 
 ```bash
 python3 "$VAULTLIB" sync m365-triage --vault "$VAULT" \
@@ -397,7 +403,7 @@ duplicates dispatches zero worker batches and zero probes, so a bucket
 that waited for either would never bank at all and the same duplicates
 would loop forever. Write one `{"id": <id>, "start_utc": <start_utc>,
 "outcome": "skipped"}` per `duplicate` entry (no `recording_id` — there is
-no full event read yet) to `$SCRATCH/m365_duplicates.json` and bank it
+no event read yet, by a probe or anything else) to `$SCRATCH/m365_duplicates.json` and bank it
 right here, before doing anything else with `fetch`:
 
 ```bash
@@ -423,22 +429,24 @@ first run after they end. Only the occurrences in
 upgrading everything dispatches once and the outcomes recorded below make
 every later run cheap.
 
-**Split `fetch` by its own `reason` field before doing anything else with
-it.** An entry reasoned `unseen` or `unkeyed` is a first look — it proceeds
-through the routing extract below and gets an ordinary worker in step 6, no
-different from any run before this one. An entry reasoned
-`recheck-no-transcript` is not: a transcript already failed to exist for it
-once, so paying for a full worker (routing extract, attendee resolution,
-extraction) to ask the same fetch a second time would be paying sonnet
-prices to relearn "still nothing" most of the time. Hold those entries
-aside as the **probe dispatch list** instead — step 6 dispatches a cheap
-haiku probe for each one, before its ordinary worker batches, and only
-promotes an entry back into the routing extract and a full worker if its
-probe actually finds a transcript. Nothing below this point in Step 1
-applies to a `recheck-no-transcript` entry until that promotion happens.
+**Split `fetch` by its own `reason` field — every entry becomes a probe,
+never straight into the routing extract.** `unseen`, `unkeyed`, and
+`recheck-no-transcript` alike go onto the **probe dispatch list** now:
+paying for a full worker (routing extract, attendee resolution,
+extraction) just to *discover* whether a transcript exists would be
+paying sonnet prices to relearn "nothing yet" most of the time, first
+look or recheck alike — the measurement behind this change found 5 of 8
+M365 dispatches in one run ending without a transcript. Step 6 dispatches
+a cheap haiku probe for each entry instead, before any worker batch, and
+only promotes an entry back into the routing extract and a full worker if
+its probe replies `transcript-found`. Nothing below this point in Step 1
+applies to any `fetch` entry until that promotion happens — the
+`m365_routing.json` extract that follows, and steps 3–5, run only for a
+promoted entry.
 
-For each `unseen`/`unkeyed` `fetch` survivor, match its `id` back against
-the calendar-search pages you already hold and write one compact array,
+For each entry a probe promotes with `transcript-found` — never for one
+still waiting on a probe — match its `id` back against the calendar-search
+pages you already hold and write one compact array,
 `$SCRATCH/m365_routing.json`, with — per event, **values verbatim from the
 listing, never rebuilt** — `id`, `subject`, `start`, `end`, `organizer`,
 `attendees`, `location`, and `recurrence`.
@@ -455,46 +463,54 @@ into `%2F`; the connector decodes that back to a raw `/`, Graph reads the
 tail as unknown path segments, and the worker gets a 400
 `RequestBroker--ParseUri` on every retry, every run. That silently cost
 two meetings their transcripts (issue #205). `event_uri` exists so this
-step copies an opaque string instead of transforming one.
+step copies an opaque string instead of transforming one — every entry
+still needs its own `uri` on the probe dispatch list below, promoted or
+not, since a probe reads it first, before anything here decides whether
+that entry ever reaches this extract.
 
-There is no full event read and no id
-derivation here any more: the worker fetches its own event, derives its
-own ids, and dedups itself before it ever reads a transcript —
-`worker-contract.md`'s Fetching — M365 section has the mechanics. The
-event is never fetched in this context, and neither is the transcript —
-the worker's step 6 dispatch makes both `read_resource` calls itself, and
-what it finds comes back as its outcome line: `already-synced:
+There is no event read and no id derivation in this context at all any
+more, for a first look or a recheck alike: a probe fetches the event and
+derives ids for every `fetch` entry before any worker exists
+(`probe-contract.md`, restating `worker-contract.md`'s Fetching — M365
+steps 1–2) — the event is never fetched in this context, and neither is
+the transcript. A probe's own outcome line settles most of what a
+worker's outcome line used to settle directly here: `still-no-transcript`
+(its own id-derivation call found no `meetingTranscriptUrl`, or the
+transcript read answered `transcripts_empty`; banked as `no-transcript` —
+step 6), `"no-access"` (a 403 whose body carries Graph code 3003 / "does
+not have access to lookup meeting", or whose body is unreadable / carries
+no readable Graph error code at all, the safer default — the transcript
+is not reachable from this account; an entry reaching a probe at all
+rather than being caught as `external` means either the organizer's
+domain is missing from `adapters.m365.home_domains` or that list is
+unset, or the organisation's own tenant has the Microsoft Graph
+transcript-access setting off), or `"forbidden"` (a 403 whose body
+positively names a different cause — another tenant owns the transcript,
+permanently). Only `transcript-found` promotes an entry to a worker,
+which still runs its own dedup and collision check on the pre-fetched
+event before it ever re-reads the transcript
+(`worker-contract.md`'s pre-fetched event variant) — so `already-synced:
 <recording_id>` (its own dedup call found the id already in the ledger —
-no transcript fetch, no payload), `no-transcript` (its own id-derivation
-call found no `meetingTranscriptUrl`, or the transcript read answered
-`transcripts_empty`), `"no-access"` (a 403 whose body carries Graph code
-3003 / "does not have access to lookup meeting", or whose body is
-unreadable / carries no readable Graph error code at all, the safer
-default — the transcript is not reachable from this account; a triage
-survivor reaching a worker at all rather than being caught as `external`
-means either the organizer's domain is missing from
-`adapters.m365.home_domains` or that list is unset, or the organisation's
-own tenant has the Microsoft Graph transcript-access setting off), or
-`"forbidden"` (a 403 whose body positively names a different cause —
-another tenant owns the transcript, permanently), or a written note. Those
-outcomes are
+no transcript re-fetch, no payload) and `skip-listed: <recording_id>` can
+still settle a promoted entry, or the worker proceeds to a written note.
+Those outcomes are
 banked per batch in step 6. A recording that *failed* — a transport error
 — gets **no outcome line**: what is not settled is not recorded, and the
 occurrence surfaces again next run. A cross-adapter duplicate always gets
 one now, and never deferred, from whichever of the two nets finds it — but
 never the same way: a triage-bucket entry (step 1's `duplicate` bucket)
 has no `recording_id` yet, so it banks straight through `sync m365-record`
-in step 1, immediately; one a worker detects itself — its own pre-fetch
-collide reply, or `meeting write`'s write-time refusal — has a real
-`recording_id` and is settled in step 6 via `sync settle-duplicate` the
-moment it is found.
+in step 1, immediately; one a promoted worker detects itself — its own
+pre-fetch collide reply, or `meeting write`'s write-time refusal — has a
+real `recording_id` and is settled in step 6 via `sync settle-duplicate`
+the moment it is found.
 
-A `recheck-no-transcript` entry's row still lives in the calendar-search
-pages you hold this run (rechecks come from the same triage `fetch` list,
-so they were always in the listing) — it is just not extracted into
-`m365_routing.json` yet. Keep its `id`, `start_utc`, and `event_uri` — all
-three straight off its triage entry — on the probe dispatch list step 6
-needs; nothing else about it is decided here.
+Every `fetch` entry's row still lives in the calendar-search pages you
+hold this run (triage reads straight off the same listing) — it is just
+not extracted into `m365_routing.json` yet, promoted or not. Keep each
+entry's `id`, `start_utc`, and `event_uri` — all three straight off its
+triage entry — on the probe dispatch list step 6 needs; nothing else about
+any of them is decided here.
 
 An m365 recording's routing starts ahead of plaud's: the listing **is**
 the calendar record. Pre-fill `calendar-subject`, `organizer`, `location`,
@@ -503,33 +519,35 @@ the calendar record. Pre-fill `calendar-subject`, `organizer`, `location`,
 reason — step 2 below is skipped for m365-sourced items. `source` is
 `teams`. The listing carries attendees as bare **email addresses**, never
 names, so attendee slugs are not yours to produce here: the worker
-resolves them itself from the full event it fetches (`person ensure`, per
-`worker-contract.md`'s Attendees and confidence section) — Teams
+resolves them itself from the event file its briefing names — the
+promoting probe's already-fetched event, on the pre-fetched path every
+M365 worker now takes (`person ensure`, per `worker-contract.md`'s
+Attendees and confidence section) — Teams
 transcripts carry no speaker names besides (a tenant setting most
 deployments have off), and its speech recognition garbles names and
 product terms, so attendee resolution never touches the transcript either
 way. Pass `attendee-emails` in the worker's briefing (step 6); it derives
 the slugs, never you.
 
-**The dispatch gate.** A worker is dispatched for every `unseen`/`unkeyed`
-occurrence that survived triage (`sync m365-triage`'s `fetch` list) — never
-to discover whether a transcript exists for anything else. A
-`recheck-no-transcript` survivor gets a probe instead, per the split above;
-it only gets a worker if that probe replies `transcript-found` (step 6).
-The ledger dedup that used
-to run here, once, before dispatch now runs inside the worker instead, as
-its first move after it derives its own ids (`worker-contract.md`): an id
-already in the ledger stops there, before any transcript fetch, and
-reports `already-synced: <recording_id>` rather than costing an
-extraction — `meeting write`'s own already-synced refusal is the backstop
-behind that, not a second gate you maintain here. Each worker makes
-exactly the connector calls for its one assigned recording, and a
-negative answer (no transcript, forbidden, already-synced, skip-listed) is one of its
-first tool calls, costing a skip, not an extraction — that, plus triage,
-is what keeps a fleet of workers from ever being paid to learn "nothing to
-write". A worker **never writes the seen-events cache**: every settled
-outcome comes back as one line, and step 6 banks each batch's lines the
-moment it returns — including any `already-synced` lines, banked as
+**The dispatch gate.** No M365 worker is ever dispatched to *discover*
+whether a transcript exists — a probe answers that question first for
+every occurrence that survived triage (`sync m365-triage`'s `fetch`
+list), regardless of `reason`, and a worker is dispatched only for the
+ones a probe promotes with `transcript-found` (step 6). The ledger dedup
+that used to run here, once, before dispatch now runs inside the promoted
+worker instead, as its first move after it derives ids from the
+pre-fetched event (`worker-contract.md`): an id already in the ledger
+stops there, before any transcript re-fetch, and reports `already-synced:
+<recording_id>` rather than costing an extraction — `meeting write`'s own
+already-synced refusal is the backstop behind that, not a second gate you
+maintain here. Each promoted worker makes exactly the one Graph call its
+recording still needs (the transcript — the event was the probe's call),
+and a negative answer (already-synced, skip-listed) is one of its first
+tool calls, costing a skip, not an extraction — that, plus the probe wave
+ahead of it, is what keeps a fleet of workers from ever being paid to
+learn "nothing to write". A worker **never writes the seen-events cache**:
+every settled outcome comes back as one line, and step 6 banks each
+batch's lines the moment it returns — including any `already-synced` lines, banked as
 `written`, which is how the cache back-fills for meetings synced before it
 existed.
 
@@ -629,8 +647,9 @@ out of `attendees` and mention them in the debrief instead.
 **M365 is the exception.** The listing carries no attendee names, only
 emails, so this context cannot resolve slugs for an m365 recording at all —
 skip this paragraph for it entirely. The worker does its own `person
-ensure` from the full event it fetches (step 6 passes `attendee-emails` and
-the vault owner's person slug instead of resolved attendees).
+ensure` from the promoting probe's already-fetched event (step 6 passes
+`attendee-emails` and the vault owner's person slug instead of resolved
+attendees).
 
 ### 4. Stamp confidence
 
@@ -671,11 +690,26 @@ a future calibration needs — write it accurately, not optimistically.
 
 ### 5. Confirm the plan (interactive mode only)
 
-Skipped entirely under `--unattended`. Show one table — title, date,
-projects, new people, confidence — and ask once: proceed / edit / skip
-items. The title column is provisional: the real title is a step-6
-subagent output, decided from the transcript, not yet drafted here — show
-the source filename or the calendar subject in its place.
+**Order, in interactive mode: every M365 occurrence is probed first, then
+one plan is shown, then dispatch.** Step 6's probe wave runs before this
+step ever shows anything — not interleaved with it, and never after. A
+`transcript-found` promotion (step 6) folds its row into *this* table,
+the same one every plaud/inbox recording is already on; it is never a
+second table or a second confirmation for that row. Skipped entirely
+under `--unattended`, where the probe wave and worker dispatch simply run
+back to back with no plan shown at all.
+
+Show one table — title, date, projects, new people, confidence — and ask
+once: proceed / edit / skip items. The title column is provisional: the
+real title is a step-6 subagent output, decided from the transcript, not
+yet drafted here — show the source filename or the calendar subject in
+its place.
+
+**The mechanism behind that ordering:** the probe wave (step 6) runs on
+haiku, not sonnet, and only a `transcript-found` reply extracts a row
+into `m365_routing.json` and carries it into this table; a row still
+waiting on a probe, or one a probe settled
+`no-transcript`/`no-access`/`forbidden`, never appears here at all.
 
 **M365 rows carry two more provisional columns, for the same reason.**
 Neither the attendee count nor the final confidence exists yet at step 5
@@ -717,38 +751,68 @@ python3 "$VAULTLIB" sync park --vault "$VAULT" \
 A `plaud:` id has no inbox file, so `sync skip` — with its recording id
 already known at step 5 — is the whole story there.
 
-An m365 row is different: there is no recording id for it yet at step 5
-(that only exists once the worker derives it from the full event, per
-`worker-contract.md`), so there is nothing to hand `sync skip` and no file
-to hand `sync park`. Dropping an m365 row banks it straight into the
-seen-events cache instead, keyed the same way triage keys everything else
-— the `id` and `start_utc` that row's triage result carried:
+An m365 row is different in mechanism, not in what is knowable: its
+`recording_id` **is** known by step 5 — a row only reaches this table
+once its probe has promoted it, and that probe's `transcript-found` line
+carried `<recording_id>` verbatim before the row ever reached the
+routing extract. Dropping an m365 row is therefore two writes, not one:
 
-```
-[{"id": "<event id>", "start_utc": "<triage start_utc>", "outcome": "skipped"}]
-```
+1. Fold `{"id": <event id>, "start_utc": <triage start_utc>, "outcome":
+   "skipped"}` into step 6's next banking call, keyed the same way
+   triage keys everything else — this is the write that stops this
+   occurrence from being listed again by triage, unchanged from before
+   probe-first:
 
-Fold that entry into step 6's next banking call rather than reaching for
-`sync skip` — the cache accepts a `"skipped"` outcome with no
-`recording_id` at all, and the seen-events cache has no separate
-never-propose-again list the way the plaud/inbox ledger does. Say so
-honestly, not as a permanent suppression: this one is cache-backed, so it
-can resurface if the cache entry is later pruned (its own retention
-horizon) *and* a wide-enough window still lists the occurrence — in which
-case the user just drops it once more. No worker is dispatched for a row
-dropped this way.
+   ```
+   [{"id": "<event id>", "start_utc": "<triage start_utc>", "outcome": "skipped"}]
+   ```
+
+2. Because the id is known, also write it to the permanent skip list —
+   the same one a plaud/inbox drop uses — so the drop survives the
+   seen-events cache's own retention horizon instead of only it:
+
+   ```bash
+   python3 "$VAULTLIB" sync skip --vault "$VAULT" --id m365:<hex> \
+     --reason "dropped from the plan by the owner"
+   ```
+
+Do both for every m365 row dropped at step 5, never just the seen-events
+write: the cache entry is what keeps triage from re-listing the
+occurrence immediately, and the skip-list line is the backstop that keeps
+a *pruned* cache entry from letting the occurrence resurface — a
+promoted worker's own `sync dedup` call (`worker-contract.md`) checks
+this list before it ever re-fetches a transcript, replying
+`skip-listed: <recording_id>` and stopping there. No worker is dispatched
+for a row dropped this way.
+
+This drop has its own undo shape too. Unlike a settled duplicate, which
+`sync unsettle-duplicate` reverses in one call because one call wrote it,
+a drop is two separate writes (`sync skip` plus a `skipped` bank) and so
+takes two commands to reverse:
+`sync unskip --id m365:<hex>` removes the skip-list line, and
+`sync m365-forget --event-id <id> --start-utc <utc>` removes the
+seen-events entry, naming the same `id`/`start_utc` the drop was keyed
+by. Run both, or the occurrence stays half-suppressed — `unskip` alone
+leaves the seen-events entry in place, permanently filtering the
+occurrence out of every future triage.
 
 ### 6. Extract and write
 
-**Probe the recheck list first, before any worker batch.** For each
-`recheck-no-transcript` entry the step-1 split held aside, dispatch a
-recheck probe as the plugin's own agent type: `subagent_type:
-second-brain:sync-probe-m365`. **Dispatch in blocking batches of at most
-~4 — this is the cap, not a suggestion on top of it:** send ONE message
-containing at most ~4 blocking Agent calls (`run_in_background: false`);
-only once every call in that message has returned do you send the next
-message with the next batch, until every recheck entry has a probe. There
-is no background mode for this fan-out. Pass each probe: the
+**Probe every M365 fetch entry first, before any worker batch.** Step 1
+holds every `fetch` entry on the **probe dispatch list** — `unseen`,
+`unkeyed`, and `recheck-no-transcript` alike, never split by reason at
+this point — and none of them proceeds through the routing extract,
+steps 3–4, or the single step-5 plan until a probe promotes it. In interactive mode this whole wave
+runs before step 5's plan is ever shown — step 5 says the same thing from
+its own side; the two never interleave, and there is never a second plan
+for a row this wave promotes. Dispatch a probe for each one as the
+plugin's own agent type: `subagent_type: second-brain:sync-probe-m365`.
+**Dispatch in blocking batches of at most ~4 — this is the cap, not a
+suggestion on top of it:** send ONE message containing at most ~4 blocking
+Agent calls (`run_in_background: false`); only once every call in that
+message has returned do you send the next message with the next batch,
+until every entry on the list has a probe. There is no background mode
+for this fan-out. Pass each probe: the
 `references/probe-contract.md` path (`references/worker-contract.md` too —
 the probe contract defers to it), `$VAULT`, `$SCRATCH`, `$VAULTLIB`, the
 vault timezone, the entry's `uri` (verbatim, from the calendar-search pages
@@ -760,10 +824,14 @@ When a probe batch returns, act on each line:
 
 - `still-no-transcript` — settles as `{"id": <id>, "start_utc":
   <start_utc>, "outcome": "no-transcript"}`, keyed by the `id`/`start_utc`
-  triage carried for that entry. This refreshes the cached entry's
-  `checked_at`, which restarts the 6h recheck-window hold — the next probe
-  for this occurrence waits another 6 hours, exactly like a worker's first
-  `no-transcript` reply does.
+  triage carried for that entry. For an `unseen`/`unkeyed` entry this is
+  the occurrence's first bank of any kind — it is the provisional entry
+  that starts the 48h/6h recheck cycle (`seenevents.py`'s
+  `NO_TRANSCRIPT_FINAL_AFTER_HOURS`/`RECHECK_MIN_INTERVAL_HOURS` logic), the same
+  role a worker's own first `no-transcript` reply used to play. For a
+  `recheck-no-transcript` entry it instead refreshes the cached entry's
+  `checked_at`, restarting the 6h recheck-window hold — the next probe for
+  this occurrence waits another 6 hours.
 - `no-access` — settles as `{"id": <id>, "start_utc": <start_utc>,
   "outcome": "no-access"}`, same as a worker's `no-access` reply — the 403
   body carried Graph code 3003, or was unreadable / carried no readable
@@ -775,13 +843,17 @@ When a probe batch returns, act on each line:
   "outcome": "forbidden"}`, same as a worker's `forbidden` reply — a 403
   body that positively names a different cause.
 - `transcript-found: <recording_id> (event at <path>, transcript-url:
-  <url>)` — not settled by this probe wave at all: the recheck paid off, so
-  route this entry **like any fetch survivor** instead — extract its row
-  into `$SCRATCH/m365_routing.json` from the calendar-search pages (same
-  fields, same verbatim rule, as step 1's ordinary extract), then run
-  steps 3–5 (routing signals, confidence inputs, the interactive plan row)
-  for it, same as an `unseen` survivor. Only then dispatch a full
-  `second-brain:sync-worker-m365` for it, using the worker contract's
+  <url>)` — not settled by this probe wave at all: this entry is a real
+  fetch survivor now — first look or recheck alike, the probe's job was
+  only ever to answer whether a transcript exists — so route it **like
+  any fetch survivor**: extract its row into `$SCRATCH/m365_routing.json`
+  from the calendar-search pages (same fields, same verbatim rule, as
+  step 1's ordinary extract), then run steps 3–4 (routing signals,
+  confidence inputs) for it — never step 5 again for this row alone: in
+  interactive mode step 5's plan runs once, after every probe in this
+  wave has settled, and its single table already includes every row
+  promoted here. Then dispatch it with the promoted-worker batches below,
+  once every probe has returned, using the worker contract's
   **pre-fetched event variant**: the probe's event file and its verbatim
   `recording_id`/`transcript_url` in place of a URI to fetch — the worker
   starts at dedup (worker-contract.md), so the dedup gate still runs, it is
@@ -798,9 +870,10 @@ When a probe batch returns, act on each line:
   reports it, re-authentication belonging to the user.
 
 **Bank the probe wave's own settled lines immediately, in their own call —
-never deferred to the worker-batch banking below.** A recheck-only pass can
-dispatch probes and zero worker batches, and the worker-batch banking call
-only ever runs after a worker batch returns; delegating a probe's outcome
+never deferred to the worker-batch banking below.** A pass whose probes
+all come back `still-no-transcript` / `no-access` / `forbidden` dispatches
+zero worker batches, and the worker-batch banking call only ever runs
+after a worker batch returns; delegating a probe's outcome
 to it would mean nothing ever banks on that pass, `checked_at` never
 refreshes, and the 6h hold never restarts. So as soon as this probe batch
 settles, write its `still-no-transcript`, `no-access`, and `forbidden`
@@ -815,12 +888,16 @@ python3 "$VAULTLIB" sync m365-record --vault "$VAULT" \
 Same per-batch banking doctrine as the worker batches below: crash loss is
 bounded to one probe wave, one cheap re-probe next run.
 
-For each recording that survived step 1 — **also when there is only one**
-(rule 7) — dispatch a worker as the plugin's own agent type: `subagent_type:
-second-brain:sync-worker` for plaud and inbox recordings, `subagent_type:
-second-brain:sync-worker-m365` for m365 ones (the M365 connector's tool
-names differ per deployment, so that worker's tool surface stays open where
-the other's is pinned). Both agent definitions pin `model: sonnet`
+**Dispatch Plaud and inbox worker batches, then promoted M365 workers.**
+For each plaud or inbox recording that survived step 1, and each M365
+entry a probe above promoted with `transcript-found` — **also when there
+is only one** (rule 7) — dispatch a worker as the plugin's own agent type:
+`subagent_type: second-brain:sync-worker` for plaud and inbox recordings,
+`subagent_type: second-brain:sync-worker-m365` for m365 ones (the M365
+connector's tool names differ per deployment, so that worker's tool
+surface stays open where the other's is pinned). No M365 worker is ever
+dispatched for an entry a probe has not promoted — the probe wave above
+is the only route in. Both agent definitions pin `model: sonnet`
 structurally — the model is never a per-dispatch decision. On a harness
 where the plugin agent types do not resolve, fall back to a generic
 subagent spawned with `model: sonnet` passed explicitly — a live cost
@@ -851,13 +928,24 @@ Pass each worker *paths and decisions*, not content:
 - both contract paths above, `$VAULT`, `$SCRATCH`, the `$VAULTLIB` path,
   and the vault timezone;
 - its recording reference and scratch stem: Plaud — the file id and
-  `$SCRATCH/rec_N.meta.json`; M365 — the `uri` field of
-  `m365_routing.json`, copied character for character (it is triage's
-  CLI-derived `event_uri`; never decoded, re-encoded, or rebuilt from the
-  `id` — see step 1's warning), and the scratch stem
-  `m365_event_<n>`; there is no pre-read event file and no `transcript_url`
-  to pass — the worker fetches the event and derives both itself
-  (`worker-contract.md`'s Fetching — M365 section); inbox — the file's
+  `$SCRATCH/rec_N.meta.json`; M365 — **both** of the promoting probe's
+  event paths, named for which call each feeds:
+  `$SCRATCH/m365_probe_<n>.event.json` (the trimmed event **object** —
+  for `m365 reassemble --event` and attendee reading) and
+  `$SCRATCH/m365_probe_<n>.events.json` (the same event wrapped in a
+  one-element **array** — for the worker's own `m365 ids --events` call;
+  `m365 ids` refuses anything that is not an array, so the object file
+  alone is not enough), plus the probe's verbatim `recording_id` and
+  `transcript_url`, both already sitting on its `transcript-found` line,
+  in place of a URI to fetch — every M365 dispatch here is the worker
+  contract's **pre-fetched event variant**, never the raw-URI one, since
+  the probe already made the one Graph call to read the event. The
+  worker's own scratch stem is still `m365_event_<n>`, allocated the same
+  way as for any M365 worker — only the two event files it reads are the
+  probe's; everything it writes itself (`m365_event_<n>.ids-in.json`,
+  `.dedup.json`, `.transcript.json`, and so on, per `worker-contract.md`'s
+  Fetching — M365 section) keeps its own stem, never the probe's; inbox —
+  the file's
   path, its `recording_id` from `sync scan`, its date read from the file's
   own content or header, and its scratch stem — the inbox file's own name
   stem (its payload file `<scratch stem>.payload.json` is swept by pattern
@@ -1089,7 +1177,8 @@ Count what exists, not what you intended (a lab run once reported
 **Cross-adapter duplicates skipped:** {N} ({subject} → already synced as {stem}; undo: `sync unsettle-duplicate --id <id> --event-id <id> --start-utc <utc>` | `sync m365-forget --event-id <id> --start-utc <utc>`)
 **Skipped / errors:** {N} (will retry next run) · {N} tiny clips auto-skipped ({list each with its duration}) — permanent, not a retry
 **M365 fetches saved:** {N} of {N} listed occurrences answered from the seen-events cache or the home-domain filter ({N} held in the 6h recheck window) | cache cold (first run)
-**Workers dispatched:** {N} ({N} plaud · {N} m365 · {N} inbox) — m365 candidates not dispatched were answered by the cache ({N}), were a known cross-adapter duplicate ({N}), were external ({N}), or hadn't ended yet ({N}); worker outcomes: {N} written · {N} already-synced · {N} skip-listed · {N} no-transcript · {N} no-access · {N} forbidden · {N} fetch-error · {N} auth-error · {N} probes ({N} still-no-transcript · {N} transcript-found)
+**Workers dispatched:** {N} ({N} plaud · {N} promoted m365 · {N} inbox) — the m365 count is promoted workers only, never a first-look dispatch; m365 candidates not dispatched were answered by the cache ({N}), were a known cross-adapter duplicate ({N}), were external ({N}), or hadn't ended yet ({N}); worker outcomes: {N} written · {N} already-synced · {N} skip-listed · {N} no-transcript · {N} no-access · {N} forbidden · {N} fetch-error · {N} auth-error · {N} probes ({N} no-transcript · {N} transcript-found · {N} no-access · {N} forbidden · {N} fetch-error)
+**M365 first looks answered by a probe:** {N} — every `unseen`/`unkeyed` occurrence a probe classified this run instead of a full worker
 **External meetings (recorder territory):** {N} — {subject} · {local date} · {organizer domain}; {subject} · {local date} · {organizer domain} | none
 **Adapters:** inbox ok · plaud ok (window {N}d) | REFUSED — signed in as a different account (account-mismatch) | REFUSED — no account bound to this vault yet (no-account-hint) | disabled | unavailable | STOPPED mid-run — connector wants re-authentication (auth-error) · m365 ok (window {N}d) | REFUSED — signed in as a different account (account-mismatch) | REFUSED — no account bound to this vault yet (no-account-hint) | disabled | unavailable | STOPPED mid-run — connector wants re-authentication (auth-error)
 **Calendar enrichment:** ok | UNAVAILABLE
@@ -1133,8 +1222,8 @@ metadata already on screen, and it is never written to a note.
 `Cross-adapter duplicates skipped` counts occurrences settled two
 different ways, and each has its own undo shape — never assume one covers
 both. Step 1's triage-time `duplicate` bucket never reaches `sync
-settle-duplicate` at all — it has no `recording_id` yet (no full event
-read ever happened), so it banks straight through `sync m365-record`
+settle-duplicate` at all — it has no `recording_id` yet (no event read
+ever happened, by a probe or anything else), so it banks straight through `sync m365-record`
 (above) and its only undo is the id-scoped `sync m365-forget --event-id
 <id> --start-utc <utc>`, naming that entry's own `id`/`start_utc`. A
 worker's own `possible-duplicate-of` reply, dropped automatically now

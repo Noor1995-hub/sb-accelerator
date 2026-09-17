@@ -157,6 +157,48 @@ def test_a_non_utc_event_start_is_refused_not_guessed():
         m365.derive_id(event)
 
 
+def test_a_non_utc_event_end_is_refused_not_guessed():
+    """end.timeZone must be checked exactly as symmetrically as
+    start.timeZone — a non-UTC end used to be parsed as if it were UTC,
+    which would silently mis-window a recurring series' transcript filter
+    and the duration fallbacks derived from the same span."""
+    event = {**EVENT, "end": {"dateTime": "2026-08-25T17:00:00",
+                              "timeZone": "Romance Standard Time"}}
+    with pytest.raises(m365.M365Error, match="end.timeZone.*is not UTC"):
+        m365.ids([event], utc_offset="+02:00")
+
+
+def test_a_non_utc_event_end_is_refused_with_no_timezone_flags_at_all():
+    """PR #217 review finding: `_event_end` used to be reachable only
+    through `_event_duration_min`, which `ids()` calls only when
+    `timezone`/`utc_offset` is supplied — the probe's own `m365 ids` call
+    passes neither, so a malformed end passed through silently until a
+    Sonnet worker re-derived ids later, after the expensive dispatch this
+    PR exists to avoid. Validation must not depend on an optional flag."""
+    event = {**EVENT, "end": {"dateTime": "2026-08-25T17:00:00",
+                              "timeZone": "Romance Standard Time"}}
+    with pytest.raises(m365.M365Error, match="end.timeZone.*is not UTC"):
+        m365.ids([event])
+    with pytest.raises(m365.M365Error, match="end.timeZone.*is not UTC"):
+        m365.derive_id(event)
+
+
+def test_ids_with_no_timezone_flags_still_derives_an_event_with_no_end():
+    """The fix for the above must not make `end` a required key — an
+    event with no `end` at all (never mind a malformed one) still derives
+    an id with no flags supplied."""
+    event = {k: v for k, v in EVENT.items() if k != "end"}
+    result = m365.ids([event])
+    assert result["ids"][0]["recording_id"] == m365.derive_id(event)["recording_id"]
+    assert "event_duration_min" not in result["ids"][0]
+
+
+def test_event_missing_start_datetime_is_refused_plainly():
+    event = {k: v for k, v in EVENT.items() if k != "start"}
+    with pytest.raises(m365.M365Error, match="missing start.dateTime"):
+        m365.derive_id(event)
+
+
 def test_graph_seven_digit_fractional_seconds_parse():
     """Graph emits 7 fractional digits; 3.10's fromisoformat takes at most 6."""
     parsed = m365._parse_graph_dt("2026-08-25T09:00:00.5558195Z", "x")
@@ -325,10 +367,47 @@ def test_content_with_no_cues_raises(tmp_path):
 
 def test_an_event_missing_its_transcript_url_is_not_reassemblable(tmp_path):
     event = {k: v for k, v in EVENT.items() if k != "meetingTranscriptUrl"}
-    with pytest.raises(m365.M365Error, match="full calendar event read"):
+    with pytest.raises(m365.M365Error, match="missing meetingTranscriptUrl"):
         m365.reassemble(write_json(tmp_path, "e.json", event),
                         write_json(tmp_path, "t.json", TRANSCRIPT),
                         str(tmp_path), utc_offset="+02:00")
+
+
+def test_an_event_missing_start_datetime_is_not_reassemblable(tmp_path):
+    event = {k: v for k, v in EVENT.items() if k != "start"}
+    with pytest.raises(m365.M365Error, match="missing start.dateTime"):
+        m365.reassemble(write_json(tmp_path, "e.json", event),
+                        write_json(tmp_path, "t.json", TRANSCRIPT),
+                        str(tmp_path), utc_offset="+02:00")
+
+
+# --- trimmed event: the scratch event file the probe/worker write now keeps
+# only id, subject, start, end, meetingTranscriptUrl, organizer, attendees
+# (each name/address/type) — everything else (body, location, recurrence,
+# onlineMeeting, webLink, @odata.*, ...) is dropped before it ever reaches
+# scratch. ids/reassemble must round-trip on exactly that shape.
+
+TRIMMED_EVENT = {
+    "id": "AAMkAGId1",
+    "subject": "Kennismaking & sync AI",
+    "start": {"dateTime": "2026-08-25T14:00:00.0000000", "timeZone": "UTC"},
+    "end": {"dateTime": "2026-08-25T15:00:00.0000000", "timeZone": "UTC"},
+    "meetingTranscriptUrl": SCOPED_URL,
+    "organizer": {"name": "Michael B", "address": "m@example.com"},
+    "attendees": [{"name": "J T", "address": "j@client.com", "type": "required"}],
+}
+
+
+def test_trimmed_event_with_only_the_kept_keys_round_trips(tmp_path):
+    assert set(TRIMMED_EVENT) == {
+        "id", "subject", "start", "end", "meetingTranscriptUrl",
+        "organizer", "attendees"}
+    result = m365.reassemble(write_json(tmp_path, "e.json", TRIMMED_EVENT),
+                             write_json(tmp_path, "t.json", TRANSCRIPT),
+                             str(tmp_path), utc_offset="+02:00")
+    assert result["recording_id"] == m365.derive_id(TRIMMED_EVENT)["recording_id"]
+    assert result["duration_min"] == 47
+    assert result["recorded_local"] == "2026-08-25T16:00"
 
 
 # --- event_uri: the URI is derived, never retyped -------------------------
