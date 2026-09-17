@@ -54,15 +54,18 @@ event and derive your own ids before you touch a transcript:
    and let a human see it, instead of trying other spellings. Write the raw
    result to `$SCRATCH/m365_event_<n>.json` verbatim.
 2. Write the one-element array `$SCRATCH/m365_event_<n>.ids-in.json`
-   (the event you just fetched) and derive its dedup id:
+   (the event you just fetched) and derive its dedup id — with your
+   timezone, so the entry also carries `recorded_local` and
+   `event_duration_min` for the collision check below:
 
    ```bash
-   python3 "$VAULTLIB" m365 ids --events "$SCRATCH/m365_event_<n>.ids-in.json"
+   python3 "$VAULTLIB" m365 ids --events "$SCRATCH/m365_event_<n>.ids-in.json" --timezone <timezone from your prompt>
    ```
 
    `skipped` carrying `"reason": "no-transcript-url"` → reply
    `no-transcript` and stop — there is nothing to dedup or fetch. Otherwise
-   take `recording_id` and `transcript_url` from the one entry in `ids`.
+   take `recording_id`, `transcript_url`, `recorded_local`, and
+   `event_duration_min` from the one entry in `ids`.
 3. Write `$SCRATCH/m365_event_<n>.dedup.json` — the one-element array
    `[<recording_id>]` — and check the ledger:
 
@@ -76,6 +79,36 @@ event and derive your own ids before you touch a transcript:
    recorded why this id must never sync (`sync skip`, on an earlier run or
    an interactive drop), so there is nothing left for you to decide; no
    transcript fetch, no payload. Only a `new` id proceeds.
+
+   **Collision check.** Before you touch a transcript, check whether
+   another adapter already captured this conversation, using the values
+   step 2 just derived:
+
+   ```bash
+   python3 "$VAULTLIB" sync collide --vault "$VAULT" \
+     --start <recorded_local> --duration-min <event_duration_min>
+   ```
+
+   A match flagged `strong: true` from a different `source-recording-id`
+   namespace means a probable duplicate: reply
+
+   ```
+   possible-duplicate-of: <existing stem> (recording-id: <recording_id>, existing: <source-recording-id>)
+   ```
+
+   and stop — no transcript fetch, no payload. `collide`'s 15-minute grace
+   makes two merely-adjacent meetings (one ending as the other starts) a
+   *match* with essentially no real overlap; a match that is `imprecise`,
+   or precise but not `strong`, does not stop you: continue to step 4
+   below — `meeting write`'s own collide check reports it as a warning
+   later instead, at write time. When `event_duration_min` is absent (the
+   event has no `end`), there is nothing to give `sync collide
+   --duration-min`, so skip this collision check entirely and continue to
+   step 4 — the write-time net (`meeting write`'s own check) still applies
+   regardless. Skip this check entirely too when your briefing carries
+   `collision: accepted` (the interactive "write it anyway" re-dispatch) —
+   go straight to step 4, and pass `--accept-collision` to `meeting write`
+   in Extract and write below.
 4. One `read_resource` call on the `transcript_url` `m365 ids` returned in
    step 2, **exactly as given** — never rebuild or re-scope the URL; a
    recurring series answers a rebuilt, unscoped URL with other occurrences'
@@ -108,11 +141,21 @@ You make no other Graph call — not the calendar, not another occurrence.
 
 **Pre-fetched event variant.** Some briefings name an already-fetched event
 file plus its already-derived `recording_id` and a verbatim
-`transcript_url` instead of a URI to fetch — skip steps 1 and 2 and start
-at step 3 (dedup) with the ids you were given. You make only the one
-Graph call step 4 makes (the transcript) — the event was never yours to
-fetch on this path; everything else, including that single-call ceiling,
-stands as written.
+`transcript_url` instead of a URI to fetch — skip only step 1, the Graph
+fetch. Still run step 2's `m365 ids --events <the briefing's event file>
+--timezone <timezone from your prompt>` yourself, locally: it is a CLI
+call, not a Graph call, so it costs nothing against the single-call
+ceiling below, and it is the only way you get `recorded_local` and
+`event_duration_min` for your own collision check (the briefing did not
+derive those — only `recording_id` and `transcript_url`). Cross-check the
+`ids` result's `recording_id` and `transcript_url` against the ones your
+briefing already named: any disagreement means the pre-fetch and this
+worker are looking at two different events, so reply
+`fetch-error: pre-fetched ids disagree` and stop — do not guess which one
+is right. Agreement confirmed, continue at step 3 (dedup) as before. You
+make only the one Graph call step 4 makes (the transcript) — the event
+was never yours to fetch on this path; everything else, including that
+single-Graph-call ceiling, stands as written.
 
 ## Attendees and confidence (M365 only)
 
@@ -194,29 +237,6 @@ any `warnings` from the result at the end of your outcome line, verbatim.
 An inbox item has no fetch and no reassemble: read the file you were given;
 its `date` and `source-recording-id` arrive in your prompt.
 
-## Collision check (M365 only)
-
-Before writing, check whether another adapter already captured this
-conversation:
-
-```bash
-python3 "$VAULTLIB" sync collide --vault "$VAULT" \
-  --start <recorded_local> --duration-min <duration_min>
-```
-
-A match whose `source-recording-id` carries another namespace — or one
-flagged `imprecise: true` — means a probable duplicate. **Draft the payload
-anyway** (next section), but do **not** call `meeting write`: reply
-
-```
-possible-duplicate-of: <existing stem> (recording-id: <your recording_id>, payload at $SCRATCH/<scratch stem>.payload.json) (new-people: <comma-separated names>)
-```
-
-and stop — for M365, append `(new-people: none)` in place of the names
-when nobody was counted new; that clause carries the list you kept in the
-Attendees and confidence step above. The orchestrator decides with the
-user and can write your payload without re-extraction.
-
 ## Extract and write
 
 Extract from the blob file the `reassemble` result named — never from the raw
@@ -246,18 +266,42 @@ confidence your prompt already stamped, and no match means `projects: []`.
 python3 "$VAULTLIB" meeting write --vault "$VAULT" --note "$SCRATCH/<scratch stem>.payload.json"
 ```
 
+If your briefing carries `collision: accepted` (the interactive "write it
+anyway" re-dispatch — you skipped the M365 collision check above, or you
+are a plaud/inbox worker with no early check of your own), add
+`--accept-collision` to this call.
+
 If `meeting write` refuses, fix the payload per the `error` and `hint` and
-retry — the contract names every rule. The one refusal you never retry is
-an `error` naming an already-synced id: dedup was bypassed upstream — stop
-and reply `fetch-error: already-synced id (dedup bypassed)` so a human sees
-it. Read the result: `conflict` of kind `confirmed-target`,
+retry — the contract names every rule. Two refusals you never retry:
+
+- an `error` naming an already-synced id: dedup was bypassed upstream —
+  stop and reply `fetch-error: already-synced id (dedup bypassed)` so a
+  human sees it.
+- an `error` starting `cross-adapter-duplicate:` — this write-time net
+  applies to every worker type, not just M365, and can fire even after an
+  M365 worker's own early collision check found nothing (a sibling
+  worker's note can land on disk in the gap between the two checks). Take
+  the existing stem and id the error names and reply
+
+  ```
+  possible-duplicate-of: <existing stem> (recording-id: <your recording_id>, existing: <existing_id>)
+  ```
+
+  and stop — do not retry with a different payload; nothing was written.
+
+Read the result: `conflict` of kind `confirmed-target`,
 `cross-source-duplicate` (a sibling worker in this run — or an earlier run —
 already wrote this meeting's note from another source; the CLI wrote your
 note as a flagged sibling instead), or `stem-collision` still counts as
 written — mention the kind in your outcome line. Verify the result's `path` exists on disk before
 replying `written:` — for M365, append `(recording-id: <your recording_id>)`
-and the same `(new-people: ...)` clause described in the collision section
-above.
+and the same `(new-people: ...)` clause described in the Attendees and
+confidence section above. Include any `warnings` the `meeting write` result
+carries at the end of your outcome line, verbatim — the same obligation
+Reassemble's own `warnings` already carry (an accepted collision, or an
+imprecise/weak-overlap collision match `meeting write` flagged but did not
+refuse on); this is the only way that information ever reaches the
+orchestrator's summary.
 
 ## The outcome line (your entire reply)
 
@@ -271,12 +315,13 @@ above.
 | `auth-error` | connector wants re-authentication — the adapter should stop |
 | `already-synced: <recording_id>` | M365 only: `sync dedup` already reports your derived id `synced` — stop before the transcript read; no payload |
 | `skip-listed: <recording_id>` | M365 only: `sync dedup` already reports your derived id `skipped` — stop before the transcript read; no payload |
-| `possible-duplicate-of: <stem> (payload at <path>)` | collision found; payload drafted, nothing written (M365 additionally appends `(recording-id: m365:<hex>, ...)` and `(new-people: ...)` — see the collision section) |
+| `possible-duplicate-of: <existing stem> (recording-id: <recording_id>, existing: <existing_id>)` | a cross-adapter collision, caught either before the transcript fetch (M365's own collision check above) or at write time (`meeting write`'s `cross-adapter-duplicate` refusal, any adapter) — nothing was written, and no payload was ever drafted |
 
 For an M365 recording, the orchestrator parses `recording-id:` out of your
 `written` and `possible-duplicate-of` lines to bank the outcome —
 `sync m365-record` **requires** a namespaced `recording_id` on every
-`written` outcome (`seenevents.py:234-242`). Get that clause right: a
+`written` outcome (`seenevents._validate_outcome`'s `written` branch). Get
+that clause right: a
 missing or malformed `recording-id:` must surface to the orchestrator as a
 banking error, never silently drop the occurrence from the ledger. A
 `skip-listed:` line banks as a plain `"skipped"` outcome instead — it

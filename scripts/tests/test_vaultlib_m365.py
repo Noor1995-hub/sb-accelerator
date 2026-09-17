@@ -90,6 +90,61 @@ def test_ids_rejects_a_non_array_payload():
         m365.ids({"value": []})
 
 
+# --- ids gains optional --timezone/--utc-offset (A3's CLI half): the owner-
+# local recorded timestamp and the event's own span, so `sync collide` can
+# run before any transcript fetch. Omitted entirely when neither is passed —
+# id-only callers (the worker contract's step-2 invocation before this PR)
+# see no shape change at all.
+
+
+def test_ids_omits_recorded_local_and_duration_without_timezone_or_offset():
+    result = m365.ids([EVENT])
+    assert "recorded_local" not in result["ids"][0]
+    assert "event_duration_min" not in result["ids"][0]
+
+
+def test_ids_adds_recorded_local_and_duration_with_utc_offset():
+    result = m365.ids([EVENT], utc_offset="+02:00")
+    assert result["ids"][0]["recorded_local"] == "2026-08-25T16:00"
+    assert result["ids"][0]["event_duration_min"] == 60
+
+
+def test_ids_adds_recorded_local_and_duration_with_timezone():
+    try:
+        from zoneinfo import ZoneInfo
+        ZoneInfo("Europe/Brussels")
+    except Exception:
+        pytest.skip("no tz database on host")
+    result = m365.ids([EVENT], timezone="Europe/Brussels")
+    assert result["ids"][0]["recorded_local"] == "2026-08-25T16:00"
+    assert result["ids"][0]["event_duration_min"] == 60
+
+
+def test_ids_duration_absent_without_an_event_end():
+    event = {k: v for k, v in EVENT.items() if k != "end"}
+    result = m365.ids([event], utc_offset="+02:00")
+    assert result["ids"][0]["recorded_local"] == "2026-08-25T16:00"
+    assert "event_duration_min" not in result["ids"][0]
+
+
+def test_ids_event_duration_min_rounds_not_floors():
+    """Fix round 1, MINOR 3: event_duration_min must share dates.py's
+    round()-semantics helper with sync collide's occurrence duration —
+    a floor here would silently disagree with collide's own rounding."""
+    event = {**EVENT, "end": {"dateTime": "2026-08-25T14:40:31.0000000",
+                              "timeZone": "UTC"}}
+    result = m365.ids([event], utc_offset="+02:00")
+    # 40 min 31 sec = 40.5166... min -> rounds to 41, a floor would say 40.
+    assert result["ids"][0]["event_duration_min"] == 41
+
+
+def test_ids_skipped_entries_are_unaffected_by_timezone():
+    bare = {"subject": "Focus time", "start": EVENT["start"]}
+    result = m365.ids([EVENT, bare], utc_offset="+02:00")
+    assert result["skipped"] == [{"subject": "Focus time",
+                                  "reason": "no-transcript-url"}]
+
+
 def test_a_malformed_transcript_url_raises():
     with pytest.raises(m365.M365Error, match="does not start with"):
         m365.derive_id({**EVENT, "meetingTranscriptUrl": "https://graph/x"})

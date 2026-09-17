@@ -667,6 +667,214 @@ def test_sync_skip_carries_an_optional_reason_through(capsys, tmp_path):
          "reason": "a pocket recording, nothing said", "source_name": None}]
 
 
+def test_sync_settle_duplicate_through_the_cli_skip_list_only(
+    capsys, tmp_path
+):
+    root = make_vault(tmp_path)
+    code, payload = run(capsys, [
+        "sync", "settle-duplicate", "--vault", str(root),
+        "--id", "m365:aaaa111122223333", "--existing", "plaud:abc123",
+        "--stem", "28-08-26-weekly-sync",
+    ])
+    assert code == 0
+    assert payload["result"]["seen_events_recorded"] is False
+    assert syncjob.read_skip_records(root) == [{
+        "recording_id": "m365:aaaa111122223333",
+        "reason": "same meeting already synced as plaud:abc123 "
+                  "(28-08-26-weekly-sync)",
+        "source_name": None,
+    }]
+
+
+def test_sync_settle_duplicate_through_the_cli_with_event_keys(
+    capsys, tmp_path
+):
+    root = make_vault(tmp_path)
+    code, payload = run(capsys, [
+        "sync", "settle-duplicate", "--vault", str(root),
+        "--id", "m365:aaaa111122223333", "--existing", "plaud:abc123",
+        "--stem", "28-08-26-weekly-sync",
+        "--event-id", "AAMkAGId1", "--start-utc", "2026-08-28T14:00:00",
+    ])
+    assert code == 0
+    assert payload["result"]["seen_events_recorded"] is True
+
+    listing = tmp_path / "search.json"
+    listing.write_text(json.dumps([{
+        "id": "AAMkAGId1", "subject": "Weekly sync",
+        "start": {"dateTime": "2026-08-28T14:00:00.0000000", "timeZone": "UTC"},
+        "end": {"dateTime": "2026-08-28T15:00:00.0000000", "timeZone": "UTC"},
+    }]), encoding="utf-8")
+    code, payload = run(capsys, [
+        "sync", "m365-triage", "--vault", str(root),
+        "--events", str(listing), "--now", "2026-08-28T18:00:00",
+    ])
+    assert code == 0
+    assert payload["result"]["fetch"] == []
+    assert payload["result"]["filtered"]["skipped"] == 1
+
+
+def test_sync_settle_duplicate_travels_together_argument_error(
+    capsys, tmp_path
+):
+    root = make_vault(tmp_path)
+    code, payload = run(capsys, [
+        "sync", "settle-duplicate", "--vault", str(root),
+        "--id", "m365:aaaa111122223333", "--existing", "plaud:abc123",
+        "--stem", "28-08-26-weekly-sync", "--event-id", "AAMkAGId1",
+    ])
+    assert code == 1
+    assert payload["ok"] is False
+    assert "travel together" in payload["error"]
+
+
+def test_sync_unskip_through_the_cli(capsys, tmp_path):
+    root = make_vault(tmp_path)
+    run(capsys, ["sync", "skip", "--vault", str(root),
+                "--id", "plaud:abc123"])
+    code, payload = run(capsys, [
+        "sync", "unskip", "--vault", str(root), "--id", "plaud:abc123",
+    ])
+    assert code == 0
+    assert payload["result"] == {"recording_id": "plaud:abc123",
+                                 "removed": True}
+    assert syncjob.read_skip_list(root) == set()
+
+
+def test_sync_unskip_refuses_an_unknown_id_through_the_cli(capsys, tmp_path):
+    root = make_vault(tmp_path)
+    code, payload = run(capsys, [
+        "sync", "unskip", "--vault", str(root), "--id", "plaud:neverskipped",
+    ])
+    assert code == 1
+    assert payload["ok"] is False
+    assert "not on the skip list" in payload["error"]
+
+
+# ---------------------------------------------------------------------------
+# Fix wave 2, IMPORTANT: sync unskip alone leaves a worker-settled m365
+# duplicate's seen-events entry in place. sync unsettle-duplicate reverses
+# both writes sync settle-duplicate made.
+
+
+def test_sync_unsettle_duplicate_reverses_both_writes(capsys, tmp_path):
+    root = make_vault(tmp_path)
+    code, payload = run(capsys, [
+        "sync", "settle-duplicate", "--vault", str(root),
+        "--id", "m365:aaaa111122223333", "--existing", "plaud:abc123",
+        "--stem", "28-08-26-weekly-sync",
+        "--event-id", "AAMkAGId1", "--start-utc", "2026-08-28T14:00:00",
+    ])
+    assert code == 0
+
+    code, payload = run(capsys, [
+        "sync", "unsettle-duplicate", "--vault", str(root),
+        "--id", "m365:aaaa111122223333",
+        "--event-id", "AAMkAGId1", "--start-utc", "2026-08-28T14:00:00",
+    ])
+    assert code == 0
+    assert payload["result"] == {"recording_id": "m365:aaaa111122223333",
+                                 "removed": True, "forgot": True,
+                                 "reason": None}
+    assert syncjob.read_skip_list(root) == set()
+
+    listing = tmp_path / "search.json"
+    listing.write_text(json.dumps([{
+        "id": "AAMkAGId1", "subject": "Weekly sync",
+        "start": {"dateTime": "2026-08-28T14:00:00.0000000", "timeZone": "UTC"},
+        "end": {"dateTime": "2026-08-28T15:00:00.0000000", "timeZone": "UTC"},
+    }]), encoding="utf-8")
+    code, payload = run(capsys, [
+        "sync", "m365-triage", "--vault", str(root),
+        "--events", str(listing), "--now", "2026-08-28T18:00:00",
+    ])
+    assert code == 0
+    assert [e["reason"] for e in payload["result"]["fetch"]] == ["unseen"]
+
+
+def test_sync_unsettle_duplicate_without_event_keys_removes_the_skip_line_only(
+    capsys, tmp_path
+):
+    root = make_vault(tmp_path)
+    code, payload = run(capsys, [
+        "sync", "settle-duplicate", "--vault", str(root),
+        "--id", "plaud:aaaa111122223333", "--existing", "plaud:abc123",
+        "--stem", "28-08-26-weekly-sync",
+    ])
+    assert code == 0
+
+    code, payload = run(capsys, [
+        "sync", "unsettle-duplicate", "--vault", str(root),
+        "--id", "plaud:aaaa111122223333",
+    ])
+    assert code == 0
+    assert payload["result"] == {"recording_id": "plaud:aaaa111122223333",
+                                 "removed": True, "forgot": False,
+                                 "reason": None}
+    assert syncjob.read_skip_list(root) == set()
+
+
+def test_sync_unsettle_duplicate_refuses_to_forget_a_non_skipped_entry(
+    capsys, tmp_path
+):
+    root = make_vault(tmp_path)
+    code, payload = run(capsys, [
+        "sync", "settle-duplicate", "--vault", str(root),
+        "--id", "m365:aaaa111122223333", "--existing", "plaud:abc123",
+        "--stem", "28-08-26-weekly-sync",
+    ])
+    assert code == 0
+    outcomes = tmp_path / "outcomes.json"
+    outcomes.write_text(json.dumps([{
+        "id": "AAMkAGId1", "start_utc": "2026-08-28T14:00:00",
+        "outcome": "written", "recording_id": "m365:0123456789abcdef",
+    }]), encoding="utf-8")
+    code, payload = run(capsys, [
+        "sync", "m365-record", "--vault", str(root),
+        "--outcomes", str(outcomes), "--now", "2026-08-28T19:00:00",
+    ])
+    assert code == 0
+
+    code, payload = run(capsys, [
+        "sync", "unsettle-duplicate", "--vault", str(root),
+        "--id", "m365:aaaa111122223333",
+        "--event-id", "AAMkAGId1", "--start-utc", "2026-08-28T14:00:00",
+    ])
+    assert code == 0
+    assert payload["result"] == {"recording_id": "m365:aaaa111122223333",
+                                 "removed": True, "forgot": False,
+                                 "reason": "outcome is written, not skipped"}
+
+
+def test_sync_unsettle_duplicate_refuses_an_id_not_on_the_skip_list(
+    capsys, tmp_path
+):
+    root = make_vault(tmp_path)
+    code, payload = run(capsys, [
+        "sync", "unsettle-duplicate", "--vault", str(root),
+        "--id", "m365:neverskipped",
+    ])
+    assert code == 1
+    assert payload["ok"] is False
+    assert "not on the skip list" in payload["error"]
+
+
+def test_sync_unsettle_duplicate_event_id_requires_start_utc(capsys, tmp_path):
+    root = make_vault(tmp_path)
+    run(capsys, [
+        "sync", "settle-duplicate", "--vault", str(root),
+        "--id", "m365:aaaa111122223333", "--existing", "plaud:abc123",
+        "--stem", "28-08-26-weekly-sync",
+    ])
+    code, payload = run(capsys, [
+        "sync", "unsettle-duplicate", "--vault", str(root),
+        "--id", "m365:aaaa111122223333", "--event-id", "AAMkAGId1",
+    ])
+    assert code == 1
+    assert payload["ok"] is False
+    assert "travel together" in payload["error"]
+
+
 M365_EVENT = {
     "subject": "Weekly sync",
     "start": {"dateTime": "2026-08-25T14:00:00.0000000", "timeZone": "UTC"},
@@ -745,6 +953,75 @@ def test_sync_m365_triage_and_record_round_trip_through_the_cli(
     assert code == 0
     assert payload["result"]["fetch"] == []
     assert payload["result"]["filtered"]["written"] == 1
+
+
+def test_sync_m365_triage_collide_flag_moves_a_cross_adapter_match(
+    capsys, tmp_path
+):
+    root = make_vault(tmp_path)
+    (root / "20-meetings").mkdir(exist_ok=True)
+    (root / "20-meetings" / "25-08-26-weekly-sync.md").write_text(
+        "---\ndate: 2026-08-25T14:00\ntype: meeting\n"
+        "recording-duration: 60\nsource: recorder\n"
+        "source-recording-id: plaud:abc123\n---\n\nbody\n", encoding="utf-8")
+    listing = tmp_path / "search.json"
+    listing.write_text(json.dumps(M365_LISTING), encoding="utf-8")
+
+    code, payload = run(capsys, [
+        "sync", "m365-triage", "--vault", str(root),
+        "--events", str(listing), "--now", "2026-08-25T18:00:00",
+        "--collide", "--utc-offset", "+00:00",
+    ])
+    assert code == 0
+    assert payload["result"]["fetch"] == []
+    assert payload["result"]["duplicate"] == [{
+        "id": "AAMkAGId1", "start_utc": "2026-08-25T14:00:00",
+        "subject": "Weekly sync", "event_uri": "calendar:///events/AAMkAGId1",
+        "existing_stem": "25-08-26-weekly-sync",
+        "existing_id": "plaud:abc123",
+    }]
+
+
+def test_sync_m365_triage_collide_duplicate_settles_after_banking(
+    capsys, tmp_path
+):
+    """The A2 round trip: bank the collide-caught duplicate as a plain
+    seen-events `skipped` entry (no recording_id — there is no m365 id yet)
+    and confirm the next triage neither re-fetches nor re-flags it."""
+    root = make_vault(tmp_path)
+    (root / "20-meetings").mkdir(exist_ok=True)
+    (root / "20-meetings" / "25-08-26-weekly-sync.md").write_text(
+        "---\ndate: 2026-08-25T14:00\ntype: meeting\n"
+        "recording-duration: 60\nsource: recorder\n"
+        "source-recording-id: plaud:abc123\n---\n\nbody\n", encoding="utf-8")
+    listing = tmp_path / "search.json"
+    listing.write_text(json.dumps(M365_LISTING), encoding="utf-8")
+
+    code, payload = run(capsys, [
+        "sync", "m365-triage", "--vault", str(root),
+        "--events", str(listing), "--now", "2026-08-25T18:00:00",
+        "--collide", "--utc-offset", "+00:00",
+    ])
+    dup = payload["result"]["duplicate"][0]
+    outcomes = tmp_path / "outcomes.json"
+    outcomes.write_text(json.dumps([{
+        "id": dup["id"], "start_utc": dup["start_utc"], "outcome": "skipped",
+    }]), encoding="utf-8")
+    code, payload = run(capsys, [
+        "sync", "m365-record", "--vault", str(root),
+        "--outcomes", str(outcomes), "--now", "2026-08-25T19:00:00",
+    ])
+    assert code == 0
+
+    code, payload = run(capsys, [
+        "sync", "m365-triage", "--vault", str(root),
+        "--events", str(listing), "--now", "2026-08-25T20:00:00",
+        "--collide", "--utc-offset", "+00:00",
+    ])
+    assert code == 0
+    assert payload["result"]["fetch"] == []
+    assert payload["result"]["duplicate"] == []
+    assert payload["result"]["filtered"]["skipped"] == 1
 
 
 def test_sync_m365_triage_without_config_yields_unset_warning_and_no_filtering(
@@ -990,6 +1267,104 @@ def test_sync_m365_forget_rejects_written_through_the_cli(capsys, tmp_path):
     assert "written" in payload["error"]
 
 
+# ---------------------------------------------------------------------------
+# Fix round 1, IMPORTANT: the targeted id-scoped forget (the undo for a
+# triage-caught cross-adapter duplicate, which banks as `skipped` — a
+# bulk `--outcome skipped` forget is refused, so nothing could undo it).
+
+
+def test_sync_m365_forget_event_id_scoped_removes_a_skipped_entry(
+    capsys, tmp_path
+):
+    root = make_vault(tmp_path)
+    outcomes = tmp_path / "outcomes.json"
+    outcomes.write_text(json.dumps([{
+        "id": "AAMkAGId1", "start_utc": "2026-08-25T14:00:00",
+        "outcome": "skipped",
+    }]), encoding="utf-8")
+    code, payload = run(capsys, [
+        "sync", "m365-record", "--vault", str(root),
+        "--outcomes", str(outcomes), "--now", "2026-08-25T19:00:00",
+    ])
+    assert code == 0
+
+    code, payload = run(capsys, [
+        "sync", "m365-forget", "--vault", str(root),
+        "--event-id", "AAMkAGId1", "--start-utc", "2026-08-25T14:00:00",
+    ])
+    assert code == 0
+    assert payload["result"] == {"forgotten": 1, "remaining": 0}
+
+
+def test_sync_m365_forget_event_id_scoped_refuses_an_unknown_occurrence(
+    capsys, tmp_path
+):
+    root = make_vault(tmp_path)
+    code, payload = run(capsys, [
+        "sync", "m365-forget", "--vault", str(root),
+        "--event-id", "AAMkAGId9", "--start-utc", "2026-08-25T14:00:00",
+    ])
+    assert code == 1
+    assert payload["ok"] is False
+    assert "nothing to forget" in payload["error"]
+
+
+def test_sync_m365_forget_rejects_mixing_outcome_and_event_id(
+    capsys, tmp_path
+):
+    root = make_vault(tmp_path)
+    code, payload = run(capsys, [
+        "sync", "m365-forget", "--vault", str(root),
+        "--outcome", "no-access",
+        "--event-id", "AAMkAGId1", "--start-utc", "2026-08-25T14:00:00",
+    ])
+    assert code == 1
+    assert payload["ok"] is False
+    assert "mutually exclusive" in payload["error"]
+
+
+def test_sync_m365_forget_requires_outcome_or_the_event_id_pair(
+    capsys, tmp_path
+):
+    root = make_vault(tmp_path)
+    code, payload = run(capsys, [
+        "sync", "m365-forget", "--vault", str(root),
+    ])
+    assert code == 1
+    assert payload["ok"] is False
+
+
+def test_sync_m365_forget_event_id_requires_start_utc(capsys, tmp_path):
+    root = make_vault(tmp_path)
+    code, payload = run(capsys, [
+        "sync", "m365-forget", "--vault", str(root),
+        "--event-id", "AAMkAGId1",
+    ])
+    assert code == 1
+    assert payload["ok"] is False
+    assert "travel together" in payload["error"]
+
+
+# ---------------------------------------------------------------------------
+# Fix round 1, MINOR 4: --collide must require --timezone or --utc-offset
+# at argparse level — before any work, not a runtime DatesError deep inside
+# the first candidate's collide check.
+
+
+def test_sync_m365_triage_collide_requires_timezone_or_offset(
+    capsys, tmp_path
+):
+    root = make_vault(tmp_path)
+    listing = tmp_path / "search.json"
+    listing.write_text(json.dumps(M365_LISTING), encoding="utf-8")
+    with pytest.raises(SystemExit):
+        run(capsys, [
+            "sync", "m365-triage", "--vault", str(root),
+            "--events", str(listing), "--now", "2026-08-25T18:00:00",
+            "--collide",
+        ])
+
+
 def test_sync_watermark_round_trips_through_the_cli(capsys, tmp_path):
     root = make_vault(tmp_path)
     code, payload = run(capsys, [
@@ -1220,6 +1595,28 @@ def test_m365_ids_reads_events_from_stdin(capsys, monkeypatch, tmp_path):
     assert code == 0
     assert len(payload["result"]["ids"]) == 1
     assert payload["result"]["ids"][0]["recording_id"].startswith("m365:")
+
+
+def test_m365_ids_without_timezone_or_offset_omits_the_new_fields(
+    capsys, tmp_path
+):
+    events = tmp_path / "events.json"
+    events.write_text(json.dumps([M365_EVENT]), encoding="utf-8")
+    code, payload = run(capsys, ["m365", "ids", "--events", str(events)])
+    assert code == 0
+    assert "recorded_local" not in payload["result"]["ids"][0]
+    assert "event_duration_min" not in payload["result"]["ids"][0]
+
+
+def test_m365_ids_with_utc_offset_through_the_cli(capsys, tmp_path):
+    events = tmp_path / "events.json"
+    events.write_text(json.dumps([M365_EVENT]), encoding="utf-8")
+    code, payload = run(capsys, [
+        "m365", "ids", "--events", str(events), "--utc-offset", "+02:00",
+    ])
+    assert code == 0
+    assert payload["result"]["ids"][0]["recorded_local"] == "2026-08-25T16:00"
+    assert payload["result"]["ids"][0]["event_duration_min"] == 60
 
 
 def test_sync_collide_through_the_cli_reports_matches(capsys, tmp_path):

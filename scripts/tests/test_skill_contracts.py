@@ -262,6 +262,24 @@ def test_sync_recordings_triages_m365_before_the_fetch():
         "SKILL.md no longer makes either call itself")
 
 
+# Fix wave 2, CRITICAL: a run whose only m365 candidates are known
+# cross-adapter duplicates dispatches zero worker batches and zero probes,
+# so deferring the `duplicate` bucket's banking to "step 6's next per-batch
+# outcomes call" means that call never happens — the loop survives forever.
+def test_sync_recordings_step1_banks_duplicate_bucket_immediately():
+    text = read_skill("sync-recordings")
+    step1 = text.split("### 1.")[1].split("### 2.")[0]
+    assert step1.index("sync m365-triage") < step1.index("sync m365-record"), (
+        "the duplicate bucket must be banked right after triage, inside "
+        "step 1 — not deferred to a batch call a zero-dispatch run never "
+        "makes"
+    )
+    assert "never deferred" in step1, (
+        "step 1 must mirror the probe-wave banking language: banked "
+        "immediately, in its own call, never deferred"
+    )
+
+
 # The #122 failure shape — a fleet of extraction subagents each paid ~62k
 # tokens to learn "nothing to write" — is prevented by triage gating
 # dispatch and by workers fetching FIRST (a negative is a first-tool-call
@@ -283,9 +301,16 @@ def test_sync_recordings_dispatches_workers_only_after_triage_and_dedup():
     dispatch = text.index("### 6.")
     assert text.index("sync m365-triage") < dispatch, (
         "triage must run before dispatch")
-    assert text.index("sync m365-record") > dispatch, (
-        "there is no pre-dispatch settled-outcomes banking any more — "
-        "every sync m365-record call happens after workers return")
+    # Fix wave 2: step 1 now also banks the triage-caught `duplicate` bucket
+    # immediately (a run with zero worker/probe dispatch must still bank it
+    # — see test_sync_recordings_step1_banks_duplicate_bucket_immediately),
+    # so one "sync m365-record" occurrence now legitimately precedes
+    # dispatch. There must still be at least one AFTER dispatch, for the
+    # worker-batch banking that only runs once workers return.
+    occurrences = [m.start() for m in re.finditer("sync m365-record", text)]
+    assert any(idx > dispatch for idx in occurrences), (
+        "there is no worker-batch settled-outcomes banking any more — "
+        "some sync m365-record call must still happen after workers return")
 
 
 # Cost round 2: workers run as the plugin's own agent types, which pin the
@@ -592,6 +617,184 @@ def test_sync_recordings_counts_cross_source_duplicates():
         "one-conversation-twice failure, caught at write time")
 
 
+# ---------------------------------------------------------------------------
+# A2 / A4 (prose halves): step 1's triage call gains --collide, banks its
+# duplicate bucket as skipped with no dispatch; step 6's possible-duplicate-of
+# handling settles unattended automatically through `sync settle-duplicate`
+# instead of deferring; the watermark no longer holds for a deferred
+# duplicate (there is not one any more); the summary reports what actually
+# happened instead of a permanent "deferred" state.
+
+
+def test_sync_recordings_step1_triage_call_passes_collide():
+    text = read_skill("sync-recordings")
+    step1 = text.split("### 1.")[1].split("### 2.")[0]
+    assert "--collide" in step1, (
+        "step 1's m365-triage invocation must pass --collide so a known "
+        "cross-adapter duplicate never reaches dispatch"
+    )
+    assert '"outcome": "skipped"' in step1, (
+        "a triage-time duplicate has no m365 id yet, so it banks as a "
+        "plain skipped seen-events entry, not a written one"
+    )
+    assert "no dispatch" in step1.lower() or "never dispatch" in \
+        step1.lower(), (
+        "the triage-caught duplicate bucket must say plainly that it "
+        "skips dispatch entirely"
+    )
+
+
+def test_sync_recordings_step6_possible_duplicate_uses_settle_duplicate():
+    text = read_skill("sync-recordings")
+    step6 = text.split("### 6.")[1].split("### 7.")[0]
+    assert "sync settle-duplicate" in step6, (
+        "the unattended (and the interactive drop-it) path must settle "
+        "through the one CLI verb that validates first, then writes the "
+        "skip-list line and (for M365) the seen-events entry, in order"
+    )
+    assert "sync unsettle-duplicate" in step6, (
+        "the settle line must carry its own undo command — bare sync "
+        "unskip is not enough for an M365 recording"
+    )
+    assert "collision: accepted" in step6, (
+        "the interactive write-it-anyway path is a re-dispatch with this "
+        "briefing field, not a bare meeting write --note of a stashed "
+        "payload"
+    )
+
+
+def test_sync_recordings_no_longer_defers_cross_adapter_duplicates():
+    text = read_skill("sync-recordings")
+    assert "defers until an interactive run settles it" not in text, (
+        "unattended duplicates are auto-skipped now, never deferred"
+    )
+    assert "Possible cross-adapter duplicates:** {N} — deferred" not in \
+        text
+    step1 = text.split("### 1.")[1].split("### 2.")[0]
+    assert "and neither does a cross-adapter duplicate" not in step1, (
+        "a cross-adapter duplicate always gets an outcome now (settled via "
+        "sync settle-duplicate), so it is no longer grouped with the "
+        "failed-transport no-outcome-line case"
+    )
+
+
+def test_sync_recordings_watermark_no_longer_holds_for_a_deferred_duplicate():
+    text = read_skill("sync-recordings")
+    watermark = text.split("**Advance the watermark")[1].split(
+        "### 7.")[0]
+    assert "deferred" not in watermark.lower(), (
+        "there is no more deferred cross-adapter duplicate for the "
+        "watermark to hold open for — it auto-settles instead"
+    )
+    assert "fetch-error" in watermark, (
+        "the fetch-error retry sentence must survive this edit unchanged"
+    )
+
+
+def test_sync_recordings_summary_reports_cross_adapter_duplicates_skipped():
+    text = read_skill("sync-recordings")
+    assert "**Cross-adapter duplicates skipped:**" in text
+    assert "sync unsettle-duplicate --id" in text
+    assert "**Possible cross-adapter duplicates:**" not in text
+
+
+# ---------------------------------------------------------------------------
+# Fix round 1 on PR A. Task review findings, SKILL.md half.
+
+
+def test_sync_recordings_cross_adapter_duplicates_has_two_undo_shapes():
+    """IMPORTANT: a triage-caught duplicate has no recording_id yet — only
+    the id-scoped `sync m365-forget --event-id --start-utc` can undo it. A
+    worker-settled one has a real recording_id but, for M365, also carries
+    a seen-events entry `sync unskip` alone cannot reach — `sync
+    unsettle-duplicate` reverses both. Both shapes must be named."""
+    text = read_skill("sync-recordings")
+    assert "sync unsettle-duplicate --id" in text
+    assert "sync m365-forget --event-id" in text
+    assert "--start-utc" in text
+
+
+def test_sync_recordings_no_longer_offers_bare_unskip_as_the_undo():
+    """The incomplete fix from an earlier round: sync unskip alone leaves a
+    worker-settled M365 duplicate's seen-events entry in place, permanently
+    filtering the occurrence out of every future triage. Nothing in the
+    skill may point at it as if it were sufficient any more."""
+    text = read_skill("sync-recordings")
+    assert "undo: `sync unskip --id" not in text
+    assert "the undo is `sync unskip --id" not in text
+
+
+def test_sync_recordings_drops_the_settled_from_either_net_claim():
+    """The triage net never calls sync settle-duplicate at all — it banks
+    straight through sync m365-record (no recording_id exists yet) — so a
+    sentence claiming settle_duplicate settles occurrences 'from either
+    net' is simply wrong."""
+    text = read_skill("sync-recordings")
+    assert "from either net" not in text
+
+
+def test_sync_recordings_rules_block_attributes_duplicates_to_the_right_net():
+    """Final re-review residual: the rules-block passage right after 'gets
+    no outcome line' used to say every cross-adapter duplicate settles
+    through `sync settle-duplicate` (step 6), 'whichever net catches it' —
+    including the triage bucket, which has no recording_id and never
+    reaches settle-duplicate at all (it banks via sync m365-record in step
+    1, per test_sync_recordings_step1_banks_duplicate_bucket_immediately).
+    The passage must attribute each net to its own verb."""
+    text = read_skill("sync-recordings")
+    idx = text.index("A cross-adapter duplicate always gets")
+    clause = text[idx: idx + 500]
+    assert "whichever net catches it" not in clause, (
+        "the single shared verb framing must be gone"
+    )
+    assert "duplicate` bucket" in clause and "step 1" in clause, (
+        "the triage-bucket path must be named as step 1's own"
+    )
+    assert clause.index("sync m365-record") < clause.index(
+        "sync settle-duplicate"), (
+        "the triage-bucket's sync m365-record must be named before "
+        "settle-duplicate, matching which net actually uses which verb"
+    )
+
+
+def test_sync_recordings_possible_duplicates_reads_warnings_from_outcome_lines():
+    """SPEC GAP: the summary's Possible-duplicates line must say the
+    imprecise/weak-overlap warnings come from a worker's own outcome line
+    (which now carries meeting write's warnings verbatim), not from
+    'meeting write' as if the orchestrator ever saw its raw JSON directly."""
+    text = read_skill("sync-recordings")
+    idx = text.index("**Possible duplicates:**")
+    clause = text[idx: idx + 400]
+    assert "outcome line" in clause, (
+        "the clause must say these warnings arrive via a worker's outcome "
+        "line, not directly from meeting write"
+    )
+
+
+def test_sync_recordings_no_dated_internal_run_economics():
+    """MINOR 7: internal run-economics detail (a specific measured date, a
+    specific prior-run date, dollar figures) does not belong in a skill a
+    client-facing consultant reads — keep the rule and a one-clause reason,
+    drop the metrics."""
+    text = read_skill("sync-recordings")
+    assert "measured 2026-09-17" not in text
+    assert "since 2026-09-15" not in text
+    assert "26% problem" not in text
+    assert not re.search(r"\$\d", text), (
+        "no dollar figures belong in the shipped skill prose"
+    )
+
+
+def test_sync_recordings_workers_dispatched_line_names_duplicate_bucket():
+    """Fix wave 2: a triage-caught duplicate is a fourth reason an m365
+    candidate never reaches dispatch, alongside the cache, external, and
+    not-ended reasons already enumerated — it must be named too."""
+    text = read_skill("sync-recordings")
+    idx = text.index("m365 candidates not dispatched were")
+    clause = text[idx: idx + 200]
+    assert "duplicate" in clause
+
+
 def test_sync_recordings_worker_contract_m365_resolves_its_own_attendees():
     ref = read_ref("sync-recordings", "worker-contract.md")
     assert "person ensure" in ref, (
@@ -653,13 +856,184 @@ def test_sync_recordings_worker_contract_m365_derives_the_attendees_reason():
 
 
 def test_sync_recordings_worker_contract_seenevents_citation_is_accurate():
+    """PR #216 review: a line-number citation rots on every commit that
+    touches the file above it (this PR's own collide/settle-duplicate
+    additions already shifted this exact citation twice). Cite by symbol
+    instead — `seenevents._validate_outcome`'s `written` branch — and
+    forbid every `seenevents.py:<digits>` line citation anywhere in the
+    contract, not just the one this citation used to be."""
     ref = read_ref("sync-recordings", "worker-contract.md")
-    assert "seenevents.py:234-242" in ref, (
-        "the written/recording_id enforcement actually sits at "
-        "seenevents.py:234-242 (_validate_outcome's written branch), not "
-        "the outcome-vocabulary check above it"
+    assert "seenevents._validate_outcome" in ref, (
+        "the written/recording_id enforcement must be cited by symbol — "
+        "_validate_outcome's written branch — not by line number"
     )
-    assert "seenevents.py:214-223" not in ref
+    assert "written" in ref.split("seenevents._validate_outcome")[1][:40], (
+        "the citation must name the written branch specifically, not just "
+        "the function"
+    )
+    assert not re.search(r"seenevents\.py:\d", ref), (
+        "no seenevents.py:<line> citation may remain anywhere in the "
+        "contract — line numbers rot on every commit"
+    )
+
+
+# ---------------------------------------------------------------------------
+# PR A / A3 (prose half): the worker contract's M365 collision check moves
+# before the transcript fetch (`sync collide`, right after `m365 ids` derives
+# recorded_local/event_duration_min), replacing the old post-reassemble
+# section that drafted a payload nobody was allowed to write.
+
+
+def test_sync_recordings_worker_contract_collide_runs_before_transcript_read():
+    ref = read_ref("sync-recordings", "worker-contract.md")
+    m365_fetch = ref.split("## Fetching — M365")[1].split(
+        "## Attendees and confidence")[0]
+    assert "sync collide" in m365_fetch, (
+        "the collision check must move into the Fetching — M365 section, "
+        "before the transcript is ever read"
+    )
+    assert m365_fetch.index("sync collide") < m365_fetch.index(
+        'read_resource` call on the `transcript_url`'), (
+        "sync collide must run before the transcript read it is meant to "
+        "save the cost of"
+    )
+    assert m365_fetch.index("sync dedup") < m365_fetch.index("sync collide"), (
+        "collide follows dedup — an already-synced or skip-listed id never "
+        "reaches the collision check at all"
+    )
+
+
+def test_sync_recordings_worker_contract_ids_call_carries_the_timezone():
+    ref = read_ref("sync-recordings", "worker-contract.md")
+    m365_fetch = ref.split("## Fetching — M365")[1].split(
+        "## Attendees and confidence")[0]
+    assert 'm365 ids --events "$SCRATCH/m365_event_<n>.ids-in.json" ' \
+        '--timezone <timezone from your prompt>' in m365_fetch, (
+        "ids must be derived with the timezone so the result carries "
+        "recorded_local/event_duration_min for the collide check right "
+        "after it"
+    )
+
+
+def test_sync_recordings_worker_contract_possible_duplicate_no_longer_names_payload():
+    """The old post-reassemble collision check drafted the payload before
+    reporting a collision ('payload at <path>'); the new pre-fetch check
+    stops before anything is drafted at all, and the write-time refusal
+    (meeting write's own cross-adapter-duplicate) never had a payload path
+    to report either — a human re-dispatches a fresh worker instead of
+    reusing one."""
+    ref = read_ref("sync-recordings", "worker-contract.md")
+    assert "payload at" not in ref
+    assert "Draft the payload anyway" not in ref
+
+
+def test_sync_recordings_worker_contract_meeting_write_cross_adapter_refusal():
+    """A1 makes `meeting write` itself refuse a precise cross-adapter
+    collision, for every worker type — the contract's Extract and write
+    section (shared by all adapters) must say what to do about it, and how
+    the collision:accepted re-dispatch skips the early check and passes
+    --accept-collision."""
+    ref = read_ref("sync-recordings", "worker-contract.md")
+    extract = ref.split("## Extract and write")[1].split(
+        "## The outcome line")[0]
+    assert "cross-adapter-duplicate" in extract, (
+        "the write-time refusal kind must be named in Extract and write"
+    )
+    assert "--accept-collision" in extract, (
+        "a collision:accepted re-dispatch passes --accept-collision to "
+        "meeting write"
+    )
+    assert "collision: accepted" in ref, (
+        "the briefing field name that triggers the re-dispatch path must "
+        "be named somewhere in the contract"
+    )
+    outcome_table = ref.split("## The outcome line")[1]
+    assert "existing:" in outcome_table, (
+        "the possible-duplicate-of row must name the existing id clause "
+        "both the pre-fetch and the write-time collision reply carry"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Fix round 1 on PR A. Task review findings, worker-contract.md half.
+
+
+def test_sync_recordings_worker_contract_collision_check_uses_strong_wording():
+    """CRITICAL: collide's 15-minute grace makes a merely-adjacent meeting
+    a "precise" match with ~zero real overlap; the collision check must act
+    on `strong` matches only, and say so."""
+    ref = read_ref("sync-recordings", "worker-contract.md")
+    m365_fetch = ref.split("## Fetching — M365")[1].split(
+        "## Attendees and confidence")[0]
+    assert "flagged `strong: true`" in m365_fetch, (
+        "the collision check must gate on collide's own strong field, "
+        "named explicitly, not just 'precise'/non-imprecise"
+    )
+    assert "precise (non-`imprecise`) match whose" not in m365_fetch, (
+        "the old wording that acted on any precise match must be gone"
+    )
+
+
+def test_sync_recordings_worker_contract_skips_collision_without_duration():
+    """IMPORTANT: event_duration_min is only present when the event has an
+    end; without it there is nothing to query sync collide with, and the
+    worker must skip its own check rather than crash or guess — the
+    write-time net (meeting write's own check) still applies regardless."""
+    ref = read_ref("sync-recordings", "worker-contract.md")
+    m365_fetch = ref.split("## Fetching — M365")[1].split(
+        "## Attendees and confidence")[0]
+    assert "event_duration_min" in m365_fetch and "absent" in m365_fetch
+    flat = re.sub(r"\s+", " ", m365_fetch)
+    assert "skip" in flat.lower() and "collision check" in flat.lower(), (
+        "the contract must say to skip the collision check (not the whole "
+        "step) when event_duration_min is absent"
+    )
+
+
+def test_sync_recordings_worker_contract_pre_fetched_variant_runs_ids_locally():
+    """IMPORTANT: the pre-fetched variant used to skip both the event fetch
+    AND id derivation, so it never had recorded_local/event_duration_min for
+    its own collision check at all. It must still run `m365 ids` locally
+    (a CLI call on the briefing's own event file, not a Graph call — the
+    single-call ceiling stands) and cross-check the result against what the
+    briefing already named."""
+    ref = read_ref("sync-recordings", "worker-contract.md")
+    variant = ref.split("**Pre-fetched event variant.**")[1].split(
+        "## Attendees and confidence")[0]
+    flat = re.sub(r"\s+", " ", variant)
+    assert "m365 ids" in flat, (
+        "the pre-fetched variant must still run m365 ids locally to get "
+        "recorded_local/event_duration_min for its own collision check"
+    )
+    assert "skip steps 1 and 2" not in flat, (
+        "the variant no longer skips step 2 — only step 1, the Graph fetch"
+    )
+    assert "skip step 1" in flat or "skip only step 1" in flat, (
+        "the variant must say it skips only the Graph event fetch"
+    )
+    assert "fetch-error: pre-fetched ids disagree" in flat, (
+        "a mismatch between the locally-derived ids and the briefing's own "
+        "must be a named, reportable failure, not silently trusted"
+    )
+    assert "not a Graph call" in flat or "not a graph call" in flat.lower(), (
+        "must state the local m365 ids call does not count against the "
+        "single-Graph-call-per-step ceiling"
+    )
+
+
+def test_sync_recordings_worker_contract_written_appends_meeting_write_warnings():
+    """SPEC GAP: meeting write can return `warnings` (an accepted collision,
+    an imprecise/weak-overlap match) that never reached the summary because
+    nothing told the worker to carry them into its outcome line — exactly
+    the same obligation reassemble's own warnings already carry."""
+    ref = read_ref("sync-recordings", "worker-contract.md")
+    extract = ref.split("## Extract and write")[1].split(
+        "## The outcome line")[0]
+    flat = re.sub(r"\s+", " ", extract)
+    assert "warnings" in flat and "verbatim" in flat, (
+        "Extract and write must say to carry meeting write's own warnings "
+        "into the outcome line verbatim, the same way Reassemble's are"
+    )
 
 
 def test_sync_recordings_states_the_start_date_bound():

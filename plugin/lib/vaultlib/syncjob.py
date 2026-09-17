@@ -18,6 +18,7 @@ answer — see scancache.py.
 from __future__ import annotations
 
 import hashlib
+import math
 import re
 import shutil
 from datetime import datetime, timedelta
@@ -276,6 +277,29 @@ def skip(root: Path, recording_id: str, reason: Optional[str] = None,
             "reason_added": bool(cleaned), "reason": cleaned}
 
 
+def unskip(root: Path, recording_id: str) -> dict:
+    """Remove one id from the never-propose-again list — the undo half of
+    `sync settle-duplicate` (and of a bare `sync skip`).
+
+    Refuses an id that is not on the list, rather than silently doing
+    nothing: a caller unskipping an id it does not actually suppress is far
+    more likely a typo'd id than a deliberate no-op, and a silent success
+    here would look identical to the one that actually removed something.
+    """
+    rid = _validate_id(recording_id)
+    records = read_skip_records(root)
+    remaining = [r for r in records if r["recording_id"] != rid]
+    if len(remaining) == len(records):
+        raise SyncError(
+            f"recording id {rid!r} is not on the skip list — nothing to "
+            "remove; check the id, or read the list to find the one "
+            "actually suppressing it"
+        )
+    vault.atomic_write(root / SKIP_FILE_RELPATH,
+                       "".join(_format_skip_line(r) for r in remaining))
+    return {"recording_id": rid, "removed": True}
+
+
 def scan(root: Path) -> dict:
     """Partition inbox files into candidates / already synced / skipped.
 
@@ -352,17 +376,71 @@ _COLLIDE_START_RE = re.compile(r"\A\d{4}-\d{2}-\d{2}T\d{2}:\d{2}\Z")
 OVERLAP_GRACE_MIN = 15
 
 
-def collide(root: Path, start_local: str, duration_min: int) -> dict:
+def _read_meeting_notes(root: Path) -> Tuple[List[dict], List[str]]:
+    """(notes, warnings) — every `20-meetings/*.md`'s rel path, stem, and
+    parsed frontmatter, read once. An unreadable note is a warning, never
+    fatal — one mangled file must not blind `collide` to every other note."""
+    notes: List[dict] = []
+    warnings: List[str] = []
+    meetings = root / MEETINGS_DIR
+    for path in sorted(meetings.glob("*.md")) if meetings.is_dir() else []:
+        rel = path.relative_to(root).as_posix()
+        try:
+            data, _ = markdown.split_frontmatter(path.read_text(encoding="utf-8"))
+        except (ValueError, OSError) as exc:
+            warnings.append(f"{rel}: {exc}")
+            continue
+        notes.append({"rel": rel, "stem": path.stem, "data": data})
+    return notes, warnings
+
+
+def load_collide_notes(root: Path) -> dict:
+    """Preload `{"notes": [...], "warnings": [...]}` for a caller that runs
+    many `collide` queries in one pass — `sync m365-triage --collide`, one
+    per fetch survivor. Without this, `collide` re-globbed and re-parsed
+    every meeting note once per candidate; loading once and passing `notes`
+    through to every `collide` call turns an O(candidates × notes) re-read
+    into one O(notes) read plus O(candidates × notes) in-memory comparisons.
+    Surface `warnings` once for the whole run — `collide` itself produces no
+    read-warnings when `notes` is supplied, only date-format ones.
+    """
+    notes, warnings = _read_meeting_notes(root)
+    return {"notes": notes, "warnings": warnings}
+
+
+def collide(root: Path, start_local: str, duration_min: int, *,
+           notes: Optional[List[dict]] = None) -> dict:
     """Meeting notes whose time window overlaps a candidate recording.
 
     The exact-id ledger cannot see that plaud:X and m365:Y are the same
-    conversation captured twice; this can. Fresh, uncached scan — it runs a
-    handful of times per sync over one folder, and the ledger cache's entry
-    shape only holds ids.
+    conversation captured twice; this can. Fresh, uncached scan by default —
+    it runs a handful of times per sync over one folder, and the ledger
+    cache's entry shape only holds ids. Pass `notes` (from
+    `load_collide_notes`) to skip the read/glob entirely when a caller
+    (`sync m365-triage --collide`) runs many queries in one pass.
 
     A date-only note (legal per the meeting payload) has no window; it
     matches by calendar day and is flagged imprecise — a "look at it", never
     a "duplicate".
+
+    Every match also carries `overlap_min` (the real intersection of the two
+    windows, no grace, floored at 0) and `strong` (`overlap_min >= 1` and
+    `overlap_min` at least half — rounded up — of the shorter of the two
+    windows; always `False` for an imprecise match). The 15-minute grace
+    above makes two merely-adjacent meetings (14:00-15:00 and 15:00-16:00)
+    a *match* — real overlap is 0 — so a caller that acts automatically on a
+    match (never just reports it) must additionally require `strong`, or it
+    silently drops a genuine back-to-back meeting as a duplicate.
+
+    `strong` is also always `False` when the *existing note*'s own
+    `recording-duration` is falsy (0, missing, or unparseable) — a capture
+    with `recording-duration: 0` legitimately means "nothing was recorded"
+    (SKILL.md's own contract for a `type: note` capture), and treating that
+    as a real 1-minute window would make its own strong-match threshold
+    `ceil(1/2) == 1`, so any single overlapping minute against an unrelated
+    real meeting would trivially count as strong. `overlap_min` is still
+    reported for such a match — only `strong` is forced false, same
+    treatment as an imprecise match gets.
     """
     start_text = str(start_local or "").strip()
     if not _COLLIDE_START_RE.match(start_text):
@@ -372,31 +450,47 @@ def collide(root: Path, start_local: str, duration_min: int) -> dict:
             or duration_min < 0:
         raise SyncError(f"--duration-min {duration_min!r} must be an int >= 0")
     q_start = datetime.fromisoformat(start_text)
-    q_end = q_start + timedelta(minutes=max(duration_min, 1))
+    q_minutes = max(duration_min, 1)
+    q_end = q_start + timedelta(minutes=q_minutes)
     grace = timedelta(minutes=OVERLAP_GRACE_MIN)
 
+    if notes is None:
+        note_entries, warnings = _read_meeting_notes(root)
+    else:
+        note_entries, warnings = notes, []
+
     matches: List[dict] = []
-    warnings: List[str] = []
     checked = 0
-    meetings = root / MEETINGS_DIR
-    for path in sorted(meetings.glob("*.md")) if meetings.is_dir() else []:
-        rel = path.relative_to(root).as_posix()
-        try:
-            data, _ = markdown.split_frontmatter(path.read_text(encoding="utf-8"))
-        except (ValueError, OSError) as exc:
-            warnings.append(f"{rel}: {exc}")
-            continue
+    for entry in note_entries:
+        rel = entry["rel"]
+        data = entry["data"]
         checked += 1
         date_text = str(data.get("date") or "").strip()
         imprecise = False
+        overlap_min = 0
+        strong = False
         if _COLLIDE_START_RE.match(date_text):
             n_start = datetime.fromisoformat(date_text)
             try:
-                note_min = max(int(data.get("recording-duration") or 0), 1)
+                note_duration = int(data.get("recording-duration") or 0)
             except (TypeError, ValueError):
-                note_min = 1
+                note_duration = 0
+            note_min = max(note_duration, 1)
             n_end = n_start + timedelta(minutes=note_min)
             hit = n_start <= q_end + grace and q_start <= n_end + grace
+            if hit:
+                overlap_start = max(q_start, n_start)
+                overlap_end = min(q_end, n_end)
+                overlap_min = max(
+                    int((overlap_end - overlap_start).total_seconds() // 60),
+                    0)
+                # A falsy recording-duration (0, missing, unparseable) has no
+                # real window — note_min above is a fabricated 1-minute
+                # placeholder, and its own threshold would be ceil(1/2) == 1,
+                # trivially satisfied by any single overlapping minute.
+                if note_duration > 0:
+                    threshold = math.ceil(min(q_minutes, note_min) / 2)
+                    strong = overlap_min >= 1 and overlap_min >= threshold
         elif re.match(r"\A\d{4}-\d{2}-\d{2}\Z", date_text):
             imprecise = True
             hit = date_text in {q_start.date().isoformat(),
@@ -410,13 +504,15 @@ def collide(root: Path, start_local: str, duration_min: int) -> dict:
         if hit:
             matches.append({
                 "path": rel,
-                "stem": path.stem,
+                "stem": entry["stem"],
                 "date": date_text,
                 "recording-duration": data.get("recording-duration"),
                 "source": data.get("source"),
                 "source-recording-id": data.get("source-recording-id"),
                 "calendar-subject": data.get("calendar-subject"),
                 "imprecise": imprecise,
+                "overlap_min": overlap_min,
+                "strong": strong,
             })
     return {"matches": matches, "checked": checked, "warnings": warnings}
 

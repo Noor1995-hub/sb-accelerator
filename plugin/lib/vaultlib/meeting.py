@@ -33,6 +33,7 @@ OPTIONAL_PAYLOAD = ("attendee-emails", "organizer", "location", "recurring",
 _QUOTE_KEYS = frozenset({"calendar-subject", "source-filename", "organizer",
                          "location", "conflicts-with", "confidence-reasons"})
 _DATETIME_RE = re.compile(r"\A\d{4}-\d{2}-\d{2}(T\d{2}:\d{2})?\Z")
+_COLLIDE_DATETIME_RE = re.compile(r"\A\d{4}-\d{2}-\d{2}T\d{2}:\d{2}\Z")
 _NEW_ATTENDEES_RE = re.compile(r"\Anew-attendees:[1-9]\d*\Z")
 MAX_TAKEAWAYS = 5
 
@@ -231,7 +232,7 @@ def _frontmatter(payload: dict, review_status: str,
     return data
 
 
-def write(root: Path, payload: dict) -> dict:
+def write(root: Path, payload: dict, *, accept_collision: bool = False) -> dict:
     _require_keys(payload)
     _validate_scalars(payload)
     _validate_confidence(payload)
@@ -290,8 +291,8 @@ def write(root: Path, payload: dict) -> dict:
     # write refuse a name that appeared in between; the loser re-resolves and
     # lands on the collision path it would have taken had it looked later.
     for _ in range(3):
-        stem, review_status, conflicts_with, conflict = _resolve_target(
-            root, base_stem, payload)
+        stem, review_status, conflicts_with, conflict, warnings = _resolve_target(
+            root, base_stem, payload, accept_collision=accept_collision)
 
         frontmatter = _frontmatter(
             payload, review_status, conflicts_with, entities)
@@ -315,6 +316,7 @@ def write(root: Path, payload: dict) -> dict:
             "review_status": review_status,
             "recording_id": payload.get("source-recording-id"),
             "conflict": conflict,
+            "warnings": warnings,
         }
     raise MeetingError(
         f"could not claim a free stem for {base_stem!r} — concurrent writers "
@@ -346,7 +348,99 @@ def _namespace(recording_id) -> Optional[str]:
     return text.split(":", 1)[0] if ":" in text else None
 
 
-def _resolve_target(root: Path, stem: str, payload: dict):
+def _cross_adapter_collision(root: Path, payload: dict,
+                             accept_collision: bool, stem: str) -> list:
+    """Stem-independent duplicate check: does this recording's time window
+    overlap a meeting note the vault already has, captured by a different
+    adapter?
+
+    The same-stem guard in `_resolve_target` below only catches two sources
+    that happen to derive the *same* title-based stem; a Plaud recording
+    named after a generic recorder filename and its own meeting's Teams
+    transcript often do not, so two separate notes land for one
+    conversation with no conflict anywhere. This scans every meeting note's
+    time window instead of one stem's — the correctness net for the
+    intra-run race a worker's own pre-write `sync collide` check cannot
+    always close by itself (it can run before a sibling worker's note
+    exists; `meeting write` is the one place that sees the vault at the
+    instant it actually writes). Called from both `_resolve_target` paths
+    below that can still land a genuinely new note: the fully-free stem, and
+    the stem-collision path (same stem, same namespace, unconfirmed — a
+    *different* cross-adapter note can still exist elsewhere in the vault).
+    A match at `stem` itself is excluded either way — on the free-stem path
+    that is a no-op (nothing is there yet); on the stem-collision path it is
+    the note that already caused the stem collision, which the caller
+    already knows about and must not have re-reported here.
+
+    Only a **strong** match (`syncjob.collide`'s own `strong` field) from a
+    different source-recording-id namespace refuses the write —
+    `--accept-collision` is the only way past it (the interactive "write it
+    anyway" re-dispatch). `collide`'s 15-minute grace makes two merely
+    adjacent meetings (one ending as the other starts) a *match* with
+    essentially no real overlap; treating every match as a refusal would
+    silently lose a genuine back-to-back meeting, so a non-strong precise
+    match is handled exactly like an imprecise (date-only) one: a warning,
+    never a refusal. Skipped entirely — no `syncjob.collide` call at all —
+    in two cases: the payload carries no real recording-duration (a
+    capture or a duration-less inbox item; `recording-duration: 0` is the
+    SKILL.md contract for exactly these, and they have nothing to query a
+    window with), or the payload's own `date` is date-only (no `T`,
+    e.g. `2026-05-20`) rather than a full local timestamp — `syncjob.collide`
+    takes `--start` as `YYYY-MM-DDTHH:MM` and cannot be queried with a bare
+    date either, so a date-only *payload* (as opposed to a date-only
+    *existing note*, which `collide` itself already handles as `imprecise`)
+    is a scan this function never runs, not one that finds nothing.
+    """
+    duration = payload.get("recording-duration")
+    if not duration:
+        return []
+    date = str(payload.get("date") or "")
+    if not _COLLIDE_DATETIME_RE.match(date):
+        return []
+    mine = _namespace(payload.get("source-recording-id"))
+    result = syncjob.collide(root, date, int(duration))
+    warnings: list = []
+    for match in result["matches"]:
+        if match["stem"] == stem:
+            continue
+        theirs = _namespace(match.get("source-recording-id"))
+        if not match["imprecise"] and match["strong"] and mine and theirs \
+                and mine != theirs:
+            if accept_collision:
+                # No frontmatter change (the schema is closed), but the
+                # override must leave a trace somewhere the caller can see
+                # it, rather than silently writing over a flagged collision.
+                warnings.append(f"collision-accepted: {match['stem']}")
+                continue
+            # No !r on the stem/id below: a worker parses this message to
+            # build its `possible-duplicate-of` outcome line and, from
+            # there, sync settle-duplicate's --existing value (which lands
+            # verbatim in the skip-list reason) — repr quotes would leak
+            # into both.
+            raise MeetingError(
+                "cross-adapter-duplicate: this recording's time window "
+                f"overlaps {match['stem']} (existing_id "
+                f"{match.get('source-recording-id')}), already captured "
+                "by a different source — pass --accept-collision to write "
+                "it anyway if this is genuinely a separate meeting"
+            )
+        elif match["imprecise"]:
+            warnings.append(
+                f"possible duplicate, imprecise date-only match — look at "
+                f"it: {match['stem']} already carries "
+                f"{match.get('source-recording-id')!r}"
+            )
+        elif not match["strong"] and mine and theirs and mine != theirs:
+            warnings.append(
+                f"possible duplicate, weak time overlap — look at it: "
+                f"{match['stem']} already carries "
+                f"{match.get('source-recording-id')!r}"
+            )
+    return warnings
+
+
+def _resolve_target(root: Path, stem: str, payload: dict, *,
+                    accept_collision: bool = False):
     """Apply the collision guards, in order. Never overwrites."""
     rid = payload.get("source-recording-id")
     if rid is not None:
@@ -360,7 +454,9 @@ def _resolve_target(root: Path, stem: str, payload: dict):
     folder = root / MEETINGS_DIR
     existing = _find_stem(folder, stem)
     if existing is None:
-        return stem, "needs-review", None, None
+        warnings = _cross_adapter_collision(
+            root, payload, accept_collision, stem)
+        return stem, "needs-review", None, None, warnings
 
     try:
         data, _ = markdown.split_frontmatter(existing.read_text(encoding="utf-8"))
@@ -374,7 +470,7 @@ def _resolve_target(root: Path, stem: str, payload: dict):
         # while it is present.
         sibling = _first_free(folder, stem + "-v{n}")
         conflict = {"kind": "confirmed-target", "conflicts_with": existing.stem}
-        return sibling, "needs-review", existing.stem, conflict
+        return sibling, "needs-review", existing.stem, conflict, []
 
     mine = _namespace(rid)
     theirs = _namespace(data.get("source-recording-id"))
@@ -389,8 +485,9 @@ def _resolve_target(root: Path, stem: str, payload: dict):
         sibling = _first_free(folder, stem + "-v{n}")
         conflict = {"kind": "cross-source-duplicate",
                     "conflicts_with": existing.stem}
-        return sibling, "needs-review", existing.stem, conflict
+        return sibling, "needs-review", existing.stem, conflict, []
 
     suffixed = _first_free(folder, stem + "-{n}")
     conflict = {"kind": "stem-collision", "suffixed_from": existing.stem}
-    return suffixed, "needs-review", None, conflict
+    warnings = _cross_adapter_collision(root, payload, accept_collision, stem)
+    return suffixed, "needs-review", None, conflict, warnings

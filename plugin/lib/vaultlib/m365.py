@@ -143,9 +143,57 @@ def derive_id(event: dict) -> dict:
     }
 
 
-def ids(events) -> dict:
+def _recorded_local(event: dict, *, timezone: Optional[str] = None,
+                    utc_offset: Optional[str] = None) -> str:
+    """The owner-local recorded timestamp — factored out of `reassemble`,
+    which both `meeting write` (`date`) and `sync collide` (`--start`) take
+    verbatim (minute precision, no seconds — neither accepts more)."""
+    start_utc = _event_start(event)
+    local, _ = dates.utc_to_local(start_utc, timezone, utc_offset)
+    return local.strftime("%Y-%m-%dT%H:%M")
+
+
+def _event_span_ms(event: dict) -> Optional[float]:
+    """The calendar event's own start/end span, in milliseconds, or None
+    with no `end`. This is `reassemble`'s event-span fallback, factored out
+    so `ids` can offer the same number before any transcript exists — at
+    that stage there is no cue-derived duration to prefer over it."""
+    end = (event.get("end") or {}).get("dateTime")
+    if not end:
+        return None
+    start_utc = _event_start(event)
+    return (_parse_graph_dt(end, "event end.dateTime")
+            - start_utc).total_seconds() * 1000
+
+
+def _event_duration_min(event: dict) -> Optional[int]:
+    """The calendar event's own start/end span, in whole minutes, or None
+    with no `end` — via `dates.minutes_between`, the same round()-semantics
+    helper `sync collide`'s occurrence duration uses, so the two never
+    silently disagree by a minute at the boundary (both now feed the same
+    `strong`-match threshold)."""
+    end = (event.get("end") or {}).get("dateTime")
+    if not end:
+        return None
+    start_utc = _event_start(event)
+    return dates.minutes_between(
+        start_utc, _parse_graph_dt(end, "event end.dateTime"))
+
+
+def ids(events, *, timezone: Optional[str] = None,
+       utc_offset: Optional[str] = None) -> dict:
     """Batch id derivation over full event reads, before any transcript
-    fetch. No transcript URL is the normal case, never an error."""
+    fetch. No transcript URL is the normal case, never an error.
+
+    `timezone`/`utc_offset` are optional and travel together with the same
+    "exactly one" rule as everywhere else in this CLI; omitted entirely, a
+    derived entry carries only what it always has (id-only callers, and the
+    worker contract's pre-#213 invocation, see no shape change at all).
+    Supplied, each transcript-bearing entry also gains `recorded_local` (for
+    `sync collide --start` and `meeting write`'s `date`) and
+    `event_duration_min` (for `sync collide --duration-min`) — the latter
+    only when the event carries an `end`.
+    """
     if not isinstance(events, list):
         raise M365Error("--events must be a JSON array of full event reads")
     derived: List[dict] = []
@@ -158,7 +206,14 @@ def ids(events) -> dict:
             skipped.append({"subject": event.get("subject") or None,
                             "reason": "no-transcript-url"})
             continue
-        derived.append(derive_id(event))
+        entry = derive_id(event)
+        if timezone is not None or utc_offset is not None:
+            entry["recorded_local"] = _recorded_local(
+                event, timezone=timezone, utc_offset=utc_offset)
+            duration_min = _event_duration_min(event)
+            if duration_min is not None:
+                entry["event_duration_min"] = duration_min
+        derived.append(entry)
     return {"ids": derived, "skipped": skipped}
 
 
@@ -228,13 +283,12 @@ def reassemble(event_path: str, transcript_path: str, out_dir: str, *,
                         "reassemble input")
 
     derived = derive_id(event)
-    start_utc = _event_start(event)
-    local, _ = dates.utc_to_local(start_utc, timezone, utc_offset)
     # Both consumers of this value parse it verbatim — `meeting write`
     # (date) and `sync collide` (--start) — and neither accepts seconds
     # or a space separator. Widening the format here costs every
     # recording a rejection round trip.
-    recorded_local = local.strftime("%Y-%m-%dT%H:%M")
+    recorded_local = _recorded_local(event, timezone=timezone,
+                                     utc_offset=utc_offset)
 
     entries = []
     for entry in transcripts:
@@ -271,10 +325,9 @@ def reassemble(event_path: str, transcript_path: str, out_dir: str, *,
                               - created).total_seconds() * 1000)
         duration_ms = int(sum(spans))
     if not duration_ms:
-        end = (event.get("end") or {}).get("dateTime")
-        if end:
-            duration_ms = int((_parse_graph_dt(end, "event end.dateTime")
-                               - start_utc).total_seconds() * 1000)
+        span_ms = _event_span_ms(event)
+        if span_ms is not None:
+            duration_ms = int(span_ms)
 
     title = event.get("subject") or "Untitled meeting"
     parts = [title, "", f"> Recorded: {recorded_local}", "", "#Transcript",

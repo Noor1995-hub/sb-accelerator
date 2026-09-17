@@ -352,6 +352,19 @@ def _parse_date(text, label: str) -> date:
         raise DatesError(f"{label} {text!r} is not a real date") from exc
 
 
+def minutes_between(start: datetime, end: datetime) -> int:
+    """Whole minutes between two datetimes, `round()` semantics, floored at
+    0 for a negative span.
+
+    The one place "duration from two timestamps" arithmetic happens: before
+    this, `sync collide`'s occurrence duration floored (`// 60`) while
+    `m365 ids`'s `event_duration_min` used `round()`, so the two disagreed
+    by a minute at the boundary — a real risk once both feed the same
+    `strong`-match threshold. Both route through here now.
+    """
+    return max(round((end - start).total_seconds() / 60), 0)
+
+
 def utc_to_local(utc_dt: datetime, timezone: Optional[str],
                  utc_offset: Optional[str]) -> Tuple[datetime, str]:
     """A naive UTC datetime rendered in the vault owner's local time.

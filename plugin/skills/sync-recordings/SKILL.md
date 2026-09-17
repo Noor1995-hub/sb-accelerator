@@ -363,7 +363,7 @@ which occurrences still need a worker at all:
 
 ```bash
 python3 "$VAULTLIB" sync m365-triage --vault "$VAULT" \
-  --events "$SCRATCH/m365_search.json"
+  --events "$SCRATCH/m365_search.json" --collide --timezone <tz>
 ```
 
 Everything the cache already answers is filtered out here, before any
@@ -381,7 +381,34 @@ email) as recorder territory. If `warnings` carries a line saying
 `adapters.m365.home_domains is unset`, the filter is off and every listed
 occurrence is dispatched regardless of organizer — surface that warning in
 the summary verbatim, including the `config write` command it names, so an
-unattended run's savings do not just quietly not happen. A `no-transcript`
+unattended run's savings do not just quietly not happen.
+
+`--collide` splits off one bucket more: `duplicate` — a candidate whose
+time window *strongly* overlaps a meeting note already synced from a
+different adapter, checked straight off the listing's own start/end
+(`m365 ids` cannot be used here — the listing carries no
+`meetingTranscriptUrl`). Without it, a known cross-adapter duplicate
+re-dispatches a full worker on every run, because nothing records the
+pair. An entry in `duplicate` never dispatches a worker or probe at all.
+
+**Bank `duplicate` immediately, in its own call — never deferred to step
+6's per-batch banking.** A run whose only m365 candidates are known
+duplicates dispatches zero worker batches and zero probes, so a bucket
+that waited for either would never bank at all and the same duplicates
+would loop forever. Write one `{"id": <id>, "start_utc": <start_utc>,
+"outcome": "skipped"}` per `duplicate` entry (no `recording_id` — there is
+no full event read yet) to `$SCRATCH/m365_duplicates.json` and bank it
+right here, before doing anything else with `fetch`:
+
+```bash
+python3 "$VAULTLIB" sync m365-record --vault "$VAULT" \
+  --outcomes "$SCRATCH/m365_duplicates.json"
+```
+
+Count each one in the summary's `Cross-adapter duplicates skipped` line by
+subject and the existing note's stem. An
+imprecise (date-only) match never lands here — it stays in `fetch`, same
+as the write-time check's own "look at it" warning. A `no-transcript`
 outcome stays provisional for 48 hours after the meeting ends — Teams
 delivers transcripts with delay — so those come back in `fetch` as
 `recheck-no-transcript` until the window passes. A provisional occurrence
@@ -452,9 +479,15 @@ own tenant has the Microsoft Graph transcript-access setting off), or
 another tenant owns the transcript, permanently), or a written note. Those
 outcomes are
 banked per batch in step 6. A recording that *failed* — a transport error
-— gets **no outcome line**, and neither does a cross-adapter duplicate
-deferred under `--unattended`: what is not settled is not recorded, and
-the occurrence surfaces again next run.
+— gets **no outcome line**: what is not settled is not recorded, and the
+occurrence surfaces again next run. A cross-adapter duplicate always gets
+one now, and never deferred, from whichever of the two nets finds it — but
+never the same way: a triage-bucket entry (step 1's `duplicate` bucket)
+has no `recording_id` yet, so it banks straight through `sync m365-record`
+in step 1, immediately; one a worker detects itself — its own pre-fetch
+collide reply, or `meeting write`'s write-time refusal — has a real
+`recording_id` and is settled in step 6 via `sync settle-duplicate` the
+moment it is found.
 
 A `recheck-no-transcript` entry's row still lives in the calendar-search
 pages you hold this run (rechecks come from the same triage `fetch` list,
@@ -941,21 +974,41 @@ and settles it as already synced.
 - `fetch-error` — no outcome line is banked; it retries next run.
 - `auth-error` — stop dispatching that adapter's remaining recordings and
   report it; re-authentication belongs to the user.
-- `possible-duplicate-of: <stem> (recording-id: m365:<hex>, payload at
-  <path>) (new-people: <names>` or `none)` — the ledger keys on exact ids,
-  so it cannot see one conversation captured twice across adapters; the
-  worker's window check can, and it drafted its payload without writing.
-  Parse the `recording-id:` clause — you need it whichever way the user
-  decides. Interactively: show both notes and ask once — "write it anyway"
-  is `meeting write --vault "$VAULT" --note "<path>"` right here, no
-  re-extraction — then include a `written` entry for it, keyed to that
-  parsed `recording_id`, in the batch outcomes you bank below, and fold
-  its `new-people` clause into the summary count; "drop it" is `sync skip
-  --id m365:<hex> --reason "same meeting already synced as <existing
-  id>"`, using that same parsed id, which banks as a `"skipped"` outcome.
-  Under `--unattended`: neither — count it in the summary's cross-adapter
-  duplicates line; it defers until an interactive run settles it, and that
-  is the safe direction.
+- `possible-duplicate-of: <existing stem> (recording-id: <recording_id>,
+  existing: <existing_id>)` — the ledger keys on exact ids, so it cannot
+  see one conversation captured twice across adapters; a worker's own
+  pre-fetch collide check (M365 only, before it ever reads a transcript)
+  or `meeting write`'s own write-time refusal (any adapter, `conflict`
+  kind `cross-adapter-duplicate`) can, and stopped before a payload was
+  drafted or written. Parse the `recording-id:` and `existing:` clauses —
+  you need both whichever way this settles. Interactively: show both notes
+  and ask once — "write it anyway" is a full re-dispatch of the *same*
+  worker, its briefing now carrying `collision: accepted` (it re-runs from
+  the top, skips its own collision check if it has one, and passes
+  `--accept-collision` to `meeting write`) — a deliberate cost trade for a
+  rare interactive path, since there is no pre-drafted payload left to
+  reuse; then bank the re-dispatched worker's own `written:` reply, same
+  as any other worker in the batch. "Drop it" — and every `--unattended`
+  occurrence of this line, automatically, with no prompt — settles through
+  one call: validated first, then the skip-list line and (for M365) the
+  seen-events entry, in that order:
+
+  ```bash
+  python3 "$VAULTLIB" sync settle-duplicate --vault "$VAULT" \
+    --id <recording_id> --existing <existing_id> --stem <existing stem> \
+    --event-id <id> --start-utc <start_utc>
+  ```
+
+  using the parsed `recording-id:`/`existing:` clauses and, for an M365
+  recording, the triage entry's own `id`/`start_utc` (omit `--event-id`
+  and `--start-utc` for a plaud/inbox recording — it has no m365
+  occurrence to cache). Count it in the summary's `Cross-adapter
+  duplicates skipped` line, with the undo command right there — the same
+  two flags, so both writes reverse together:
+  `sync unsettle-duplicate --id <recording_id> --event-id <id> --start-utc <start_utc>`
+  (plaud/inbox: `sync unsettle-duplicate --id <recording_id>`, no event
+  keys — `sync unskip` alone would leave an M365 occurrence's seen-events
+  entry in place, permanently filtering it out of every future triage).
 
 Then write the batch's settled lines — `written` (with each
 `recording_id`, including any `already-synced`-derived entries),
@@ -1011,22 +1064,13 @@ Run it for whichever adapters finished `ok` — often just one. Skip it for an
 adapter that was `REFUSED`, `unavailable`, or stopped mid-run on
 `auth-error`: nothing past the point of failure was actually covered, and
 advancing the mark past that would hide what still needs listing next run.
-Skip it too for an adapter that deferred one or more cross-adapter
-duplicates under `--unattended` this run: that recording settled nothing —
-no note, no seen-events entry, no skip-list line, its payload swept with the
-rest of scratch — so it is still sitting there unsettled next run, and it
-needs the window open wide enough for an interactive run to reach it. A
-batch's `fetch-error` outcomes do not hold this back — a persistently
+A batch's `fetch-error` outcomes do not hold this back — a persistently
 failing item (an oversized transcript, say) retries itself next run inside
-`dates window`'s own 2-day floor regardless of where the watermark sits — but
-a deferred cross-adapter duplicate waits on a human, not on a retry, so the
-watermark has to hold for it too. Everything after the window's `utc_to` was
-never listed this run, so stamping "now" instead would silently skip
-whatever synced late between the window and the stamp. The write is
-monotonic — an earlier `utc_to` than what is already stored is a no-op — so
-holding it back only widens the next run's window, day by day back toward
-the full 7, until an interactive run settles the duplicate and the hold
-lifts.
+`dates window`'s own 2-day floor regardless of where the watermark sits.
+Everything after the window's `utc_to` was never listed this run, so
+stamping "now" instead would silently skip whatever synced late between the
+window and the stamp. The write is monotonic — an earlier `utc_to` than
+what is already stored is a no-op.
 
 ### 7. Summarize — from disk, not from memory
 
@@ -1041,11 +1085,11 @@ Count what exists, not what you intended (a lab run once reported
 **Inbox swept:** {N} files → `90-archive/inbox/{YYYY-MM}/` · {N} left pending in `10-inbox/`
 **New people:** {N} created in `50-people/`
 **Meetings you ticked as reviewed:** {N} now confirmed
-**Possible duplicates:** {N} ({list the stems}) — kept as separate notes; each landed on a meeting that already had a note (one you confirmed, or one written from another source this run), so nothing was overwritten
-**Possible cross-adapter duplicates:** {N} — deferred; needs an interactive run
+**Possible duplicates:** {N} ({list the stems}) — kept as separate notes; each landed on a meeting that already had a note (one you confirmed, or one written from another source this run), so nothing was overwritten; also includes any imprecise or weak-overlap collision warning appended to a worker's `written:` outcome line this run
+**Cross-adapter duplicates skipped:** {N} ({subject} → already synced as {stem}; undo: `sync unsettle-duplicate --id <id> --event-id <id> --start-utc <utc>` | `sync m365-forget --event-id <id> --start-utc <utc>`)
 **Skipped / errors:** {N} (will retry next run) · {N} tiny clips auto-skipped ({list each with its duration}) — permanent, not a retry
 **M365 fetches saved:** {N} of {N} listed occurrences answered from the seen-events cache or the home-domain filter ({N} held in the 6h recheck window) | cache cold (first run)
-**Workers dispatched:** {N} ({N} plaud · {N} m365 · {N} inbox) — m365 candidates not dispatched were answered by the cache ({N}), were external ({N}), or hadn't ended yet ({N}); worker outcomes: {N} written · {N} already-synced · {N} skip-listed · {N} no-transcript · {N} no-access · {N} forbidden · {N} fetch-error · {N} auth-error · {N} probes ({N} still-no-transcript · {N} transcript-found)
+**Workers dispatched:** {N} ({N} plaud · {N} m365 · {N} inbox) — m365 candidates not dispatched were answered by the cache ({N}), were a known cross-adapter duplicate ({N}), were external ({N}), or hadn't ended yet ({N}); worker outcomes: {N} written · {N} already-synced · {N} skip-listed · {N} no-transcript · {N} no-access · {N} forbidden · {N} fetch-error · {N} auth-error · {N} probes ({N} still-no-transcript · {N} transcript-found)
 **External meetings (recorder territory):** {N} — {subject} · {local date} · {organizer domain}; {subject} · {local date} · {organizer domain} | none
 **Adapters:** inbox ok · plaud ok (window {N}d) | REFUSED — signed in as a different account (account-mismatch) | REFUSED — no account bound to this vault yet (no-account-hint) | disabled | unavailable | STOPPED mid-run — connector wants re-authentication (auth-error) · m365 ok (window {N}d) | REFUSED — signed in as a different account (account-mismatch) | REFUSED — no account bound to this vault yet (no-account-hint) | disabled | unavailable | STOPPED mid-run — connector wants re-authentication (auth-error)
 **Calendar enrichment:** ok | UNAVAILABLE
@@ -1086,12 +1130,32 @@ Per event, list both a worker's and a probe's `no-access` reply by the
 meeting's subject and date in the in-session summary — that is calendar
 metadata already on screen, and it is never written to a note.
 
+`Cross-adapter duplicates skipped` counts occurrences settled two
+different ways, and each has its own undo shape — never assume one covers
+both. Step 1's triage-time `duplicate` bucket never reaches `sync
+settle-duplicate` at all — it has no `recording_id` yet (no full event
+read ever happened), so it banks straight through `sync m365-record`
+(above) and its only undo is the id-scoped `sync m365-forget --event-id
+<id> --start-utc <utc>`, naming that entry's own `id`/`start_utc`. A
+worker's own `possible-duplicate-of` reply, dropped automatically now
+under `--unattended` rather than deferred, settles through `sync
+settle-duplicate` with a real `recording_id` on record — its undo is
+`sync unsettle-duplicate --id <recording_id>` plus, for an M365 recording,
+the same `--event-id <id> --start-utc <utc>` settle-duplicate was given
+(a plaud/inbox recording never carries those flags, on either side of the
+undo — `sync unskip` alone would leave an M365 occurrence's seen-events
+entry in place, permanently filtering it out of every future triage, so
+`unsettle-duplicate` is the one command that reverses both writes
+together). Each entry names the subject, the existing note it duplicates,
+and the one undo command that actually matches how it was settled — a
+wrong auto-skip should be one command away from being reversed, never a
+research project.
+
 `New people` sums two sources, never just one: the orchestrator's own
 `person ensure` calls for plaud, inbox, and capture attendees (step 3), and
-the `new-people:` clause each m365 worker's `written` or
-`possible-duplicate-of` line carries — you never call `person ensure` for
-an m365 attendee yourself (step 6), so its count has to come from the
-worker.
+the `new-people:` clause each m365 worker's `written` line carries — you
+never call `person ensure` for an m365 attendee yourself (step 6), so its
+count has to come from the worker.
 
 ## Scratch hygiene
 

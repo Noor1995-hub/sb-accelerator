@@ -911,6 +911,175 @@ def test_collide_rejects_a_negative_duration(tmp_path):
         syncjob.collide(root, "2026-08-25T16:00", -5)
 
 
+# ---------------------------------------------------------------------------
+# Fix round 1, CRITICAL: adjacent meetings are "precise" matches under the
+# 15-minute grace, and every auto-acting caller (triage's duplicate bucket,
+# meeting write's refusal, the unattended settle-duplicate path) used to act
+# on any precise match — silently losing a genuine back-to-back meeting.
+# `overlap_min` (the real intersection, no grace) and `strong` (overlap at
+# least half of the shorter window, floored at 1 minute) let a caller tell
+# "these are probably the same conversation" from "these merely touch".
+
+
+def test_collide_back_to_back_meetings_are_not_strong(tmp_path):
+    """14:00-15:00 vs 15:00-16:00: the grace makes this a match (both notes
+    exist), but there is zero real overlap — must never be strong."""
+    root = make_vault(tmp_path)
+    write_timed_meeting(root, "25-08-26-first", date="2026-08-25T14:00",
+                        duration=60, source="recorder",
+                        recording_id="plaud:abc123")
+    result = syncjob.collide(root, "2026-08-25T15:00", 60)
+    assert len(result["matches"]) == 1
+    match = result["matches"][0]
+    assert match["overlap_min"] == 0
+    assert match["strong"] is False
+
+
+def test_collide_a_late_recorder_start_is_strong(tmp_path):
+    """Recorder pressed 20 min late: 14:20-15:00 recording vs a 14:00-15:00
+    calendar occurrence already on disk as a note. 40 min overlap out of a
+    40/60 min pair -> well over half the shorter window."""
+    root = make_vault(tmp_path)
+    write_timed_meeting(root, "25-08-26-calendar", date="2026-08-25T14:00",
+                        duration=60, source="teams",
+                        recording_id="m365:0123456789abcdef")
+    result = syncjob.collide(root, "2026-08-25T14:20", 40)
+    assert len(result["matches"]) == 1
+    match = result["matches"][0]
+    assert match["overlap_min"] == 40
+    assert match["strong"] is True
+
+
+def test_collide_a_longer_recording_covering_a_shorter_occurrence_is_strong(
+        tmp_path):
+    """A 14:00-16:00 recording queried against a 15:00-16:00 note: 60 min
+    overlap, min(query=120, note=60)=60, threshold ceil(30)=30 -> strong."""
+    root = make_vault(tmp_path)
+    write_timed_meeting(root, "25-08-26-short-note", date="2026-08-25T15:00",
+                        duration=60, source="recorder",
+                        recording_id="plaud:def456")
+    result = syncjob.collide(root, "2026-08-25T14:00", 120)
+    assert len(result["matches"]) == 1
+    match = result["matches"][0]
+    assert match["overlap_min"] == 60
+    assert match["strong"] is True
+
+
+def test_collide_imprecise_match_is_never_strong(tmp_path):
+    root = make_vault(tmp_path)
+    write_timed_meeting(root, "25-08-26-dateless", date="2026-08-25",
+                        duration=0, source="manual",
+                        recording_id="inbox:aaaa000011112222")
+    result = syncjob.collide(root, "2026-08-25T16:00", 60)
+    match = result["matches"][0]
+    assert match["imprecise"] is True
+    assert match["strong"] is False
+    assert match["overlap_min"] == 0
+
+
+def test_collide_exact_half_overlap_is_strong_at_the_boundary(tmp_path):
+    """overlap_min >= ceil(0.5 * min(...)) is inclusive at the boundary."""
+    root = make_vault(tmp_path)
+    write_timed_meeting(root, "25-08-26-boundary", date="2026-08-25T14:00",
+                        duration=60, source="recorder",
+                        recording_id="plaud:boundary1")
+    # 30 min overlap out of a 60/60 pair: ceil(30) == 30, exactly at the line.
+    result = syncjob.collide(root, "2026-08-25T14:30", 60)
+    match = result["matches"][0]
+    assert match["overlap_min"] == 30
+    assert match["strong"] is True
+
+
+def test_collide_zero_duration_note_is_never_strong(tmp_path):
+    """PR #216 review: an existing capture note with recording-duration: 0
+    (a real, documented value meaning "nothing was recorded") must not be
+    treated as a real 1-minute window — note_min = max(0, 1) would fabricate
+    one, whose own strong-match threshold is ceil(1/2) == 1, so any single
+    overlapping minute against an unrelated real meeting would trivially
+    count as strong. overlap_min is still reported; only strong is forced
+    false, same as an imprecise match."""
+    root = make_vault(tmp_path)
+    write_timed_meeting(root, "25-08-26-zero-duration-capture",
+                        date="2026-08-25T14:00", duration=0,
+                        source="manual", recording_id="inbox:aaaa000011112222")
+    # a real 13:30-14:30 meeting from another adapter overlaps this capture's
+    # fabricated 14:00-14:01 window by exactly 1 minute.
+    result = syncjob.collide(root, "2026-08-25T13:30", 60)
+    match = result["matches"][0]
+    assert match["strong"] is False
+
+
+def test_collide_missing_duration_note_is_never_strong(tmp_path):
+    """Same guard, no recording-duration key at all (falls back to 0)."""
+    root = make_vault(tmp_path)
+    (root / "20-meetings" / "25-08-26-no-duration-field.md").write_text(
+        "\n".join(["---", "date: 2026-08-25T14:00", "type: meeting",
+                  'calendar-subject: "A meeting"', "source: manual",
+                  "source-recording-id: inbox:bbbb000011112222", "---", "",
+                  "body"]),
+        encoding="utf-8")
+    result = syncjob.collide(root, "2026-08-25T13:30", 60)
+    match = result["matches"][0]
+    assert match["strong"] is False
+
+
+# --- load_collide_notes: preload once per triage run instead of re-globbing
+# 20-meetings/ per candidate.
+
+
+def test_load_collide_notes_returns_every_note_and_no_warnings_when_clean(
+        tmp_path):
+    root = make_vault(tmp_path)
+    write_timed_meeting(root, "25-08-26-a", date="2026-08-25T14:00",
+                        duration=60, source="recorder",
+                        recording_id="plaud:abc123")
+    write_timed_meeting(root, "25-08-26-b", date="2026-08-25T15:00",
+                        duration=30, source="teams",
+                        recording_id="m365:0123456789abcdef")
+    loaded = syncjob.load_collide_notes(root)
+    assert len(loaded["notes"]) == 2
+    assert loaded["warnings"] == []
+
+
+def test_collide_with_preloaded_notes_matches_the_fresh_scan(tmp_path):
+    root = make_vault(tmp_path)
+    write_timed_meeting(root, "25-08-26-a", date="2026-08-25T14:00",
+                        duration=60, source="recorder",
+                        recording_id="plaud:abc123")
+    loaded = syncjob.load_collide_notes(root)
+    fresh = syncjob.collide(root, "2026-08-25T14:30", 30)
+    preloaded = syncjob.collide(root, "2026-08-25T14:30", 30,
+                                notes=loaded["notes"])
+    assert preloaded["matches"] == fresh["matches"]
+    assert preloaded["checked"] == fresh["checked"] == 1
+
+
+def test_collide_with_preloaded_notes_does_not_reread_the_filesystem(
+        tmp_path, monkeypatch):
+    root = make_vault(tmp_path)
+    write_timed_meeting(root, "25-08-26-a", date="2026-08-25T14:00",
+                        duration=60, source="recorder",
+                        recording_id="plaud:abc123")
+    loaded = syncjob.load_collide_notes(root)
+
+    def boom(*a, **k):
+        raise AssertionError("collide re-read the filesystem despite notes=")
+
+    monkeypatch.setattr(Path, "glob", boom)
+    result = syncjob.collide(root, "2026-08-25T14:30", 30,
+                             notes=loaded["notes"])
+    assert len(result["matches"]) == 1
+
+
+def test_load_collide_notes_warns_on_an_unparseable_note(tmp_path):
+    root = make_vault(tmp_path)
+    (root / "20-meetings" / "broken.md").write_text("---\n: not yaml\n",
+                                                    encoding="utf-8")
+    loaded = syncjob.load_collide_notes(root)
+    assert loaded["notes"] == []
+    assert loaded["warnings"]
+
+
 # --- rederive_entities: the evening fold's drift repair ---
 
 
@@ -1245,3 +1414,39 @@ def test_cli_reconcile_reviews_accepts_timestamp(tmp_path):
     assert payload["ok"] is True
     assert payload["result"]["flipped"] == ["20-meetings/a-ticked.md"]
     assert payload["result"]["confirmed_at"] == "2026-08-21T09:30"
+
+
+# ---------------------------------------------------------------------------
+# A4: sync unskip — the undo half of sync settle-duplicate's skip-list line.
+# Refuses an id not on the list outright: undoing a suppression that was
+# never recorded is far more likely a typo'd id than an id worth removing
+# twice, and a silent no-op here would look like it worked.
+
+
+def test_unskip_removes_a_recorded_id(tmp_path):
+    root = make_vault(tmp_path)
+    syncjob.skip(root, "plaud:abc123", reason="user dropped it")
+    result = syncjob.unskip(root, "plaud:abc123")
+    assert result == {"recording_id": "plaud:abc123", "removed": True}
+    assert "plaud:abc123" not in syncjob.read_skip_list(root)
+
+
+def test_unskip_refuses_an_id_not_on_the_list(tmp_path):
+    root = make_vault(tmp_path)
+    with pytest.raises(syncjob.SyncError, match="not on the skip list"):
+        syncjob.unskip(root, "plaud:neverskipped")
+
+
+def test_unskip_leaves_other_skip_records_untouched(tmp_path):
+    root = make_vault(tmp_path)
+    syncjob.skip(root, "plaud:abc123", reason="a")
+    syncjob.skip(root, "plaud:def456", reason="b")
+    syncjob.unskip(root, "plaud:abc123")
+    assert syncjob.read_skip_records(root) == [
+        {"recording_id": "plaud:def456", "reason": "b", "source_name": None}]
+
+
+def test_unskip_validates_the_id_shape(tmp_path):
+    root = make_vault(tmp_path)
+    with pytest.raises(syncjob.SyncError, match="namespace prefix"):
+        syncjob.unskip(root, "not-namespaced")

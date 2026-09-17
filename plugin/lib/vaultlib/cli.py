@@ -365,6 +365,17 @@ def build_parser() -> argparse.ArgumentParser:
              "or - for stdin")
     sync_triage.add_argument(
         "--now", help="UTC ISO datetime override (tests); defaults to now")
+    sync_triage.add_argument(
+        "--collide", action="store_true",
+        help="also run the cross-adapter duplicate check against each "
+             "fetch survivor's own time window, moving a strong, "
+             "non-imprecise match into the `duplicate` bucket instead of "
+             "`fetch`; requires --timezone or --utc-offset")
+    sync_triage.add_argument(
+        "--timezone", help="IANA timezone name; only with --collide")
+    sync_triage.add_argument(
+        "--utc-offset", dest="utc_offset",
+        help="explicit offset like +02:00; only with --collide")
 
     sync_record = sync_sub.add_parser(
         "m365-record",
@@ -388,11 +399,73 @@ def build_parser() -> argparse.ArgumentParser:
              "either of which can turn a no-access 403 into a fetch")
     _add_vault_argument(sync_forget)
     sync_forget.add_argument(
-        "--outcome", required=True,
-        help="the outcome to drop — no-access, forbidden, or no-transcript; "
-             "written and skipped are refused (they would re-trigger a paid "
-             "dispatch wave or undo a deliberate decision, not a stale "
-             "denial)")
+        "--outcome",
+        help="bulk mode: the outcome to drop — no-access, forbidden, or "
+             "no-transcript; written and skipped are refused (they would "
+             "re-trigger a paid dispatch wave or undo a deliberate "
+             "decision, not a stale denial). Mutually exclusive with "
+             "--event-id/--start-utc")
+    sync_forget.add_argument(
+        "--event-id", dest="event_id",
+        help="targeted mode: forget exactly this occurrence's seen-events "
+             "entry, regardless of its outcome — the undo for a "
+             "triage-caught cross-adapter duplicate (sync "
+             "settle-duplicate); travels with --start-utc")
+    sync_forget.add_argument(
+        "--start-utc", dest="start_utc",
+        help="the occurrence's start_utc key; travels with --event-id")
+
+    sync_settle = sync_sub.add_parser(
+        "settle-duplicate",
+        help="settle an unattended cross-adapter duplicate: validated, "
+             "then the skip-list line and, when the m365 occurrence is "
+             "known, the seen-events skipped entry — in that order")
+    _add_vault_argument(sync_settle)
+    sync_settle.add_argument(
+        "--id", dest="recording_id", required=True,
+        help="the new recording's own id, e.g. m365:<hex>")
+    sync_settle.add_argument(
+        "--existing", dest="existing_id", required=True,
+        help="the id of the meeting note it duplicates")
+    sync_settle.add_argument(
+        "--stem", required=True,
+        help="the existing meeting note's stem, named in the reason text")
+    sync_settle.add_argument(
+        "--event-id", dest="event_id",
+        help="the underlying m365 event id, when known — travels with "
+             "--start-utc")
+    sync_settle.add_argument(
+        "--start-utc", dest="start_utc",
+        help="the occurrence's start_utc key, when known — travels with "
+             "--event-id")
+
+    sync_unskip = sync_sub.add_parser(
+        "unskip",
+        help="remove one id from the never-propose-again list; refuses an "
+             "id that is not on it")
+    _add_vault_argument(sync_unskip)
+    sync_unskip.add_argument("--id", dest="recording_id", required=True)
+
+    sync_unsettle = sync_sub.add_parser(
+        "unsettle-duplicate",
+        help="undo a worker-settled cross-adapter duplicate: removes the "
+             "skip-list line and, when the m365 occurrence is named, the "
+             "seen-events entry too — sync unskip alone would leave an "
+             "M365 occurrence permanently filtered out of every future "
+             "triage")
+    _add_vault_argument(sync_unsettle)
+    sync_unsettle.add_argument(
+        "--id", dest="recording_id", required=True,
+        help="the recording id sync settle-duplicate was given, e.g. "
+             "m365:<hex>")
+    sync_unsettle.add_argument(
+        "--event-id", dest="event_id",
+        help="the underlying m365 event id, if settle-duplicate was given "
+             "one — travels with --start-utc")
+    sync_unsettle.add_argument(
+        "--start-utc", dest="start_utc",
+        help="the occurrence's start_utc key, if settle-duplicate was "
+             "given one — travels with --event-id")
 
     sync_rederive = sync_sub.add_parser(
         "rederive-entities",
@@ -425,6 +498,11 @@ def build_parser() -> argparse.ArgumentParser:
     _add_vault_argument(meeting_write)
     meeting_write.add_argument("--note", required=True,
                                help="path to a JSON file, or - to read stdin")
+    meeting_write.add_argument(
+        "--accept-collision", dest="accept_collision", action="store_true",
+        help="write anyway despite a strong, non-imprecise cross-adapter "
+             "time-window collision from another adapter — the "
+             "interactive 'write it anyway' re-dispatch")
 
     plaud_group = top.add_parser("plaud", help="Plaud MCP adapter helpers")
     plaud_sub = plaud_group.add_subparsers(dest="action", required=True)
@@ -448,6 +526,12 @@ def build_parser() -> argparse.ArgumentParser:
         "ids", help="derive m365: recording ids from full calendar event reads")
     m365_ids.add_argument("--events", required=True,
                           help="path to a JSON array of event objects, or - for stdin")
+    m365_ids.add_argument(
+        "--timezone", help="IANA timezone name — adds recorded_local and "
+                           "event_duration_min to each derived entry")
+    m365_ids.add_argument(
+        "--utc-offset", dest="utc_offset",
+        help="explicit offset like +02:00 — same effect as --timezone")
     m365_re = m365_sub.add_parser(
         "reassemble",
         help="render an event read + transcript read into one capture-bundle blob")
@@ -735,8 +819,10 @@ def _dispatch(args: argparse.Namespace) -> int:
             payload = (json.load(sys.stdin) if args.events == "-"
                        else json.loads(Path(args.events).read_text(encoding="utf-8")))
             home_domains, home_domains_warning = config.m365_home_domains(root)
-            result = seenevents.triage(root, payload, seenevents.parse_now(args.now),
-                                       home_domains=home_domains)
+            result = seenevents.triage(
+                root, payload, seenevents.parse_now(args.now),
+                home_domains=home_domains, collide=args.collide,
+                timezone=args.timezone, utc_offset=args.utc_offset)
             if home_domains_warning:
                 result["warnings"] = result["warnings"] + [home_domains_warning]
             return _ok(result)
@@ -745,7 +831,37 @@ def _dispatch(args: argparse.Namespace) -> int:
                        else json.loads(Path(args.outcomes).read_text(encoding="utf-8")))
             return _ok(seenevents.record(root, payload, seenevents.parse_now(args.now)))
         if args.action == "m365-forget":
+            id_scoped = args.event_id is not None or args.start_utc is not None
+            if id_scoped and args.outcome is not None:
+                raise seenevents.SeenEventsError(
+                    "--outcome and --event-id/--start-utc are mutually "
+                    "exclusive — pass the bulk outcome form or the "
+                    "targeted id form, not both"
+                )
+            if id_scoped:
+                if args.event_id is None or args.start_utc is None:
+                    raise seenevents.SeenEventsError(
+                        "--event-id and --start-utc travel together — "
+                        "pass both"
+                    )
+                return _ok(seenevents.forget_event(
+                    root, args.event_id, args.start_utc))
+            if args.outcome is None:
+                raise seenevents.SeenEventsError(
+                    "pass --outcome for the bulk form, or --event-id and "
+                    "--start-utc together for the targeted form"
+                )
             return _ok(seenevents.forget(root, args.outcome))
+        if args.action == "settle-duplicate":
+            return _ok(seenevents.settle_duplicate(
+                root, args.recording_id, args.existing_id, args.stem,
+                event_id=args.event_id, start_utc=args.start_utc))
+        if args.action == "unskip":
+            return _ok(syncjob.unskip(root, args.recording_id))
+        if args.action == "unsettle-duplicate":
+            return _ok(seenevents.unsettle_duplicate(
+                root, args.recording_id,
+                event_id=args.event_id, start_utc=args.start_utc))
         if args.action == "rederive-entities":
             return _ok(syncjob.rederive_entities(root))
         if args.action == "watermark":
@@ -758,7 +874,8 @@ def _dispatch(args: argparse.Namespace) -> int:
     if args.group == "meeting":
         payload = (json.load(sys.stdin) if args.note == "-"
                    else json.loads(Path(args.note).read_text(encoding="utf-8")))
-        return _ok(meeting.write(root, payload))
+        return _ok(meeting.write(root, payload,
+                                 accept_collision=args.accept_collision))
     if args.group == "plaud":
         return _ok(plaud.reassemble(
             args.meta, args.transcript, args.note, args.out,
@@ -767,7 +884,8 @@ def _dispatch(args: argparse.Namespace) -> int:
         if args.action == "ids":
             payload = (json.load(sys.stdin) if args.events == "-"
                        else json.loads(Path(args.events).read_text(encoding="utf-8")))
-            return _ok(m365.ids(payload))
+            return _ok(m365.ids(payload, timezone=args.timezone,
+                                utc_offset=args.utc_offset))
         return _ok(m365.reassemble(
             args.event, args.transcript, args.out,
             timezone=args.timezone, utc_offset=args.utc_offset))
@@ -844,8 +962,17 @@ def _merge_dash_values(argv: Sequence[str]) -> list:
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
-    args = build_parser().parse_args(
+    parser = build_parser()
+    args = parser.parse_args(
         _merge_dash_values(sys.argv[1:] if argv is None else argv))
+    if args.group == "sync" and args.action == "m365-triage" \
+            and args.collide and (args.timezone is None) == (args.utc_offset is None):
+        # Argparse-level, not a runtime DatesError buried inside the first
+        # candidate's collide check: --collide with neither or both of
+        # --timezone/--utc-offset is a call that can never do useful work.
+        parser.error(
+            "sync m365-triage --collide requires exactly one of --timezone "
+            "or --utc-offset")
     try:
         return _dispatch(args)
     except vault.VaultError as exc:

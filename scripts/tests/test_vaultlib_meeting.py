@@ -444,3 +444,169 @@ def test_write_stores_the_plaud_id_in_canonical_form(tmp_path):
     data, _ = markdown.split_frontmatter(
         (root / result["path"]).read_text(encoding="utf-8"))
     assert data["source-recording-id"] == f"plaud:{hex_id}"
+
+
+# ---------------------------------------------------------------------------
+# A1: a stem-independent cross-adapter collision check. The existing
+# cross-source-duplicate guard above only catches two sources that derive
+# the *same* title-based stem; a Plaud recording named after a generic
+# recorder filename and its own meeting's Teams transcript often do not, so
+# two separate notes land for one conversation with no conflict anywhere.
+# This scans every meeting note's time window instead of one stem's, and is
+# the correctness net for the intra-run race worker-contract.md's collide
+# check cannot always close by itself (its own pre-write check can run
+# before a sibling worker's note exists).
+
+
+def test_cross_adapter_collision_at_a_different_stem_refuses(tmp_path):
+    root = make_vault(tmp_path)
+    meeting.write(root, payload(**{"source-recording-id": "plaud:abc123"}))
+    with pytest.raises(meeting.MeetingError, match="cross-adapter-duplicate"):
+        meeting.write(root, payload(
+            title="teams recording of the same meeting",
+            **{"source-recording-id": "m365:def456"}))
+    # nothing was written for the refused attempt
+    assert len(list((root / "20-meetings").glob("*.md"))) == 1
+
+
+def test_cross_adapter_collision_message_carries_no_repr_quotes(tmp_path):
+    """Fix wave 2: a worker parses this message's stem/id verbatim for its
+    outcome line and, from there, sync settle-duplicate's --existing value
+    — repr quotes (from `!r`) would leak into both."""
+    root = make_vault(tmp_path)
+    meeting.write(root, payload(**{"source-recording-id": "plaud:abc123"}))
+    with pytest.raises(meeting.MeetingError) as excinfo:
+        meeting.write(root, payload(
+            title="teams recording of the same meeting",
+            **{"source-recording-id": "m365:def456"}))
+    message = str(excinfo.value)
+    assert "'20-05-26-vendor-strategy-brainstorm'" not in message
+    assert "'plaud:abc123'" not in message
+    assert "20-05-26-vendor-strategy-brainstorm" in message
+    assert "plaud:abc123" in message
+
+
+def test_cross_adapter_collision_same_namespace_writes_normally(tmp_path):
+    root = make_vault(tmp_path)
+    meeting.write(root, payload(**{"source-recording-id": "plaud:abc123"}))
+    result = meeting.write(root, payload(
+        title="a second plaud capture in the same overlapping slot",
+        **{"source-recording-id": "plaud:def456"}))
+    assert result["conflict"] is None
+    assert result["warnings"] == []
+
+
+def test_cross_adapter_collision_imprecise_match_is_a_warning_not_a_refusal(
+        tmp_path):
+    root = make_vault(tmp_path)
+    meeting.write(root, payload(
+        title="date-only capture", date="2026-05-20",
+        **{"source-recording-id": "plaud:abc123"}))
+    result = meeting.write(root, payload(
+        title="teams recording of the same meeting",
+        **{"source-recording-id": "m365:def456"}))
+    assert result["conflict"] is None
+    assert result["warnings"]
+    assert "imprecise" in result["warnings"][0].lower() \
+        or "date-only" in result["warnings"][0].lower()
+
+
+def test_accept_collision_writes_a_precise_cross_adapter_match_anyway(
+        tmp_path):
+    root = make_vault(tmp_path)
+    meeting.write(root, payload(**{"source-recording-id": "plaud:abc123"}))
+    result = meeting.write(
+        root, payload(
+            title="teams recording of the same meeting",
+            **{"source-recording-id": "m365:def456"}),
+        accept_collision=True)
+    assert result["conflict"] is None
+    assert (root / result["path"]).is_file()
+
+
+def test_accept_collision_leaves_a_trace_in_the_result_warnings(tmp_path):
+    """MINOR 1: --accept-collision used to bypass the refusal silently,
+    leaving no record on the written note or its result of a collision
+    having been overridden."""
+    root = make_vault(tmp_path)
+    meeting.write(root, payload(**{"source-recording-id": "plaud:abc123"}))
+    result = meeting.write(
+        root, payload(
+            title="teams recording of the same meeting",
+            **{"source-recording-id": "m365:def456"}),
+        accept_collision=True)
+    assert any(
+        w.startswith("collision-accepted: ")
+        and "20-05-26-vendor-strategy-brainstorm" in w
+        for w in result["warnings"]
+    ), result["warnings"]
+
+
+def test_zero_duration_payload_skips_the_collision_scan(tmp_path):
+    root = make_vault(tmp_path)
+    meeting.write(root, payload(**{"source-recording-id": "plaud:abc123"}))
+    result = meeting.write(root, note_payload(
+        title="teams recording of the same meeting",
+        **{"source-recording-id": "m365:def456"}))
+    assert result["conflict"] is None
+    assert result["warnings"] == []
+
+
+# ---------------------------------------------------------------------------
+# Fix round 1, CRITICAL: a merely-adjacent meeting is a "precise" match under
+# collide's 15-minute grace, but has zero real overlap — must never be
+# refused or skipped, only warned about, same as an imprecise match.
+
+
+def test_cross_adapter_collision_non_strong_match_is_a_warning_not_a_refusal(
+        tmp_path):
+    root = make_vault(tmp_path)
+    meeting.write(root, payload(**{"source-recording-id": "plaud:abc123"}))
+    # Back-to-back: the first meeting is 11:00-11:41; this one starts right
+    # as it ends. Different namespace, different stem, zero real overlap.
+    result = meeting.write(root, payload(
+        title="an unrelated meeting right after the first one",
+        date="2026-05-20T11:41",
+        **{"source-recording-id": "m365:def456"}))
+    assert result["conflict"] is None
+    assert result["warnings"]
+    assert "20-05-26-vendor-strategy-brainstorm" in result["warnings"][0]
+
+
+# ---------------------------------------------------------------------------
+# Fix round 1, SPEC GAP: the write-time collision scan used to run only on
+# the fully-free-stem path — a payload landing on the stem-collision branch
+# (same title, same namespace, unconfirmed note already there) never got the
+# stem-independent scan at all, so a *different*, strongly-overlapping,
+# cross-adapter note elsewhere in the vault went uncaught.
+
+
+def test_cross_adapter_collision_also_runs_on_the_stem_collision_path(
+        tmp_path):
+    root = make_vault(tmp_path)
+    # A: same title/date/duration as the payload under test, same namespace
+    # (plaud) -> C will land on the stem-collision path against A.
+    meeting.write(root, payload(**{"source-recording-id": "plaud:aaa111"}))
+    # B: a different stem entirely, different namespace, identical window —
+    # a strong cross-adapter match the stem-collision path must still catch.
+    # (Written with accept_collision=True: on its own write B also overlaps
+    # A strongly, cross-namespace, which is exactly the scenario under test
+    # — a human/re-dispatch already confirmed these are two real meetings.)
+    meeting.write(root, payload(
+        title="an entirely different capture of the same slot",
+        **{"source-recording-id": "m365:bbb222"}), accept_collision=True)
+    with pytest.raises(meeting.MeetingError, match="cross-adapter-duplicate"):
+        meeting.write(root, payload(**{"source-recording-id": "plaud:ccc333"}))
+
+
+def test_stem_collision_path_excludes_its_own_stem_from_the_scan(tmp_path):
+    """The note already sitting at the colliding stem (same namespace) must
+    not also get reported back as an imprecise/non-strong warning — that
+    would just be noisy double-reporting of the stem-collision conflict the
+    caller already sees."""
+    root = make_vault(tmp_path)
+    meeting.write(root, payload(**{"source-recording-id": "inbox:aaaa000011112222"}))
+    result = meeting.write(
+        root, payload(**{"source-recording-id": "inbox:bbbb000011112222"}))
+    assert result["conflict"]["kind"] == "stem-collision"
+    assert result["warnings"] == []

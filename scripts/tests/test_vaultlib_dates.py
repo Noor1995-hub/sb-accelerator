@@ -940,3 +940,31 @@ def test_cli_dates_window_corrupt_watermark_file_is_a_cold_cache(tmp_path):
     result = json.loads(proc.stdout)["result"]
     assert result["watermark_used"] is False
     assert result["effective_days"] == 7
+
+
+# ---------------------------------------------------------------------------
+# Fix round 1, MINOR 3: one shared round()-semantics helper for "minutes
+# between two datetimes", used by both sync collide's occurrence duration
+# and m365 ids' event_duration_min — they used to round differently
+# (floor vs round()), silently disagreeing by a minute at the boundary.
+
+
+def test_minutes_between_rounds_not_floors():
+    from datetime import datetime as _dt
+    start = _dt(2026, 8, 25, 14, 0, 0)
+    end = _dt(2026, 8, 25, 14, 40, 31)  # 40.5166... min -> rounds to 41, not 40
+    assert dates.minutes_between(start, end) == 41
+
+
+def test_minutes_between_floors_at_zero_for_a_negative_span():
+    from datetime import datetime as _dt
+    start = _dt(2026, 8, 25, 14, 0, 0)
+    end = _dt(2026, 8, 25, 13, 0, 0)
+    assert dates.minutes_between(start, end) == 0
+
+
+def test_minutes_between_exact_minutes():
+    from datetime import datetime as _dt
+    start = _dt(2026, 8, 25, 14, 0, 0)
+    end = _dt(2026, 8, 25, 15, 0, 0)
+    assert dates.minutes_between(start, end) == 60

@@ -549,6 +549,68 @@ def test_forget_allows_the_outcomes_that_never_heal_on_their_own(
     assert result["forgotten"] == 1
 
 
+# ---------------------------------------------------------------------------
+# Fix round 1, IMPORTANT: no undo existed for a triage-caught duplicate's
+# seen-events entry (banked as `skipped`, which the bulk forget() refuses to
+# touch). forget_event targets exactly one occurrence, regardless of its
+# outcome — the undo `sync m365-forget --event-id --start-utc` needs.
+
+
+def test_forget_event_removes_a_skipped_entry_the_bulk_form_refuses(tmp_path):
+    root = make_vault(tmp_path)
+    seenevents.record(root, [{
+        "id": "AAMkAGId1", "start_utc": "2026-08-28T14:00:00",
+        "outcome": "skipped",
+    }], NOW)
+    result = seenevents.forget_event(
+        root, "AAMkAGId1", "2026-08-28T14:00:00")
+    assert result == {"forgotten": 1, "remaining": 0}
+    result2 = seenevents.triage(
+        root, [listing_event(event_id="AAMkAGId1",
+                             start="2026-08-28T14:00:00.0000000",
+                             end="2026-08-28T15:00:00.0000000")], NOW)
+    assert [e["reason"] for e in result2["fetch"]] == ["unseen"]
+
+
+def test_forget_event_removes_a_written_entry_too(tmp_path):
+    """Unlike the bulk form, the targeted form has no closed-vocabulary
+    restriction — it names one occurrence, not a whole class of outcomes."""
+    root = make_vault(tmp_path)
+    seenevents.record(root, [outcome(kind="written")], NOW)
+    result = seenevents.forget_event(
+        root, "AAMkAGId1", "2026-08-28T14:00:00")
+    assert result == {"forgotten": 1, "remaining": 0}
+
+
+def test_forget_event_refuses_an_id_not_on_the_cache(tmp_path):
+    root = make_vault(tmp_path)
+    with pytest.raises(seenevents.SeenEventsError, match="nothing to forget"):
+        seenevents.forget_event(root, "AAMkAGId9", "2026-08-28T14:00:00")
+
+
+def test_forget_event_leaves_other_entries_untouched(tmp_path):
+    root = make_vault(tmp_path)
+    seenevents.record(root, [
+        outcome(event_id="AAMkAGId1", kind="skipped"),
+        outcome(event_id="AAMkAGId2", kind="written"),
+    ], NOW)
+    result = seenevents.forget_event(
+        root, "AAMkAGId1", "2026-08-28T14:00:00")
+    assert result["remaining"] == 1
+    cache = json.loads(
+        (root / seenevents.CACHE_RELPATH).read_text(encoding="utf-8"))
+    assert list(cache["events"]) == ["AAMkAGId2|2026-08-28T14:00:00"]
+
+
+def test_forget_event_normalizes_graph_datetimes_in_the_key(tmp_path):
+    root = make_vault(tmp_path)
+    seenevents.record(
+        root, [outcome(start_utc="2026-08-28T14:00:00.0000000Z")], NOW)
+    result = seenevents.forget_event(
+        root, "AAMkAGId1", "2026-08-28T14:00:00Z")
+    assert result == {"forgotten": 1, "remaining": 0}
+
+
 # Review finding #5 (minor, round 1): the fail-open branch in triage() (an
 # outcome value this version does not know) was only ever exercised
 # indirectly, through record()'s own validation rejecting it first. Writing
@@ -773,3 +835,450 @@ def test_triage_emits_the_event_uri_on_an_unkeyable_entry(tmp_path):
     assert result["fetch"][0]["reason"] == "unkeyed"
     assert result["fetch"][0]["event_uri"] == (
         f"calendar:///events/{URLSAFE_ID}")
+
+
+# ---------------------------------------------------------------------------
+# A2: triage-time --collide. `m365 ids` cannot be used here (the listing
+# carries no meetingTranscriptUrl), so the collide inputs are computed from
+# the listing itself: owner-local start (`_occurrence_dt` + `utc_to_local`)
+# and `(end - start)` minutes. A precise cross-namespace match moves a fetch
+# survivor into the new top-level `duplicate` bucket instead of dispatching a
+# worker for it at all — the 26% problem the plan's cost table names.
+
+
+def make_meeting_note(root: Path, stem: str, *, date: str, duration: int,
+                      recording_id: str) -> None:
+    (root / "20-meetings").mkdir(exist_ok=True)
+    (root / "20-meetings" / f"{stem}.md").write_text(
+        f"---\ndate: {date}\ntype: meeting\n"
+        f"recording-duration: {duration}\nsource: recorder\n"
+        f"source-recording-id: {recording_id}\n---\n\nbody\n",
+        encoding="utf-8")
+
+
+def test_collide_moves_a_precise_cross_namespace_match_to_duplicate(tmp_path):
+    root = make_vault(tmp_path)
+    make_meeting_note(root, "28-08-26-weekly-sync",
+                      date="2026-08-28T14:00", duration=60,
+                      recording_id="plaud:abc123")
+    result = seenevents.triage(root, [listing_event()], NOW,
+                              collide=True, utc_offset="+00:00")
+    assert result["fetch"] == []
+    assert result["duplicate"] == [{
+        "id": "AAMkAGId1", "start_utc": "2026-08-28T14:00:00",
+        "subject": "Weekly sync", "event_uri": "calendar:///events/AAMkAGId1",
+        "existing_stem": "28-08-26-weekly-sync",
+        "existing_id": "plaud:abc123",
+    }]
+
+
+def test_collide_same_namespace_match_stays_in_fetch(tmp_path):
+    root = make_vault(tmp_path)
+    make_meeting_note(root, "28-08-26-weekly-sync",
+                      date="2026-08-28T14:00", duration=60,
+                      recording_id="m365:0123456789abcdef")
+    result = seenevents.triage(root, [listing_event()], NOW,
+                              collide=True, utc_offset="+00:00")
+    assert result["duplicate"] == []
+    assert [e["reason"] for e in result["fetch"]] == ["unseen"]
+
+
+def test_collide_imprecise_match_stays_in_fetch(tmp_path):
+    root = make_vault(tmp_path)
+    make_meeting_note(root, "28-08-26-weekly-sync",
+                      date="2026-08-28", duration=60,
+                      recording_id="plaud:abc123")
+    result = seenevents.triage(root, [listing_event()], NOW,
+                              collide=True, utc_offset="+00:00")
+    assert result["duplicate"] == []
+    assert [e["reason"] for e in result["fetch"]] == ["unseen"]
+
+
+def test_without_collide_flag_duplicate_bucket_stays_empty(tmp_path):
+    root = make_vault(tmp_path)
+    make_meeting_note(root, "28-08-26-weekly-sync",
+                      date="2026-08-28T14:00", duration=60,
+                      recording_id="plaud:abc123")
+    result = seenevents.triage(root, [listing_event()], NOW)
+    assert result["duplicate"] == []
+    assert [e["reason"] for e in result["fetch"]] == ["unseen"]
+
+
+def test_collide_checks_each_recurring_occurrence_independently(tmp_path):
+    root = make_vault(tmp_path)
+    make_meeting_note(root, "24-08-26-weekly-sync",
+                      date="2026-08-24T14:00", duration=60,
+                      recording_id="plaud:abc123")
+    monday = listing_event(start="2026-08-24T14:00:00.0000000",
+                           end="2026-08-24T15:00:00.0000000")
+    wednesday = listing_event(start="2026-08-26T14:00:00.0000000",
+                              end="2026-08-26T15:00:00.0000000")
+    result = seenevents.triage(root, [monday, wednesday], NOW,
+                              collide=True, utc_offset="+00:00")
+    assert [d["start_utc"] for d in result["duplicate"]] == \
+        ["2026-08-24T14:00:00"]
+    assert [e["start_utc"] for e in result["fetch"]] == \
+        ["2026-08-26T14:00:00"]
+
+
+def test_collide_non_strong_precise_match_stays_in_fetch(tmp_path):
+    """Fix round 1, CRITICAL: a back-to-back note (starts exactly when the
+    candidate ends) is a *match* under collide's 15-minute grace but has
+    zero real overlap — must never be auto-settled as a duplicate."""
+    root = make_vault(tmp_path)
+    make_meeting_note(root, "28-08-26-back-to-back",
+                      date="2026-08-28T15:00", duration=60,
+                      recording_id="plaud:abc123")
+    result = seenevents.triage(root, [listing_event()], NOW,
+                              collide=True, utc_offset="+00:00")
+    assert result["duplicate"] == []
+    assert [e["reason"] for e in result["fetch"]] == ["unseen"]
+
+
+def test_collide_no_end_listing_entry_stays_in_fetch(tmp_path):
+    """Fix wave 2, IMPORTANT: a listing entry with no `end` falls back to
+    `end = start` (occurrence duration 0), which `syncjob.collide` floors
+    to a 1-minute window — and a 1-minute window's own strong-match
+    threshold is ceil(1/2) == 1, so a single overlapping minute trivially
+    satisfies it. Without a guard this auto-skips on a fabricated window
+    that was never a real duration in the first place; it must stay in
+    `fetch` and let the write-time net (which sees a real payload duration)
+    decide instead."""
+    root = make_vault(tmp_path)
+    make_meeting_note(root, "28-08-26-weekly-sync",
+                      date="2026-08-28T14:00", duration=60,
+                      recording_id="plaud:abc123")
+    no_end_event = {
+        "id": "AAMkAGId1", "subject": "Weekly sync",
+        "start": {"dateTime": "2026-08-28T14:00:00.0000000",
+                  "timeZone": "UTC"},
+    }
+    result = seenevents.triage(root, [no_end_event], NOW,
+                              collide=True, utc_offset="+00:00")
+    assert result["duplicate"] == []
+    assert [e["reason"] for e in result["fetch"]] == ["unseen"]
+
+
+def test_collide_preload_warnings_reach_triage(tmp_path):
+    """PR #216 review: load_collide_notes' own warnings (an unparseable
+    20-meetings/*.md file) were silently dropped — collide() starts from
+    warnings=[] when notes is pre-injected, and _collide_duplicate never
+    reads result["warnings"], so nothing ever surfaced them to the caller
+    under --collide. triage() must fold them into its own warnings list."""
+    root = make_vault(tmp_path)
+    (root / "20-meetings" / "broken.md").write_text("---\n: not yaml\n",
+                                                    encoding="utf-8")
+    result = seenevents.triage(root, [listing_event()], NOW,
+                              collide=True, utc_offset="+00:00")
+    assert any("broken.md" in w for w in result["warnings"])
+
+
+def test_collide_preload_warnings_appear_once_per_triage_call(tmp_path):
+    """Even with multiple fetch survivors in one triage call (each of which
+    would otherwise trigger its own collide() call), the preload warning
+    must appear exactly once — it is a property of the vault's
+    20-meetings/ folder, not of any one candidate."""
+    root = make_vault(tmp_path)
+    (root / "20-meetings" / "broken.md").write_text("---\n: not yaml\n",
+                                                    encoding="utf-8")
+    ev1 = listing_event(event_id="AAMkAGId1",
+                        start="2026-08-28T10:00:00.0000000",
+                        end="2026-08-28T11:00:00.0000000")
+    ev2 = listing_event(event_id="AAMkAGId2",
+                        start="2026-08-28T12:00:00.0000000",
+                        end="2026-08-28T13:00:00.0000000")
+    result = seenevents.triage(root, [ev1, ev2], NOW,
+                              collide=True, utc_offset="+00:00")
+    matching = [w for w in result["warnings"] if "broken.md" in w]
+    assert len(matching) == 1
+
+
+def test_collide_loads_notes_once_and_reuses_them_across_candidates(
+        tmp_path, monkeypatch
+):
+    """Fix round 1, MINOR 6: collide used to re-glob 20-meetings/ per
+    candidate; triage --collide must load once and pass `notes=` through."""
+    root = make_vault(tmp_path)
+    make_meeting_note(root, "28-08-26-weekly-sync",
+                      date="2026-08-28T14:00", duration=60,
+                      recording_id="plaud:abc123")
+    calls = {"load": 0, "notes_passed": []}
+    real_load = syncjob.load_collide_notes
+    real_collide = syncjob.collide
+
+    def counting_load(root_arg):
+        calls["load"] += 1
+        return real_load(root_arg)
+
+    def spying_collide(root_arg, start, duration, *, notes=None):
+        calls["notes_passed"].append(notes is not None)
+        return real_collide(root_arg, start, duration, notes=notes)
+
+    monkeypatch.setattr(syncjob, "load_collide_notes", counting_load)
+    monkeypatch.setattr(syncjob, "collide", spying_collide)
+
+    ev1 = listing_event(event_id="AAMkAGId1",
+                        start="2026-08-28T10:00:00.0000000",
+                        end="2026-08-28T11:00:00.0000000")
+    ev2 = listing_event(event_id="AAMkAGId2",
+                        start="2026-08-28T12:00:00.0000000",
+                        end="2026-08-28T13:00:00.0000000")
+    seenevents.triage(root, [ev1, ev2], NOW, collide=True, utc_offset="+00:00")
+    assert calls["load"] == 1
+    assert calls["notes_passed"] == [True, True]
+
+
+def test_collide_duplicate_settles_as_skipped_and_filters_next_run(tmp_path):
+    root = make_vault(tmp_path)
+    make_meeting_note(root, "28-08-26-weekly-sync",
+                      date="2026-08-28T14:00", duration=60,
+                      recording_id="plaud:abc123")
+    result = seenevents.triage(root, [listing_event()], NOW,
+                              collide=True, utc_offset="+00:00")
+    dup = result["duplicate"][0]
+    seenevents.record(root, [{
+        "id": dup["id"], "start_utc": dup["start_utc"], "outcome": "skipped",
+    }], NOW)
+    again = seenevents.triage(root, [listing_event()], NOW,
+                              collide=True, utc_offset="+00:00")
+    assert again["fetch"] == []
+    assert again["duplicate"] == []
+    assert again["filtered"]["skipped"] == 1
+
+
+# ---------------------------------------------------------------------------
+# A4: seenevents.settle_duplicate — the one CLI verb `sync settle-duplicate`
+# calls, for the unattended path: writes the skip-list line (via
+# `syncjob.skip`) and, when the underlying m365 occurrence is known, the
+# seen-events `skipped` entry too. Validated before the first write, then
+# the two writes happen in order, skip line first — the "two writes that
+# must not come apart" shape `syncjob.park` set the precedent for.
+
+
+def test_settle_duplicate_writes_the_skip_list_line(tmp_path):
+    root = make_vault(tmp_path)
+    result = seenevents.settle_duplicate(
+        root, "m365:aaaa111122223333", "plaud:abc123",
+        "28-08-26-weekly-sync")
+    assert result["recording_id"] == "m365:aaaa111122223333"
+    assert result["reason"] == (
+        "same meeting already synced as plaud:abc123 "
+        "(28-08-26-weekly-sync)")
+    assert syncjob.read_skip_records(root) == [{
+        "recording_id": "m365:aaaa111122223333",
+        "reason": result["reason"], "source_name": None,
+    }]
+    assert result["seen_events_recorded"] is False
+
+
+def test_settle_duplicate_also_banks_the_seen_events_entry_when_known(
+        tmp_path):
+    root = make_vault(tmp_path)
+    result = seenevents.settle_duplicate(
+        root, "m365:aaaa111122223333", "plaud:abc123",
+        "28-08-26-weekly-sync",
+        event_id="AAMkAGId1", start_utc="2026-08-28T14:00:00", now_utc=NOW)
+    assert result["seen_events_recorded"] is True
+    assert "m365:aaaa111122223333" in syncjob.read_skip_list(root)
+    # the same occurrence now filters at triage, unattended, no --collide
+    # needed: the skip-list line alone would not do that, only the cache
+    # entry does.
+    triaged = seenevents.triage(
+        root, [listing_event(event_id="AAMkAGId1",
+                             start="2026-08-28T14:00:00.0000000",
+                             end="2026-08-28T15:00:00.0000000")], NOW)
+    assert triaged["fetch"] == []
+    assert triaged["filtered"]["skipped"] == 1
+
+
+def test_settle_duplicate_requires_both_event_keys_or_neither(tmp_path):
+    root = make_vault(tmp_path)
+    with pytest.raises(seenevents.SeenEventsError,
+                       match="travel together"):
+        seenevents.settle_duplicate(
+            root, "m365:aaaa111122223333", "plaud:abc123",
+            "28-08-26-weekly-sync", event_id="AAMkAGId1")
+    with pytest.raises(seenevents.SeenEventsError,
+                       match="travel together"):
+        seenevents.settle_duplicate(
+            root, "m365:aaaa111122223333", "plaud:abc123",
+            "28-08-26-weekly-sync", start_utc="2026-08-28T14:00:00")
+
+
+def test_settle_duplicate_is_idempotent_on_the_skip_list(tmp_path):
+    root = make_vault(tmp_path)
+    seenevents.settle_duplicate(
+        root, "m365:aaaa111122223333", "plaud:abc123",
+        "28-08-26-weekly-sync")
+    result = seenevents.settle_duplicate(
+        root, "m365:aaaa111122223333", "plaud:abc123",
+        "28-08-26-weekly-sync")
+    assert result["already_present"] is True
+    assert len(syncjob.read_skip_records(root)) == 1
+
+
+# Fix round 1, MINOR 2: settle_duplicate wrote the skip-list line first and
+# only validated the seen-events entry afterward — a malformed start_utc
+# left the skip-list line written but the seen-events entry never banked,
+# the two ledgers out of sync. Validate before either write.
+
+
+def test_settle_duplicate_validates_before_writing_the_skip_list_line(
+        tmp_path):
+    root = make_vault(tmp_path)
+    with pytest.raises(seenevents.SeenEventsError):
+        seenevents.settle_duplicate(
+            root, "m365:aaaa111122223333", "plaud:abc123",
+            "28-08-26-weekly-sync",
+            event_id="AAMkAGId1", start_utc="not-a-date")
+    assert syncjob.read_skip_records(root) == []
+
+
+# ---------------------------------------------------------------------------
+# Fix wave 2, IMPORTANT: sync unskip alone leaves a worker-settled m365
+# duplicate's seen-events entry in place, permanently filtering the
+# occurrence out of every future triage. seenevents.unsettle_duplicate
+# reverses both writes settle_duplicate made — the undo `sync
+# unsettle-duplicate` needs.
+
+
+def test_unsettle_duplicate_removes_the_skip_list_line(tmp_path):
+    root = make_vault(tmp_path)
+    seenevents.settle_duplicate(
+        root, "plaud:aaaa111122223333", "plaud:abc123",
+        "28-08-26-weekly-sync")
+    result = seenevents.unsettle_duplicate(root, "plaud:aaaa111122223333")
+    assert result == {"recording_id": "plaud:aaaa111122223333",
+                      "removed": True, "forgot": False, "reason": None}
+    assert syncjob.read_skip_list(root) == set()
+
+
+def test_unsettle_duplicate_also_forgets_the_seen_events_entry(tmp_path):
+    root = make_vault(tmp_path)
+    seenevents.settle_duplicate(
+        root, "m365:aaaa111122223333", "plaud:abc123",
+        "28-08-26-weekly-sync",
+        event_id="AAMkAGId1", start_utc="2026-08-28T14:00:00", now_utc=NOW)
+    result = seenevents.unsettle_duplicate(
+        root, "m365:aaaa111122223333",
+        event_id="AAMkAGId1", start_utc="2026-08-28T14:00:00")
+    assert result["removed"] is True
+    assert result["forgot"] is True
+    assert syncjob.read_skip_list(root) == set()
+    # the occurrence is fetchable again, both ledgers cleared
+    triaged = seenevents.triage(
+        root, [listing_event(event_id="AAMkAGId1",
+                             start="2026-08-28T14:00:00.0000000",
+                             end="2026-08-28T15:00:00.0000000")], NOW)
+    assert [e["reason"] for e in triaged["fetch"]] == ["unseen"]
+
+
+def test_unsettle_duplicate_tolerates_a_missing_seen_events_entry(tmp_path):
+    """The occurrence may have already aged out of the cache's own 30-day
+    retention — that must not stop the skip-list line from being removed,
+    only report honestly that there was nothing left to forget."""
+    root = make_vault(tmp_path)
+    seenevents.settle_duplicate(
+        root, "m365:aaaa111122223333", "plaud:abc123",
+        "28-08-26-weekly-sync")  # no event_id/start_utc -> no cache entry
+    result = seenevents.unsettle_duplicate(
+        root, "m365:aaaa111122223333",
+        event_id="AAMkAGId1", start_utc="2026-08-28T14:00:00")
+    assert result["removed"] is True
+    assert result["forgot"] is False
+    assert result["reason"] is None
+    assert syncjob.read_skip_list(root) == set()
+
+
+def test_unsettle_duplicate_refuses_to_forget_a_non_skipped_entry(tmp_path):
+    """forget_event deletes regardless of outcome, so a caller passing
+    mismatched event keys (a typo, or a stale id) could otherwise drop some
+    other occurrence's `written`/`no-transcript`/etc. entry. unsettle_
+    duplicate must check the outcome first and refuse to touch anything
+    that isn't the `skipped` entry it itself is supposed to be undoing."""
+    root = make_vault(tmp_path)
+    seenevents.settle_duplicate(
+        root, "m365:aaaa111122223333", "plaud:abc123",
+        "28-08-26-weekly-sync")  # no event keys -> no seen-events entry
+    # a real, unrelated occurrence recorded as written
+    seenevents.record(root, [{
+        "id": "AAMkAGId1", "start_utc": "2026-08-28T14:00:00",
+        "outcome": "written", "recording_id": "m365:0123456789abcdef",
+    }], NOW)
+    result = seenevents.unsettle_duplicate(
+        root, "m365:aaaa111122223333",
+        event_id="AAMkAGId1", start_utc="2026-08-28T14:00:00")
+    assert result["removed"] is True  # the skip-list line still comes off
+    assert result["forgot"] is False
+    assert result["reason"] == "outcome is written, not skipped"
+    # the unrelated written entry survives untouched
+    cache = json.loads(
+        (root / seenevents.CACHE_RELPATH).read_text(encoding="utf-8"))
+    assert cache["events"]["AAMkAGId1|2026-08-28T14:00:00"]["outcome"] == \
+        "written"
+
+
+def test_unsettle_duplicate_normalizes_a_padded_event_id_the_guard_lookup(
+        tmp_path):
+    """PR #216 review: the guard used to build its lookup key from the raw
+    event_id while forget_event normalizes with str(event_id or "").strip()
+    before building its own — a padded --event-id (whitespace the CLI
+    passes through verbatim, no type= stripping) made the guard's own
+    lookup miss the real entry (cached=None -> outcome=None), fall through
+    to the "else" branch, and call forget_event unconditionally — which
+    normalizes internally, finds the real entry, and deletes it, silently
+    bypassing the non-skipped refusal this function's docstring promises."""
+    root = make_vault(tmp_path)
+    seenevents.record(root, [{
+        "id": "AAMkAGId1", "start_utc": "2026-08-28T14:00:00",
+        "outcome": "written", "recording_id": "m365:0123456789abcdef",
+    }], NOW)
+    seenevents.settle_duplicate(
+        root, "m365:aaaa111122223333", "plaud:abc123",
+        "28-08-26-weekly-sync")  # no event keys -> nothing new cached
+    result = seenevents.unsettle_duplicate(
+        root, "m365:aaaa111122223333",
+        event_id="AAMkAGId1 ", start_utc="2026-08-28T14:00:00")  # padded
+    assert result["forgot"] is False
+    assert result["reason"] == "outcome is written, not skipped"
+    cache = json.loads(
+        (root / seenevents.CACHE_RELPATH).read_text(encoding="utf-8"))
+    assert cache["events"]["AAMkAGId1|2026-08-28T14:00:00"]["outcome"] == \
+        "written"
+
+
+def test_settle_and_unsettle_duplicate_agree_on_a_padded_event_id(tmp_path):
+    """The normal (non-adversarial) case: settle_duplicate and
+    unsettle_duplicate must land on the same cache key regardless of which
+    side (if either) receives incidental whitespace in --event-id."""
+    root = make_vault(tmp_path)
+    seenevents.settle_duplicate(
+        root, "m365:aaaa111122223333", "plaud:abc123",
+        "28-08-26-weekly-sync",
+        event_id=" AAMkAGId1", start_utc="2026-08-28T14:00:00", now_utc=NOW)
+    result = seenevents.unsettle_duplicate(
+        root, "m365:aaaa111122223333",
+        event_id="AAMkAGId1 ", start_utc="2026-08-28T14:00:00")
+    assert result["forgot"] is True
+    assert result["reason"] is None
+
+
+def test_unsettle_duplicate_refuses_an_id_not_on_the_skip_list(tmp_path):
+    # syncjob.unskip's own refusal propagates unconverted — the same
+    # pattern settle_duplicate already uses for syncjob.skip's own errors.
+    root = make_vault(tmp_path)
+    with pytest.raises(syncjob.SyncError, match="not on the skip list"):
+        seenevents.unsettle_duplicate(root, "m365:neverskipped")
+
+
+def test_unsettle_duplicate_requires_both_event_keys_or_neither(tmp_path):
+    root = make_vault(tmp_path)
+    seenevents.settle_duplicate(
+        root, "m365:aaaa111122223333", "plaud:abc123",
+        "28-08-26-weekly-sync")
+    with pytest.raises(seenevents.SeenEventsError, match="travel together"):
+        seenevents.unsettle_duplicate(
+            root, "m365:aaaa111122223333", event_id="AAMkAGId1")
+    with pytest.raises(seenevents.SeenEventsError, match="travel together"):
+        seenevents.unsettle_duplicate(
+            root, "m365:aaaa111122223333", start_utc="2026-08-28T14:00:00")
