@@ -264,8 +264,9 @@ step 0 brings you straight back here.
 Repo creation and token minting stay a manual, out-of-band consultant
 action — this skill never does either:
 
-1. A delaware-owned `sb-client-<slug>` GitHub repo, scoped to this client
-   only.
+1. A delaware-owned GitHub repo for this deployment's feedback, scoped to
+   it only: `sb-client-<slug>` for a client, `sb-internal-<slug>` when the
+   vault owner is a delaware colleague.
 2. A fine-grained token: `issues: read` + `issues: write` on that repo,
    **no `contents` scope** — the leak blast-radius control.
 
@@ -288,7 +289,7 @@ Once the token file is confirmed present, bind the vault to the repo:
 
 ```bash
 VAULTLIB="${CLAUDE_PLUGIN_ROOT}/lib/vaultlib/cli.py"
-python3 "$VAULTLIB" config write --vault "$VAULT" --field feedback.repo --value <org>/sb-client-<slug>
+python3 "$VAULTLIB" config write --vault "$VAULT" --field feedback.repo --value <org>/<feedback-repo>
 ```
 
 ## Handoff — what this skill deliberately did not do
