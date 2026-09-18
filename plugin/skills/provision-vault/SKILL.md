@@ -7,21 +7,19 @@ origin: net-new
 
 # Provision Vault
 
-Provisioning still belongs to the consultant, at setup, on each machine —
-this skill changes the delivery channel, not who runs it or when. Before
-#86 (part 1), the vault template and the Obsidian-plugin provisioner lived
-in `scripts/` and `template/`, so setting up a client machine needed an
-accelerator repo checkout sitting on it. They now ship inside the plugin
-itself (`plugin/template/`, `plugin/lib/`), which means the plugin cache
-Claude Code or Cowork already installed is enough — no repo checkout, no
-`git clone`, nothing extra to bring to the client's machine.
+Provisioning happens at setup, on the vault owner's machine, and the plugin
+cache Claude Code or Cowork already installed is enough to run it — no repo
+checkout, no `git clone`, nothing extra to bring to the client's machine.
 
 ## Audience
 
-**Consultant-run, at setup day.** Never hand this to the vault owner — it
-writes into a location that does not exist yet, and step 4 touches a
-credential that must never appear in a chat transcript. Run the whole
-sequence once, on the vault owner's machine.
+**Run by the consultant, or by the vault owner with a consultant present to
+help.** Either way, this is a setup-day session with someone who knows the
+skill in the room — never something the vault owner completes alone. It
+writes into a location that does not exist yet, and step 4 must never let
+the token's own value land in the chat transcript (see Hard rules) — that
+constraint holds no matter who is at the keyboard. Run the whole sequence
+once, on the vault owner's machine.
 
 ## Requirements
 
@@ -266,20 +264,38 @@ action — this skill never does either:
 2. A fine-grained token: `issues: read` + `issues: write` on that repo,
    **no `contents` scope** — the leak blast-radius control.
 
-Ask whether the consultant has already placed that token at
-`99-workflow-config/secrets/feedback-token` inside `$VAULT` (one line, no
-surrounding commentary). **Never ask for the token's value in chat, and
-never open or display that file's contents** — confirm only that it exists
-and is non-empty:
+Whoever is in the room may be hearing about this for the first time, so
+introduce it in two sentences before asking anything: this token lets
+**you** send delaware a heads-up through `/report-feedback` when
+something isn't working as expected — and every report is scrubbed
+first, so delaware only ever sees the plugin version, the skill involved,
+and what went wrong versus expected, never vault content or names.
 
-```bash
-test -s "$VAULT/99-workflow-config/secrets/feedback-token" && echo "token file present" || echo "token file missing"
-```
+Then ask whether they've already received a feedback token from their
+delaware contact:
 
-Report only `present` or `missing`, never the file's contents. If it is
-missing, tell the consultant exactly where to place it, and say that
-re-running `/provision-vault` on this vault once it is there picks up at
-step 4 — the vault is provisioned, so nothing is redone. Then stop here.
+- **Yes** — tell them to create
+  `99-workflow-config/secrets/feedback-token` inside `$VAULT` themselves
+  and paste the token in there — their own editor, never this chat. Then
+  confirm it landed:
+
+  ```bash
+  test -s "$VAULT/99-workflow-config/secrets/feedback-token" && echo "token file present" || echo "token file missing"
+  ```
+
+  Report only `present` or `missing`, never the file's contents. **Never
+  ask for the token's value in chat, never write or paste it on their
+  behalf, and never open or display that file's contents.** If it still
+  reports missing — not saved yet, wrong filename, wrong folder — tell
+  them the exact path again and offer to re-check once they say it's
+  there; if they'd rather stop here, that's the same fine, costs-nothing
+  outcome as answering "No" below.
+
+- **No** — say that's fine and costs nothing: tell them to ask their
+  delaware contact for the token, then come back — in this session once
+  they have it, or a later one — and ask for help configuring feedback.
+  That re-runs `/provision-vault`, and step 0 brings it straight back
+  here. Then stop here.
 
 Once the token file is confirmed present, bind the vault to the repo:
 
