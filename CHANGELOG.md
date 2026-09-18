@@ -15,6 +15,8 @@ delivers them.
 
 ## Unreleased
 
+- `/provision-vault`'s feedback-token step now explains itself before asking anything — what the token is for, and that every report is scrubbed before it reaches delaware — instead of a bare yes/no question with no context. Either the vault owner or the consultant can now be the one running the skill; it no longer says "never hand this to the vault owner." (#201, #221)
+
 ## v0.11.8 — 2026-09-17
 
 - The vault's own `CLAUDE.md`, `Start here`, and skill prose no longer describe a second human operator (an EA) sharing the vault over Obsidian Sync — the product is single-operator only, for the vault owner. If a deployment already trained a second operator on the old model, say so at the next tune-up; nothing about how the vault itself behaves changes for them today. (#212)
