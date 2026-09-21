@@ -547,6 +547,20 @@ def build_parser() -> argparse.ArgumentParser:
     m365_ids.add_argument(
         "--utc-offset", dest="utc_offset",
         help="explicit offset like +02:00 — same effect as --timezone")
+    m365_agenda = m365_sub.add_parser(
+        "agenda",
+        help="the day's meetings from a raw calendar-search listing, filtered, "
+             "sorted and rendered in the owner's local time (daily-note prep)")
+    m365_agenda.add_argument(
+        "--events", required=True,
+        help="path to the raw outlook_calendar_search output (every page, "
+             "as written), or - for stdin")
+    m365_agenda.add_argument("--timezone", help="IANA timezone name")
+    m365_agenda.add_argument("--utc-offset", dest="utc_offset",
+                             help="explicit offset like +02:00 — same effect as --timezone")
+    m365_agenda.add_argument(
+        "--date", help="owner-local day YYYY-MM-DD — events whose local start "
+                       "falls on another day are dropped and counted")
     m365_re = m365_sub.add_parser(
         "reassemble",
         help="render an event read + transcript read into one capture-bundle blob")
@@ -906,6 +920,11 @@ def _dispatch(args: argparse.Namespace) -> int:
                        else json.loads(Path(args.events).read_text(encoding="utf-8")))
             return _ok(m365.ids(payload, timezone=args.timezone,
                                 utc_offset=args.utc_offset))
+        if args.action == "agenda":
+            text = (sys.stdin.read() if args.events == "-"
+                    else Path(args.events).read_text(encoding="utf-8"))
+            return _ok(m365.agenda(m365.load_listing(text), timezone=args.timezone,
+                                   utc_offset=args.utc_offset, date=args.date))
         return _ok(m365.reassemble(
             args.event, args.transcript, args.out,
             timezone=args.timezone, utc_offset=args.utc_offset))

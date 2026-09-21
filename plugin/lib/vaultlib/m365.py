@@ -206,6 +206,120 @@ def _event_duration_min(event: dict) -> Optional[int]:
     return dates.minutes_between(start_utc, end_dt)
 
 
+def load_listing(text: str) -> list:
+    """The calendar-search listing as a flat list of objects, however the
+    orchestrator wrote it to scratch.
+
+    The connector answers a page as JSON objects back to back — not an
+    array — with paging markers (`nextOffset`, `totalResultCount`) among
+    them, and the skill says "write every page to one file". So this accepts
+    a JSON array, an object wrapping one under `value`/`events`, or any
+    concatenation of arrays and objects separated by nothing or whitespace.
+    Markers pass through; `agenda` counts and drops them, so the caller sees
+    that they were there rather than wondering whether an event vanished.
+    """
+    decoder = json.JSONDecoder()
+    items: list = []
+    pos = 0
+    length = len(text)
+    while True:
+        while pos < length and text[pos].isspace():
+            pos += 1
+        if pos >= length:
+            break
+        try:
+            chunk, pos = decoder.raw_decode(text, pos)
+        except json.JSONDecodeError as exc:
+            raise M365Error(
+                f"calendar listing is not JSON at offset {exc.pos}: {exc.msg}") from exc
+        if isinstance(chunk, list):
+            items.extend(chunk)
+        elif isinstance(chunk, dict):
+            wrapped = chunk.get("value", chunk.get("events"))
+            if isinstance(wrapped, list) and "start" not in chunk:
+                items.extend(wrapped)
+            else:
+                items.append(chunk)
+        else:
+            raise M365Error(
+                f"calendar listing must hold event objects, got {type(chunk).__name__}")
+    if not items and not text.strip():
+        raise M365Error("calendar listing is empty — write the raw search results first")
+    return items
+
+
+_AGENDA_DATE_RE = re.compile(r"\A\d{4}-\d{2}-\d{2}\Z")
+
+
+def agenda(events, *, timezone: Optional[str] = None,
+           utc_offset: Optional[str] = None, date: Optional[str] = None) -> dict:
+    """The day's meetings from a calendar-search listing, filtered, sorted
+    and rendered in the vault owner's local time — the deterministic half of
+    /evening-sync Stage 5.
+
+    The connector returns every `start`/`end` as a UTC wall clock with
+    `timeZone: "UTC"`. When the heading time was left to the orchestrator to
+    "render locally", one run copied the UTC clock straight into the daily
+    note and every meeting showed two hours early. So `time` (owner-local
+    `HH:MM`) is computed here, by the same `dates.utc_to_local` the meeting
+    notes use, and the skill carries it into the payload verbatim.
+
+    All-day and cancelled entries are dropped and counted; so are paging
+    markers (`load_listing` passes them through). With `date` (local
+    `YYYY-MM-DD`) an event whose *local* start falls on another day is
+    dropped too — the query window is built in UTC and can graze a
+    neighbouring day at the edges. A non-UTC listing is refused, exactly as
+    `ids` refuses it: guessing an offset is how this bug happened.
+    """
+    if not isinstance(events, list):
+        raise M365Error("--events must hold a JSON array of calendar-search results")
+    if date is not None and not _AGENDA_DATE_RE.match(date):
+        raise M365Error(f"--date {date!r} must be YYYY-MM-DD (the owner-local day)")
+    dropped = {"all_day": 0, "cancelled": 0, "other_day": 0, "not_events": 0}
+    keyed: List[Tuple[str, str, dict]] = []
+    for event in events:
+        if not isinstance(event, dict):
+            raise M365Error(
+                f"--events entries must be objects, got {type(event).__name__}")
+        if not (event.get("start") or {}).get("dateTime"):
+            dropped["not_events"] += 1
+            continue
+        if event.get("isCancelled"):
+            dropped["cancelled"] += 1
+            continue
+        if event.get("isAllDay"):
+            dropped["all_day"] += 1
+            continue
+        start_utc = _event_start(event)
+        local, _ = dates.utc_to_local(start_utc, timezone, utc_offset)
+        if date is not None and local.strftime("%Y-%m-%d") != date:
+            dropped["other_day"] += 1
+            continue
+        end_utc = _event_end(event)
+        end_local = None
+        if end_utc is not None:
+            end_local = dates.utc_to_local(end_utc, timezone, utc_offset)[0].strftime("%H:%M")
+        attendees = event.get("attendees")
+        subject = str(event.get("subject") or "").strip()
+        entry = {
+            "time": local.strftime("%H:%M"),
+            "end": end_local,
+            "subject": subject,
+            "start_utc": start_utc.strftime("%Y-%m-%dT%H:%M:%S"),
+            "start_local": local.strftime("%Y-%m-%dT%H:%M"),
+            "organizer": event.get("organizer"),
+            "attendees": list(attendees) if isinstance(attendees, list) else [],
+            "location": event.get("location"),
+            "show_as": event.get("showAs"),
+            "is_organizer": event.get("isOrganizer"),
+            "id": event.get("id"),
+            "uri": event.get("uri"),
+        }
+        keyed.append((entry["start_utc"], subject.casefold(), entry))
+    keyed.sort(key=lambda item: (item[0], item[1]))
+    return {"date": date, "meetings": [item[2] for item in keyed], "dropped": dropped}
+
+
 def ids(events, *, timezone: Optional[str] = None,
        utc_offset: Optional[str] = None) -> dict:
     """Batch id derivation over event reads (the trimmed event file — id,

@@ -15,6 +15,8 @@ delivers them.
 
 ## Unreleased
 
+- Tomorrow's daily note now shows each meeting at the vault owner's local time. The calendar connector reports starts in UTC, and one evening run copied that clock straight into the headings, so every meeting appeared two hours early; the conversion, filtering and sorting now happen in the CLI (`m365 agenda`) instead of being left to the run. If a daily note written before this release shows the wrong times, shift its headings by hand — the prep underneath is right. (#223)
+
 ## v0.11.9 — 2026-09-21
 
 - `/provision-vault`'s feedback-token step now explains itself before asking anything — what the token is for, and that every report is scrubbed before it reaches delaware — instead of a bare yes/no question with no context. Either the vault owner or the consultant can now be the one running the skill; it no longer says "never hand this to the vault owner." (#201, #221)

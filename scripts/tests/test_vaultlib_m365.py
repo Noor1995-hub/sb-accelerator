@@ -473,3 +473,121 @@ def test_event_uri_refuses_an_empty_or_non_string_id():
     for bad in ("", "   ", None, 17):
         with pytest.raises(m365.M365Error, match="event id"):
             m365.event_uri(bad)
+
+
+# --- agenda: the calendar-prep listing rendered in the owner's local time ---
+#
+# Regression for the 2026-09-21 daily note: the connector answers every
+# start as a UTC wall clock with timeZone "UTC", and the heading time used to
+# be hand-copied from it. The agenda step owns filter, sort and conversion.
+
+def _listing_event(subject, start, end=None, **extra):
+    event = {
+        "uri": f"calendar:///events/{subject[:3]}",
+        "id": subject[:3],
+        "subject": subject,
+        "organizer": "org@example.com",
+        "attendees": ["a@example.com"],
+        "start": {"dateTime": start, "timeZone": "UTC"},
+        "location": None,
+        "showAs": "busy",
+        "isAllDay": False,
+        "isCancelled": False,
+        "isOrganizer": False,
+    }
+    if end is not None:
+        event["end"] = {"dateTime": end, "timeZone": "UTC"}
+    event.update(extra)
+    return event
+
+
+def test_agenda_renders_local_start_and_end_and_sorts_by_start():
+    events = [
+        _listing_event("Later  ", "2026-09-21T12:00:00.0000000", "2026-09-21T13:30:00.0000000"),
+        _listing_event("Check-in ", "2026-09-21T08:00:00.0000000", "2026-09-21T08:30:00.0000000"),
+    ]
+    result = m365.agenda(events, utc_offset="+02:00")
+    assert [m["time"] for m in result["meetings"]] == ["10:00", "14:00"]
+    first = result["meetings"][0]
+    assert first["subject"] == "Check-in"
+    assert first["end"] == "10:30"
+    assert first["start_utc"] == "2026-09-21T08:00:00"
+    assert first["start_local"] == "2026-09-21T10:00"
+    assert first["organizer"] == "org@example.com"
+    assert first["attendees"] == ["a@example.com"]
+    assert first["uri"] == "calendar:///events/Che"
+    assert result["dropped"] == {"all_day": 0, "cancelled": 0, "other_day": 0, "not_events": 0}
+
+
+def test_agenda_with_timezone_name():
+    try:
+        from zoneinfo import ZoneInfo
+        ZoneInfo("Europe/Brussels")
+    except Exception:
+        pytest.skip("no tz database on host")
+    events = [_listing_event("Winter", "2026-01-12T08:00:00.0000000"),
+              _listing_event("Summer", "2026-09-21T08:00:00.0000000")]
+    result = m365.agenda(events, timezone="Europe/Brussels")
+    by_subject = {m["subject"]: m for m in result["meetings"]}
+    assert by_subject["Winter"]["time"] == "09:00"
+    assert by_subject["Summer"]["time"] == "10:00"
+    assert by_subject["Winter"]["end"] is None
+
+
+def test_agenda_drops_all_day_cancelled_and_other_days_with_counts():
+    events = [
+        _listing_event("Keep", "2026-09-21T08:00:00.0000000"),
+        _listing_event("Holiday", "2026-09-21T00:00:00.0000000", isAllDay=True),
+        _listing_event("Gone", "2026-09-21T09:00:00.0000000", isCancelled=True),
+        # 23:00Z the evening before is 01:00 local on the 21st — kept.
+        _listing_event("Late", "2026-09-20T23:00:00.0000000"),
+        # 22:30Z on the 21st is 00:30 local on the 22nd — another day.
+        _listing_event("Next", "2026-09-21T22:30:00.0000000"),
+    ]
+    result = m365.agenda(events, utc_offset="+02:00", date="2026-09-21")
+    assert [m["subject"] for m in result["meetings"]] == ["Late", "Keep"]
+    assert result["dropped"] == {"all_day": 1, "cancelled": 1, "other_day": 1, "not_events": 0}
+    assert result["date"] == "2026-09-21"
+
+
+def test_agenda_refuses_a_non_utc_listing():
+    event = _listing_event("Odd", "2026-09-21T10:00:00.0000000")
+    event["start"]["timeZone"] = "Romance Standard Time"
+    with pytest.raises(m365.M365Error, match="not UTC"):
+        m365.agenda([event], utc_offset="+02:00")
+
+
+def test_agenda_requires_exactly_one_offset_source():
+    with pytest.raises(Exception, match="exactly one"):
+        m365.agenda([_listing_event("X", "2026-09-21T10:00:00.0000000")])
+
+
+def test_agenda_rejects_a_bad_date_filter():
+    with pytest.raises(m365.M365Error, match="YYYY-MM-DD"):
+        m365.agenda([], utc_offset="+02:00", date="21/09/2026")
+
+
+def test_load_listing_accepts_array_wrapper_and_concatenated_objects():
+    a = _listing_event("A", "2026-09-21T08:00:00.0000000")
+    b = _listing_event("B", "2026-09-21T09:00:00.0000000")
+    marker = {"totalResultCount": 2}
+    assert m365.load_listing(json.dumps([a, b])) == [a, b]
+    assert m365.load_listing(json.dumps({"value": [a, b]})) == [a, b]
+    # The connector's raw output: objects back to back, plus paging markers.
+    raw = json.dumps(a) + json.dumps(b) + json.dumps(marker)
+    assert m365.load_listing(raw) == [a, b, marker]
+    raw_pages = json.dumps([a, marker]) + "\n" + json.dumps([b])
+    assert m365.load_listing(raw_pages) == [a, marker, b]
+
+
+def test_agenda_counts_paging_markers_as_not_events():
+    events = [_listing_event("A", "2026-09-21T08:00:00.0000000"),
+              {"nextOffset": 25}, {"totalResultCount": 26}]
+    result = m365.agenda(events, utc_offset="+02:00")
+    assert [m["subject"] for m in result["meetings"]] == ["A"]
+    assert result["dropped"]["not_events"] == 2
+
+
+def test_load_listing_refuses_garbage():
+    with pytest.raises(m365.M365Error, match="calendar listing"):
+        m365.load_listing("not json at all")

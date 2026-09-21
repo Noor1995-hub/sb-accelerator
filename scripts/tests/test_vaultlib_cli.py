@@ -2185,3 +2185,24 @@ def test_runlog_append_rejects_a_bad_routine_name(capsys, tmp_path):
     assert code == 1
     assert payload["ok"] is False
     assert "routine" in payload["error"]
+
+
+def test_m365_agenda_reads_the_raw_listing_file(capsys, tmp_path):
+    listing = tmp_path / "m365_calendar.json"
+    event = {"subject": "Check-in ", "organizer": "o@example.com", "attendees": None,
+             "start": {"dateTime": "2026-09-21T08:00:00.0000000", "timeZone": "UTC"},
+             "end": {"dateTime": "2026-09-21T08:30:00.0000000", "timeZone": "UTC"},
+             "isAllDay": False, "isCancelled": False}
+    # Written the way the connector answers: objects back to back, then the count.
+    listing.write_text(json.dumps(event) + json.dumps({"totalResultCount": 1}),
+                       encoding="utf-8")
+    code, payload = run(capsys, ["m365", "agenda", "--events", str(listing),
+                                 "--utc-offset", "+02:00", "--date", "2026-09-21"])
+    assert code == 0, payload
+    assert payload["result"]["meetings"] == [{
+        "time": "10:00", "end": "10:30", "subject": "Check-in",
+        "start_utc": "2026-09-21T08:00:00", "start_local": "2026-09-21T10:00",
+        "organizer": "o@example.com", "attendees": [], "location": None,
+        "show_as": None, "is_organizer": None, "id": None, "uri": None,
+    }]
+    assert payload["result"]["dropped"]["not_events"] == 1
