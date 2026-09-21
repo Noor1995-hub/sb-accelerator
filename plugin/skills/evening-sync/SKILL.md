@@ -321,11 +321,27 @@ stops.
 **Write the raw `outlook_calendar_search` results — every page — to
 `$SCRATCH/m365_calendar.json` with the Write tool — never hold them in the
 main context.** A day's calendar search easily runs tens of thousands of
-characters, and it is read once (to
-filter and sort) then never needed again; keeping it in context past that
-point is pure waste that every later turn in the run pays for again. Read it
-back from the file to filter out all-day and cancelled events; sort by start
-time; render times in the vault owner's local timezone. For each event, build
+characters, and it is read once (by the CLI, below) then never needed again;
+keeping it in context past that point is pure waste that every later turn in
+the run pays for again. Write the pages exactly as the tool answered them —
+objects back to back, paging markers included; the CLI reads that shape.
+
+Then let the CLI turn the listing into the day's agenda:
+
+```bash
+python3 "$VAULTLIB" m365 agenda --events "$SCRATCH/m365_calendar.json" --timezone <tz> --date <next_business_day>
+```
+
+The result's `meetings[]` is already filtered (all-day, cancelled and
+other-day entries dropped and counted under `dropped`), sorted by start, and
+rendered in the vault owner's local time. **Carry each entry's `time` and
+`subject` into the payload verbatim.** Never read `start.dateTime` yourself:
+the connector answers every start as a UTC wall clock labelled
+`timeZone: "UTC"`, and a hand-copied clock put every meeting two hours early
+in a daily note once — the offset is the CLI's to apply, not yours. The
+remaining fields (`organizer`, `attendees`, `location`, `show_as`,
+`is_organizer`, `uri`) are the inputs for the prep below.
+For each event, build
 the prep as **three fields**: `attendees` (names, organizer first),
 `last_meeting` (a wikilink to the most recent note for this entity or
 project with a one-line what-happened, or `none on file`), and `context`

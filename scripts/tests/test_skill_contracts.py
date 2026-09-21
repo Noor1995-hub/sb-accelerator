@@ -1369,35 +1369,63 @@ def test_sync_recordings_step6_dispatch_is_a_blocking_batch_cap():
 # not as prose.
 
 FENCED_BLOCK_RE = re.compile(r"```(?:bash)?\n(.*?)```", re.DOTALL)
-PLACEHOLDERS = {'"$VAULT"': "/placeholder/vault", "<tz>": "Europe/Brussels"}
+PLACEHOLDERS = {'"$VAULT"': "/placeholder/vault", "<tz>": "Europe/Brussels",
+                "<next_business_day>": "2026-09-21"}
 
 
-def fenced_dates_window_invocations(text: str):
+def fenced_invocations(text: str, subcommand: str):
+    """Every fenced `<group> <action>` invocation in a skill, as argv tokens
+    with the prose placeholders substituted — so argparse can be asked
+    whether the skill prescribes something the CLI actually accepts."""
     import shlex
     found = []
     for block in FENCED_BLOCK_RE.findall(text):
         for line in block.replace("\\\n", " ").splitlines():
-            if "dates window" not in line:
+            if subcommand not in line:
                 continue
-            command = line[line.index("dates window"):]
+            command = line[line.index(subcommand):]
             for token, value in PLACEHOLDERS.items():
                 command = command.replace(token, value)
             found.append(shlex.split(command))
     return found
 
 
+def fenced_dates_window_invocations(text: str):
+    return fenced_invocations(text, "dates window")
+
+
+@pytest.mark.parametrize("subcommand", ["dates window", "m365 agenda"])
 @pytest.mark.parametrize("path", SKILL_FILES + REF_FILES,
                          ids=lambda p: p.parent.name)
-def test_every_fenced_dates_window_invocation_parses(path):
+def test_every_fenced_invocation_of_a_parsed_subcommand_parses(path, subcommand):
     parser = cli.build_parser()
-    for tokens in fenced_dates_window_invocations(
-            path.read_text(encoding="utf-8")):
+    for tokens in fenced_invocations(path.read_text(encoding="utf-8"), subcommand):
         try:
             parser.parse_args(tokens)
         except SystemExit:
             pytest.fail(
-                f"{path.parent.name} prescribes a dates window invocation "
+                f"{path.parent.name} prescribes a {subcommand} invocation "
                 f"argparse refuses: {' '.join(tokens)}")
+
+
+def test_evening_sync_stage5_leaves_the_heading_time_to_the_cli():
+    """The 2026-09-21 daily note showed every meeting two hours early: the
+    connector answers starts as a UTC wall clock, and Stage 5 asked the
+    model, in prose, to "render times in the vault owner's local timezone".
+    One run copied UTC. The time now comes from `m365 agenda` and travels
+    into the payload verbatim — the prose instruction must not come back."""
+    text = (SKILLS_DIR / "evening-sync" / "SKILL.md").read_text(encoding="utf-8")
+    stage5 = text[text.index("## Stage 5"):text.index("## Stage 6")]
+    assert fenced_invocations(stage5, "m365 agenda"), (
+        "Stage 5 must prescribe a fenced `m365 agenda` invocation")
+    assert "--timezone <tz>" in stage5 and "--date <next_business_day>" in stage5, (
+        "the agenda call must carry the vault timezone and the local day")
+    assert "verbatim" in stage5 and "`time`" in stage5, (
+        "Stage 5 must say the agenda's `time` goes into the payload verbatim")
+    assert "render times in the vault owner's local timezone" not in stage5, (
+        "timezone conversion is the CLI's job, never a prose instruction")
+    assert "start.dateTime" in stage5, (
+        "Stage 5 must name the field the orchestrator is not to read")
 
 
 def test_sync_recordings_discovery_window_is_a_fenced_trailing_invocation():
