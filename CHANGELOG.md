@@ -15,6 +15,8 @@ delivers them.
 
 ## Unreleased
 
+## v0.11.9 — 2026-09-21
+
 - `/provision-vault`'s feedback-token step now explains itself before asking anything — what the token is for, and that every report is scrubbed before it reaches delaware — instead of a bare yes/no question with no context. Either the vault owner or the consultant can now be the one running the skill; it no longer says "never hand this to the vault owner." (#201, #221)
 
 ## v0.11.8 — 2026-09-17
