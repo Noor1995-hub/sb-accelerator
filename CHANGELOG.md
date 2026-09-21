@@ -15,6 +15,8 @@ delivers them.
 
 ## Unreleased
 
+## v0.11.10 — 2026-09-21
+
 - Tomorrow's daily note now shows each meeting at the vault owner's local time. The calendar connector reports starts in UTC, and one evening run copied that clock straight into the headings, so every meeting appeared two hours early; the conversion, filtering and sorting now happen in the CLI (`m365 agenda`) instead of being left to the run. If a daily note written before this release shows the wrong times, shift its headings by hand — the prep underneath is right. (#223)
 
 ## v0.11.9 — 2026-09-21
