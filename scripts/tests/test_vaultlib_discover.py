@@ -90,7 +90,7 @@ def test_address_normalises_every_connector_shape(value, expected):
 
 @pytest.mark.parametrize("address, expected", [
     ("jane.doe@x.example", "Jane Doe"),
-    ("pieter-jan.coppe@x.example", "Pieter Jan Coppe"),
+    ("pieter-jan.coppe@x.example", "Pieter-Jan Coppe"),
     ("t.suys@x.example", None),
     ("info@x.example", None),
 ])
@@ -504,13 +504,13 @@ def write_block(scratch, text):
 def test_a_block_built_from_the_evidence_passes(scratch):
     block = write_block(scratch, "- Chief Commercial Officer\n- Chairs the Weekly exco\n"
                                  "- Works closely with Priya Nathan\n")
-    assert discover.check_block(str(scratch), block) == {"ok": True, "unsupported": []}
+    assert discover.check_block(str(scratch), block) == {"passed": True, "unsupported": []}
 
 
 def test_a_block_with_a_smuggled_name_fails(scratch):
     block = write_block(scratch, "- Chairs the Weekly exco with Tom Peeters\n")
     assert discover.check_block(str(scratch), block) == {
-        "ok": False, "unsupported": ["Tom Peeters"]}
+        "passed": False, "unsupported": ["Tom Peeters"]}
 
 
 def test_a_single_name_opening_a_sentence_is_the_known_gap(scratch):
@@ -518,7 +518,7 @@ def test_a_single_name_opening_a_sentence_is_the_known_gap(scratch):
     # the owner's read-back covers prose; if this starts failing, the gap
     # closed and the spec should say so.
     block = write_block(scratch, "Tom leads the Weekly exco.\n")
-    assert discover.check_block(str(scratch), block)["ok"] is True
+    assert discover.check_block(str(scratch), block)["passed"] is True
 
 
 def test_a_curly_quoted_lowercase_title_is_dropped(scratch):
@@ -555,7 +555,7 @@ def test_a_name_after_a_semicolon_dash_or_colon_is_checked(scratch, text):
 @pytest.mark.parametrize("line", ["- Manager: Tom\n", "| Chair | Tom |\n"])
 def test_a_name_in_a_label_value_line_or_table_cell_is_checked(scratch, line):
     assert discover.check_block(str(scratch), write_block(scratch, line)) == {
-        "ok": False, "unsupported": ["Tom"]}
+        "passed": False, "unsupported": ["Tom"]}
 
 
 def test_a_possessive_does_not_drop_a_supported_name(scratch):
@@ -572,7 +572,7 @@ def test_an_invented_email_is_dropped(scratch):
 def test_a_block_may_quote_the_owners_own_answer(scratch):
     discover.answer(str(scratch), question="Other roles?", text="Board chair of Fabrikam")
     block = write_block(scratch, "- Board chair of Fabrikam\n")
-    assert discover.check_block(str(scratch), block)["ok"] is True
+    assert discover.check_block(str(scratch), block)["passed"] is True
 
 
 def test_a_plain_double_quoted_lowercase_title_is_dropped(scratch):
@@ -596,3 +596,78 @@ def test_a_plain_apostrophe_possessive_still_passes(scratch):
     result = propose(scratch, "people",
                      claim("You work closely with Priya Nathan's team.", "E4"))
     assert result["counts"]["passed"] == 1
+
+
+
+@pytest.mark.parametrize("text", [
+    "You meet your exco, e.g. Jansen and the board.",
+    "You attend the Weekly exco, i.e. Jansen runs it.",
+    "You attend the Weekly exco etc. Jansen too.",
+    "(Jansen) chairs the Weekly exco.",
+])
+def test_a_name_after_an_abbreviation_or_bracket_is_checked(scratch, text):
+    assert propose(scratch, "work", claim(text, "E2"))["passed"] == []
+
+
+def test_a_real_second_sentence_still_opens_with_a_grammatical_capital(scratch):
+    result = propose(scratch, "about-you",
+                     claim("You're Chief Commercial Officer. Owns the Weekly exco.", "E1", "E2"))
+    assert result["counts"]["passed"] == 1
+
+
+@pytest.mark.parametrize("tail", ["gets hundreds of mails", "meets twice a week",
+                                  "is your third-largest forum", "komt negen keer samen"])
+def test_plural_ordinal_and_dutch_number_words_are_dropped(scratch, tail):
+    assert propose(scratch, "work", claim(f"Weekly exco {tail}.", "E2"))["passed"] == []
+
+
+def test_a_guillemet_quoted_title_is_dropped(scratch):
+    text = "You attend the \u00absecret budget review\u00bb."
+    assert propose(scratch, "work", claim(text, "E2"))["passed"] == []
+
+
+def test_a_sent_mail_cannot_be_picked(scratch):
+    (scratch / discover.EVIDENCE_FILE).write_text(json.dumps({**EVIDENCE, "entries": EVIDENCE["entries"] + [
+        {"id": "E5", "key": "sent:0", "kind": "sent-mail", "label": "planning", "detail": "x",
+         "text": 'Sent mail "planning": x', "facts": {"subject": "planning", "summary": "x"}}]}),
+        encoding="utf-8")
+    assert propose(scratch, "style", {"kind": "pick", "ref": "E5"})["passed"] == []
+
+
+def test_expect_skips_a_source_whose_count_does_not_match(tmp_path):
+    result = build1(read1_scratch(tmp_path), expect={"calendar": 3})
+    assert result["sources"]["calendar"]["error"].endswith(
+        "the reader reported 3 rows, the file holds 9")
+    assert "recurring-meeting" not in result["by_kind"]
+    assert "profile" in result["by_kind"]
+
+
+def test_expect_error_skips_a_source_the_reader_reported_as_failed(tmp_path):
+    result = build1(read1_scratch(tmp_path), expect={"sentsample": "error"})
+    assert "the reader reported a failure" in result["sources"]["sentsample"]["error"]
+    assert "sent-mail" not in result["by_kind"]
+
+
+def test_matching_expect_builds_normally(tmp_path):
+    result = build1(read1_scratch(tmp_path), expect={"profile": 1, "calendar": 9, "sentsample": 3})
+    assert "error" not in result["sources"]["calendar"]
+    assert "recurring-meeting" in result["by_kind"]
+
+
+def test_expect_for_a_source_the_read_does_not_read_is_refused(tmp_path):
+    with pytest.raises(discover.DiscoverError, match="inbox"):
+        build1(read1_scratch(tmp_path), expect={"inbox": 4})
+
+
+def test_a_badly_shaped_calendar_row_is_recorded_not_fatal(tmp_path):
+    scratch = read1_scratch(tmp_path)
+    write_rows(scratch / "m365_calendar.payload.json",
+               [{"subject": "Weekly exco", "start": "2026-09-14", "showAs": "busy"}])
+    result = build1(scratch)
+    assert "error" in result["sources"]["calendar"]
+    assert "profile" in result["by_kind"]
+
+
+def test_derived_names_are_flagged_to_the_model(tmp_path):
+    people = entries_of(build1(read1_scratch(tmp_path)), "person")
+    assert all(entry.get("note") == "name derived from the email address" for entry in people)

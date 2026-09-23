@@ -145,8 +145,10 @@ it appends one line `{"moreResults": true}` so the build can record the cap.
 This is also data minimisation: fields the second brain does not use never
 leave the tool result. **It moves one trust point.** The evidence is now what
 the worker transcribed, not the raw payload. The worker is told to copy
-verbatim and never to add a row, and its reported row counts are compared
-with the build's; a mismatch is surfaced, not ignored. That is a strong
+verbatim and never to add a row, and its reported row counts are passed to
+`discover build --expect`: a source whose count does not match, or that the
+worker reported as failed, is recorded with an `error` and not ingested.
+That is a strong
 guard, not a proof. §7's check guarantees that proposals are faithful to the
 evidence; the evidence being faithful to Microsoft 365 rests on the worker.
 
@@ -180,8 +182,8 @@ measurement without touching the skill. Initial values (25 results per page):
 | Chat list | 4 pages (~100 chats) | 63 chats active in ~3 weeks |
 | Sent sample | 1 page (20 mails) | enough for style |
 
-A cap that is hit is recorded in the evidence (`capped: true` with the oldest
-date actually reached), and proposals built on it say "in your most recent…"
+A cap that is hit is recorded in the evidence (`capped: true`; trimmed rows
+carry no dates, so no oldest date is recorded), and proposals built on it say "in your most recent…"
 rather than "in the last four weeks".
 
 ### 5.4 The discovery worker
@@ -308,14 +310,17 @@ interview questions.
 The final context block goes through the same token rule (`discover check
 --block <file>`) against the whole evidence list and every owner answer before
 it is read back, so nothing can be slipped into the final prose between
-approval and writing. When the owner changes a proposal, their wording is
+approval and writing, returning `{"passed": bool, "unsupported": [...]}`.
+When the owner changes a proposal, their wording is
 recorded with `discover answer` first, so their own words always pass.
 
 The first word of a sentence or bullet is not checked on its own (it is
 capitalised for grammar, not because it is a name); a capitalised run of two
 or more words is still checked from its second word. Segments are sentences
 and lines only: a clause after a colon, semicolon, dash or table pipe is
-checked from its first word.
+checked from its first word. A period after an abbreviation such as "e.g."
+or "etc." does not end a sentence, and a word preceded by a bracket or quote
+is never treated as sentence-initial.
 
 ### 7.3 What the check cannot prove
 

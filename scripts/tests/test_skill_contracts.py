@@ -1962,7 +1962,10 @@ def test_setup_my_brain_dispatches_the_worker_and_consumes_raw_reads():
     text = read_skill("setup-my-brain")
     assert "setup-discovery-worker" in text
     assert "references/discovery-contract.md" in text
-    assert text.count("--consume") >= 2, "both reads must delete their raw rows"
+    builds = [line for line in text.splitlines() if "discover build --vault" in line]
+    assert len(builds) == 2, "one build per read"
+    assert all("--consume" in line and "--expect" in line for line in builds), (
+        "both reads delete their raw rows and enforce the worker's counts")
 
 
 def test_setup_my_brain_is_written_for_the_owner_alone():

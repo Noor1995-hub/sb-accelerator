@@ -46,7 +46,7 @@ TOPIC_KINDS = {
     "organisations": frozenset({"domain"}),
     "work": frozenset({"recurring-meeting", "mail-subject", "chat"}),
     "people": frozenset({"person"}),
-    "style": frozenset({"sent-mail", "language"}),
+    "style": frozenset({"language"}),
     "systems": frozenset({"system-sender"}),
 }
 
@@ -62,7 +62,6 @@ _SYSTEM_HINTS = ("azuredevops", "visualstudio", "salesforce", "servicenow",
                  "service-now", "atlassian", "workday", "concur", "successfactors")
 _BOT_DOMAIN = "teams.microsoft.com"
 _EMAIL_RE = re.compile(r"\A[^@\s<>]+@[^@\s<>]+\.[^@\s<>]+\Z")
-_NAME_PART_RE = re.compile(r"\A[a-z]{2,}\Z")
 _WORD_RE = re.compile(r"[a-zà-öø-ÿß]+")
 _QUOTE_CUT_RE = re.compile(r"_{5,}|-{5,}|\b(?:From|Van|Von|De)\s?:", re.IGNORECASE)
 _STOPWORDS = {
@@ -175,12 +174,16 @@ def _domain(address: str) -> str:
     return address.rsplit("@", 1)[1]
 
 
+_NAME_PART_RE = re.compile(r"\A[a-z]{2,}(?:-[a-z]{2,})*\Z")
+
+
 def _name_from_address(address: str) -> Optional[str]:
-    """`first.last@` -> "First Last"; None when the local part is not plainly
-    a name. Shown with `name_source: address` so the owner confirms it."""
-    parts = re.split(r"[._-]", address.split("@", 1)[0])
+    """`first.last@` -> "First Last" (hyphens kept: "Pieter-Jan"); None when the
+    local part is not plainly a name. Flagged to the owner as derived."""
+    parts = re.split(r"[._]", address.split("@", 1)[0])
     if 2 <= len(parts) <= 3 and all(_NAME_PART_RE.match(part) for part in parts):
-        return " ".join(part.capitalize() for part in parts)
+        return " ".join("-".join(piece.capitalize() for piece in part.split("-"))
+                        for part in parts)
     return None
 
 
@@ -524,9 +527,20 @@ def _assign_ids(entries: List[dict], ids: Dict[str, str]) -> None:
         entry["id"] = ids[entry["key"]]
 
 
+def _public_entry(entry: dict) -> dict:
+    """What a proposal may see of one evidence entry: id, kind, label, detail,
+    text \u2014 plus a note when the person's name was derived rather than given,
+    so the model can ask the owner to confirm it."""
+    out = {key: entry[key] for key in ("id", "kind", "label", "detail", "text")}
+    if entry["kind"] == "person" and entry["facts"].get("name_source") == "address":
+        out["note"] = "name derived from the email address"
+    return out
+
+
 def build(scratch_dir: str, *, read: int, home_domains: Optional[List[str]] = None,
           timezone: Optional[str] = None, utc_offset: Optional[str] = None,
-          consume: bool = False) -> dict:
+          consume: bool = False,
+          expect: Optional[Dict[str, object]] = None) -> dict:
     """Turn one read's payload files into the evidence list.
 
     Read 1 starts a fresh evidence file; read 2 merges into it (stable ids,
@@ -534,10 +548,16 @@ def build(scratch_dir: str, *, read: int, home_domains: Optional[List[str]] = No
     call read are deleted once the evidence is written — the only deletion
     here, so raw rows never outlive their use. A source whose rows the
     connector shaped unexpectedly is recorded with an `error` and skipped;
-    the other sources still build."""
+    the other sources still build. With `expect`, a source whose row count
+    differs from the reader's report, or which the reader reported as
+    failed, is recorded with an `error` and not ingested."""
     root = _scratch(scratch_dir)
     if read not in READ_FILES:
         raise DiscoverError(f"--read {read!r} must be 1 or 2")
+    unknown = sorted(set(expect or {}) - set(READ_FILES[read]))
+    if unknown:
+        raise DiscoverError(
+            f"--expect names {', '.join(unknown)}, which read {read} does not read")
     evidence_path = root / EVIDENCE_FILE
     if read == 1:
         evidence = {"schema": 1, "ids": {}, "stats": _empty_stats(), "entries": []}
@@ -561,10 +581,18 @@ def build(scratch_dir: str, *, read: int, home_domains: Optional[List[str]] = No
             stats["sources"][source] = {"present": False, "items": 0, "capped": False}
             continue
         rows, capped = _read_items(path)
+        expected = (expect or {}).get(source)
+        if expected is not None and expected != len(rows):
+            reason = ("the reader reported a failure" if expected == "error"
+                      else f"the reader reported {expected} rows, the file holds {len(rows)}")
+            stats["sources"][source] = {"present": True, "items": len(rows),
+                                        "capped": capped, "error": f"{name}: {reason}"}
+            consumed.append(path)
+            continue
         trial = copy.deepcopy(stats)
         try:
             _INGEST[source](trial, rows, home, timezone, utc_offset)
-        except m365.M365Error as exc:
+        except (m365.M365Error, AttributeError, KeyError, TypeError, ValueError) as exc:
             # One source's data the connector shaped unexpectedly (e.g. a
             # non-UTC calendar) must not cost the other sources their
             # evidence: record it, keep nothing half-counted, carry on.
@@ -592,8 +620,7 @@ def build(scratch_dir: str, *, read: int, home_domains: Optional[List[str]] = No
         "sources": stats["sources"],
         "by_kind": by_kind,
         "consumed": sorted(path.name for path in consumed) if consume else [],
-        "entries": [{key: entry[key] for key in ("id", "kind", "label", "detail", "text")}
-                    for entry in entries],
+        "entries": [_public_entry(entry) for entry in entries],
     }
 
 
@@ -601,13 +628,27 @@ _EMAIL_TOKEN_RE = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
 _DOMAIN_TOKEN_RE = re.compile(
     r"(?<![\w@.-])[a-z0-9][a-z0-9-]*(?:\.[a-z0-9-]+)*\.[a-z]{2,}(?![\w-])", re.IGNORECASE)
 _NUMBER_RE = re.compile(r"(?<![\w.,:])\d+(?:[.,:]\d+)*")
-_NUMBER_WORDS = ("two", "three", "four", "five", "six", "seven", "eight", "nine",
-                 "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen",
-                 "sixteen", "seventeen", "eighteen", "nineteen", "twenty", "thirty",
-                 "forty", "fifty", "hundred", "thousand", "million", "dozen")
-_NUMBER_WORD_RE = re.compile(r"\b(?:" + "|".join(_NUMBER_WORDS) + r")\b", re.IGNORECASE)
+_NUMBER_WORDS = (
+    # English
+    "once", "twice", "two", "three", "four", "five", "six", "seven", "eight", "nine",
+    "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen",
+    "seventeen", "eighteen", "nineteen", "twenty", "thirty", "forty", "fifty",
+    "hundred", "thousand", "million", "dozen", "third", "fourth", "fifth", "sixth",
+    "seventh", "eighth", "ninth", "tenth",
+    # Dutch
+    "twee", "drie", "vier", "vijf", "zes", "zeven", "acht", "negen", "tien", "twaalf",
+    "twintig", "honderd", "duizend",
+    # French
+    "deux", "trois", "quatre", "cinq", "sept", "huit", "neuf", "dix", "douze",
+    "vingt", "cent", "mille",
+    # German
+    "zwei", "drei", "f\u00fcnf", "sechs", "sieben", "neun", "zehn", "zw\u00f6lf",
+    "zwanzig", "hundert", "tausend",
+)
+_NUMBER_WORD_RE = re.compile(r"\b(?:" + "|".join(_NUMBER_WORDS) + r")s?\b", re.IGNORECASE)
 _QUOTED_RE = re.compile(
-    "[\\x22\\u201c\\u201d]([^\\x22\\u201c\\u201d\\n]{2,}?)[\\x22\\u201c\\u201d]"
+    "[\\x22\\u201c\\u201d\\u201e\\u00ab\\u00bb]([^\\x22\\u201c\\u201d\\u201e\\u00ab\\u00bb\\n]{2,}?)"
+    "[\\x22\\u201c\\u201d\\u00ab\\u00bb]"
     "|(?:^|(?<=[\\s(]))[\\x27\\u2018]([^\\x27\\u2018\\u2019\\n]{2,}?)[\\x27\\u2019]"
     "(?=[\\s.,;:!?)]|$)",
     re.MULTILINE)
@@ -623,6 +664,19 @@ _CAP_STOP = frozenset({
     "September", "October", "November", "December",
     "Teams", "Outlook", "Microsoft", "Claude", "Plaud", "Obsidian", "Cowork",
 })
+_ABBREVIATIONS = frozenset({"e.g", "i.e", "etc", "incl", "approx", "vs", "cf", "resp",
+                            "ca", "bijv", "o.a", "d.w.z", "enz", "p.ex", "z.b", "usw",
+                            "c.-\u00e0-d"})
+
+
+def _continues_sentence(previous: str) -> bool:
+    """True when the previous segment ended on an abbreviation ("e.g.",
+    "etc.") rather than a sentence, so the next word is not sentence-initial."""
+    words = previous.rstrip().split()
+    if not words:
+        return False
+    last = words[-1].rstrip(".").casefold()
+    return last in _ABBREVIATIONS or ("." in last and last.replace(".", "").isalpha())
 
 
 def _load_evidence(root: Path) -> dict:
@@ -661,8 +715,9 @@ def answer(scratch_dir: str, *, question: str, text: str) -> dict:
 
 
 def _norm(text: str) -> str:
-    for curly, plain in (("“", "\x22"), ("”", "\x22"),
-                         ("‘", "\x27"), ("’", "\x27")):
+    for curly, plain in (("\u201c", "\x22"), ("\u201d", "\x22"),
+                         ("\u2018", "\x27"), ("\u2019", "\x27"),
+                         ("\u201e", "\x22"), ("\u00ab", "\x22"), ("\u00bb", "\x22")):
         text = text.replace(curly, plain)
     return re.sub(r"\s+", " ", text).casefold()
 
@@ -685,17 +740,20 @@ def _close_run(run: List[str], opens_segment: bool, phrases: List[str]) -> None:
 
 def _proper_nouns(text: str) -> List[str]:
     """Runs of adjacent capitalised words. A segment's first word is
-    capitalised for grammar, so it is dropped from the run it opens; a longer
-    run is still checked from its second word (spec §7.2). Segments are
-    sentences and lines only: a clause after a colon, semicolon, dash or
-    table pipe is checked from its first word."""
+    capitalised for grammar, so it is dropped from the run it opens \u2014 but only
+    when it really opens a sentence: not after an abbreviation like "e.g.",
+    and not when anything (a bracket, a quote) precedes it. Segments are
+    sentences and lines (spec \u00a77.2)."""
     phrases: List[str] = []
-    for segment in _SEGMENT_RE.split(text):
-        segment = _LIST_MARK_RE.sub("", segment)
+    previous = ""
+    for raw in _SEGMENT_RE.split(text):
+        continues = _continues_sentence(previous)
+        previous = raw
+        segment = _LIST_MARK_RE.sub("", raw)
         run: List[str] = []
         opens_segment = False
         previous_end: Optional[int] = None
-        for position, match in enumerate(_TOKEN_WORD_RE.finditer(segment)):
+        for match in _TOKEN_WORD_RE.finditer(segment):
             word = match.group(0)
             capital = word[0].isupper() and word not in _CAP_STOP
             adjacent = (previous_end is not None
@@ -704,7 +762,9 @@ def _proper_nouns(text: str) -> List[str]:
                 run.append(word)
             else:
                 _close_run(run, opens_segment, phrases)
-                run, opens_segment = ([word], position == 0) if capital else ([], False)
+                sentence_start = (not continues and previous_end is None
+                                  and not segment[: match.start()].strip())
+                run, opens_segment = ([word], sentence_start) if capital else ([], False)
             previous_end = match.end()
         _close_run(run, opens_segment, phrases)
     return phrases
@@ -806,7 +866,8 @@ def check(scratch_dir: str, proposal_path: str) -> dict:
 
 def check_block(scratch_dir: str, block_path: str) -> dict:
     """The same token rule for a finished context block, against the whole
-    evidence list and every owner answer, right before it is read back."""
+    evidence list and every owner answer, right before it is read back.
+    Returns `{"passed": bool, "unsupported": [...]}`."""
     root = _scratch(scratch_dir)
     evidence = _load_evidence(root)
     answers = _load_answers(root)
@@ -816,4 +877,4 @@ def check_block(scratch_dir: str, block_path: str) -> dict:
         raise DiscoverError(f"block file {block_path!r} is unreadable: {exc}") from exc
     haystack = _haystack(list(evidence.get("entries", [])) + answers)
     unsupported = [token for token in _tokens(text) if not _present(token, haystack)]
-    return {"ok": not unsupported, "unsupported": unsupported}
+    return {"passed": not unsupported, "unsupported": unsupported}

@@ -2249,7 +2249,7 @@ def test_discover_build_answer_and_check_round_trip(capsys, tmp_path):
     block.write_text("- Chief Commercial Officer\n", encoding="utf-8")
     code, payload = run(capsys, ["discover", "check", "--dir", str(scratch),
                                  "--block", str(block)])
-    assert code == 0 and payload["result"]["ok"] is True
+    assert code == 0 and payload["result"]["passed"] is True
 
 
 def test_discover_check_without_evidence_fails_inside_the_envelope(capsys, tmp_path):
@@ -2266,3 +2266,25 @@ def test_discover_check_without_evidence_fails_inside_the_envelope(capsys, tmp_p
 def test_discover_check_needs_exactly_one_of_proposal_or_block(capsys, tmp_path):
     with pytest.raises(SystemExit):
         cli.main(["discover", "check", "--dir", str(tmp_path)])
+
+
+def test_discover_build_expect_is_parsed_and_enforced(capsys, tmp_path):
+    root = make_vault(tmp_path)
+    scratch = tmp_path / "scratch"
+    scratch.mkdir()
+    (scratch / "m365_profile.payload.json").write_text(json.dumps(
+        {"displayName": "Morgan Ellery", "mail": "morgan.ellery@northwind.example"}) + "\n",
+        encoding="utf-8")
+    code, payload = run(capsys, ["discover", "build", "--vault", str(root), "--dir", str(scratch),
+                                 "--read", "1", "--utc-offset", "+02:00", "--expect", "profile=2"])
+    assert code == 0
+    assert "error" in payload["result"]["sources"]["profile"]
+
+
+def test_discover_build_rejects_a_malformed_expect(capsys, tmp_path):
+    root = make_vault(tmp_path)
+    scratch = tmp_path / "scratch"
+    scratch.mkdir()
+    code, payload = run(capsys, ["discover", "build", "--vault", str(root), "--dir", str(scratch),
+                                 "--read", "1", "--utc-offset", "+02:00", "--expect", "profile"])
+    assert code == 1 and payload["ok"] is False

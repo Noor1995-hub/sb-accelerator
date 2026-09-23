@@ -595,6 +595,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--consume", action="store_true",
         help="delete exactly the payload files this build read, once the "
              "evidence is written")
+    discover_build.add_argument(
+        "--expect",
+        help="worker row counts from its outcome line, e.g. "
+             "inbox=398,sent=81; use <source>=error for a source the worker "
+             "reported as failed")
     discover_answer = discover_sub.add_parser(
         "answer", help="record what the owner said, verbatim, as citable evidence")
     discover_answer.add_argument("--dir", required=True)
@@ -728,6 +733,19 @@ def build_parser() -> argparse.ArgumentParser:
         help="also render to 99-workflow-config/health-reports/{today}.md")
 
     return parser
+
+
+def _parse_expect(text: Optional[str]) -> Optional[dict]:
+    if not text:
+        return None
+    counts: dict = {}
+    for part in text.split(","):
+        source, sep, value = part.strip().partition("=")
+        if not sep or not source.strip():
+            raise ValueError(f"--expect entry {part!r} must look like inbox=398")
+        value = value.strip()
+        counts[source.strip()] = "error" if value == "error" else int(value)
+    return counts
 
 
 def _dispatch(args: argparse.Namespace) -> int:
@@ -974,7 +992,7 @@ def _dispatch(args: argparse.Namespace) -> int:
             return _ok(discover.build(
                 args.dir, read=args.read, home_domains=home_domains,
                 timezone=args.timezone, utc_offset=args.utc_offset,
-                consume=args.consume))
+                consume=args.consume, expect=_parse_expect(args.expect)))
         if args.action == "answer":
             return _ok(discover.answer(args.dir, question=args.question, text=args.text))
         if args.proposal is not None:

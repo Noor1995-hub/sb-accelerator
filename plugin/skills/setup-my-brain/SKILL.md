@@ -277,13 +277,13 @@ one outcome line of row counts.
 Then build the evidence and delete the raw rows in the same call:
 
 ```bash
-python3 "$VAULTLIB" discover build --vault "$VAULT" --dir "$SCRATCH" --read 1 --timezone <tz> --consume
+python3 "$VAULTLIB" discover build --vault "$VAULT" --dir "$SCRATCH" --read 1 --timezone <tz> --expect "<source>=<rows>,..." --consume
 ```
 
-Compare each source's `items` in the result with the worker's row count. A
-difference means rows were lost or added in transcription: never propose
-from a mismatched source — treat it as empty, and say nothing about it
-beyond what the owner loses.
+`--expect` carries the row counts from the worker's outcome line
+(`profile=1,calendar=106,sentsample=20`); for a source it reported as
+`discovery-error`, pass `<source>=error`. The build records any source
+whose count does not match, or that failed, with an `error` and skips it.
 
 A source whose entry under `sources` carries an `error` is treated as empty
 too: its topics fall back to their questions. Tell the owner only what that
@@ -315,6 +315,8 @@ This loop is the same for every topic below.
    the entry, never from you. A **claim** is prose: every name, number,
    domain, email address and quoted title in it must appear in the entries it
    cites. Put meeting and thread titles in double quotes. Write numbers as digits.
+   Copy times exactly as the evidence shows them (`09:00`). Never start a
+   line of a claim with a name: lists go through picks.
 3. **Check it:**
 
    ```bash
@@ -324,11 +326,13 @@ This loop is the same for every topic below.
    **Show only what is under `passed`.** A dropped item is gone: never
    reword it until it passes, never mention it. If nothing passed, ask that
    topic's own interview questions instead (see "Without Microsoft 365").
-4. **Show it plainly.** A claim gets one "Based on…" line restating its
-   `based_on` evidence in plain words, with every number and name exactly as
-   written there (you may translate the rest into their language). A pick
+4. **Show it plainly.** A claim is shown with a "Based on:" line that
+   repeats its `based_on` texts exactly as returned — never reworded or
+   summarised (you may translate only the words "Based on"). A pick
    becomes an AskUserQuestion option: its `label` as the option, its `detail`
-   as the description.
+   as the description. A person entry with a `note` has a name derived from
+   their email address: show the address too, and ask them to confirm the
+   name.
 5. **Accept / Change / Skip.** On a change, record their words first, then
    use them:
 
@@ -351,7 +355,7 @@ This loop is the same for every topic below.
    python3 "$VAULTLIB" context write --vault "$VAULT" --file identity --content "$SCRATCH/identity.block.md"
    ```
 
-   `ok: false` lists the `unsupported` words: take them out, or ask the owner
+   `passed: false` in the check's `result` lists the `unsupported` words: take them out, or ask the owner
    and record their answer, then check again. Never write a block that did
    not pass.
 
@@ -365,8 +369,9 @@ it when not, or when you are unsure.
 Propose from the `profile`, `working-day` and `language` entries: their
 name, their job title, their typical working day, and the language they
 write in — then ask, as a choice, which language their evening note should
-be in. Ask openly which company they work for (their mail domain is a fair
-hint to offer), what people call them, and one line of background. Write the
+be in. Ask openly which company they work for (offer their mail domain as
+written — never a company name you infer from it), what people call
+them, and one line of background. Write the
 `identity` block through the loop above.
 
 Now make the owner's own record, with the name they accepted:
@@ -390,10 +395,10 @@ agents **in one message**, with `read: 2` and the sources `inbox`, `sent` and
 window and `page_caps`. Then:
 
 ```bash
-python3 "$VAULTLIB" discover build --vault "$VAULT" --dir "$SCRATCH" --read 2 --consume
+python3 "$VAULTLIB" discover build --vault "$VAULT" --dir "$SCRATCH" --read 2 --expect "<source>=<rows>,..." --consume
 ```
 
-Compare counts as in step 2. Read 2 merges into read 1's evidence: every id
+Pass the three workers' counts with `--expect`, as in step 2. Read 2 merges into read 1's evidence: every id
 already used keeps pointing at the same thing.
 
 ## Step 5 — the rest (about 12 minutes)
@@ -414,6 +419,9 @@ it:
 python3 "$VAULTLIB" entity ensure --vault "$VAULT" --slug meridian-freight-holdings \
   --name "Meridian Freight Holdings" --type client --status active --owner alex-rivera
 ```
+
+The slug is the name they gave, lowercase and hyphenated
+(`meridian-freight-holdings`).
 
 ### Your work
 
@@ -493,6 +501,9 @@ line; walk through it anyway.
 they chose under "Boundaries". Do not compose a schedule by hand. Its first
 manual run is what grants the routine access to their accounts; keep them in
 the room for it.
+
+They already chose the time under "Boundaries": when `/schedule-daily-loop`
+asks for it, confirm that time with them rather than asking afresh.
 
 It ends **scheduled** — say the first automatic run as a day and a time, and
 what it depends on (the machine awake, Claude open) — or **handed off** — say

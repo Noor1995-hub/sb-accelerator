@@ -41,6 +41,7 @@ CONSULTANT_LED = {"setup-my-brain", "upgrade-vault", "provision-vault"}
 # because being invoked by one is not the same as being one. Neither
 # rationale above applies: it is not lossy (a wrong time is fixed by
 # re-running it) and it is not a once-ever setup. Re-running it after a
+# machine change is a designed-for case rather than a tolerated one — the
 # routine has to be created on the machine that will run it, so a vault
 # owner who moves the evening run to a new laptop has no other way to move
 # it.
