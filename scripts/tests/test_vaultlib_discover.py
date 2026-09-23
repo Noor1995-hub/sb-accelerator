@@ -366,3 +366,143 @@ def test_read2_twice_is_refused(tmp_path):
     read2_files(tmp_path)
     with pytest.raises(discover.DiscoverError, match="already"):
         discover.build(str(tmp_path), read=2)
+
+
+EVIDENCE = {"schema": 1, "ids": {}, "stats": {}, "entries": [
+    {"id": "E1", "key": "profile:jobTitle", "kind": "profile", "label": "Job title",
+     "detail": "Chief Commercial Officer", "text": "Job title: Chief Commercial Officer",
+     "facts": {"field": "jobTitle", "value": "Chief Commercial Officer"}},
+    {"id": "E2", "key": "recurring:weekly exco", "kind": "recurring-meeting",
+     "label": "Weekly exco", "detail": "9 times",
+     "text": 'Recurring meeting "Weekly exco": 9 times in the window',
+     "facts": {"subject": "Weekly exco", "count": 9}},
+    {"id": "E3", "key": "domain:contoso.example", "kind": "domain",
+     "label": "contoso.example", "detail": "14 meetings, 22 mails",
+     "text": "contoso.example: 14 meetings, 22 mails",
+     "facts": {"domain": "contoso.example", "calendar": 14, "mail": 22, "chat": 0,
+               "total": 36}},
+    {"id": "E4", "key": "person:priya.nathan@contoso.example", "kind": "person",
+     "label": "Priya Nathan", "detail": "11 meetings",
+     "text": "Priya Nathan (priya.nathan@contoso.example): 11 meetings",
+     "facts": {"address": PRIYA, "name": "Priya Nathan", "name_source": "chat",
+               "calendar": 11, "mail": 0, "chat": 0, "total": 11}},
+]}
+
+
+@pytest.fixture
+def scratch(tmp_path):
+    (tmp_path / discover.EVIDENCE_FILE).write_text(json.dumps(EVIDENCE), encoding="utf-8")
+    return tmp_path
+
+
+def propose(scratch, topic, *items):
+    path = scratch / f"m365_{topic}.payload.json"
+    path.write_text(json.dumps({"topic": topic, "items": list(items)}), encoding="utf-8")
+    return discover.check(str(scratch), str(path))
+
+
+def claim(text, *cites):
+    return {"kind": "claim", "text": text, "cites": list(cites)}
+
+
+def test_a_supported_claim_passes_with_its_evidence(scratch):
+    result = propose(scratch, "about-you", claim("You're Chief Commercial Officer.", "E1"))
+    assert result["counts"] == {"passed": 1, "dropped": 0}
+    assert result["passed"][0]["based_on"] == ["Job title: Chief Commercial Officer"]
+
+
+def test_an_invented_name_is_dropped(scratch):
+    result = propose(scratch, "work",
+                     claim("You chair the Weekly exco with Tom Peeters.", "E2"))
+    assert result["passed"] == []
+    assert "'Tom Peeters' is not in the cited evidence" in result["dropped"][0]["reasons"]
+
+
+def test_an_invented_number_is_dropped(scratch):
+    result = propose(scratch, "work", claim("Weekly exco meets 12 times.", "E2"))
+    assert result["passed"] == []
+
+
+def test_an_invented_quoted_title_is_dropped(scratch):
+    result = propose(scratch, "work", claim('You also attend "Budget review".', "E2"))
+    assert result["passed"] == []
+
+
+def test_an_invented_domain_is_dropped(scratch):
+    result = propose(scratch, "organisations",
+                     claim("You deal with fabrikam.example often.", "E3"))
+    assert result["passed"] == []
+
+
+def test_a_token_found_only_in_an_uncited_entry_is_dropped(scratch):
+    result = propose(scratch, "people", claim("You work closely with Priya Nathan.", "E2"))
+    assert result["passed"] == []
+
+
+def test_a_claim_without_cites_or_with_unknown_cites_is_dropped(scratch):
+    result = propose(scratch, "work", claim("You chair it."), claim("You chair it.", "E99"))
+    assert result["counts"] == {"passed": 0, "dropped": 2}
+
+
+def test_an_owner_answer_makes_their_own_words_pass(scratch):
+    recorded = discover.answer(str(scratch), question="What do people call you?",
+                               text="Everyone calls me Tom")
+    assert recorded["id"] == "A1"
+    result = propose(scratch, "about-you", claim("People call you Tom.", "A1"))
+    assert result["counts"]["passed"] == 1
+
+
+def test_an_empty_answer_is_refused(scratch):
+    with pytest.raises(discover.DiscoverError, match="empty"):
+        discover.answer(str(scratch), question="q", text="   ")
+
+
+def test_picks_take_their_name_from_the_evidence(scratch):
+    result = propose(scratch, "organisations", {"kind": "pick", "ref": "E3"})
+    assert result["passed"] == [{"kind": "pick", "ref": "E3", "label": "contoso.example",
+                                 "detail": "14 meetings, 22 mails",
+                                 "text": "contoso.example: 14 meetings, 22 mails"}]
+
+
+def test_a_pick_of_the_wrong_kind_or_an_unknown_ref_is_dropped(scratch):
+    result = propose(scratch, "organisations", {"kind": "pick", "ref": "E4"},
+                     {"kind": "pick", "ref": "E42"})
+    assert result["counts"] == {"passed": 0, "dropped": 2}
+
+
+def test_an_unknown_topic_is_refused(scratch):
+    with pytest.raises(discover.DiscoverError, match="topic"):
+        propose(scratch, "hobbies", claim("x", "E1"))
+
+
+def test_check_without_evidence_is_refused(tmp_path):
+    path = tmp_path / "m365_work.payload.json"
+    path.write_text(json.dumps({"topic": "work", "items": []}), encoding="utf-8")
+    with pytest.raises(discover.DiscoverError, match="discover build"):
+        discover.check(str(tmp_path), str(path))
+
+
+def write_block(scratch, text):
+    path = scratch / "role-and-responsibilities.block.md"
+    path.write_text(text, encoding="utf-8")
+    return str(path)
+
+
+def test_a_block_built_from_the_evidence_passes(scratch):
+    block = write_block(scratch, "- Chief Commercial Officer\n- Chairs the Weekly exco\n"
+                                 "- Works closely with Priya Nathan\n")
+    assert discover.check_block(str(scratch), block) == {"ok": True, "unsupported": []}
+
+
+def test_a_block_with_a_smuggled_name_fails(scratch):
+    block = write_block(scratch, "- Chairs the Weekly exco with Tom Peeters\n")
+    assert discover.check_block(str(scratch), block) == {
+        "ok": False, "unsupported": ["Tom Peeters"]}
+
+
+def test_a_single_name_opening_a_sentence_is_the_known_gap(scratch):
+    # Pinned on purpose: the spec (§7.3) names this gap. Picks cover lists and
+    # the owner's read-back covers prose; if this starts failing, the gap
+    # closed and the spec should say so.
+    block = write_block(scratch, "Tom leads the Weekly exco.\n")
+    assert discover.check_block(str(scratch), block)["ok"] is True

@@ -583,3 +583,211 @@ def build(scratch_dir: str, *, read: int, home_domains: Optional[List[str]] = No
         "entries": [{key: entry[key] for key in ("id", "kind", "label", "detail", "text")}
                     for entry in entries],
     }
+
+
+_EMAIL_TOKEN_RE = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
+_DOMAIN_TOKEN_RE = re.compile(
+    r"(?<![\w@.-])[a-z0-9][a-z0-9-]*(?:\.[a-z0-9-]+)*\.[a-z]{2,}(?![\w-])", re.IGNORECASE)
+_NUMBER_RE = re.compile(r"(?<![\w.,:])\d+(?:[.,:]\d+)*(?!\w)")
+_QUOTED_RE = re.compile(r"[\"""]([^\"""\n]{2,}?)[\"""]")
+_SEGMENT_RE = re.compile(r"\n+|(?<=[.!?;:])\s+|\s+[—–]\s+|\s*\|\s*")
+_LIST_MARK_RE = re.compile(r"\A\s*(?:[#>*+-]+|\d+[.)])\s+")
+_TOKEN_WORD_RE = re.compile(r"[^\W\d_][\w''&-]*")
+# Capitalised for reasons other than being a name the evidence must hold.
+_CAP_STOP = frozenset({
+    "I", "I'm", "I've", "I'd", "I'll", "OK", "Ok", "AI",
+    "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday",
+    "January", "February", "March", "April", "May", "June", "July", "August",
+    "September", "October", "November", "December",
+    "Teams", "Outlook", "Microsoft", "Claude", "Plaud", "Obsidian", "Cowork",
+})
+
+
+def _load_evidence(root: Path) -> dict:
+    path = root / EVIDENCE_FILE
+    if not path.is_file():
+        raise DiscoverError(
+            "no evidence in this scratch directory — run `discover build` first")
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise DiscoverError(f"{EVIDENCE_FILE} is not valid JSON: {exc}") from exc
+
+
+def _load_answers(root: Path) -> List[dict]:
+    path = root / ANSWERS_FILE
+    if not path.is_file():
+        return []
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise DiscoverError(f"{ANSWERS_FILE} is not valid JSON: {exc}") from exc
+
+
+def answer(scratch_dir: str, *, question: str, text: str) -> dict:
+    """Record what the owner said, verbatim, as evidence a claim may cite.
+    Their own words are never "invented", so they always pass the check."""
+    root = _scratch(scratch_dir)
+    if not str(text).strip():
+        raise DiscoverError("--text is empty: record what the owner actually said")
+    answers = _load_answers(root)
+    entry = {"id": f"A{len(answers) + 1}", "kind": "owner-said",
+             "question": str(question).strip(), "text": str(text).strip()}
+    answers.append(entry)
+    _write_json(root / ANSWERS_FILE, answers)
+    return entry
+
+
+def _norm(text: str) -> str:
+    for curly, plain in ((""", '"'), (""", '"'), ("'", "'"), ("'", "'")):
+        text = text.replace(curly, plain)
+    return re.sub(r"\s+", " ", text).casefold()
+
+
+def _haystack(entries: List[dict]) -> str:
+    """What cited entries actually say: their text and their facts. An
+    owner answer contributes its text only — the question is ours, not theirs."""
+    parts: List[str] = []
+    for entry in entries:
+        parts.append(str(entry.get("text", "")))
+        parts.extend(str(value) for value in (entry.get("facts") or {}).values())
+    return _norm(" \n ".join(parts))
+
+
+def _close_run(run: List[str], opens_segment: bool, phrases: List[str]) -> None:
+    words = run[1:] if opens_segment else run
+    if words:
+        phrases.append(" ".join(words))
+
+
+def _proper_nouns(text: str) -> List[str]:
+    """Runs of adjacent capitalised words. A segment's first word is
+    capitalised for grammar, so it is dropped from the run it opens; a longer
+    run is still checked from its second word (spec §7.2)."""
+    phrases: List[str] = []
+    for segment in _SEGMENT_RE.split(text):
+        segment = _LIST_MARK_RE.sub("", segment)
+        run: List[str] = []
+        opens_segment = False
+        previous_end: Optional[int] = None
+        for position, match in enumerate(_TOKEN_WORD_RE.finditer(segment)):
+            word = match.group(0)
+            capital = word[0].isupper() and word not in _CAP_STOP
+            adjacent = (previous_end is not None
+                        and not segment[previous_end: match.start()].strip())
+            if capital and run and adjacent:
+                run.append(word)
+            else:
+                _close_run(run, opens_segment, phrases)
+                run, opens_segment = ([word], position == 0) if capital else ([], False)
+            previous_end = match.end()
+        _close_run(run, opens_segment, phrases)
+    return phrases
+
+
+def _tokens(text: str) -> List[str]:
+    """Everything in `text` the evidence must hold: emails, domains, quoted
+    strings, numbers and proper-noun runs, deduplicated in order."""
+    emails = _EMAIL_TOKEN_RE.findall(text)
+    rest = _EMAIL_TOKEN_RE.sub(" ", text)
+    domains = _DOMAIN_TOKEN_RE.findall(rest)
+    rest = _DOMAIN_TOKEN_RE.sub(" ", rest)
+    quoted = [match.group(1).strip() for match in _QUOTED_RE.finditer(text)]
+    numbers = _NUMBER_RE.findall(rest)
+    names = _proper_nouns(rest)
+    seen, out = set(), []
+    for token in emails + domains + quoted + numbers + names:
+        key = _norm(token).strip()
+        if key and key not in seen:
+            seen.add(key)
+            out.append(token)
+    return out
+
+
+def _present(token: str, haystack: str) -> bool:
+    needle = _norm(token).strip()
+    return bool(re.search(r"(?<!\w)" + re.escape(needle) + r"(?!\w)", haystack))
+
+
+def _check_claim(item: dict, index: Dict[str, dict]) -> Tuple[bool, List[str]]:
+    text, cites = item.get("text"), item.get("cites")
+    if not isinstance(text, str) or not text.strip():
+        return False, ["claim has no text"]
+    if not isinstance(cites, list) or not cites:
+        return False, ["claim cites nothing"]
+    missing = [str(cite) for cite in cites if str(cite) not in index]
+    if missing:
+        return False, [f"cites {cite!r}, which is not in the evidence or the owner's answers"
+                       for cite in missing]
+    haystack = _haystack([index[str(cite)] for cite in cites])
+    reasons = [f"{token!r} is not in the cited evidence"
+               for token in _tokens(text) if not _present(token, haystack)]
+    return not reasons, reasons
+
+
+def check(scratch_dir: str, proposal_path: str) -> dict:
+    """Split a proposal into what may be shown and what is dropped.
+
+    A pick is shown with the evidence's own label and text, so a list item
+    can never be invented. A claim passes only when every checkable token in
+    it appears in the entries it cites. Dropped items are never softened."""
+    root = _scratch(scratch_dir)
+    evidence = _load_evidence(root)
+    answers = _load_answers(root)
+    try:
+        proposal = json.loads(Path(proposal_path).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise DiscoverError(f"proposal file {proposal_path!r} is unreadable: {exc}") from exc
+    topic = proposal.get("topic") if isinstance(proposal, dict) else None
+    if topic not in TOPIC_KINDS:
+        raise DiscoverError(
+            f"proposal topic {topic!r} must be one of {', '.join(sorted(TOPIC_KINDS))}")
+    items = proposal.get("items")
+    if not isinstance(items, list):
+        raise DiscoverError("proposal must carry an `items` list")
+    entries = {entry["id"]: entry for entry in evidence.get("entries", [])}
+    index = {**entries, **{entry["id"]: entry for entry in answers}}
+    passed: List[dict] = []
+    dropped: List[dict] = []
+    for item in items:
+        kind = item.get("kind") if isinstance(item, dict) else None
+        if kind == "pick":
+            entry = entries.get(str(item.get("ref")))
+            if entry is None:
+                dropped.append({"item": item, "reasons": [
+                    f"ref {item.get('ref')!r} is not in the evidence"]})
+            elif entry["kind"] not in TOPIC_KINDS[topic]:
+                dropped.append({"item": item, "reasons": [
+                    f"{entry['id']} is a {entry['kind']}, not something the "
+                    f"{topic} topic lists"]})
+            else:
+                passed.append({"kind": "pick", "ref": entry["id"], "label": entry["label"],
+                               "detail": entry["detail"], "text": entry["text"]})
+        elif kind == "claim":
+            ok, reasons = _check_claim(item, index)
+            if ok:
+                cites = [str(cite) for cite in item["cites"]]
+                passed.append({"kind": "claim", "text": item["text"].strip(), "cites": cites,
+                               "based_on": [index[cite]["text"] for cite in cites]})
+            else:
+                dropped.append({"item": item, "reasons": reasons})
+        else:
+            dropped.append({"item": item, "reasons": [
+                f"kind {kind!r} must be claim or pick"]})
+    return {"topic": topic, "passed": passed, "dropped": dropped,
+            "counts": {"passed": len(passed), "dropped": len(dropped)}}
+
+
+def check_block(scratch_dir: str, block_path: str) -> dict:
+    """The same token rule for a finished context block, against the whole
+    evidence list and every owner answer, right before it is read back."""
+    root = _scratch(scratch_dir)
+    evidence = _load_evidence(root)
+    answers = _load_answers(root)
+    try:
+        text = Path(block_path).read_text(encoding="utf-8")
+    except OSError as exc:
+        raise DiscoverError(f"block file {block_path!r} is unreadable: {exc}") from exc
+    haystack = _haystack(list(evidence.get("entries", [])) + answers)
+    unsupported = [token for token in _tokens(text) if not _present(token, haystack)]
+    return {"ok": not unsupported, "unsupported": unsupported}
