@@ -2206,3 +2206,63 @@ def test_m365_agenda_reads_the_raw_listing_file(capsys, tmp_path):
         "show_as": None, "is_organizer": None, "id": None, "uri": None,
     }]
     assert payload["result"]["dropped"]["not_events"] == 1
+
+
+def test_discover_window_via_the_cli(capsys):
+    code, payload = run(capsys, ["discover", "window", "--utc-offset", "+02:00",
+                                 "--now", "2026-09-23T10:00:00Z"])
+    assert code == 0
+    assert payload["result"]["calendar"]["utc_from"] == "2026-08-25T22:00:00Z"
+
+
+def test_discover_build_answer_and_check_round_trip(capsys, tmp_path):
+    root = make_vault(tmp_path)
+    scratch = tmp_path / "scratch"
+    scratch.mkdir()
+    (scratch / "m365_profile.payload.json").write_text(json.dumps(
+        {"displayName": "Morgan Ellery", "jobTitle": "Chief Commercial Officer",
+         "mail": "morgan.ellery@northwind.example"}) + "\n", encoding="utf-8")
+    code, payload = run(capsys, ["discover", "build", "--vault", str(root),
+                                 "--dir", str(scratch), "--read", "1",
+                                 "--utc-offset", "+02:00", "--consume"])
+    assert code == 0
+    job = next(entry for entry in payload["result"]["entries"]
+               if entry["label"] == "Job title")
+    assert payload["result"]["consumed"] == ["m365_profile.payload.json"]
+
+    code, payload = run(capsys, ["discover", "answer", "--dir", str(scratch),
+                                 "--question", "What do people call you?",
+                                 "--text", "Call me Morgan"])
+    assert code == 0 and payload["result"]["id"] == "A1"
+
+    proposal = scratch / "m365_about-you.payload.json"
+    proposal.write_text(json.dumps({"topic": "about-you", "items": [
+        {"kind": "claim", "text": "You're Chief Commercial Officer.", "cites": [job["id"]]},
+        {"kind": "claim", "text": "You report to Dana Whitfield.", "cites": [job["id"]]},
+    ]}), encoding="utf-8")
+    code, payload = run(capsys, ["discover", "check", "--dir", str(scratch),
+                                 "--proposal", str(proposal)])
+    assert code == 0
+    assert payload["result"]["counts"] == {"passed": 1, "dropped": 1}
+
+    block = scratch / "identity.block.md"
+    block.write_text("- Chief Commercial Officer\n", encoding="utf-8")
+    code, payload = run(capsys, ["discover", "check", "--dir", str(scratch),
+                                 "--block", str(block)])
+    assert code == 0 and payload["result"]["ok"] is True
+
+
+def test_discover_check_without_evidence_fails_inside_the_envelope(capsys, tmp_path):
+    proposal = tmp_path / "m365_work.payload.json"
+    proposal.write_text(json.dumps({"topic": "work", "items": []}), encoding="utf-8")
+    code, payload = run(capsys, ["discover", "check", "--dir", str(tmp_path),
+                                 "--proposal", str(proposal)])
+    assert code == 1
+    assert payload["ok"] is False
+    assert "discover build" in payload["error"]
+    assert payload["hint"]
+
+
+def test_discover_check_needs_exactly_one_of_proposal_or_block(capsys, tmp_path):
+    with pytest.raises(SystemExit):
+        cli.main(["discover", "check", "--dir", str(tmp_path)])

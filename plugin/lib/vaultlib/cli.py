@@ -32,7 +32,7 @@ if __package__ in (None, ""):
     # the skills invoke it.
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from vaultlib import config, dailynote, dates, decision, entity, feedback, fetcherrors, health, lastsync, m365, meeting, migrate, person, plaud, project, projectstate, provenance, runlog, scratch, schema, seenevents, syncjob, template, updatequeue, vault  # noqa: E402
+from vaultlib import config, dailynote, dates, decision, discover, entity, feedback, fetcherrors, health, lastsync, m365, meeting, migrate, person, plaud, project, projectstate, provenance, runlog, scratch, schema, seenevents, syncjob, template, updatequeue, vault  # noqa: E402
 
 
 def _emit(payload: dict) -> None:
@@ -571,6 +571,42 @@ def build_parser() -> argparse.ArgumentParser:
     m365_re.add_argument("--timezone", help="IANA timezone name")
     m365_re.add_argument("--utc-offset", dest="utc_offset")
 
+    discover_group = top.add_parser(
+        "discover", help="Session-1 discovery: M365 evidence and the proposal check")
+    discover_sub = discover_group.add_subparsers(dest="action", required=True)
+    discover_window = discover_sub.add_parser(
+        "window", help="UTC query windows for the two setup reads (no start-date clamp)")
+    discover_window.add_argument("--timezone", help="IANA timezone name")
+    discover_window.add_argument("--utc-offset", dest="utc_offset",
+                                 help="explicit offset like +02:00")
+    discover_window.add_argument("--days-back", dest="days_back", type=int, default=28)
+    discover_window.add_argument("--days-forward", dest="days_forward", type=int, default=14)
+    discover_window.add_argument("--now", help="UTC ISO datetime override (tests)")
+    discover_build = discover_sub.add_parser(
+        "build", help="turn one read's payload files in --dir into the evidence list")
+    _add_vault_argument(discover_build)
+    discover_build.add_argument("--dir", required=True,
+                                help="the session scratch directory (never the vault)")
+    discover_build.add_argument("--read", type=int, choices=(1, 2), required=True)
+    discover_build.add_argument("--timezone", help="IANA timezone name")
+    discover_build.add_argument("--utc-offset", dest="utc_offset",
+                                help="explicit offset like +02:00")
+    discover_build.add_argument(
+        "--consume", action="store_true",
+        help="delete exactly the payload files this build read, once the "
+             "evidence is written")
+    discover_answer = discover_sub.add_parser(
+        "answer", help="record what the owner said, verbatim, as citable evidence")
+    discover_answer.add_argument("--dir", required=True)
+    discover_answer.add_argument("--question", required=True)
+    discover_answer.add_argument("--text", required=True)
+    discover_check = discover_sub.add_parser(
+        "check", help="split a proposal into passed and dropped, or check a block")
+    discover_check.add_argument("--dir", required=True)
+    discover_target = discover_check.add_mutually_exclusive_group(required=True)
+    discover_target.add_argument("--proposal", help="path to a proposal JSON file")
+    discover_target.add_argument("--block", help="path to a draft context block")
+
     feedback_group = top.add_parser(
         "feedback", help="scrub-linted product feedback, sent as a GitHub issue")
     feedback_sub = feedback_group.add_subparsers(dest="action", required=True)
@@ -928,6 +964,22 @@ def _dispatch(args: argparse.Namespace) -> int:
         return _ok(m365.reassemble(
             args.event, args.transcript, args.out,
             timezone=args.timezone, utc_offset=args.utc_offset))
+    if args.group == "discover":
+        if args.action == "window":
+            return _ok(discover.window(
+                timezone=args.timezone, utc_offset=args.utc_offset,
+                days_back=args.days_back, days_forward=args.days_forward, now=args.now))
+        if args.action == "build":
+            home_domains, _warning = config.m365_home_domains(root)
+            return _ok(discover.build(
+                args.dir, read=args.read, home_domains=home_domains,
+                timezone=args.timezone, utc_offset=args.utc_offset,
+                consume=args.consume))
+        if args.action == "answer":
+            return _ok(discover.answer(args.dir, question=args.question, text=args.text))
+        if args.proposal is not None:
+            return _ok(discover.check(args.dir, args.proposal))
+        return _ok(discover.check_block(args.dir, args.block))
     if args.group == "feedback":
         body_text = (sys.stdin.read() if args.body_file == "-"
                     else Path(args.body_file).read_text(encoding="utf-8"))
@@ -1044,6 +1096,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         return _fail(str(exc), "Check the raw MCP JSON files named in the error.")
     except m365.M365Error as exc:
         return _fail(str(exc), "Check the raw M365 JSON files named in the error.")
+    except discover.DiscoverError as exc:
+        return _fail(str(exc), "Fix the named argument or payload and retry; "
+                     "nothing from this call was shown to the owner.")
     except updatequeue.UpdateQueueError as exc:
         return _fail(str(exc), "Fix the named argument and retry.")
     except dailynote.DailyNoteError as exc:
