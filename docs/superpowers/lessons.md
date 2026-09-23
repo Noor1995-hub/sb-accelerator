@@ -926,3 +926,36 @@ after merge, and read the Cost page grouped by Model, before quoting a
 figure. If the bill is the problem and the orchestrator is not, the lever to
 try is keeping the orchestrator on Opus while forcing the reviewers onto
 Sonnet — untested here.
+
+## 2026-09-23 — the plugin's model pins were honoured all along; two entries misread them
+
+**What went wrong.** The 2026-09-03 entry says the `code-review` plugin asks
+for Haiku and "5 parallel Sonnet agents", "asks for Opus nowhere", and that
+its pins lose because subagents inherit the session model. The entry just
+above repeats that and predicts the reviewers would follow the orchestrator
+onto Opus. Both are wrong. The plugin file (unchanged upstream since
+2026-03-12, so it read the same when the 2026-09-03 entry was written) asks
+for haiku in steps 1–2, sonnet for the PR summary, the two CLAUDE.md
+reviewers and their validators, and **opus for the two bug reviewers and the
+bug-finding validators**. The run logs show the orchestrator honours those
+assignments: every one of the six Sonnet-pinned runs up to 2026-09-21 lists
+`claude-opus-5[1m]` in `modelUsage`, and an Opus-session run in
+bta-agents-portal lists Sonnet and Haiku.
+
+So the 85%-on-Opus split before #156 was the plugin's design (Opus bug
+agents) plus an Opus orchestrator, not ignored pins. The Sonnet pin moved the
+orchestrator only, and reversing it brings back only the orchestrator's
+cost, not the reviewers'.
+
+**A second gap it exposed.** The plugin names models by alias, and aliases
+resolve inside whichever Claude Code build `@v1` installs. v2.1.278 resolved
+`opus` to `claude-opus-5`, so the bug agents stayed on Opus 5 after
+`--model claude-opus-5-5`. The fix is
+`settings.env.ANTHROPIC_DEFAULT_OPUS_MODEL`, Claude Code's documented alias
+override.
+
+**The rule.** Before writing down what a plugin asks for, quote its current
+file (`gh api repos/anthropics/claude-code/contents/plugins/code-review/commands/code-review.md`),
+and before claiming a pin is ignored, check `modelUsage` in a run log. It
+lists every model the session touched. `--model` is the orchestrator's model;
+subagents' models are the plugin's aliases, resolved by the build.
