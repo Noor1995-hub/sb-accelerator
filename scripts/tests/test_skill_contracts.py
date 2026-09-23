@@ -1898,3 +1898,36 @@ def test_sync_recordings_watermark_gloss_names_the_park():
     idx = text.index("A batch's `fetch-error` outcomes do not hold this back")
     passage = re.sub(r"\s+", " ", text[idx: idx + 400])
     assert "until `sync fetch-error` parks it on its third failing day" in passage
+
+
+def test_setup_discovery_worker_agent_frontmatter():
+    agents_dir = SKILLS_DIR.parent / "agents"
+    worker = (agents_dir / "setup-discovery-worker.md").read_text(encoding="utf-8")
+    front = worker.split("---")[1]
+    assert "name: setup-discovery-worker" in front
+    assert "model: sonnet" in front, "verbatim transcription is the trust point"
+    assert "tools:" not in front, (
+        "the worker's tools must stay open — connector tool names differ per "
+        "deployment, exactly as for sync-worker-m365")
+    disallowed_lines = [line for line in front.splitlines()
+                        if line.strip().startswith("disallowedTools:")]
+    assert disallowed_lines, "the discovery worker must declare disallowedTools"
+    disallowed = [name.strip()
+                  for name in disallowed_lines[0].split(":", 1)[1].split(",")]
+    assert disallowed == M365_WORKER_DISALLOWED_TOOLS
+    body = re.sub(r"\s+", " ", worker.split("---", 2)[2])
+    assert "discovery contract" in body and "outcome line" in body
+    assert "dispatched without a briefing" in body
+
+
+def test_discovery_contract_pins_the_privacy_rules():
+    contract = re.sub(r"\s+", " ", read_ref("setup-my-brain", "discovery-contract.md"))
+    assert "never call `chat_message_search`" in contract
+    assert "one folder at a time" in contract
+    assert "never add, merge or guess a row" in contract
+    from vaultlib import discover
+    for files in discover.READ_FILES.values():
+        for name in files.values():
+            assert name in contract, f"the contract must name {name}"
+    for source, cap in discover.PAGE_CAPS.items():
+        assert f"page_caps.{source}" in contract or source == "sentsample"
