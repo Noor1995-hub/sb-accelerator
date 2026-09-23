@@ -1394,7 +1394,9 @@ def fenced_dates_window_invocations(text: str):
     return fenced_invocations(text, "dates window")
 
 
-@pytest.mark.parametrize("subcommand", ["dates window", "m365 agenda"])
+@pytest.mark.parametrize("subcommand", ["dates window", "m365 agenda", "discover window",
+                                        "discover build", "discover answer",
+                                        "discover check"])
 @pytest.mark.parametrize("path", SKILL_FILES + REF_FILES,
                          ids=lambda p: p.parent.name)
 def test_every_fenced_invocation_of_a_parsed_subcommand_parses(path, subcommand):
@@ -1934,3 +1936,37 @@ def test_discovery_contract_pins_the_privacy_rules():
     assert discover.BROADCAST_LIMIT == 15 and "more than 15" in contract, (
         "the contract states the broadcast threshold; keep it equal to "
         "discover.BROADCAST_LIMIT")
+
+
+def test_setup_my_brain_shows_only_what_the_check_passed():
+    text = read_skill("setup-my-brain")
+    assert "Nothing is shown to the owner that `discover check` did not pass" in text
+    assert "Show only what is under `passed`" in text
+    assert "Entities come from the vault owner, never from the calendar" not in text, (
+        "rule 5 was replaced: organisations may be proposed, only the owner confirms")
+
+
+def test_setup_my_brain_asks_the_company_rules_question_before_reading():
+    text = read_skill("setup-my-brain")
+    # The Requirements section names `discover build --consume` early; the
+    # ordering that matters is against the first real read, step 2's call.
+    assert text.index("Does your company have rules") < text.index(
+        'discover build --vault "$VAULT"')
+
+
+def test_setup_my_brain_never_reads_chat_text():
+    assert "Chat message text is never read" in read_skill("setup-my-brain")
+
+
+def test_setup_my_brain_dispatches_the_worker_and_consumes_raw_reads():
+    text = read_skill("setup-my-brain")
+    assert "setup-discovery-worker" in text
+    assert "references/discovery-contract.md" in text
+    assert text.count("--consume") >= 2, "both reads must delete their raw rows"
+
+
+def test_setup_my_brain_is_written_for_the_owner_alone():
+    text = read_skill("setup-my-brain")
+    assert "on their own" in text
+    assert "consultant's own record" not in text, (
+        "there is no consultant in the room any more")

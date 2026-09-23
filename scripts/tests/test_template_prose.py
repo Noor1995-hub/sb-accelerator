@@ -24,24 +24,23 @@ START_HERE = TEMPLATE / "Start here.md"
 # both the guard and its own audience checks at once.
 SLASH_RE = re.compile(r"`/([a-z][a-z0-9]*(?:-[a-z0-9]+)*)`")
 
-# Consultant-led: delaware runs it, at a visit, with the vault on screen.
-# upgrade-vault can be lossy ("not something to hand the vault owner to run
-# alone") and setup-my-brain is a once-ever two-hour interview run by the
-# consultant and the vault owner together. provision-vault runs before the
-# vault owner has a vault to be handed a command in, touches a credential
-# that must never appear in chat, and is never invoked by a self-serve skill
-# the way schedule-daily-loop is invoked by setup-my-brain below — nothing
-# calls it once setup day is over. None of the three belongs in a note whose
-# whole audience is the vault owner.
+# Not for the orientation note. upgrade-vault is consultant-led: it can be
+# lossy ("not something to hand the vault owner to run alone").
+# provision-vault runs before the vault owner has a vault to be handed a
+# command in, touches a credential that must never appear in chat, and is
+# never invoked by a self-serve skill — nothing calls it once setup day is
+# over. setup-my-brain is run by the vault owner, but once, before they ever
+# open Start here: the note is read after it, so naming it there would hand
+# them a command they have already run. None of the three belongs in a note
+# whose whole audience is the vault owner in their daily routine.
 CONSULTANT_LED = {"setup-my-brain", "upgrade-vault", "provision-vault"}
 
 # Safe to run unaccompanied by the vault owner.
 #
-# schedule-daily-loop is here despite being invoked by consultant-led
-# setup-my-brain, because being invoked by one is not the same as being one.
-# Neither rationale above applies: it is not lossy (a wrong time is fixed by
-# re-running it) and it is not a two-hour interview. Re-running it after a
-# machine change is a designed-for case rather than a tolerated one — the
+# schedule-daily-loop is here despite being invoked by setup-my-brain,
+# because being invoked by one is not the same as being one. Neither
+# rationale above applies: it is not lossy (a wrong time is fixed by
+# re-running it) and it is not a once-ever setup. Re-running it after a
 # routine has to be created on the machine that will run it, so a vault
 # owner who moves the evening run to a new laptop has no other way to move
 # it.
