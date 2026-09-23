@@ -653,7 +653,7 @@ _QUOTED_RE = re.compile(
     "(?=[\\s.,;:!?)]|$)",
     re.MULTILINE)
 _SEGMENT_RE = re.compile(r"\n+|(?<=[.!?])\s+")
-_LIST_MARK_RE = re.compile(r"\A\s*(?:[#>*+-]+|\d+[.)])\s+")
+_LIST_MARK_RE = re.compile(r"\A\s*(?:[#>*+|-]+|\d+[.)])\s+")
 _TOKEN_WORD_RE = re.compile("[^\\W\\d_][\\w\\x27\\u2019&-]*")
 _POSSESSIVE_RE = re.compile("[\\x27\\u2019]s\\Z")
 # Capitalised for reasons other than being a name the evidence must hold.
