@@ -285,7 +285,7 @@ The model writes one proposal file per topic, `m365_<topic>.payload.json`:
 ### 7.2 What `discover check` enforces
 
 `discover check --proposal <file>` reads the proposal, the evidence and the
-answers and returns `{"passed": [...], "dropped": [{"item": ..., "reason": ...}]}`.
+answers and returns `{"passed": [...], "dropped": [{"item": ..., "reasons": [...]}]}`.
 
 For a **pick**: `ref` must exist and be of a kind valid for the topic.
 
@@ -294,9 +294,11 @@ For a **claim**:
 1. `cites` is non-empty and every id exists (E- or A-entry).
 2. Every *checkable token* in `text` appears, case-insensitively and
    whitespace-normalised, in the `text` or `facts` of at least one cited
-   entry. Checkable tokens are: numbers, email addresses, domains, quoted
-   strings, and runs of capitalised words (proper nouns). A short stop-list
-   covers sentence-initial words and generic capitalised terms.
+   entry. Checkable tokens are: numbers (the digits of `9am` or `12th` too, and English
+   number words, so proposals write numbers as digits), email addresses, domains,
+   quoted strings (plain or curly, double or single quotes), and runs of
+   capitalised words (proper nouns, with a trailing possessive `'s` ignored). A
+   short stop-list covers sentence-initial words and generic capitalised terms.
 3. A claim that fails either rule is **dropped**, with the reason. It is never
    softened or rewritten into something plausible.
 
@@ -311,7 +313,9 @@ recorded with `discover answer` first, so their own words always pass.
 
 The first word of a sentence or bullet is not checked on its own (it is
 capitalised for grammar, not because it is a name); a capitalised run of two
-or more words is still checked from its second word.
+or more words is still checked from its second word. Segments are sentences
+and lines only: a clause after a colon, semicolon, dash or table pipe is
+checked from its first word.
 
 ### 7.3 What the check cannot prove
 

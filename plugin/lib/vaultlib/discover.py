@@ -595,13 +595,14 @@ _NUMBER_WORDS = ("two", "three", "four", "five", "six", "seven", "eight", "nine"
                  "forty", "fifty", "hundred", "thousand", "million", "dozen")
 _NUMBER_WORD_RE = re.compile(r"\b(?:" + "|".join(_NUMBER_WORDS) + r")\b", re.IGNORECASE)
 _QUOTED_RE = re.compile(
-    "[“”]([^“”\n]{2,}?)[“”]"
-    "|(?:^|(?<=[\\s(]))[‘’]([^‘’\n]{2,}?)[‘’](?=[\\s.,;:!?)]|$)",
+    "[\\x22\\u201c\\u201d]([^\\x22\\u201c\\u201d\\n]{2,}?)[\\x22\\u201c\\u201d]"
+    "|(?:^|(?<=[\\s(]))[\\x27\\u2018]([^\\x27\\u2018\\u2019\\n]{2,}?)[\\x27\\u2019]"
+    "(?=[\\s.,;:!?)]|$)",
     re.MULTILINE)
 _SEGMENT_RE = re.compile(r"\n+|(?<=[.!?])\s+")
 _LIST_MARK_RE = re.compile(r"\A\s*(?:[#>*+-]+|\d+[.)])\s+")
-_TOKEN_WORD_RE = re.compile("[^\\W\\d_][\\w‘’&-]*")
-_POSSESSIVE_RE = re.compile("[‘’]s\\Z")
+_TOKEN_WORD_RE = re.compile("[^\\W\\d_][\\w\\x27\\u2019&-]*")
+_POSSESSIVE_RE = re.compile("[\\x27\\u2019]s\\Z")
 # Capitalised for reasons other than being a name the evidence must hold.
 _CAP_STOP = frozenset({
     "I", "I'm", "I've", "I'd", "I'll", "OK", "Ok", "AI",
@@ -648,7 +649,8 @@ def answer(scratch_dir: str, *, question: str, text: str) -> dict:
 
 
 def _norm(text: str) -> str:
-    for curly, plain in (("“", '"'), ("”", '"'), ("‘", "'"), ("’", "'")):
+    for curly, plain in (("“", "\x22"), ("”", "\x22"),
+                         ("‘", "\x27"), ("’", "\x27")):
         text = text.replace(curly, plain)
     return re.sub(r"\s+", " ", text).casefold()
 

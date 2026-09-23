@@ -560,3 +560,26 @@ def test_a_block_may_quote_the_owners_own_answer(scratch):
     discover.answer(str(scratch), question="Other roles?", text="Board chair of Fabrikam")
     block = write_block(scratch, "- Board chair of Fabrikam\n")
     assert discover.check_block(str(scratch), block)["ok"] is True
+
+
+def test_a_plain_double_quoted_lowercase_title_is_dropped(scratch):
+    result = propose(scratch, "work", claim('You also attend "budget review".', "E2"))
+    assert result["passed"] == []
+    assert "'budget review' is not in the cited evidence" in result["dropped"][0]["reasons"]
+
+
+def test_a_plain_single_quoted_lowercase_title_is_dropped(scratch):
+    result = propose(scratch, "work", claim("You also attend 'budget review'.", "E2"))
+    assert result["passed"] == []
+    assert "'budget review' is not in the cited evidence" in result["dropped"][0]["reasons"]
+
+
+def test_a_name_spliced_with_a_plain_apostrophe_is_dropped(scratch):
+    result = propose(scratch, "people", claim("You also work with Nathan'Weekly.", "E4", "E2"))
+    assert result["passed"] == []
+
+
+def test_a_plain_apostrophe_possessive_still_passes(scratch):
+    result = propose(scratch, "people",
+                     claim("You work closely with Priya Nathan's team.", "E4"))
+    assert result["counts"]["passed"] == 1
