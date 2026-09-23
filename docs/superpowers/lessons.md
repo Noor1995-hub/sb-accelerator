@@ -898,3 +898,31 @@ this problem (the `plugin/vendor/**` `-text` rule in `.gitattributes`,
 solved it locally; a fourth site that skipped the search shipped the bug. The
 corollary for review: a hash of file bytes is a portability decision, so ask
 what happens to it on the other platform before the CI matrix asks for you.
+
+## 2026-09-23 — the review's cost pin was reversed for orchestrator quality
+
+**What changed.** The 2026-09-03 entry above pinned the review to
+`--model claude-sonnet-5` as a cost fix. That pin is now
+`--model claude-opus-5-5`, by deliberate choice: the orchestrator is the
+step that reads the diff, briefs the reviewers and validates their findings,
+and Sonnet was judged too weak for it. bta-agents-portal made the same pin
+the same day (its PR #518). Until then it had never set a model and was running
+on `claude-opus-5[1m]`, the default of the Claude Code build `@v1` happened
+to install, even though Opus 5.5 was already out.
+
+**The rule.** A model pin optimises one axis. Say which one in the comment
+beside it, so the next person can tell a cost decision from a quality
+decision before reversing it. And pin rather than leave it unset: an
+unpinned review moves models whenever upstream changes a default, and
+nothing in the repo records that it happened.
+
+**What this reversal costs.** The 2026-09-03 mechanism still holds: `Task`
+subagents inherit the session model unless the orchestrator passes an
+override. So an Opus session probably pulls the five step-4 reviewers back
+onto Opus too, not just the orchestrator. For reference, the last Opus
+period had a median of $3.49 over 85 runs, and the six runs under the Sonnet
+pin had ~$1.61. Measure Opus 5.5 from `total_cost_usd` over several runs
+after merge, and read the Cost page grouped by Model, before quoting a
+figure. If the bill is the problem and the orchestrator is not, the lever to
+try is keeping the orchestrator on Opus while forcing the reviewers onto
+Sonnet — untested here.
