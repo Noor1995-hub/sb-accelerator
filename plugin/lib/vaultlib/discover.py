@@ -213,3 +213,300 @@ def _own_words(summary: str) -> str:
     match = _QUOTE_CUT_RE.search(summary)
     text = summary[: match.start()] if match else summary
     return re.sub(r"\s+", " ", text).strip()
+
+
+def _scratch(directory: str) -> Path:
+    root = Path(directory).expanduser().resolve()
+    if not root.is_dir():
+        raise DiscoverError(f"scratch directory does not exist: {root}")
+    return root
+
+
+def _write_json(path: Path, obj) -> None:
+    path.write_text(json.dumps(obj, indent=2, sort_keys=True, ensure_ascii=False) + "\n",
+                    encoding="utf-8")
+
+
+def _empty_stats() -> dict:
+    return {"profile": {}, "owner_addresses": [], "people": {}, "names": {},
+            "domains": {}, "recurring": {}, "days": {}, "mail_subjects": {},
+            "chats": [], "system_senders": {},
+            "language": {"total": 0, "counts": {}}, "sent_mail": [], "sources": {}}
+
+
+def _countable(address: str, stats: dict) -> bool:
+    return (address not in stats["owner_addresses"]
+            and not address.endswith("@" + _BOT_DOMAIN)
+            and not _is_system(address))
+
+
+def _bump(table: dict, key: str, source: str) -> None:
+    row = table.setdefault(key, {"calendar": 0, "mail": 0, "chat": 0})
+    row[source] += 1
+
+
+def _count_parties(stats: dict, parties: List[str], source: str, home: set) -> None:
+    """One item (an event, a mail, a chat): +1 per person in it and +1 per
+    external organisation domain in it — a meeting with five people from one
+    client is one meeting with that client, not five."""
+    for address in parties:
+        _bump(stats["people"], address, source)
+    for domain in sorted({_domain(address) for address in parties} - home):
+        _bump(stats["domains"], domain, source)
+
+
+def _ingest_profile(stats, rows, home, timezone, utc_offset) -> None:
+    profile = rows[0] if rows else {}
+    for field, _label in PROFILE_FIELDS:
+        value = profile.get(field)
+        if isinstance(value, str) and value.strip():
+            stats["profile"][field] = value.strip()
+    owners = {address for address in (_address(profile.get("mail")),
+                                      _address(profile.get("userPrincipalName")))
+              if address}
+    stats["owner_addresses"] = sorted(set(stats["owner_addresses"]) | owners)
+
+
+def _note_working_day(stats, event, timezone, utc_offset) -> None:
+    start = dates.utc_to_local(m365._event_start(event), timezone, utc_offset)[0]
+    end_utc = m365._event_end(event)
+    end = dates.utc_to_local(end_utc, timezone, utc_offset)[0] if end_utc else start
+    if start.weekday() >= 5 or end.date() != start.date():
+        return
+    day = start.date().isoformat()
+    first_new, last_new = start.hour * 60 + start.minute, end.hour * 60 + end.minute
+    first, last = stats["days"].get(day, [first_new, last_new])
+    stats["days"][day] = [min(first, first_new), max(last, last_new)]
+
+
+def _ingest_calendar(stats, rows, home, timezone, utc_offset) -> None:
+    for event in rows:
+        if event.get("isCancelled"):
+            continue
+        subject = _subject(event.get("subject"))
+        if _is_noise_subject(subject):
+            continue
+        if not event.get("isAllDay"):
+            if subject:
+                row = stats["recurring"].setdefault(
+                    subject.casefold(), {"subject": subject, "count": 0})
+                row["count"] += 1
+            if str(event.get("showAs") or "").casefold() in ("busy", "tentative"):
+                _note_working_day(stats, event, timezone, utc_offset)
+        listed = [event.get("organizer"), *(event.get("attendees") or [])]
+        parties = sorted({address for address in map(_address, listed)
+                          if address and _countable(address, stats)})
+        size = event.get("attendeeCount")
+        if not isinstance(size, int):
+            size = len(parties)
+        if size > BROADCAST_LIMIT:
+            continue
+        _count_parties(stats, parties, "calendar", home)
+
+
+def _count_language(stats: dict, text: str) -> None:
+    stats["language"]["total"] += 1
+    code = _language(text)
+    if code:
+        counts = stats["language"]["counts"]
+        counts[code] = counts.get(code, 0) + 1
+
+
+def _ingest_sentsample(stats, rows, home, timezone, utc_offset) -> None:
+    for mail in rows[: TOP["sent-mail"]]:
+        summary = _own_words(str(mail.get("summary") or ""))
+        if not summary:
+            continue
+        stats["sent_mail"].append({"subject": _subject(mail.get("subject")),
+                                   "summary": summary})
+        _count_language(stats, summary)
+
+
+_INGEST = {
+    "profile": _ingest_profile,
+    "calendar": _ingest_calendar,
+    "sentsample": _ingest_sentsample,
+}
+
+
+def _plural(count: int, word: str) -> str:
+    return f"{count} {word}" if count == 1 else f"{count} {word}s"
+
+
+def _phrase(row: dict) -> str:
+    return ", ".join(_plural(row.get(source, 0), noun)
+                     for source, noun in (("calendar", "meeting"), ("mail", "mail"),
+                                          ("chat", "chat"))
+                     if row.get(source, 0))
+
+
+def _total(row: dict) -> int:
+    return row.get("calendar", 0) + row.get("mail", 0) + row.get("chat", 0)
+
+
+def _hhmm(minutes: float) -> str:
+    whole = int(round(minutes))
+    return f"{whole // 60:02d}:{whole % 60:02d}"
+
+
+def _entry(key: str, kind: str, label: str, detail: str, text: str, facts: dict) -> dict:
+    return {"key": key, "kind": kind, "label": label, "detail": detail,
+            "text": text, "facts": facts}
+
+
+def _entries(stats: dict) -> List[dict]:
+    """Every evidence entry, in a fixed kind order and a fixed rank inside
+    each kind, so the same stats always render the same list."""
+    out: List[dict] = []
+    for field, label in PROFILE_FIELDS:
+        value = stats["profile"].get(field)
+        if value:
+            out.append(_entry(f"profile:{field}", "profile", label, value,
+                              f"{label}: {value}", {"field": field, "value": value}))
+    days = list(stats["days"].values())
+    if len(days) >= 3:
+        first = _hhmm(median(day[0] for day in days))
+        last = _hhmm(median(day[1] for day in days))
+        out.append(_entry(
+            "working-day", "working-day", "Working day", f"{first} to {last}",
+            f"Typical weekday: first meeting starts {first}, last meeting ends "
+            f"{last} (median over {len(days)} days)",
+            {"first_start": first, "last_end": last, "days": len(days)}))
+    language = stats["language"]
+    if language["counts"]:
+        code, count = sorted(language["counts"].items(), key=lambda kv: (-kv[1], kv[0]))[0]
+        name, total = LANGUAGES[code], language["total"]
+        out.append(_entry(
+            "language", "language", name, f"{count} of {total} messages",
+            f"Language of your sent mail: {name} in {count} of {total} messages",
+            {"language": name, "count": count, "total": total}))
+    recurring = sorted((row for row in stats["recurring"].values()
+                        if row["count"] >= RECURRING_MIN),
+                       key=lambda row: (-row["count"], row["subject"].casefold()))
+    for row in recurring[: TOP["recurring-meeting"]]:
+        times = _plural(row["count"], "time")
+        out.append(_entry(
+            f"recurring:{row['subject'].casefold()}", "recurring-meeting", row["subject"],
+            times, f"Recurring meeting \"{row['subject']}\": {times} in the window",
+            {"subject": row["subject"], "count": row["count"]}))
+    domains = sorted(((domain, row) for domain, row in stats["domains"].items()
+                      if _total(row) >= 2),
+                     key=lambda item: (-_total(item[1]), item[0]))
+    for domain, row in domains[: TOP["domain"]]:
+        out.append(_entry(f"domain:{domain}", "domain", domain, _phrase(row),
+                          f"{domain}: {_phrase(row)}",
+                          {"domain": domain, **row, "total": _total(row)}))
+    people = sorted(((address, row) for address, row in stats["people"].items()
+                     if _total(row) >= 2),
+                    key=lambda item: (-_total(item[1]), item[0]))
+    for address, row in people[: TOP["person"]]:
+        name, source = stats["names"].get(address), "chat"
+        if not name:
+            name, source = _name_from_address(address), "address"
+        if not name:
+            source = None
+        text = (f"{name} ({address}): {_phrase(row)}" if name
+                else f"{address}: {_phrase(row)}")
+        out.append(_entry(f"person:{address}", "person", name or address, _phrase(row),
+                          text, {"address": address, "name": name, "name_source": source,
+                                 **row, "total": _total(row)}))
+    subjects = sorted((row for row in stats["mail_subjects"].values() if row["count"] >= 2),
+                      key=lambda row: (-row["count"], row["subject"].casefold()))
+    for row in subjects[: TOP["mail-subject"]]:
+        mails = _plural(row["count"], "mail")
+        with_domains = f", with {', '.join(row['domains'])}" if row["domains"] else ""
+        out.append(_entry(
+            f"mail-subject:{row['subject'].casefold()}", "mail-subject", row["subject"],
+            mails, f"Mail thread \"{row['subject']}\": {mails}{with_domains}",
+            {"subject": row["subject"], "count": row["count"], "domains": row["domains"]}))
+    for chat in stats["chats"][: TOP["chat"]]:
+        members = _plural(chat["members"], "member")
+        out.append(_entry(
+            f"chat:{chat['type']}:{chat['topic'].casefold()}", "chat", chat["topic"],
+            members, f"Teams {chat['type']} chat \"{chat['topic']}\" ({members})",
+            dict(chat)))
+    senders = sorted(stats["system_senders"].items(), key=lambda item: (-item[1], item[0]))
+    for address, count in senders[: TOP["system-sender"]]:
+        mails = _plural(count, "mail")
+        out.append(_entry(f"system:{address}", "system-sender", address, mails,
+                          f"Notifications from {address}: {mails}",
+                          {"address": address, "count": count}))
+    for index, mail in enumerate(stats["sent_mail"][: TOP["sent-mail"]]):
+        out.append(_entry(f"sent:{index}", "sent-mail", mail["subject"] or "(no subject)",
+                          mail["summary"],
+                          f"Sent mail \"{mail['subject']}\": {mail['summary']}", dict(mail)))
+    return out
+
+
+def _assign_ids(entries: List[dict], ids: Dict[str, str]) -> None:
+    """Stable ids: a key keeps the id it got in read 1, a new key takes the
+    next free number, so a proposal drafted after read 1 still points at the
+    same entry after read 2."""
+    next_number = max((int(value[1:]) for value in ids.values()), default=0) + 1
+    for entry in entries:
+        if entry["key"] not in ids:
+            ids[entry["key"]] = f"E{next_number}"
+            next_number += 1
+        entry["id"] = ids[entry["key"]]
+
+
+def build(scratch_dir: str, *, read: int, home_domains: Optional[List[str]] = None,
+          timezone: Optional[str] = None, utc_offset: Optional[str] = None,
+          consume: bool = False) -> dict:
+    """Turn one read's payload files into the evidence list.
+
+    Read 1 starts a fresh evidence file; read 2 merges into it (stable ids,
+    per-source counts added). With `consume`, exactly the payload files this
+    call read are deleted once the evidence is written — the only deletion
+    here, so raw rows never outlive their use."""
+    root = _scratch(scratch_dir)
+    if read not in READ_FILES:
+        raise DiscoverError(f"--read {read!r} must be 1 or 2")
+    evidence_path = root / EVIDENCE_FILE
+    if read == 1:
+        evidence = {"schema": 1, "ids": {}, "stats": _empty_stats(), "entries": []}
+    else:
+        if not evidence_path.is_file():
+            raise DiscoverError(
+                "no evidence from read 1 in this scratch directory — run "
+                "`discover build --read 1` first; read 2 merges into it")
+        evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
+        if any(source in evidence["stats"]["sources"] for source in READ_FILES[2]):
+            raise DiscoverError(
+                "read 2 is already in this evidence — start again from read 1 "
+                "rather than counting mail twice")
+    stats = evidence["stats"]
+    home = {domain.casefold() for domain in (home_domains or [])}
+    consumed: List[Path] = []
+    for source, name in READ_FILES[read].items():
+        home |= {_domain(address) for address in stats["owner_addresses"]}
+        path = root / name
+        if not path.is_file():
+            stats["sources"][source] = {"present": False, "items": 0, "capped": False}
+            continue
+        rows, capped = _read_items(path)
+        try:
+            _INGEST[source](stats, rows, home, timezone, utc_offset)
+        except m365.M365Error as exc:
+            raise DiscoverError(f"{name}: {exc}") from exc
+        stats["sources"][source] = {"present": True, "items": len(rows), "capped": capped}
+        consumed.append(path)
+    entries = _entries(stats)
+    _assign_ids(entries, evidence["ids"])
+    evidence["entries"] = entries
+    _write_json(evidence_path, evidence)
+    if consume:
+        for path in consumed:
+            path.unlink()
+    by_kind: Dict[str, int] = {}
+    for entry in entries:
+        by_kind[entry["kind"]] = by_kind.get(entry["kind"], 0) + 1
+    return {
+        "read": read,
+        "evidence": evidence_path.name,
+        "sources": stats["sources"],
+        "by_kind": by_kind,
+        "consumed": sorted(path.name for path in consumed) if consume else [],
+        "entries": [{key: entry[key] for key in ("id", "kind", "label", "detail", "text")}
+                    for entry in entries],
+    }

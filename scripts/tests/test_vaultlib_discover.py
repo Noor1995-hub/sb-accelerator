@@ -120,3 +120,148 @@ def test_language_needs_three_stop_words():
 def test_own_words_cuts_the_quoted_reply():
     text = "Prima, doen we zo.\n________________\nFrom: Priya\nolder text"
     assert discover._own_words(text) == "Prima, doen we zo."
+
+
+OWNER = {"displayName": "Morgan Ellery", "jobTitle": "Chief Commercial Officer",
+         "mail": "morgan.ellery@northwind.example",
+         "userPrincipalName": "mellery@northwind-corp.example"}
+PRIYA = "priya.nathan@contoso.example"
+SAM = "sam.okafor@northwind.example"
+
+
+def event(subject, day, start="07:00", end="08:00", *, attendees=(),
+          organizer=OWNER["mail"], show="busy", all_day=False, cancelled=False):
+    """A trimmed calendar row. Times are UTC; with +02:00, 07:00Z is 09:00."""
+    return {"subject": subject,
+            "start": {"dateTime": f"2026-09-{day:02d}T{start}:00.0000000", "timeZone": "UTC"},
+            "end": {"dateTime": f"2026-09-{day:02d}T{end}:00.0000000", "timeZone": "UTC"},
+            "organizer": organizer, "attendees": list(attendees),
+            "isAllDay": all_day, "isCancelled": cancelled, "showAs": show}
+
+
+def read1_scratch(tmp_path):
+    write_rows(tmp_path / "m365_profile.payload.json", [OWNER])
+    write_rows(tmp_path / "m365_calendar.payload.json", [
+        event("Weekly exco", 14, attendees=[SAM]),                      # Mon
+        event("Weekly exco", 21, attendees=[SAM]),                      # Mon
+        event("Weekly exco", 28, attendees=[SAM]),                      # Mon
+        event("Supplier review", 15, "13:00", "16:00", attendees=[PRIYA]),  # Tue
+        event("Pricing sync", 16, "07:00", "16:00", attendees=[PRIYA, SAM]),  # Wed
+        event("Company all-hands", 17,
+              attendees=[f"person{i}@northwind.example" for i in range(20)]),
+        event("Office closed", 18, all_day=True, show="free"),
+        event("Accepted: Pricing sync", 16),
+        event("Cancelled thing", 16, cancelled=True),
+    ])
+    write_rows(tmp_path / "m365_sentsample.payload.json", [
+        {"subject": "RE: planning",
+         "summary": "Dag Priya, dat is goed voor mij en ik kijk het na. Groeten\n"
+                    "________________\nFrom: Priya"},
+        {"subject": "offerte", "summary": "Graag de offerte van de week, bedankt en groeten"},
+        {"subject": "update", "summary": "Hi all, the update is ready for you to review, thanks"},
+    ])
+    return tmp_path
+
+
+def entries_of(result, kind):
+    return [entry for entry in result["entries"] if entry["kind"] == kind]
+
+
+def build1(tmp_path, **kwargs):
+    return discover.build(str(tmp_path), read=1, home_domains=["northwind.example"],
+                          utc_offset=OFFSET, **kwargs)
+
+
+def test_read1_profile_entries_come_first_and_skip_absent_fields(tmp_path):
+    result = build1(read1_scratch(tmp_path))
+    profile = entries_of(result, "profile")
+    assert [entry["label"] for entry in profile] == ["Name", "Job title", "Email", "Sign-in name"]
+    assert profile[0]["id"] == "E1"
+    assert profile[1]["text"] == "Job title: Chief Commercial Officer"
+
+
+def test_read1_working_day_is_the_median_of_busy_weekdays(tmp_path):
+    [day] = entries_of(build1(read1_scratch(tmp_path)), "working-day")
+    assert day["text"] == ("Typical weekday: first meeting starts 09:00, last meeting "
+                           "ends 10:00 (median over 6 days)")
+
+
+def test_read1_recurring_meetings_need_three_and_skip_noise(tmp_path):
+    recurring = entries_of(build1(read1_scratch(tmp_path)), "recurring-meeting")
+    assert [entry["label"] for entry in recurring] == ["Weekly exco"]
+    assert recurring[0]["text"] == 'Recurring meeting "Weekly exco": 3 times in the window'
+
+
+def test_read1_people_exclude_the_owner_and_broadcasts(tmp_path):
+    people = entries_of(build1(read1_scratch(tmp_path)), "person")
+    assert [entry["label"] for entry in people] == ["Sam Okafor", "Priya Nathan"]
+    assert people[0]["detail"] == "4 meetings"
+    assert people[1]["text"] == "Priya Nathan (priya.nathan@contoso.example): 2 meetings"
+
+
+def test_read1_domains_are_external_only(tmp_path):
+    domains = entries_of(build1(read1_scratch(tmp_path)), "domain")
+    assert [entry["label"] for entry in domains] == ["contoso.example"]
+    assert domains[0]["detail"] == "2 meetings"
+
+
+def test_read1_language_and_sent_mail_use_the_owners_own_words(tmp_path):
+    result = build1(read1_scratch(tmp_path))
+    [language] = entries_of(result, "language")
+    assert language["text"] == "Language of your sent mail: Dutch in 2 of 3 messages"
+    sent = entries_of(result, "sent-mail")
+    assert sent[0]["text"] == ('Sent mail "planning": Dag Priya, dat is goed voor mij '
+                               'en ik kijk het na. Groeten')
+
+
+def test_read1_writes_evidence_and_consumes_only_its_own_files(tmp_path):
+    scratch = read1_scratch(tmp_path)
+    (scratch / "identity.block.md").write_text("draft", encoding="utf-8")
+    result = build1(scratch, consume=True)
+    assert result["consumed"] == ["m365_calendar.payload.json", "m365_profile.payload.json",
+                                  "m365_sentsample.payload.json"]
+    assert (scratch / discover.EVIDENCE_FILE).is_file()
+    assert (scratch / "identity.block.md").is_file()
+    assert not (scratch / "m365_calendar.payload.json").exists()
+
+
+def test_read1_without_consume_keeps_the_raw_rows(tmp_path):
+    scratch = read1_scratch(tmp_path)
+    assert build1(scratch)["consumed"] == []
+    assert (scratch / "m365_calendar.payload.json").is_file()
+
+
+def test_a_profile_only_mailbox_builds_without_failing(tmp_path):
+    write_rows(tmp_path / "m365_profile.payload.json", [OWNER])
+    result = build1(tmp_path)
+    assert set(result["by_kind"]) == {"profile"}
+    assert result["sources"]["calendar"] == {"present": False, "items": 0, "capped": False}
+
+
+def test_a_non_utc_calendar_row_fails_naming_the_file(tmp_path):
+    write_rows(tmp_path / "m365_profile.payload.json", [OWNER])
+    row = event("Weekly exco", 14)
+    row["start"]["timeZone"] = "Romance Standard Time"
+    write_rows(tmp_path / "m365_calendar.payload.json", [row])
+    with pytest.raises(discover.DiscoverError, match="m365_calendar.payload.json"):
+        build1(tmp_path)
+
+
+def test_read2_before_read1_is_refused(tmp_path):
+    with pytest.raises(discover.DiscoverError, match="read 1"):
+        discover.build(str(tmp_path), read=2)
+
+
+def test_an_unknown_read_is_refused(tmp_path):
+    with pytest.raises(discover.DiscoverError, match="1 or 2"):
+        discover.build(str(tmp_path), read=3)
+
+
+def test_every_discovery_file_name_is_swept(tmp_path):
+    from vaultlib import scratch
+    names = [discover.EVIDENCE_FILE, discover.ANSWERS_FILE]
+    names += [name for files in discover.READ_FILES.values() for name in files.values()]
+    names += [f"m365_{topic}.payload.json" for topic in discover.TOPIC_KINDS]
+    for name in names:
+        (tmp_path / name).write_text("x", encoding="utf-8")
+    assert sorted(scratch.sweep(str(tmp_path))["deleted"]) == sorted(names)
