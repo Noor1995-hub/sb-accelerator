@@ -68,7 +68,7 @@ but the owner sees their content.
 | 0 | Preflight | 0 | Nothing visible: `config read`, `migrate status`, as today. |
 | 1 | Welcome and connect | ~3 min | One plain sentence on what happens next. They pick what to connect (Microsoft 365, Plaud). "Is this your account?" Then, **before anything is read**: "Does your company have rules about where information like this may be kept?" Then one consent line naming what will be read, that Claude reads it in this session, and that nothing is kept except what they approve. |
 | 2 | Read 1 | ~45 s | "Reading your profile and calendar…" then "done". |
-| 3 | About you | ~5 min | Proposals: name, role, company, language, location, time zone, working day. Open questions asked here: what people call you, a short background line. |
+| 3 | About you | ~5 min | Proposals: name, role, language, working day. Open questions asked here: which company (proposed from the mail domain when one is obvious), where they are based (the time zone is then suggested from the answer and confirmed as a choice), what people call you, a short background line. The profile carries no location, so location is never proposed. |
 | 4 | Read 2 | ~1.5–2 min | "Reading your last four weeks of mail and chats…" then "done". |
 | 5 | Proposals, rest | ~12 min | In order: your organisations, your work (standing responsibilities, things in flight, forums, direct reports), your people, how you write, your systems. Open questions where they fit: metrics you are judged on, how direct pushback should be, what must never leave the vault, what lands on your desk that is not yours. |
 | 6 | First daily note | ~4 min | `/evening-sync` writes tomorrow's note; it is opened on screen. Unchanged. |
@@ -103,8 +103,8 @@ Every source has a named destination. Anything without one is not fetched.
 
 | Source (M365 tool) | Read | Not read | Feeds |
 |---|---|---|---|
-| Profile (`get_me`) | display name, job title, department, office location, `mail`, `userPrincipalName` | anything else | About you, time zone, the owner's person note, `home_domains` |
-| Calendar (`outlook_calendar_search`), 4 weeks back, 2 forward | subject, start, end, organizer, attendees, recurrence, `isOnlineMeeting` | invite bodies (`read_resource` on events) | working day, forums, projects, people, organisations, evening-run time, systems |
+| Profile (`get_me`) | `displayName`, `jobTitle`, `mail`, `userPrincipalName`; `department` and `officeLocation` only if the tenant returns them (verified 2026-09-23: the connector returns the first four only, and `jobTitle` may be null) | anything else | About you, the owner's own addresses |
+| Calendar (`outlook_calendar_search`), 4 weeks back, 2 forward | subject, start, end, organizer, attendees, `isAllDay`, `isCancelled`, `showAs` | invite bodies: the listing carries a `summary` excerpt, which `discover build` discards; `read_resource` on events is never called | working day, forums, projects, people, organisations, evening-run time |
 | Mail, `Inbox` and `Sent Items` (`outlook_email_search`), 4 weeks | subject, sender, recipients, received time, the ~250-character `summary` | full mails, attachments, other folders | organisations, projects, people, language, systems |
 | Teams chat list (`teams_list_chats`) | chat type, topic, members | message text, channel messages | people, projects, organisations |
 | Sent-mail sample (`outlook_email_search`, `Sent Items`) | subject and `summary` of the ~20 newest | full mails | how you write, language |
@@ -121,6 +121,39 @@ content, anything older than 4 weeks, anyone else's mailbox or calendar.
 
 All names match the existing `scratch sweep` patterns (`m365_*.json`,
 `*.payload.json`), so the sweep needs no change.
+
+**Trimmed rows, not raw pages.** A worker can only put connector data on disk
+by writing it out itself, token by token. Copying raw pages would mean
+re-emitting everything, including invite excerpts, mail summaries and
+40-address attendee lists: about 250 KB for one consultant's four weeks,
+far too slow for a live session. So each payload file holds **one JSON
+object per line, with the connector's own field names, only the fields listed
+below, values copied verbatim**:
+
+| File | Keys kept |
+|---|---|
+| `m365_profile.payload.json` | `displayName`, `jobTitle`, `department`, `officeLocation`, `mail`, `userPrincipalName` (those returned) |
+| `m365_calendar.payload.json` | `subject`, `start`, `end`, `organizer`, `attendees` (only when 15 or fewer; otherwise `attendeeCount`), `isAllDay`, `isCancelled`, `showAs` |
+| `m365_sentsample.payload.json` | `subject`, `summary` |
+| `m365_inbox.payload.json` | `subject`, `sender` |
+| `m365_sent.payload.json` | `subject`, `recipients` (only when 15 or fewer; otherwise `recipientCount`) |
+| `m365_chats.payload.json` | `chatType`, `topic`, `memberCount`, `members` (`displayName`, `email`; only when `memberCount` is 15 or fewer) |
+
+When a worker stops at its page cap while the connector still reported more,
+it appends one line `{"moreResults": true}` so the build can record the cap.
+
+This is also data minimisation: fields the second brain does not use never
+leave the tool result. **It moves one trust point.** The evidence is now what
+the worker transcribed, not the raw payload. The worker is told to copy
+verbatim and never to add a row, and its reported row counts are compared
+with the build's; a mismatch is surfaced, not ignored. That is a strong
+guard, not a proof. §7's check guarantees that proposals are faithful to the
+evidence; the evidence being faithful to Microsoft 365 rests on the worker.
+
+**Read 2 runs as three workers dispatched in one message** (inbox, sent, chat
+list), each writing its own file. If the surface runs parallel tool calls
+concurrently, read 2 takes as long as the inbox alone; if not, the total is
+the same as one worker. Nothing depends on which.
 
 **Raw payloads are consumed by the build, not by the sweep.** The sweep takes
 everything matching its patterns, which would include the evidence file still
@@ -161,8 +194,15 @@ directory, and the window from `dates window`. It:
   mail is always searched one folder at a time (an unscoped search degrades
   sender and nulls recipients), `summary` is used and individual mails are
   never read, chats come from `teams_list_chats` and not the message feed;
-- writes each source's raw result to its payload file with the Write tool;
-- reports back only counts per source, caps hit and errors, never content.
+- writes each source's trimmed rows to its payload file with the Write tool,
+  once per source after paging ends;
+- reports back only row counts per source, caps hit and errors, never
+  content.
+
+The worker follows a contract file,
+`plugin/skills/setup-my-brain/references/discovery-contract.md`, the same
+split as the sync workers: a thin agent definition, the mechanics in a
+reference the tests can pin.
 
 The worker keeps raw mail and chat content out of the main conversation. The
 main session only ever sees the evidence list.
@@ -192,11 +232,10 @@ Entry kinds, each with deterministic rules:
 | Kind | Built from | Rule |
 |---|---|---|
 | `profile` | profile | one entry per non-empty field in §5.1 |
-| `working-day` | calendar | median first start and last end on weekdays, local time via the `m365 agenda` conversion |
-| `recurring-meeting` | calendar | same normalised subject, ≥3 occurrences in the window |
-| `meeting-subject` | calendar | normalised subject, count, attendee domains |
-| `domain` | calendar, mail, chats | an address domain outside `home_domains`, with counts per source; ranked by total |
-| `person` | calendar, mail, chats | a display name plus address, counts per source; ranked by total |
+| `working-day` | calendar | median first start and last end on weekdays with at least one busy or tentative, non-all-day event; local time via `dates.utc_to_local`; needs ≥3 such days |
+| `recurring-meeting` | calendar | same normalised subject, ≥3 non-all-day occurrences in the window |
+| `domain` | calendar, mail, chats | an address domain outside `home_domains` and the owner's own domains, with counts per source; ranked by total |
+| `person` | calendar, mail, chats | an address plus counts per source, ranked by total. The name comes from a chat member's `displayName` when one was seen; otherwise it is derived from a `first.last@` address and marked `name_source: address`; otherwise the address itself is shown. Calendar attendees are bare addresses (verified 2026-09-23). |
 | `mail-subject` | mail | subject with `Re:`/`FW:` stripped, thread count, domains |
 | `chat` | chat list | type, topic, member count |
 | `system-sender` | mail | a sender that looks like a notification system (e.g. `azuredevops@…`, `…@salesforce.com`), count |
@@ -205,7 +244,15 @@ Entry kinds, each with deterministic rules:
 
 Noise dropped before counting: meeting responses (`Accepted:`, `Declined:`,
 `Tentative`), `Automatic reply:`, `Following:`, bot senders
-(`@teams.microsoft.com`), and the owner's own address as a person.
+(`@teams.microsoft.com`), and the owner's own address as a person. Broadcast
+items, meaning calendar events or chats with more than 15 attendees or
+members (all-hands, facility notices, distribution lists), do not count
+towards people or organisations.
+
+The query window comes from a new `discover window` command, not from `dates
+window`: on a fresh vault `sync.start-date` is setup day, and `dates window
+--vault` would clamp a four-week look-back to nothing. Discovery is not a sync
+(it creates no meetings), so the start-date floor does not apply to it.
 
 Owner answers are evidence too. `discover answer --text "<verbatim>"
 --question "<question>"` appends an entry `{"id": "A3", "kind": "owner-said",
@@ -256,10 +303,15 @@ For a **claim**:
 If a topic has nothing left after the check, that topic falls back to its
 interview questions.
 
-The final context block goes through the same check (`discover check --block
-<file>`, citing the union of the accepted items' evidence and all owner
-answers) before it is read back, so nothing can be slipped into the final
-prose between approval and writing.
+The final context block goes through the same token rule (`discover check
+--block <file>`) against the whole evidence list and every owner answer before
+it is read back, so nothing can be slipped into the final prose between
+approval and writing. When the owner changes a proposal, their wording is
+recorded with `discover answer` first, so their own words always pass.
+
+The first word of a sentence or bullet is not checked on its own (it is
+capitalised for grammar, not because it is a name); a capitalised run of two
+or more words is still checked from its second word.
 
 ### 7.3 What the check cannot prove
 
@@ -273,8 +325,9 @@ without a quoted phrase. These are never stated as facts:
   (`area-of-responsibility`, `initiative`), time zone. Shown as a question with
   a suggested default, e.g. "Looks like something with an end date, is that
   right?"
-- Lowercase names would escape the proper-noun rule. This is the check's known
-  gap; picks close it for every list, and read-back closes it for prose.
+- Lowercase names, and a single-word name that opens a sentence, would escape
+  the proper-noun rule. This is the check's known gap; picks close it for
+  every list, and read-back closes it for prose.
 
 ## 8. What the owner sees
 
@@ -344,9 +397,10 @@ question is asked, which is today's interview.
 
 | Unit | Kind | Does | Depends on |
 |---|---|---|---|
-| `plugin/lib/vaultlib/discover.py` | new module | `build` (with merge and `--consume`), `answer`, `check`; entry rules, caps, noise filters, token extraction | `m365.py` time conversion |
-| `plugin/lib/vaultlib/cli.py` | changed | adds `discover build`, `discover answer`, `discover check` with the usual JSON envelope | `discover.py` |
-| `plugin/agents/setup-discovery-worker.md` | new agent | fetches one read's sources into payload files, reports counts only | M365 connector tools, Write |
+| `plugin/lib/vaultlib/discover.py` | new module | `window`, `build` (with merge and `--consume`), `answer`, `check`; entry rules, caps, noise filters, token extraction | `dates.py`, `m365.load_listing`, `config.m365_home_domains` |
+| `plugin/lib/vaultlib/cli.py` | changed | adds `discover window`, `discover build`, `discover answer`, `discover check` with the usual JSON envelope | `discover.py` |
+| `plugin/agents/setup-discovery-worker.md` | new agent | fetches the sources its briefing names into trimmed payload files, reports counts only | M365 connector tools, Write |
+| `plugin/skills/setup-my-brain/references/discovery-contract.md` | new reference | the worker's calls, paging, caps, kept keys and outcome line | |
 | `plugin/skills/setup-my-brain/SKILL.md` | rewritten | the flow in §4 | all of the above, existing CLI writes |
 | `plugin/.claude-plugin/plugin.json` | changed | version bump | |
 | `CHANGELOG.md` | changed | one client-facing line under `Unreleased` | |
@@ -396,9 +450,15 @@ Cowork result is why the reads are sequential (decision 7).
 
 - **Executive volume is unmeasured.** The caps in §5.3 come from a
   consultant's account; tune them after the first real run.
-- **`teams_list_chats` ordering.** The colleague reports it is ordered by real
-  last-message time while `lastUpdatedDateTime` is stale. Verify during
-  implementation; the design relies on the order, not the field.
+- **Read 2's duration is the biggest risk to the 30-minute target.** About
+  80 KB of trimmed rows for one consultant's four weeks is roughly 20k output
+  tokens across the three workers. Measure it in the scratch-vault run
+  (§12.4); if it is too slow, lower the Inbox cap first, since it is the
+  largest source.
+- **`teams_list_chats` ordering** is resolved: the tool's own description says
+  results are ordered by most recent message first, and that
+  `lastUpdatedDateTime` is rename or membership time, not activity. The chat
+  list therefore cannot be cut at exactly four weeks; the page cap bounds it.
 - **Language detection** in `discover build` must stay deterministic; a small
   stop-word heuristic for Dutch, French and English is enough for a proposal
   the owner confirms.
