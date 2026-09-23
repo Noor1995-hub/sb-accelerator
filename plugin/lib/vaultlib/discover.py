@@ -588,11 +588,20 @@ def build(scratch_dir: str, *, read: int, home_domains: Optional[List[str]] = No
 _EMAIL_TOKEN_RE = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
 _DOMAIN_TOKEN_RE = re.compile(
     r"(?<![\w@.-])[a-z0-9][a-z0-9-]*(?:\.[a-z0-9-]+)*\.[a-z]{2,}(?![\w-])", re.IGNORECASE)
-_NUMBER_RE = re.compile(r"(?<![\w.,:])\d+(?:[.,:]\d+)*(?!\w)")
-_QUOTED_RE = re.compile(r"[\"""]([^\"""\n]{2,}?)[\"""]")
-_SEGMENT_RE = re.compile(r"\n+|(?<=[.!?;:])\s+|\s+[—–]\s+|\s*\|\s*")
+_NUMBER_RE = re.compile(r"(?<![\w.,:])\d+(?:[.,:]\d+)*")
+_NUMBER_WORDS = ("two", "three", "four", "five", "six", "seven", "eight", "nine",
+                 "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen",
+                 "sixteen", "seventeen", "eighteen", "nineteen", "twenty", "thirty",
+                 "forty", "fifty", "hundred", "thousand", "million", "dozen")
+_NUMBER_WORD_RE = re.compile(r"\b(?:" + "|".join(_NUMBER_WORDS) + r")\b", re.IGNORECASE)
+_QUOTED_RE = re.compile(
+    "[“”]([^“”\n]{2,}?)[“”]"
+    "|(?:^|(?<=[\\s(]))[‘’]([^‘’\n]{2,}?)[‘’](?=[\\s.,;:!?)]|$)",
+    re.MULTILINE)
+_SEGMENT_RE = re.compile(r"\n+|(?<=[.!?])\s+")
 _LIST_MARK_RE = re.compile(r"\A\s*(?:[#>*+-]+|\d+[.)])\s+")
-_TOKEN_WORD_RE = re.compile(r"[^\W\d_][\w''&-]*")
+_TOKEN_WORD_RE = re.compile("[^\\W\\d_][\\w‘’&-]*")
+_POSSESSIVE_RE = re.compile("[‘’]s\\Z")
 # Capitalised for reasons other than being a name the evidence must hold.
 _CAP_STOP = frozenset({
     "I", "I'm", "I've", "I'd", "I'll", "OK", "Ok", "AI",
@@ -639,7 +648,7 @@ def answer(scratch_dir: str, *, question: str, text: str) -> dict:
 
 
 def _norm(text: str) -> str:
-    for curly, plain in ((""", '"'), (""", '"'), ("'", "'"), ("'", "'")):
+    for curly, plain in (("“", '"'), ("”", '"'), ("‘", "'"), ("’", "'")):
         text = text.replace(curly, plain)
     return re.sub(r"\s+", " ", text).casefold()
 
@@ -651,7 +660,7 @@ def _haystack(entries: List[dict]) -> str:
     for entry in entries:
         parts.append(str(entry.get("text", "")))
         parts.extend(str(value) for value in (entry.get("facts") or {}).values())
-    return _norm(" \n ".join(parts))
+    return _norm(" \x00 ".join(parts))
 
 
 def _close_run(run: List[str], opens_segment: bool, phrases: List[str]) -> None:
@@ -663,7 +672,9 @@ def _close_run(run: List[str], opens_segment: bool, phrases: List[str]) -> None:
 def _proper_nouns(text: str) -> List[str]:
     """Runs of adjacent capitalised words. A segment's first word is
     capitalised for grammar, so it is dropped from the run it opens; a longer
-    run is still checked from its second word (spec §7.2)."""
+    run is still checked from its second word (spec §7.2). Segments are
+    sentences and lines only: a clause after a colon, semicolon, dash or
+    table pipe is checked from its first word."""
     phrases: List[str] = []
     for segment in _SEGMENT_RE.split(text):
         segment = _LIST_MARK_RE.sub("", segment)
@@ -692,9 +703,10 @@ def _tokens(text: str) -> List[str]:
     rest = _EMAIL_TOKEN_RE.sub(" ", text)
     domains = _DOMAIN_TOKEN_RE.findall(rest)
     rest = _DOMAIN_TOKEN_RE.sub(" ", rest)
-    quoted = [match.group(1).strip() for match in _QUOTED_RE.finditer(text)]
-    numbers = _NUMBER_RE.findall(rest)
-    names = _proper_nouns(rest)
+    quoted = [(match.group(1) or match.group(2)).strip()
+              for match in _QUOTED_RE.finditer(text)]
+    numbers = _NUMBER_RE.findall(rest) + _NUMBER_WORD_RE.findall(rest)
+    names = [_POSSESSIVE_RE.sub("", name) for name in _proper_nouns(rest)]
     seen, out = set(), []
     for token in emails + domains + quoted + numbers + names:
         key = _norm(token).strip()

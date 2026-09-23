@@ -506,3 +506,57 @@ def test_a_single_name_opening_a_sentence_is_the_known_gap(scratch):
     # closed and the spec should say so.
     block = write_block(scratch, "Tom leads the Weekly exco.\n")
     assert discover.check_block(str(scratch), block)["ok"] is True
+
+
+def test_a_curly_quoted_lowercase_title_is_dropped(scratch):
+    result = propose(scratch, "work", claim("You also attend “budget review”.", "E2"))
+    assert result["passed"] == []
+    assert "'budget review' is not in the cited evidence" in result["dropped"][0]["reasons"]
+
+
+def test_a_single_quoted_title_is_dropped_but_an_apostrophe_is_not_a_quote(scratch):
+    assert propose(scratch, "work", claim("You also attend ‘budget review’.", "E2"))["passed"] == []
+    assert propose(scratch, "work",
+                   claim("You’re in the ‘Weekly exco’.", "E2"))["counts"]["passed"] == 1
+
+
+@pytest.mark.parametrize("tail", ["meets at 8am", "meets 12x a quarter",
+                                  "is on the 12th floor", "has a 15k budget",
+                                  "meets twelve times"])
+def test_suffixed_and_spelled_out_numbers_are_dropped(scratch, tail):
+    assert propose(scratch, "work", claim(f"Weekly exco {tail}.", "E2"))["passed"] == []
+
+
+def test_the_invented_number_is_named_in_the_reason(scratch):
+    result = propose(scratch, "work", claim("Weekly exco meets 12 times.", "E2"))
+    assert "'12' is not in the cited evidence" in result["dropped"][0]["reasons"]
+
+
+@pytest.mark.parametrize("text", ["You chair the Weekly exco; Tom runs the agenda.",
+                                  "You chair the Weekly exco — Tom runs the agenda.",
+                                  "Your deputy: Tom."])
+def test_a_name_after_a_semicolon_dash_or_colon_is_checked(scratch, text):
+    assert propose(scratch, "work", claim(text, "E2"))["passed"] == []
+
+
+@pytest.mark.parametrize("line", ["- Manager: Tom\n", "| Chair | Tom |\n"])
+def test_a_name_in_a_label_value_line_or_table_cell_is_checked(scratch, line):
+    assert discover.check_block(str(scratch), write_block(scratch, line)) == {
+        "ok": False, "unsupported": ["Tom"]}
+
+
+def test_a_possessive_does_not_drop_a_supported_name(scratch):
+    result = propose(scratch, "people",
+                     claim("You work closely with Priya Nathan’s team.", "E4"))
+    assert result["counts"]["passed"] == 1
+
+
+def test_an_invented_email_is_dropped(scratch):
+    assert propose(scratch, "people",
+                   claim("You write to lee@fabrikam.example.", "E4"))["passed"] == []
+
+
+def test_a_block_may_quote_the_owners_own_answer(scratch):
+    discover.answer(str(scratch), question="Other roles?", text="Board chair of Fabrikam")
+    block = write_block(scratch, "- Board chair of Fabrikam\n")
+    assert discover.check_block(str(scratch), block)["ok"] is True
