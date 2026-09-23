@@ -52,8 +52,8 @@ clients:
     and keeps its name
 - client: la-lorraine
   owner: MB
-  plugin_version: 0.10.32
-  structure_version: '2'
+  plugin_version: 0.11.9
+  structure_version: '3'
   archetype: commercial-leader
   care_package: none
   audience: client
