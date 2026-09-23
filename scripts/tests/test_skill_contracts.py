@@ -1931,3 +1931,6 @@ def test_discovery_contract_pins_the_privacy_rules():
             assert name in contract, f"the contract must name {name}"
     for source, cap in discover.PAGE_CAPS.items():
         assert f"page_caps.{source}" in contract or source == "sentsample"
+    assert discover.BROADCAST_LIMIT == 15 and "more than 15" in contract, (
+        "the contract states the broadcast threshold; keep it equal to "
+        "discover.BROADCAST_LIMIT")

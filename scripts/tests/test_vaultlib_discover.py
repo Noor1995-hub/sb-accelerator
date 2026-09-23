@@ -238,11 +238,24 @@ def test_a_profile_only_mailbox_builds_without_failing(tmp_path):
     assert result["sources"]["calendar"] == {"present": False, "items": 0, "capped": False}
 
 
-def test_a_non_utc_calendar_row_fails_naming_the_file(tmp_path):
+def test_a_non_utc_calendar_is_recorded_and_the_other_sources_still_build(tmp_path):
+    scratch = read1_scratch(tmp_path)
+    rows = [event("Weekly exco", 14, attendees=[SAM]), event("Weekly exco", 21, attendees=[SAM])]
+    rows[1]["start"]["timeZone"] = "Romance Standard Time"
+    write_rows(scratch / "m365_calendar.payload.json", rows)
+    result = build1(scratch, consume=True)
+    calendar = result["sources"]["calendar"]
+    assert calendar["error"].startswith("m365_calendar.payload.json: ")
+    assert calendar["items"] == 2
+    assert "recurring-meeting" not in result["by_kind"]
+    assert "person" not in result["by_kind"], "no half-counted rows from the failed source"
+    assert {"profile", "language", "sent-mail"} <= set(result["by_kind"])
+    assert "m365_calendar.payload.json" in result["consumed"]
+
+
+def test_a_payload_that_is_not_json_still_fails_the_build(tmp_path):
     write_rows(tmp_path / "m365_profile.payload.json", [OWNER])
-    row = event("Weekly exco", 14)
-    row["start"]["timeZone"] = "Romance Standard Time"
-    write_rows(tmp_path / "m365_calendar.payload.json", [row])
+    (tmp_path / "m365_calendar.payload.json").write_text('{"subject": \n', encoding="utf-8")
     with pytest.raises(discover.DiscoverError, match="m365_calendar.payload.json"):
         build1(tmp_path)
 

@@ -48,10 +48,10 @@ these keys:
 | Source | File | Keys |
 |---|---|---|
 | `profile` | `m365_profile.payload.json` | `displayName`, `jobTitle`, `department`, `officeLocation`, `mail`, `userPrincipalName` — those present |
-| `calendar` | `m365_calendar.payload.json` | `subject`, `start`, `end`, `organizer`, `attendees`, `isAllDay`, `isCancelled`, `showAs` |
+| `calendar` | `m365_calendar.payload.json` | `subject`, `start`, `end`, `organizer`, `attendees` (only when 15 or fewer; otherwise `attendeeCount`), `isAllDay`, `isCancelled`, `showAs` |
 | `sentsample` | `m365_sentsample.payload.json` | `subject`, `summary` |
 | `inbox` | `m365_inbox.payload.json` | `subject`, `sender` |
-| `sent` | `m365_sent.payload.json` | `subject`, `recipients` |
+| `sent` | `m365_sent.payload.json` | `subject`, `recipients` (only when 15 or fewer; otherwise `recipientCount`) |
 | `chats` | `m365_chats.payload.json` | `chatType`, `topic`, `memberCount`, `members` (each `displayName`, `email`) |
 
 - Values exactly as the tool returned them: same spelling, same case, and

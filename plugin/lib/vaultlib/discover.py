@@ -9,6 +9,7 @@ Stdlib only, Python 3.10 floor: this runs inside the Cowork Linux VM.
 """
 from __future__ import annotations
 
+import copy
 import json
 import re
 from datetime import datetime, time, timedelta, timezone as _timezone
@@ -531,7 +532,9 @@ def build(scratch_dir: str, *, read: int, home_domains: Optional[List[str]] = No
     Read 1 starts a fresh evidence file; read 2 merges into it (stable ids,
     per-source counts added). With `consume`, exactly the payload files this
     call read are deleted once the evidence is written — the only deletion
-    here, so raw rows never outlive their use."""
+    here, so raw rows never outlive their use. A source whose rows the
+    connector shaped unexpectedly is recorded with an `error` and skipped;
+    the other sources still build."""
     root = _scratch(scratch_dir)
     if read not in READ_FILES:
         raise DiscoverError(f"--read {read!r} must be 1 or 2")
@@ -558,11 +561,20 @@ def build(scratch_dir: str, *, read: int, home_domains: Optional[List[str]] = No
             stats["sources"][source] = {"present": False, "items": 0, "capped": False}
             continue
         rows, capped = _read_items(path)
+        trial = copy.deepcopy(stats)
         try:
-            _INGEST[source](stats, rows, home, timezone, utc_offset)
+            _INGEST[source](trial, rows, home, timezone, utc_offset)
         except m365.M365Error as exc:
-            raise DiscoverError(f"{name}: {exc}") from exc
-        stats["sources"][source] = {"present": True, "items": len(rows), "capped": capped}
+            # One source's data the connector shaped unexpectedly (e.g. a
+            # non-UTC calendar) must not cost the other sources their
+            # evidence: record it, keep nothing half-counted, carry on.
+            stats["sources"][source] = {"present": True, "items": len(rows),
+                                        "capped": capped, "error": f"{name}: {exc}"}
+        else:
+            stats.clear()
+            stats.update(trial)
+            stats["sources"][source] = {"present": True, "items": len(rows),
+                                        "capped": capped}
         consumed.append(path)
     entries = _entries(stats)
     _assign_ids(entries, evidence["ids"])
