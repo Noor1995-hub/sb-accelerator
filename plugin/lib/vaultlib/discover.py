@@ -322,10 +322,83 @@ def _ingest_sentsample(stats, rows, home, timezone, utc_offset) -> None:
         _count_language(stats, summary)
 
 
+def _ingest_mail(stats, rows, home, direction: str) -> None:
+    for mail in rows:
+        subject = _subject(mail.get("subject"))
+        if _is_noise_subject(subject):
+            continue
+        if direction == "inbox":
+            sender = _address(mail.get("sender") or mail.get("from"))
+            if sender and _is_system(sender):
+                senders = stats["system_senders"]
+                senders[sender] = senders.get(sender, 0) + 1
+                continue
+            listed = [sender] if sender else []
+            size = len(listed)
+        else:
+            listed = [address for address in map(_address, mail.get("recipients") or [])
+                      if address]
+            size = mail.get("recipientCount")
+            if not isinstance(size, int):
+                size = len(listed)
+        parties = sorted({address for address in listed if _countable(address, stats)})
+        if size > BROADCAST_LIMIT:
+            parties = []
+        _count_parties(stats, parties, "mail", home)
+        if subject:
+            external = sorted({_domain(address) for address in parties} - home)
+            row = stats["mail_subjects"].setdefault(
+                subject.casefold(), {"subject": subject, "count": 0, "domains": []})
+            row["count"] += 1
+            row["domains"] = sorted(set(row["domains"]) | set(external))
+
+
+def _ingest_inbox(stats, rows, home, timezone, utc_offset) -> None:
+    _ingest_mail(stats, rows, home, "inbox")
+
+
+def _ingest_sent(stats, rows, home, timezone, utc_offset) -> None:
+    _ingest_mail(stats, rows, home, "sent")
+
+
+def _ingest_chats(stats, rows, home, timezone, utc_offset) -> None:
+    """The chat list, never message text: type, topic and members. Names
+    are taken from every chat that lists members; only chats at or under the
+    broadcast limit count towards people and organisations."""
+    seen = {(chat["type"], chat["topic"].casefold()) for chat in stats["chats"]}
+    for chat in rows:
+        members = []
+        for member in chat.get("members") or []:
+            address = _address(member)
+            if not address:
+                continue
+            name = member.get("displayName") if isinstance(member, dict) else None
+            if (isinstance(name, str) and name.strip()
+                    and address not in stats["owner_addresses"]):
+                stats["names"][address] = name.strip()
+            members.append(address)
+        size = chat.get("memberCount")
+        if not isinstance(size, int):
+            size = len(set(members))
+        chat_type = str(chat.get("chatType") or "")
+        topic = re.sub(r"\s+", " ", str(chat.get("topic") or "")).strip()
+        if (topic and chat_type in ("group", "meeting")
+                and (chat_type, topic.casefold()) not in seen):
+            seen.add((chat_type, topic.casefold()))
+            stats["chats"].append({"type": chat_type, "topic": topic, "members": size})
+        if size > BROADCAST_LIMIT:
+            continue
+        parties = sorted({address for address in members if _countable(address, stats)})
+        _count_parties(stats, parties, "chat", home)
+
+
 _INGEST = {
     "profile": _ingest_profile,
     "calendar": _ingest_calendar,
     "sentsample": _ingest_sentsample,
+    "inbox": _ingest_inbox,
+    "sent": _ingest_sent,
+    "chats": _ingest_chats,
 }
 
 

@@ -265,3 +265,104 @@ def test_every_discovery_file_name_is_swept(tmp_path):
     for name in names:
         (tmp_path / name).write_text("x", encoding="utf-8")
     assert sorted(scratch.sweep(str(tmp_path))["deleted"]) == sorted(names)
+
+
+def read2_files(scratch):
+    write_rows(scratch / "m365_inbox.payload.json", [
+        {"subject": "Budget 2027", "sender": "Priya.Nathan@Contoso.example"},
+        {"subject": "RE: Budget 2027", "sender": PRIYA},
+        {"subject": "Work item 4411 assigned", "sender": "azuredevops@microsoft.com"},
+        {"subject": "Automatic reply: away", "sender": "lee@fabrikam.example"},
+    ], more=True)
+    write_rows(scratch / "m365_sent.payload.json", [
+        {"subject": "Budget 2027", "recipients": [PRIYA, SAM]},
+        {"subject": "Town hall", "recipientCount": 40},
+    ])
+    write_rows(scratch / "m365_chats.payload.json", [
+        {"chatType": "group", "topic": "Yard automation", "memberCount": 3,
+         "members": [{"displayName": "Morgan Ellery", "email": OWNER["mail"]},
+                     {"displayName": "Priya Nathan-Shah", "email": PRIYA},
+                     {"displayName": "Sam Okafor", "email": SAM}]},
+        {"chatType": "group", "topic": "Commercial leadership", "memberCount": 25},
+        {"chatType": "oneOnOne", "topic": None, "memberCount": 2,
+         "members": [{"displayName": "Morgan Ellery", "email": OWNER["mail"]},
+                     {"displayName": "Lee Wong", "email": "lee@fabrikam.example"}]},
+    ])
+    return scratch
+
+
+def build_both(tmp_path):
+    scratch = read1_scratch(tmp_path)
+    first = build1(scratch, consume=True)
+    read2_files(scratch)
+    second = discover.build(str(scratch), read=2, home_domains=["northwind.example"],
+                            consume=True)
+    return first, second
+
+
+def by_label(result, kind):
+    return {entry["label"]: entry for entry in entries_of(result, kind)}
+
+
+def test_read2_merges_counts_and_keeps_ids_stable(tmp_path):
+    first, second = build_both(tmp_path)
+    before = {entry["text"].split(" (")[0]: entry["id"]
+              for entry in entries_of(first, "person")}
+    after = by_label(second, "person")
+    assert after["Priya Nathan-Shah"]["id"] == before["Priya Nathan"]
+    assert after["Priya Nathan-Shah"]["detail"] == "2 meetings, 3 mails, 1 chat"
+    assert after["Sam Okafor"]["detail"] == "4 meetings, 1 mail, 1 chat"
+
+
+def test_read2_chat_names_override_address_derived_ones(tmp_path):
+    _, second = build_both(tmp_path)
+    assert "Priya Nathan-Shah" in by_label(second, "person")
+    assert "Priya Nathan" not in by_label(second, "person")
+
+
+def test_read2_counts_one_person_across_letter_case(tmp_path):
+    _, second = build_both(tmp_path)
+    addresses = [entry["text"] for entry in entries_of(second, "person")
+                 if "contoso" in entry["text"]]
+    assert len(addresses) == 1
+
+
+def test_read2_domains_count_items_not_heads(tmp_path):
+    _, second = build_both(tmp_path)
+    assert by_label(second, "domain")["contoso.example"]["detail"] == (
+        "2 meetings, 3 mails, 1 chat")
+    assert "fabrikam.example" not in by_label(second, "domain")
+
+
+def test_read2_system_senders_are_not_people(tmp_path):
+    _, second = build_both(tmp_path)
+    [sender] = entries_of(second, "system-sender")
+    assert sender["text"] == "Notifications from azuredevops@microsoft.com: 1 mail"
+    assert all("azuredevops" not in entry["text"] for entry in entries_of(second, "person"))
+
+
+def test_read2_mail_threads_group_reply_prefixes(tmp_path):
+    _, second = build_both(tmp_path)
+    [thread] = entries_of(second, "mail-subject")
+    assert thread["text"] == 'Mail thread "Budget 2027": 3 mails, with contoso.example'
+
+
+def test_read2_chat_topics_include_large_chats_but_not_their_members(tmp_path):
+    _, second = build_both(tmp_path)
+    assert [entry["label"] for entry in entries_of(second, "chat")] == [
+        "Yard automation", "Commercial leadership"]
+    assert by_label(second, "chat")["Yard automation"]["text"] == (
+        'Teams group chat "Yard automation" (3 members)')
+
+
+def test_read2_records_the_inbox_cap(tmp_path):
+    _, second = build_both(tmp_path)
+    assert second["sources"]["inbox"] == {"present": True, "items": 4, "capped": True}
+    assert second["sources"]["sent"]["capped"] is False
+
+
+def test_read2_twice_is_refused(tmp_path):
+    build_both(tmp_path)
+    read2_files(tmp_path)
+    with pytest.raises(discover.DiscoverError, match="already"):
+        discover.build(str(tmp_path), read=2)
