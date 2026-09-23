@@ -256,27 +256,26 @@ jobs:
           # quieter review, not a failed one. When adding a command here,
           # allow the variants too.
           #
-          # `--model` is a COST fix, and it is the model the plugin was
-          # written for -- not a downgrade. The plugin's own command file
-          # pins a model per step: steps 1, 2, 3, 5 and 7 say "use a Haiku
-          # agent", and step 4 -- the five parallel reviewers that do the
-          # actual reading -- says "launch 5 parallel Sonnet agents".
-          # Nothing in it asks for Opus.
+          # `--model` pins the ORCHESTRATOR to Opus 5.5 (2026-09-23) -- a
+          # quality call that deliberately reverses the 2026-09-03 cost pin
+          # to `claude-sonnet-5` (#156). The orchestrator reads the diff,
+          # decides what to hand the reviewers and validates their findings;
+          # Sonnet was judged too weak for that. It is pinned rather than
+          # left unset so the model moves when we merge, not when the Claude
+          # Code build that `@v1` installs changes its default (on 2026-09-23
+          # that default was still `claude-opus-5[1m]`).
           #
-          # Without `--model` the action defaults to Opus and the Task
-          # subagents inherit it, so those pins are largely not honoured.
-          # Measured over the 85 billed runs from 2026-08-22 to 2026-09-03 by
-          # reading `total_cost_usd` out of each run log: $371.00 total, mean
-          # $4.36, median $3.49, max $11.88, with roughly 85% of spend on
-          # Opus, 13% Sonnet, 2% Haiku -- the inverse of the design.
-          #
-          # What the pin actually bought, on the first run after merge
-          # (#157): $2.84 over 11.8 min with one valid finding delivered.
-          # Cheaper, but well short of the 2.5x the per-token prices imply
-          # (Opus 5 $5/$25 per MTok against Sonnet 5's $2/$10), because much
-          # of a run's bill is the orchestrator's own turns and the Haiku
-          # steps rather than the five reviewers. Read `total_cost_usd`
-          # across several runs before quoting a monthly figure.
+          # Expect cost to go back UP. The plugin's command file asks for
+          # Haiku in steps 1, 2, 3, 5 and 7 and Sonnet for the five step-4
+          # reviewers, but those are prose instructions: `Task` subagents
+          # inherit the session model unless the orchestrator passes an
+          # override, which it measurably mostly does not. The last time
+          # the session ran on Opus (85 billed runs, 2026-08-22 to
+          # 2026-09-03): $371.00 total, median $3.49, max $11.88, ~85% of
+          # spend on Opus. Under the Sonnet pin the six runs up to
+          # 2026-09-21 had a ~$1.61 median ($0.63-$4.24). Read
+          # `total_cost_usd` across several runs before quoting an Opus 5.5
+          # figure (docs/superpowers/lessons.md, 2026-09-03 and 2026-09-23).
           #
           # This pin CANNOT be verified from the PR that introduces it: the
           # action's workflow-validation guard (see the delivery assertion
@@ -292,7 +291,7 @@ jobs:
           # non-delivery into a visible red X instead of a green check with
           # nothing posted.
           claude_args: |
-            --model claude-sonnet-5
+            --model claude-opus-5-5
             --allowedTools "Task,Read,Glob,Grep,mcp__github_inline_comment__create_inline_comment,Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr list:*),Bash(gh pr comment:*),Bash(gh issue view:*),Bash(gh issue list:*),Bash(gh search:*),Bash(gh api:*),Bash(git log:*),Bash(git blame:*),Bash(git show:*),Bash(git --no-pager show:*),Bash(git diff:*),Bash(git fetch:*),Bash(python -m pytest:*),Bash(python3 -m pytest:*),Bash(python scripts/lint_plugin.py:*),Bash(python3 scripts/lint_plugin.py:*),Bash(python scripts/validate_template.py:*),Bash(python3 scripts/validate_template.py:*)"
           # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
           # or https://code.claude.com/docs/en/cli-reference for available options
