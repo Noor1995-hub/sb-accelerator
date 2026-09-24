@@ -1965,7 +1965,7 @@ def test_setup_my_brain_dispatches_the_worker_and_consumes_raw_reads():
     assert "setup-discovery-worker" in text
     assert "references/discovery-contract.md" in text
     builds = [line for line in text.splitlines() if "discover build --vault" in line]
-    assert len(builds) == 2, "one build per read"
+    assert len(builds) == 1, "one build for the one read"
     assert all("--consume" in line and "--expect" in line for line in builds), (
         "both reads delete their raw rows and enforce the worker's counts")
 
@@ -1975,3 +1975,33 @@ def test_setup_my_brain_is_written_for_the_owner_alone():
     assert "on their own" in text
     assert "consultant's own record" not in text, (
         "there is no consultant in the room any more")
+
+
+def test_setup_my_brain_asks_consent_before_anything_is_read():
+    text = read_skill("setup-my-brain")
+    assert text.index("May I look through your calendar") < text.index("discover clock-start")
+    assert "Nothing is read without their explicit yes" in text
+
+
+def test_setup_my_brain_bounds_the_read_by_time():
+    text = read_skill("setup-my-brain")
+    assert 'discover clock-start --dir "$SCRATCH" --budget 300' in text
+    assert "up to 5 minutes" in text
+    assert "--read" not in text
+
+
+def test_setup_my_brain_never_provisions():
+    text = read_skill("setup-my-brain")
+    assert "never provision" in text.lower()
+    assert "Never run `/provision-vault`" in text
+
+
+def test_setup_my_brain_asks_identity_instead_of_discovering_it():
+    text = read_skill("setup-my-brain")
+    for gone in ("working-day", "system-sender", "`language` entries"):
+        assert gone not in text, f"setup-my-brain still proposes from {gone}"
+    assert "working hours" in text
+
+
+def test_setup_my_brain_announces_the_first_evening_note():
+    assert "I'll now write tomorrow's note" in read_skill("setup-my-brain")
