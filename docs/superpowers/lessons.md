@@ -898,3 +898,64 @@ this problem (the `plugin/vendor/**` `-text` rule in `.gitattributes`,
 solved it locally; a fourth site that skipped the search shipped the bug. The
 corollary for review: a hash of file bytes is a portability decision, so ask
 what happens to it on the other platform before the CI matrix asks for you.
+
+## 2026-09-23 — the review's cost pin was reversed for orchestrator quality
+
+**What changed.** The 2026-09-03 entry above pinned the review to
+`--model claude-sonnet-5` as a cost fix. That pin is now
+`--model claude-opus-5-5`, by deliberate choice: the orchestrator is the
+step that reads the diff, briefs the reviewers and validates their findings,
+and Sonnet was judged too weak for it. bta-agents-portal made the same pin
+the same day (its PR #518). Until then it had never set a model and was running
+on `claude-opus-5[1m]`, the default of the Claude Code build `@v1` happened
+to install, even though Opus 5.5 was already out.
+
+**The rule.** A model pin optimises one axis. Say which one in the comment
+beside it, so the next person can tell a cost decision from a quality
+decision before reversing it. And pin rather than leave it unset: an
+unpinned review moves models whenever upstream changes a default, and
+nothing in the repo records that it happened.
+
+**What this reversal costs.** The 2026-09-03 mechanism still holds: `Task`
+subagents inherit the session model unless the orchestrator passes an
+override. So an Opus session probably pulls the five step-4 reviewers back
+onto Opus too, not just the orchestrator. For reference, the last Opus
+period had a median of $3.49 over 85 runs, and the six runs under the Sonnet
+pin had ~$1.61. Measure Opus 5.5 from `total_cost_usd` over several runs
+after merge, and read the Cost page grouped by Model, before quoting a
+figure. If the bill is the problem and the orchestrator is not, the lever to
+try is keeping the orchestrator on Opus while forcing the reviewers onto
+Sonnet — untested here.
+
+## 2026-09-23 — the plugin's model pins were honoured all along; two entries misread them
+
+**What went wrong.** The 2026-09-03 entry says the `code-review` plugin asks
+for Haiku and "5 parallel Sonnet agents", "asks for Opus nowhere", and that
+its pins lose because subagents inherit the session model. The entry just
+above repeats that and predicts the reviewers would follow the orchestrator
+onto Opus. Both are wrong. The plugin file (unchanged upstream since
+2026-03-12, so it read the same when the 2026-09-03 entry was written) asks
+for haiku in steps 1–2, sonnet for the PR summary, the two CLAUDE.md
+reviewers and their validators, and **opus for the two bug reviewers and the
+bug-finding validators**. The run logs show the orchestrator honours those
+assignments: every one of the six Sonnet-pinned runs up to 2026-09-21 lists
+`claude-opus-5[1m]` in `modelUsage`, and an Opus-session run in
+bta-agents-portal lists Sonnet and Haiku.
+
+So the 85%-on-Opus split before #156 was the plugin's design (Opus bug
+agents) plus an Opus orchestrator, not ignored pins. The Sonnet pin moved the
+orchestrator only, and reversing it brings back only the orchestrator's
+cost, not the reviewers'.
+
+**A second gap it exposed.** The plugin names models by alias, and aliases
+resolve inside whichever Claude Code build `@v1` installs. v2.1.278 resolved
+`opus` to `claude-opus-5`, so the bug agents stayed on Opus 5 after
+`--model claude-opus-5-5`. The fix is
+`settings.env.ANTHROPIC_DEFAULT_OPUS_MODEL`, Claude Code's documented alias
+override.
+
+**The rule.** Before writing down what a plugin asks for, quote its current
+file (`gh api repos/anthropics/claude-code/contents/plugins/code-review/commands/code-review.md`),
+and before claiming a pin is ignored, check `modelUsage` in a run log. It
+lists every model the session touched. `--model` is the orchestrator's model;
+subagents' models are the plugin's aliases, resolved by the build.
