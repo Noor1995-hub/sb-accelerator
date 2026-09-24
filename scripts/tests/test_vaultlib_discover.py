@@ -22,14 +22,14 @@ def write_rows(path: Path, rows, *, more=False) -> Path:
     return path
 
 
-def test_window_counts_back_and_forward_from_the_local_day():
+def test_window_counts_back_twelve_weeks_and_forward_two():
     result = discover.window(utc_offset=OFFSET, now="2026-09-23T10:00:00Z")
     assert result["local_today"] == "2026-09-23"
-    assert result["calendar"] == {"utc_from": "2026-08-25T22:00:00Z",
+    assert result["calendar"] == {"utc_from": "2026-06-30T22:00:00Z",
                                   "utc_to": "2026-10-07T21:59:59Z"}
-    assert result["mail"] == {"utc_from": "2026-08-25T22:00:00Z",
+    assert result["mail"] == {"utc_from": "2026-06-30T22:00:00Z",
                               "utc_to": "2026-09-23T10:00:00Z"}
-    assert result["page_caps"]["inbox"] == 20
+    assert result["page_caps"] == {"calendar": 12, "sent": 12, "chats": 4}
     assert result["page_size"] == 25
 
 
@@ -671,3 +671,39 @@ def test_a_badly_shaped_calendar_row_is_recorded_not_fatal(tmp_path):
 def test_derived_names_are_flagged_to_the_model(tmp_path):
     people = entries_of(build1(read1_scratch(tmp_path)), "person")
     assert all(entry.get("note") == "name derived from the email address" for entry in people)
+
+
+def test_clock_counts_down_from_its_start(tmp_path):
+    started = discover.clock_start(str(tmp_path), budget_s=300, now="2026-09-24T10:00:00Z")
+    assert started == {"started": "2026-09-24T10:00:00Z", "budget_s": 300}
+    assert discover.clock_check(str(tmp_path), now="2026-09-24T10:02:00Z") == {
+        "continue": True, "elapsed_s": 120, "remaining_s": 180, "budget_s": 300}
+
+
+def test_clock_says_stop_once_the_budget_is_spent(tmp_path):
+    discover.clock_start(str(tmp_path), budget_s=300, now="2026-09-24T10:00:00Z")
+    assert discover.clock_check(str(tmp_path), now="2026-09-24T10:05:00Z")["continue"] is False
+    late = discover.clock_check(str(tmp_path), now="2026-09-24T10:07:00Z")
+    assert late == {"continue": False, "elapsed_s": 420, "remaining_s": 0, "budget_s": 300}
+
+
+def test_restarting_the_clock_resets_it(tmp_path):
+    discover.clock_start(str(tmp_path), budget_s=300, now="2026-09-24T10:00:00Z")
+    discover.clock_start(str(tmp_path), budget_s=60, now="2026-09-24T11:00:00Z")
+    assert discover.clock_check(str(tmp_path), now="2026-09-24T11:00:30Z")["remaining_s"] == 30
+
+
+def test_clock_check_without_a_start_names_the_command(tmp_path):
+    with pytest.raises(discover.DiscoverError, match="clock-start"):
+        discover.clock_check(str(tmp_path))
+
+
+def test_clock_refuses_an_empty_budget(tmp_path):
+    with pytest.raises(discover.DiscoverError, match="budget"):
+        discover.clock_start(str(tmp_path), budget_s=0)
+
+
+def test_the_clock_file_is_swept(tmp_path):
+    from vaultlib import scratch
+    discover.clock_start(str(tmp_path))
+    assert scratch.sweep(str(tmp_path))["deleted"] == [discover.CLOCK_FILE]

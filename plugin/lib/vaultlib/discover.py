@@ -32,7 +32,10 @@ READ_FILES = {
         "chats": "m365_chats.payload.json"},
 }
 PAGE_SIZE = 25
-PAGE_CAPS = {"calendar": 12, "sentsample": 1, "inbox": 20, "sent": 8, "chats": 4}
+# A safety maximum only: the read is bounded by the clock (spec R.4).
+PAGE_CAPS = {"calendar": 12, "sent": 12, "chats": 4}
+CLOCK_FILE = "m365_clock.payload.json"
+DEFAULT_BUDGET_S = 300
 BROADCAST_LIMIT = 15
 RECURRING_MIN = 3
 TOP = {"recurring-meeting": 15, "domain": 12, "person": 20, "mail-subject": 15,
@@ -105,9 +108,9 @@ def _local_to_utc(local: datetime, timezone: Optional[str],
 
 
 def window(*, timezone: Optional[str] = None, utc_offset: Optional[str] = None,
-           days_back: int = 28, days_forward: int = 14,
+           days_back: int = 84, days_forward: int = 14,
            now: Optional[str] = None) -> dict:
-    """UTC query windows for the two reads, from the owner's local today.
+    """UTC query windows for the read, from the owner's local today.
 
     Deliberately not `dates.window`: that clamps to `sync.start-date`, which
     on a fresh vault is setup day and would cut a four-week look-back to
@@ -130,6 +133,38 @@ def window(*, timezone: Optional[str] = None, utc_offset: Optional[str] = None,
         "page_size": PAGE_SIZE,
         "page_caps": dict(PAGE_CAPS),
     }
+
+
+def clock_start(scratch_dir: str, *, budget_s: int = DEFAULT_BUDGET_S,
+                now: Optional[str] = None) -> dict:
+    """Start the read's time budget. The worker cannot see a clock, so the
+    CLI keeps one; `clock_check` answers whether reading may go on."""
+    if budget_s < 1:
+        raise DiscoverError(f"--budget {budget_s} must be at least 1 second")
+    root = _scratch(scratch_dir)
+    record = {"started": _now_utc(now).strftime(_UTC_FMT), "budget_s": int(budget_s)}
+    _write_json(root / CLOCK_FILE, record)
+    return record
+
+
+def clock_check(scratch_dir: str, *, now: Optional[str] = None) -> dict:
+    """How much of the budget is left. `continue` is false once it is spent;
+    the worker stops at its next check, so a read overruns by one page at most."""
+    root = _scratch(scratch_dir)
+    path = root / CLOCK_FILE
+    if not path.is_file():
+        raise DiscoverError(
+            "no clock in this scratch directory — run `discover clock-start` first")
+    try:
+        record = json.loads(path.read_text(encoding="utf-8"))
+        started = _now_utc(record["started"])
+        budget = int(record["budget_s"])
+    except (json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
+        raise DiscoverError(f"{CLOCK_FILE} is unreadable: {exc}") from exc
+    elapsed = max(0, int((_now_utc(now) - started).total_seconds()))
+    remaining = max(0, budget - elapsed)
+    return {"continue": remaining > 0, "elapsed_s": elapsed,
+            "remaining_s": remaining, "budget_s": budget}
 
 
 def _is_marker(chunk) -> bool:
