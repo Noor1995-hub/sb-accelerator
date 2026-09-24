@@ -41,12 +41,17 @@ this. Everything they read must make sense without help.
   I'll ask about the people you work with instead").
 - **One topic at a time.** A proposal, their answer, then the next. Never a
   wall of questions.
-- **Choices as choices.** Use **AskUserQuestion** for anything with known
-  options: Accept / Change / Skip on a proposal, tick boxes for lists, the
-  type of an organisation, a time. It shows at most four options per question
-  and four questions per screen, and it needs those fixed options: it fails on
-  a question without them. An open question goes in plain text, in the chat —
-  several short ones may share one message.
+- **Tick boxes, or plain text — never a form.** Every question with
+  options goes through **AskUserQuestion**: Accept / Change / Skip on a
+  proposal, tick boxes for lists, the type of an organisation, a time. Give
+  it options wherever the evidence or their earlier answers offer honest ones
+  (their job title from Microsoft 365 as the first option for their role) —
+  its "Other" lets them type anything instead. It shows at most four options
+  per question and four questions per screen, and it needs those fixed
+  options: it fails on a question without them. Never build a form, widget,
+  card or artifact to collect answers — they render too slowly. Only a
+  question with no honest option is open.
+  An open question goes in plain text, in the chat — several short ones may share one message.
 - **Announce every long step** before it starts, and say "done" when it ends.
   Never guess a duration: the only one you may give is "up to 5 minutes" for
   the read, because a clock enforces it.
@@ -200,8 +205,8 @@ python3 "$VAULTLIB" scratch sweep --dir "$SCRATCH"
 
 Identical steps: the whoami tool is `get_me`, written to
 `$SCRATCH/m365.whoami.json`; the hint comes from `mail` or
-`userPrincipalName`; the adapter is `m365`. Note the `displayName` shown in
-the payload now — step 2 offers it as their name.
+`userPrincipalName`; the adapter is `m365`. Note the `displayName` and `jobTitle` shown in
+the payload now — step 2 offers them as their name and role.
 
 ```bash
 python3 "$VAULTLIB" config write --vault "$VAULT" --field adapters.m365.account_hint --value "<verbatim from the payload>"
@@ -245,10 +250,11 @@ In this order:
    chats, there is no read: say so, and skip the consent question below.
 2. **About them.** One choice first: their name, with the `displayName` from
    step 1 as the first option and "Other" for a different one. The language
-   of their evening note is a choice too. Everything else is open, asked in
-   plain text in one message: what people call them, the company they work
-   for, their role, one line of background, and their working hours (start
-   and end of a normal day). Record the company as they name it — their mail
+   of their evening note is a choice too. Their role is a choice when step 1 showed a
+   `jobTitle`: that title first, "Other" for their own words. Everything else
+   is open, asked in plain text in one message: what people call them, the
+   company they work for, their role if there was no title, one line of
+   background, and their working hours (start and end of a normal day). Record the company as they name it — their mail
    domain is not a company name, and never infer one from it.
 3. **Where they are based.** Offer the time zone as a choice ("You're in
    Brussels, so Brussels time?") rather than asking for an identifier, and
@@ -326,8 +332,10 @@ python3 "$VAULTLIB" discover build --vault "$VAULT" --dir "$SCRATCH" --expect "<
 
 `--expect` carries the row counts from the worker's outcome line
 (`profile=1,chats=62,sent=40,calendar=30`); pass `<source>=error` and
-`<source>=unread` through as they are. The build records any source whose
-count does not match, or that failed, with an `error` and skips it.
+`<source>=unread` through as they are. A count off by a row or two still
+builds and carries a `note` — the reader types rows by hand, and the pages
+are the truth. The build records any source whose count is further off, or
+that failed, with an `error` and skips it.
 
 Take only the `<source>=<rows>` pairs from the reply: drop the
 `discovery-ok:` prefix, the ` stopped-by-clock` flag and the `elapsed=`
@@ -341,9 +349,10 @@ usable — treat the whole read as failed: do not run the build, and use
 A source whose entry under `sources` carries an `error` is treated as empty:
 its topics fall back to their questions. A source marked `capped` was cut
 short, or never reached, by the clock: proposals from it speak of "your most
-recent" meetings, mails or chats. Say "done", and tell the owner only what
-any gap means for them ("I couldn't read your calendar, so I'll ask about
-your meetings instead").
+recent" meetings, mails or chats. Say "done" with one plain sentence on what was looked at, from the
+`items` counts under `sources` ("I looked at 48 of your chats, 50 sent mails
+and 10 calendar entries"), and only what any gap means for them ("I couldn't
+read your calendar, so I'll ask about your meetings instead").
 
 The result's `entries` (id, kind, label, detail, text) are the **only**
 material any later proposal may use.
@@ -440,18 +449,20 @@ The slug is the name they gave, lowercase and hyphenated
 
 ## Step 5 — your work
 
-This is where their own words matter most; the read only offers suggestions.
+The read has just gone through their chats and mail: open with what it
+found, never with a blank question.
 
-1. **Forums.** Propose the `recurring-meeting` entries as tick boxes: the
-   meetings they sit in regularly.
-2. **Standing responsibilities.** Ask openly what is always theirs — the
-   things that will still be theirs next year.
-3. **Projects.** Ask openly what they are working on right now that has an
-   end. Then offer the `mail-subject`, `chat` and remaining
-   `recurring-meeting` entries as tick-box suggestions ("anything here you'd
-   add?"). For every project they name or tick, ask for one line on what it
-   is, in their words, and record it.
-4. Ask openly: the three to five outcomes they are judged on, who reports to
+1. **What you're working on.** Propose the `chat` and `mail-subject` entries
+   as tick boxes, top first: *"These came up most in your chats and mail —
+   tick what you're working on."* For each ticked item, ask as a choice
+   whether it is a project that ends or something that is always theirs.
+   Then ask once, in plain text, what is missing from the list. For every
+   project they tick or name, ask for one line on what it is, in their
+   words, and record it.
+2. **Forums.** Propose any `recurring-meeting` entries as tick boxes. Then
+   ask in plain text which meetings they have every week and every month —
+   the read sees only a few days of calendar, so it rarely finds them itself.
+3. Ask openly: the three to five outcomes they are judged on, who reports to
    them, and what lands on their desk that is not really theirs.
 
 Write the `role-and-responsibilities` block through the loop. Then create
@@ -571,7 +582,7 @@ it. Organisations, projects and people then come from what they named.
 | **Microsoft 365** | skipped | interview questions only | written, with the no-meetings line | unaffected |
 | **Plaud** | unaffected | unaffected | unaffected — `/sync-recordings` still reads `10-inbox/` | unaffected |
 | **Consent declined, or company rules forbid reading** | skipped | interview questions only | unaffected | unaffected |
-| **A source errors, is empty or mismatches** | recorded | that source's topics fall back to questions | unaffected | unaffected |
+| **A source errors, is empty or its count is off by more than a couple of rows** | recorded | that source's topics fall back to questions | unaffected | unaffected |
 | **The clock stopped a source** | recorded as `capped` | proposals say "your most recent…" | unaffected | unaffected |
 | **Scheduler** | unaffected | unaffected | unaffected | handed off in writing, never implied |
 

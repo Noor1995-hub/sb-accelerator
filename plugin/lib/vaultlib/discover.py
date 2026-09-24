@@ -32,6 +32,11 @@ CLOCK_FILE = "m365_clock.payload.json"
 DEFAULT_BUDGET_S = 300
 BROADCAST_LIMIT = 15
 RECURRING_MIN = 3
+# A reader that types rows out by hand miscounts by a row or two; the pages
+# are the truth. A gap this small is noted and the rows still build; a larger
+# one means pages went missing, and the source is skipped.
+COUNT_TOLERANCE_ROWS = 2
+COUNT_TOLERANCE_SHARE = 0.05
 TOP = {"recurring-meeting": 15, "domain": 12, "person": 20, "mail-subject": 15,
        "chat": 15, "sent-mail": 20}
 PROFILE_FIELDS = (("displayName", "Name"), ("jobTitle", "Job title"),
@@ -485,6 +490,12 @@ def _read_pages(paths: List[Path]) -> Tuple[List[dict], bool]:
     return rows, capped
 
 
+def _close_enough(expected: int, actual: int) -> bool:
+    """Whether a reported row count is within tolerance of the pages."""
+    allowed = max(COUNT_TOLERANCE_ROWS, int(COUNT_TOLERANCE_SHARE * max(expected, actual)))
+    return abs(expected - actual) <= allowed
+
+
 def build(scratch_dir: str, *, home_domains: Optional[List[str]] = None,
           consume: bool = False, expect: Optional[Dict[str, object]] = None) -> dict:
     """Turn the read's page files into the evidence list.
@@ -494,8 +505,9 @@ def build(scratch_dir: str, *, home_domains: Optional[List[str]] = None,
     the only deletion here, so raw rows never outlive their use. A source
     whose rows the connector shaped unexpectedly is recorded with an `error`
     and skipped; the other sources still build. With `expect`, a source whose
-    row count differs from the reader's report, or which the reader reported
-    as failed, is recorded with an `error` and not ingested."""
+    row count differs from the reader's report by more than the tolerance, or
+    which the reader reported as failed, is recorded with an `error` and not
+    ingested; a difference within tolerance builds and carries a `note`."""
     root = _scratch(scratch_dir)
     unknown = sorted(set(expect or {}) - set(SOURCES))
     if unknown:
@@ -531,7 +543,11 @@ def build(scratch_dir: str, *, home_domains: Optional[List[str]] = None,
                                         "capped": False, "error": f"{source}: {exc}"}
             continue
         expected = (expect or {}).get(source)
-        if expected is not None and expected != len(rows):
+        note = None
+        if (isinstance(expected, int) and expected != len(rows)
+                and _close_enough(expected, len(rows))):
+            note = f"{source}: the reader reported {expected} rows, the pages hold {len(rows)}"
+        elif expected is not None and expected != len(rows):
             reason = ("the reader reported a failure" if expected == "error"
                       else "the reader reported it unread, but pages were written"
                       if expected == "unread"
@@ -553,6 +569,8 @@ def build(scratch_dir: str, *, home_domains: Optional[List[str]] = None,
             stats.update(trial)
             stats["sources"][source] = {"present": True, "items": len(rows),
                                         "capped": capped}
+            if note:
+                stats["sources"][source]["note"] = note
     entries = _entries(stats)
     _assign_ids(entries, evidence["ids"])
     evidence["entries"] = entries

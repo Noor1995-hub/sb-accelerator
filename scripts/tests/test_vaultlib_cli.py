@@ -2277,7 +2277,7 @@ def test_discover_build_expect_is_parsed_and_enforced(capsys, tmp_path):
     scratch.mkdir()
     _profile_page(scratch)
     code, payload = run(capsys, ["discover", "build", "--vault", str(root),
-                                 "--dir", str(scratch), "--expect", "profile=2"])
+                                 "--dir", str(scratch), "--expect", "profile=5"])
     assert code == 0
     assert "error" in payload["result"]["sources"]["profile"]
 

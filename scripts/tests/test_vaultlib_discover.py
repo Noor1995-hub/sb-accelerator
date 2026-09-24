@@ -294,6 +294,32 @@ def test_expect_skips_a_source_whose_count_does_not_match(tmp_path):
     assert "profile" in result["by_kind"]
 
 
+def test_a_count_off_by_one_still_builds_with_a_note(tmp_path):
+    result = build_all(full_scratch(tmp_path), expect={"calendar": 8})
+    calendar = result["sources"]["calendar"]
+    assert "error" not in calendar
+    assert calendar["note"] == "calendar: the reader reported 8 rows, the pages hold 9"
+    assert "recurring-meeting" in result["by_kind"]
+
+
+def test_a_count_over_by_two_still_builds(tmp_path):
+    result = build_all(full_scratch(tmp_path), expect={"calendar": 11})
+    assert "error" not in result["sources"]["calendar"]
+
+
+@pytest.mark.parametrize("expected, actual, close", [
+    (49, 50, True), (48, 50, True), (47, 50, False),
+    (100, 105, True), (100, 106, False), (0, 2, True), (0, 3, False),
+])
+def test_close_enough_allows_two_rows_or_five_percent(expected, actual, close):
+    assert discover._close_enough(expected, actual) is close
+
+
+def test_a_matching_count_carries_no_note(tmp_path):
+    result = build_all(full_scratch(tmp_path), expect={"calendar": 9})
+    assert "note" not in result["sources"]["calendar"]
+
+
 def test_expect_error_skips_a_source_the_reader_reported_as_failed(tmp_path):
     result = build_all(full_scratch(tmp_path), expect={"chats": "error"})
     assert "the reader reported a failure" in result["sources"]["chats"]["error"]

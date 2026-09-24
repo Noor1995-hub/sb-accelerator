@@ -2023,3 +2023,16 @@ def test_setup_my_brain_keeps_open_questions_out_of_the_picker():
     assert "An open question goes in plain text" in text
     assert "the company as they name it" in text
     assert "`elapsed=`" in text
+
+
+def test_setup_my_brain_asks_through_tick_boxes_never_a_form():
+    text = read_skill("setup-my-brain")
+    assert "Never build a form, widget," in text
+    assert "`jobTitle`" in text, "the role is offered as a choice from the profile"
+
+
+def test_setup_my_brain_opens_your_work_with_what_the_read_found():
+    text = read_skill("setup-my-brain")
+    work = text[text.index("## Step 5"):text.index("## Step 6")]
+    assert work.index("`chat` and `mail-subject` entries") < work.index("every week and every month")
+    assert "I looked at" in text, "the read ends with a plain summary of what was looked at"
