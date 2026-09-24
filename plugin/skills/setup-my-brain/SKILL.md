@@ -332,7 +332,8 @@ count does not match, or that failed, with an `error` and skips it.
 Take only the `<source>=<rows>` pairs from the reply: drop the
 `discovery-ok:` prefix, the ` stopped-by-clock` flag and the `elapsed=`
 timings. Keep the whole reply line in mind: if the owner asks how the read
-went, show it to them as it is. If the reply is not
+went, show it to them as it is — the one exception to "never show
+machinery", because they asked for it. If the reply is not
 a `discovery-ok:` line at all — a `discovery-error:` line, or nothing
 usable — treat the whole read as failed: do not run the build, and use
 "Without Microsoft 365" for every topic.
