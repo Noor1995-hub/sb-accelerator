@@ -1394,7 +1394,10 @@ def fenced_dates_window_invocations(text: str):
     return fenced_invocations(text, "dates window")
 
 
-@pytest.mark.parametrize("subcommand", ["dates window", "m365 agenda"])
+@pytest.mark.parametrize("subcommand", ["dates window", "m365 agenda", "discover window",
+                                        "discover build", "discover answer",
+                                        "discover check", "discover clock-start",
+                                        "discover clock-check"])
 @pytest.mark.parametrize("path", SKILL_FILES + REF_FILES,
                          ids=lambda p: p.parent.name)
 def test_every_fenced_invocation_of_a_parsed_subcommand_parses(path, subcommand):
@@ -1898,3 +1901,147 @@ def test_sync_recordings_watermark_gloss_names_the_park():
     idx = text.index("A batch's `fetch-error` outcomes do not hold this back")
     passage = re.sub(r"\s+", " ", text[idx: idx + 400])
     assert "until `sync fetch-error` parks it on its third failing day" in passage
+
+
+def test_setup_discovery_worker_agent_frontmatter():
+    agents_dir = SKILLS_DIR.parent / "agents"
+    worker = (agents_dir / "setup-discovery-worker.md").read_text(encoding="utf-8")
+    front = worker.split("---")[1]
+    assert "name: setup-discovery-worker" in front
+    assert "model: sonnet" in front, "verbatim transcription is the trust point"
+    assert "tools:" not in front, (
+        "the worker's tools must stay open — connector tool names differ per "
+        "deployment, exactly as for sync-worker-m365")
+    disallowed_lines = [line for line in front.splitlines()
+                        if line.strip().startswith("disallowedTools:")]
+    assert disallowed_lines, "the discovery worker must declare disallowedTools"
+    disallowed = [name.strip()
+                  for name in disallowed_lines[0].split(":", 1)[1].split(",")]
+    assert disallowed == M365_WORKER_DISALLOWED_TOOLS
+    body = re.sub(r"\s+", " ", worker.split("---", 2)[2])
+    assert "discovery contract" in body and "outcome line" in body
+    assert "dispatched without a briefing" in body
+
+
+def test_discovery_contract_pins_the_privacy_rules():
+    from vaultlib import discover
+    contract = re.sub(r"\s+", " ", read_ref("setup-my-brain", "discovery-contract.md"))
+    assert "never call `chat_message_search`" in contract
+    assert "one folder at a time" in contract
+    assert "never add, merge or guess a row" in contract
+    assert "Inbox" in contract and "never read the Inbox" in contract
+    assert "round-robin" in contract
+    assert 'discover clock-check --dir "$SCRATCH"' in contract
+    assert "m365_<source>.p<n>.payload.json" in contract
+    for source in discover.SOURCES:
+        assert f"`{source}`" in contract, f"the contract must name source {source}"
+    for source in discover.PAGE_CAPS:
+        assert f"page_caps.{source}" in contract
+    assert discover.BROADCAST_LIMIT == 15 and "more than 15" in contract
+    assert "discovery-error: clock unavailable" in contract
+    assert "`<source>=unread`" in contract
+
+
+def test_setup_my_brain_shows_only_what_the_check_passed():
+    text = read_skill("setup-my-brain")
+    assert "Nothing is shown to the owner that `discover check` did not pass" in text
+    assert "Show only what is under `passed`" in text
+    assert "Entities come from the vault owner, never from the calendar" not in text, (
+        "rule 5 was replaced: organisations may be proposed, only the owner confirms")
+
+
+def test_setup_my_brain_asks_the_company_rules_question_before_reading():
+    text = read_skill("setup-my-brain")
+    # The Requirements section names `discover build --consume` early; the
+    # ordering that matters is against the first real read, step 2's call.
+    assert text.index("Does your company have rules") < text.index(
+        'discover build --vault "$VAULT"')
+
+
+def test_setup_my_brain_never_reads_chat_text():
+    assert "Chat message text is never read" in read_skill("setup-my-brain")
+
+
+def test_setup_my_brain_dispatches_the_worker_and_consumes_raw_reads():
+    text = read_skill("setup-my-brain")
+    assert "setup-discovery-worker" in text
+    assert "references/discovery-contract.md" in text
+    builds = [line for line in text.splitlines() if "discover build --vault" in line]
+    assert len(builds) == 1, "one build for the one read"
+    assert all("--consume" in line and "--expect" in line for line in builds), (
+        "the read deletes its raw rows and enforces the worker's counts")
+
+
+def test_setup_my_brain_is_written_for_the_owner_alone():
+    text = read_skill("setup-my-brain")
+    assert "on their own" in text
+    assert "consultant's own record" not in text, (
+        "there is no consultant in the room any more")
+
+
+def test_setup_my_brain_asks_consent_before_anything_is_read():
+    text = read_skill("setup-my-brain")
+    assert text.index("May I look through your calendar") < text.index("discover clock-start")
+    assert "Nothing is read without their explicit yes" in text
+
+
+def test_setup_my_brain_bounds_the_read_by_time():
+    text = read_skill("setup-my-brain")
+    assert 'discover clock-start --dir "$SCRATCH" --budget 300' in text
+    assert "up to 5 minutes" in text
+    assert "--read" not in text
+
+
+def test_setup_my_brain_never_provisions():
+    text = read_skill("setup-my-brain")
+    assert "never provision" in text.lower()
+    assert "Never run `/provision-vault`" in text
+
+
+def test_setup_my_brain_asks_identity_instead_of_discovering_it():
+    text = read_skill("setup-my-brain")
+    for gone in ("working-day", "system-sender", "`language` entries"):
+        assert gone not in text, f"setup-my-brain still proposes from {gone}"
+    assert "working hours" in text
+
+
+def test_setup_my_brain_announces_the_first_evening_note():
+    assert "I'll now write tomorrow's note" in read_skill("setup-my-brain")
+
+
+def test_discovery_contract_reads_cheap_sources_first_and_reports_timings():
+    contract = re.sub(r"\s+", " ", read_ref("setup-my-brain", "discovery-contract.md"))
+    assert "one page of `chats`, one page of `sent`, one page of `calendar`" in contract
+    assert '`order: "newest"`, `limit: 10`' in contract, "calendar pages are the heavy ones"
+    for unused in ("`start`", "`end`", "`showAs`"):
+        assert unused not in contract, f"the build no longer uses {unused}; don't make the worker type it"
+    assert "elapsed=" in contract
+
+
+def test_setup_my_brain_keeps_open_questions_out_of_the_picker():
+    text = read_skill("setup-my-brain")
+    assert "An open question goes in plain text" in text
+    assert "the company as they name it" in text
+    assert "`elapsed=`" in text
+
+
+def test_setup_my_brain_asks_through_tick_boxes_never_a_form():
+    text = read_skill("setup-my-brain")
+    assert "Never build a form, widget," in text
+    assert "`jobTitle`" in text, "the role is offered as a choice from the profile"
+
+
+def test_setup_my_brain_opens_your_work_with_what_the_read_found():
+    text = read_skill("setup-my-brain")
+    work = text[text.index("## Step 5"):text.index("## Step 6")]
+    assert work.index("`chat` and `mail-subject` entries") < work.index("every week and every month")
+    assert "I looked at" in text, "the read ends with a plain summary of what was looked at"
+
+
+def test_setup_my_brain_keeps_approvals_and_heads_ups_on_screen():
+    text = " ".join(read_skill("setup-my-brain").split())
+    assert "Every heads-up is typed in the chat" in text
+    assert "carries the full text as its `preview`" in text
+    assert "no command in between" in text
+    note = text[text.index("## Step 9"):text.index("## Step 10")]
+    assert "typing a line in the chat" in note

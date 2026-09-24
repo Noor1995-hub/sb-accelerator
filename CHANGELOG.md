@@ -15,6 +15,8 @@ delivers them.
 
 ## Unreleased
 
+- `/setup-my-brain` is now a short self-serve session the vault owner runs on their own, instead of a 60–90 minute interview led by a consultant. It asks only what the owner alone knows (name, role, working hours, time zone), then, with their explicit consent, reads their calendar, sent mail and Teams chat list for up to 5 minutes. It never reads the Inbox or chat text. From that read it suggests their organisations, people and current work as tick boxes to accept, change or skip. Every suggestion is checked against what was actually read before the owner sees it, so nothing invented reaches them, and raw reads are deleted as soon as they have been used. Weekly and monthly meetings are asked rather than guessed. Text to approve is shown right beside the question, and every long step is announced in the chat as it runs. Vaults already set up need nothing: this changes only how a first setup, or a re-run, goes. (#229)
+
 ## v0.11.10 — 2026-09-21
 
 - Tomorrow's daily note now shows each meeting at the vault owner's local time. The calendar connector reports starts in UTC, and one evening run copied that clock straight into the headings, so every meeting appeared two hours early; the conversion, filtering and sorting now happen in the CLI (`m365 agenda`) instead of being left to the run. If a daily note written before this release shows the wrong times, shift its headings by hand — the prep underneath is right. (#223)

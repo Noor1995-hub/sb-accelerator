@@ -1,58 +1,79 @@
 ---
 name: setup-my-brain
-description: The Session-1 onboarding interview — fills the context portfolio, connects the accounts the vault syncs from, seeds entities/projects/people, and ends with the vault owner's first daily note and a scheduled evening run. Triggers when the user invokes /setup-my-brain.
+description: The Session-1 setup, run by the vault owner on their own — connects their accounts, asks who they are, reads their calendar, sent mail and Teams chat list for up to five minutes with their consent, proposes their organisations, people and work for them to accept, change or skip, and ends with their first evening note and a scheduled evening run. Triggers when the user invokes /setup-my-brain.
 user_invocable: true
 origin: net-new
 ---
 
 # Set Up My Brain
 
-Session 1 of the onboarding journey, run **live**: the delaware consultant and
-the vault owner together, roughly two hours, vault open on screen. By the end
-the vault knows who its owner is, which connector accounts belong to this
-engagement, what they work on and with whom — it has written them tomorrow's
-daily note while they watch, and that note has a standing time it arrives.
+Session 1, run by the **vault owner on their own**. Nobody from delaware is in
+the room, and nobody but the owner sees what is read. By the end the vault
+knows who its owner is, which accounts belong to it, what they work on and
+with whom; it has written tomorrow's evening note while they watch, and that
+note has a standing time it arrives.
 
-**Precondition: a provisioned vault.** This skill *fills*; it never scaffolds.
-Provisioning is `/provision-vault`'s job — pointed at an ordinary folder,
-phase 0 stops and points at the provisioning runbook. That is the correct
-outcome, not a gap to work around by creating folders by hand.
+What only the owner knows — who they are, when they work, what they are
+working on — is **asked**. What their accounts show better than memory —
+the organisations and people they deal with, the forums they sit in — is
+**read** for up to 5 minutes, with their consent, and **proposed**. Every
+proposal is checked against what was actually read before they see it — see
+"How every proposal works".
 
-## Tone — this is an interview, not a form
+**Precondition: a provisioned vault.** This skill *fills*; it never
+scaffolds and never provisions. Provisioning is delaware's step, done with
+`/provision-vault` before this session. Pointed at an ordinary folder, step 0
+stops — that is the correct outcome, not a gap to work around.
 
-The vault owner is watching every prompt. Four things carry the session:
+## Speaking to the owner
 
-- **Conversational, one topic at a time.** Ask a question, listen, follow the
-  thread it opens. Never paste a whole question list and wait.
-- **Introduce every term the first time you use it, in one breath.** "Your
-  brief — the note the vault writes you each evening." "A connector — the
-  link that lets me read your recordings." "An entity — an organization the
-  vault keeps a page on." Nobody in this session should have to decide
-  between asking what a word means and pretending they know. This applies to
-  vocabulary from this skill, from the vault, and from Claude itself; if a
-  word would make a competent person feel behind, it gets its half-sentence.
-- **Their words over your summary.** When they describe how they want pushback
-  handled, the block should read like them, not like a consultant's write-up.
-  Compress and organize; do not re-voice.
-- **Read back before writing.** Every block is shown and approved before it
-  lands in the vault. "Here's what I've got — does that sound like you?"
+The owner is a busy executive, not a technologist, and they are alone with
+this. Everything they read must make sense without help.
 
-Where the answer is one of a known set — which connectors to use, what type an
-organization is, what time the evening run should fire — use
-**AskUserQuestion** rather than open prose. It is faster for them, it removes
-the "what am I supposed to say here" pause, and it is the difference between
-an interview and an exam. Keep it for genuine choices: a question with one
-obvious answer is a statement, and an open question about their own work
-should stay open.
-
-Silence and thinking time are fine. Filling them with a polished paragraph the
-owner did not say is not.
+- **Plain words.** Say "organisation", not entity; "your evening note", not
+  daily note; "your accounts", not connectors or adapters; "project" or
+  "responsibility", not initiative or area of responsibility. Any other term
+  gets half a sentence the first time: "your evening note — the page the
+  vault writes you each evening for the next day".
+- **Never show machinery.** No evidence ids, file names, commands, JSON,
+  error text, or raw mail, chat or calendar content. If something fails, say
+  what it means for them in one sentence ("I couldn't read your chats, so
+  I'll ask about the people you work with instead").
+- **One topic at a time.** A proposal, their answer, then the next. Never a
+  wall of questions.
+- **Tick boxes, or plain text — never a form.** Every question with
+  options goes through **AskUserQuestion**: Accept / Change / Skip on a
+  proposal, tick boxes for lists, the type of an organisation, a time. Give
+  it options wherever the evidence or their earlier answers offer honest ones
+  (their job title from Microsoft 365 as the first option for their role) —
+  its "Other" lets them type anything instead. It shows at most four options
+  per question and four questions per screen, and it needs those fixed
+  options: it fails on a question without them. Never build a form, widget,
+  card or artifact to collect answers — they render too slowly. Only a
+  question with no honest option is open.
+  An open question goes in plain text, in the chat — several short ones may share one message.
+- **Announce every long step** before it starts, and say "done" when it ends.
+  Never guess a duration: the only one you may give is "up to 5 minutes" for
+  the read, because a clock enforces it.
+- **Every heads-up is typed in the chat.** A command's description, or a
+  line between commands, is folded away out of sight: only a message you
+  type stays on screen. In a long step, type one line before each part of
+  it ("Now I'm checking this morning's meeting") and one when it is done,
+  and say in half a sentence why any question in the middle of it comes up.
+- **What they approve travels with the question.** A question asking them
+  to approve text — a claim, a context block — is a single choice (Accept /
+  Change / Skip) whose Accept option carries the full text as its `preview`,
+  so the text is on screen beside the options. If the preview cannot be
+  used, type the text as your last message and ask at once, with no command
+  in between.
+- **Their words over your summary.** When they change a proposal, use what
+  they typed. Compress and organise; do not re-voice.
 
 ## Requirements
 
 Writing to the vault needs a shell, so this skill runs in **Cowork** or
 **Claude Code**. It cannot run in Chat — plugins are not loaded there; say so
-plainly rather than conducting an interview whose answers go nowhere.
+plainly rather than starting a setup whose answers go nowhere.
 
 Set `VAULT` to the vault root, and:
 
@@ -60,27 +81,26 @@ Set `VAULT` to the vault root, and:
 VAULTLIB="${CLAUDE_PLUGIN_ROOT}/lib/vaultlib/cli.py"
 ```
 
-`$SCRATCH` below is the session scratch directory — draft blocks and raw
-connector payloads land there, never in the vault. The JSON envelope and
-interpreter resolution are documented in the plugin's `CLAUDE.md`. Read `ok`
-on every call; on failure surface `error` and `hint`.
+`$SCRATCH` is the session scratch directory: raw reads, the evidence list,
+the owner's recorded answers, proposals and draft blocks live there, never in
+the vault. The JSON envelope and interpreter resolution are documented in the
+plugin's `CLAUDE.md`. Read `ok` on every call; on failure act on `error` and
+`hint` yourself, and tell the owner only what it means for them.
 
-Scratch cleanup is one mechanism, the same one the sync routines use:
+Every file this skill or its worker write in `$SCRATCH` has a name the
+scratch sweep catches: `plaud.whoami.json`, `m365.whoami.json`, the
+`m365_*.payload.json` discovery files (page files, the clock, answers,
+evidence, proposals), and `*.block.md` drafts. Two deletion paths exist and
+no others: `discover build --consume` deletes exactly the page files it has
+just turned into evidence, and the sweep takes everything else:
 
 ```bash
 python3 "$VAULTLIB" scratch sweep --dir "$SCRATCH"
 ```
 
-It deletes a fixed, built-in pattern list directly inside `--dir`, never
-recursing, and it is the only deletion this skill performs. Every scratch
-name this skill tells you to write matches one of its patterns —
-`plaud.whoami.json`, `m365.whoami.json`, `sentmail.sample.json`,
-`calendar.*.json`, `*.block.md` — so use those exact names, and give any
-other raw file you write a name matching a pattern too (`m365_*.json`,
-`*.payload.json`). Two consequences: one sweep call always catches
-everything the session wrote, and a sweep takes *everything* matching, not
-one file — so a draft still on its way into the vault must never be sitting
-in `$SCRATCH` when one runs.
+A sweep takes *everything* matching, so it runs only where this skill says:
+after connecting accounts (before any discovery file exists) and at the
+close.
 
 ## Usage
 
@@ -88,306 +108,116 @@ in `$SCRATCH` when one runs.
 /setup-my-brain
 ```
 
-No arguments, and **no unattended mode**. Every phase has a human in it by
-construction: there is nothing here to schedule.
+No arguments, and **no unattended mode**: every step has the owner in it.
 
-## Phase 0 — preflight
+## Step 0 — preflight
 
-Two read-only checks, both before a single question is asked.
+Two read-only checks, before anything is said.
 
 ```bash
 python3 "$VAULTLIB" config read --vault "$VAULT"
 ```
 
-- **`ok: false`** — there is no `99-workflow-config/config.json`, which means
-  this folder is not a provisioned vault (or the vault root is wrong). Stop.
-  Surface `error` and `hint`, say plainly that this skill fills a provisioned
-  vault and does not create one, and point the consultant at
-  `playbooks/provisioning-runbook.md`. Do not offer to write the missing
-  files.
+- **`ok: false`** — there is no `99-workflow-config/config.json`: this folder
+  is not a provisioned vault, or the vault root is wrong. **Stop the session
+  here.** Never run `/provision-vault`, never create `99-workflow-config/` or
+  any other folder or file in this folder — not even when it is empty, not
+  even when it would be quicker. Tell the owner in one line that their vault
+  has not been set up yet and that delaware sets it up before this session
+  (`playbooks/provisioning-runbook.md` is the reference for whoever does it).
 - **`ok: true`** — carry `config` and `missing` forward. On a fresh vault
   `missing` is exactly `["owner", "sync.start-date", "timezone"]`; that is
-  the honest state, not an error — this skill fills all three, the start
-  date right after owner and timezone below. An account hint only joins the
-  list once its adapter is enabled, so both connectors being unbound shows
-  up as `enabled: false` in `config`, never in `missing` — phase 2 reads
-  the adapter entries, not this list.
+  the honest state, not an error — this skill fills all three. Account
+  bindings show up as `enabled: false` under `adapters` in `config`, never in
+  `missing`.
 
 ```bash
 python3 "$VAULTLIB" migrate status --vault "$VAULT"
 ```
 
-If `pending` is non-empty, **stop** and hand off to `/upgrade-vault`. Say why
-in one line: interviewing into a stale structure writes today's answers into
-a shape the plugin is about to migrate, and the vault owner's first impression
-should not be a repair job. Come back to `/setup-my-brain` once the upgrade
-is done — nothing is lost, nothing has been asked yet.
+If `pending` is non-empty, **stop** and hand off to `/upgrade-vault`, in one
+plain line: the vault needs an update before setup, and nothing has been
+asked yet. Come back once the upgrade is done.
 
 ### Fresh run or re-run
 
-A config whose `timezone` and `owner` are null is a **fresh run**: work
-straight through the phases below.
+A config whose `timezone` and `owner` are null is a **fresh run**.
 
-Anything already filled means **re-run mode** — a tune-up, a second session,
-or a restart after an interrupted one. In re-run mode every phase below
-starts by *showing what is already there* and asking whether to revise it:
-the current block from `context read`, the current config values, the
-entities/projects/people already seeded. Revising is cheap and repeating is
-harmless — a marker-fenced `context write` replaces its block, `config write`
-sets a field, and `person ensure` / `entity ensure` return `created: false` on
-an object that already exists. `entity ensure` on an existing dossier also
-applies whichever of `--name`/`--type`/`--status`/`--owner` you pass this
-time — it does not just re-affirm creation — and its envelope reports
-`changed` plus `updated: [...]` so you can tell a real edit from a no-op.
-`person ensure` never rewrites an existing note (curation added through
-People.base must survive), but if the `--name` you pass differs from the
-note's own, the envelope reports it under `ignored` rather than dropping it
-silently.
+Anything already filled means **re-run mode** — a second session, or a
+restart after an interrupted one. In re-run mode every topic starts by
+*showing what is already there* (the current block from `context read`, the
+current config values, the organisations, projects and people already in the
+vault) and asking whether to revise it; step 2 also offers to read their
+accounts again. Revising is cheap and repeating is harmless: `context write`
+replaces its block, `config write` sets a field, `person ensure` and `entity
+ensure` return `created: false` on an object that exists (`entity ensure`
+also applies any `--name`, `--type`, `--status` or `--owner` you pass and
+reports `changed` and `updated`; `person ensure` never rewrites a note and
+reports a differing `--name` under `ignored`). `project scaffold` **refuses**
+a slug that already has a folder: acknowledge it in one line ("that one's
+already there") and move on.
 
-`project scaffold` is the exception: it **refuses** a slug that already has a
-folder rather than touching a project that has been accumulating decisions and
-meeting links since the last session. That refusal is a no-op outcome, not a
-failure — acknowledge it in one line ("that one's already there"), do not
-retry it under a different name, and move on. Skipping a phase the vault owner
-is happy with is the normal case; say what you skipped in the closing summary.
+## Step 1 — welcome and connect
 
-## Phase 1 — the interview
+Open with one plain sentence about what happens and why:
 
-### Open by saying what this is for
+> *Let's set up your second brain. I'll ask you a few
+> things only you know, look through your recent calendar, mail and chats if
+> you allow it, suggest who and what you work with, and you tell me what's
+> right. Nothing is kept except what you approve.*
 
-Before the first question, one plain sentence about where the answers go —
-because "we'll fill in your context files" means nothing to someone who has
-never seen one:
+### Which accounts
 
-> *Everything you tell me in the next hour becomes the way this vault writes
-> for you. Who you are and what you own is how it decides what matters in your
-> calendar and what to leave out; how you like to be written to is how your
-> notes and drafts will sound. This is the part that stops it sounding like a
-> consultant and starts it sounding like you.*
+Ask with **AskUserQuestion**: Microsoft 365 (calendar, mail, Teams), Plaud
+(the pocket recorder), both, or neither. Say what each is in one breath, and
+what "neither" means (the degradation table at the bottom is the script).
+Then, for each one chosen, check whether it is live in this session. If it
+is not, say who needs to switch it on and move on without treating it as a
+failure.
 
-Then say how long it takes and that it is a conversation, not a form.
+Connect accounts only here, before step 2. An account switched on later in
+the session waits for the next run of /setup-my-brain: reconnecting now
+would sweep away the answers already recorded.
 
-### Start with the company
-
-Ask what company they work for and what it does, **before** anything else —
-it is the easiest question in the session, and every later one lands better
-once you know the answer. A CCO at a 1,400-person logistics group and a CFO at
-a listed bank need different follow-ups about forums, regulators and rhythm.
-
-Then offer, once, in one line: *"Want me to take two minutes to read up on
-them publicly, so I don't ask you things I could have looked up?"* On yes, do
-a light public read and **use it to shape questions, not to fill blocks** —
-anything that ends up in the vault is still something they said and approved.
-On no, or with no research tool available, carry on; this is a nicety, and
-the interview does not depend on it.
-
-### The five files
-
-Five files, **in this fixed order** — each one gives the next its vocabulary:
-
-| # | Stem | What it holds |
-|---|---|---|
-| 1 | `identity` | Who they are, in their own words |
-| 2 | `role-and-responsibilities` | What they own and are judged on |
-| 3 | `communication-style` | How drafts in their name should read |
-| 4 | `preferences-and-constraints` | Privacy, disclosure boundaries, confidentiality |
-| 5 | `tools-and-systems` | Calendar, recorder, where the files live |
-
-**The questions live in the vault, not in this skill.** Each file carries its
-own `## Interview questions` section, so an archetype can tune them per
-deployment without a plugin release. For each file, in order:
-
-1. **Read `99-workflow-config/context/<stem>.md`** with the Read tool and take
-   its `## Interview questions` bullets as your script. Ask them one at a
-   time, conversationally, following what the vault owner opens up. Skip a question
-   they have already answered under an earlier file rather than asking twice.
-2. In re-run mode, show what is there first:
-
-   ```bash
-   python3 "$VAULTLIB" context read --vault "$VAULT" --file <stem>
-   ```
-
-3. **Draft the content block** — markdown prose and bullets, short and
-   factual, no marker comments (the CLI owns those and refuses content that
-   carries them). Write the draft to `$SCRATCH/<stem>.block.md`.
-4. **Read it back for approval.** Show the block, ask, amend until they say
-   yes. Do not write an unapproved block "to save time" — this file is what
-   every later skill speaks in their name from.
-5. Write it:
-
-   ```bash
-   python3 "$VAULTLIB" context write --vault "$VAULT" --file <stem> --content "$SCRATCH/<stem>.block.md"
-   ```
-
-`replaced: true` in the result means an earlier block was overwritten —
-expected on a re-run, worth a raised eyebrow on a fresh one.
-
-**Use what they already told you.** File 2's questions land better when the
-follow-ups are built from file 1's answers — the company, the size, the role.
-Asking "what areas do you own?" cold, to someone who has just spent five
-minutes describing their remit, teaches them that nothing they say is being
-listened to.
-
-### Immediately after the first file: the vault owner's own record
-
-The first file establishes their full name and their working day. Turn both
-into machine facts before moving on to the second file:
-
-```bash
-python3 "$VAULTLIB" person ensure --vault "$VAULT" --name "Alex Rivera"
-```
-
-Take `slug` from the result — never slugify the name yourself — and record it
-as the join key every later skill uses for "the vault owner":
-
-```bash
-python3 "$VAULTLIB" config write --vault "$VAULT" --field owner --value alex-rivera
-```
-
-Then the timezone. **Propose, then confirm** — from what they just said about
-where they sit and when they work, offer the IANA name ("You're in Brussels,
-so `Europe/Brussels`?") rather than asking the vault owner to produce a
-timezone identifier:
-
-```bash
-python3 "$VAULTLIB" config write --vault "$VAULT" --field timezone --value "Europe/Brussels"
-```
-
-Both values are what phases 4 and 4b need to run at all. If either write
-fails, resolve it now rather than discovering it at the close of the session.
-
-Then, if `config read` reported `sync.start-date` in `missing`, stamp the
-vault's horizon with today's date — no question to ask, this is the
-provisioning date by definition:
-
-```bash
-python3 "$VAULTLIB" config write --vault "$VAULT" --field sync.start-date --value <today, YYYY-MM-DD>
-```
-
-From here on, no sync ever considers a meeting dated before it — recurring
-calendar series otherwise expose occurrences from long before the vault
-existed. If the vault owner asks for older meetings, that is a deliberate,
-interactive backfill run later, never a reason to backdate this value.
-
-### File 2 — areas of responsibility are not projects
-
-The role file is the longest one in a live session, and most of the drag comes
-from one blur: people answer "what do you own?" with a mix of standing
-responsibilities and things currently in flight. Both are useful; they are not
-the same object, and phase 3b needs to tell them apart.
-
-Say the distinction once, in their language, the first time it comes up:
-
-> *A responsibility is something that is always yours — pricing, the yard
-> network, the commercial team. A project is something that ends — this year's
-> tender, the new depot. I want both, but I'll keep them apart.*
-
-Then keep them apart as they talk, and carry both lists forward. Phase 3b
-opens with these named back, not with a blank question — the vault owner should
-never have to describe their own portfolio twice.
-
-### File 3 — ask the questions, and take a note of one answer
-
-Nobody can describe how they write. They can describe how they *want* to
-sound, which is a different and less useful thing, and it is why this file
-takes three minutes and produces the thinnest block in the set.
-
-The file's first question offers a way out of that: reading a sample of their
-own sent mail and drafting the block from how they actually write. **Ask it,
-and record the answer — but do not read anything yet.** Their mail account has
-not been connected at this point in the session, and nothing in this plugin
-reads a mailbox before it knows whose mailbox it is. Say that, in one line:
-*"If you'd like that, I'll come back to it in a few minutes, once your
-Microsoft account is connected."*
-
-Then ask the rest of the file's questions and write the block as usual. It is
-a complete, valid block on its own; the sent-mail pass in phase 2 revises it
-if they said yes and the connection goes through.
-
-## Phase 2 — connecting the accounts
-
-Two questions, in this order, and the first one is theirs:
-
-> *Do you want me to pull your recordings and meetings in automatically —
-> from Plaud, from Microsoft Teams, or both?*
-
-Use **AskUserQuestion**: Plaud, Microsoft 365, both, neither. Explain each in
-one breath as you go — Plaud is the pocket recorder, Microsoft 365 is the
-calendar and Teams meetings — and say what "neither" means rather than
-treating it as a mistake (the degradation table at the bottom of this file is
-the script for that).
-
-*Then*, for each one they chose, check whether that connector is actually
-live in this session. If it is, confirm the account with them and connect it.
-If it is not, explain what has to be switched on and by whom, and move on
-without treating it as a failure. Same outcome as before; the vault owner is
-asked what they want before being shown machinery.
-
-**Connecting is per-vault, and that is the point.** A connector signs in at
-the *user* level; tying the signed-in account to *this* vault is why a laptop
-holding two engagements never syncs one into the other. Worth one sentence to
-the consultant; worth none to the vault owner unless they ask.
-
-**The rule, and it has no exceptions: never ask anyone to type an email
-address.** Apple and Google sign-ins often give a connector a synthetic
-address, so the address the vault owner knows may never appear in the payload at
-all — and a display name is rejected by the CLI outright. The hint is copied
-**verbatim from the whoami payload**, character for character, or the
+**Nobody types an email address — no exceptions.** The account hint is
+copied **verbatim from the whoami payload**, character for character, or the
 connection does not happen.
 
-### Plaud
+#### Plaud
 
-With the vault owner signed in, call `mcp__plaud__get_current_user`. Write the raw
-JSON to `$SCRATCH/plaud.whoami.json` with the Write tool — never echo a large
-payload through Bash.
-
-Show them the **human-recognizable nickname** from the payload (the account
-name, the device name) and ask one question: *"Is this your account?"* Wait
-for an explicit yes. A shrug is not a yes; an unrecognized account means the
-wrong one is signed in, and the fix is to sign in again, not to connect it
-anyway.
-
-On yes, take the `id` or `email` field **verbatim from the payload**:
+With the owner signed in, call `get_current_user` on the Plaud connector and
+write the raw JSON to `$SCRATCH/plaud.whoami.json` with the Write tool —
+never echo a large payload through Bash. Show the account name and device
+name from it and ask *"Is this your account?"* Wait for an explicit yes. On
+yes, take `id` or `email` verbatim from the payload:
 
 ```bash
 python3 "$VAULTLIB" config write --vault "$VAULT" --field adapters.plaud.account_hint --value "<verbatim from the payload>"
 python3 "$VAULTLIB" config write --vault "$VAULT" --field adapters.plaud.enabled --value true
-```
-
-Then prove it, in that order — hint first, enable second, verify third:
-
-```bash
 python3 "$VAULTLIB" config verify-account --vault "$VAULT" --adapter plaud --identity "$SCRATCH/plaud.whoami.json"
 ```
 
-`match: true` is the only acceptable result. Anything else means the value you
-wrote is not in the payload — re-copy it, do not retype it from memory, and
-never "fix" it by loosening the hint.
-
-**If the mismatch cannot be resolved in this session, put the adapter back the
-way you found it before moving on** — an adapter left `enabled: true` behind a
-hint that matches nothing is refused by every later sync and evening run, and
-the vault owner loses their calendar prep without ever being told why:
+`match: true` is the only acceptable result. Anything else: re-copy from the
+payload, never retype it, never loosen the hint. If it cannot be resolved,
+put the adapter back before moving on:
 
 ```bash
 python3 "$VAULTLIB" config write --vault "$VAULT" --field adapters.plaud.enabled --value false
 python3 "$VAULTLIB" config write --vault "$VAULT" --field adapters.plaud.account_hint --null
 ```
 
-That is the declined path from the subsection below, reached late — say so out
-loud, and say what the vault does without this connector. Then **sweep the
-payload immediately**:
+Then sweep the payload:
 
 ```bash
 python3 "$VAULTLIB" scratch sweep --dir "$SCRATCH"
 ```
 
-Immediately means before the next question, not at the end of the session.
+#### Microsoft 365
 
-### Microsoft 365
-
-Identical steps, three substitutions: the whoami tool is `get_me`, the hint
-comes from `mail` or `userPrincipalName`, and the adapter is `m365`.
+Identical steps: the whoami tool is `get_me`, written to
+`$SCRATCH/m365.whoami.json`; the hint comes from `mail` or
+`userPrincipalName`; the adapter is `m365`. Note the `displayName` and `jobTitle` shown in
+the payload now — step 2 offers them as their name and role.
 
 ```bash
 python3 "$VAULTLIB" config write --vault "$VAULT" --field adapters.m365.account_hint --value "<verbatim from the payload>"
@@ -395,347 +225,411 @@ python3 "$VAULTLIB" config write --vault "$VAULT" --field adapters.m365.enabled 
 python3 "$VAULTLIB" config verify-account --vault "$VAULT" --adapter m365 --identity "$SCRATCH/m365.whoami.json"
 ```
 
-Once `match: true`, read the domains off `mail` and `userPrincipalName` in
-the same payload — the text after each address's `@`, deduplicated (the two
-fields often differ, e.g. a `.onmicrosoft.com` UPN beside a vanity `mail`
-domain) — and write them before sweeping:
+Once `match: true`, take the domains after the `@` in `mail` and
+`userPrincipalName` (deduplicated) and write them. They are the
+organisation's own domains, which is how the vault tells colleagues from
+outside organisations:
 
 ```bash
 python3 "$VAULTLIB" config write --vault "$VAULT" --field adapters.m365.home_domains --value "<domain>[,<domain>]"
 ```
 
-These are the organisation's own email domains, the seed for the
-external-organizer filter: a meeting organised from any other domain is
-hosted in another organisation's tenant, and this account's Teams
-transcripts for it are unreachable by design, so `/sync-recordings` lists
-those occurrences as external instead of trying. Ask the vault owner
-whether their organisation uses further email domains — subsidiaries,
-legacy names — and if so append them to the same `--value`, comma-separated
-(the write replaces the whole list, so include every domain each time).
+Ask whether their organisation uses other email domains (subsidiaries, older
+names) and, if so, append them to the same `--value` (the write replaces the
+whole list). An unresolved mismatch unwinds exactly like Plaud's, with
+`adapters.m365`. Then sweep the payload:
 
 ```bash
 python3 "$VAULTLIB" scratch sweep --dir "$SCRATCH"
 ```
 
-Read `match` before you sweep — the payload is the only place the correct
-hint exists, and on a mismatch you re-copy from it rather than retyping.
-Sweep once the connection is settled, whichever way it went. An unresolved
-mismatch unwinds the same way as Plaud's, with `adapters.m365`: `enabled` back
-to `false`, `account_hint` back to `--null`. This connection is what phases
-3b, 3c and 4 read the calendar through, so say out loud that it just became
-live.
+## Step 2 — what only they know
 
-#### The sent-mail read, if they asked for it in file 3
+Everything here is asked; nothing here is read from their accounts. Record
+each answer verbatim as you get it — later proposals and blocks may cite
+only what was read or what they said:
 
-**Only here, and only on all four of these**: they said yes in file 3,
-`adapters.m365.enabled` is true, `outlook_email_search` exists, and
-`verify-account` returned `match: true` on the line above. That last one is
-the whole point of doing this after the connection instead of during the
-interview — until it passes, the signed-in mailbox may belong to the
-consultant or to a previous engagement, and a writing style abstracted from a
-stranger's prose is not something a read-back can catch. `plugin/CLAUDE.md`
-states the rule this obeys: only `match: true` may proceed to listing content,
-and a mailbox search is listing content.
+```bash
+python3 "$VAULTLIB" discover answer --dir "$SCRATCH" --question "<the question>" --text "<their words>"
+```
 
-1. Search their **own sent mail**, a recent sample, and write the raw result
-   to `$SCRATCH/sentmail.sample.json` with the Write tool — never echo a large
-   payload through Bash.
-2. Draft a revised `communication-style` block from it: length, register, how
-   they open and close, bullets versus prose, the words they actually use.
-   Keep this draft in the conversation — do not write it to `$SCRATCH` yet.
-   The sweep on the next step takes `*.block.md` too, and an in-flight draft
-   must not be sitting there when it runs.
-3. **Sweep the sample immediately** — before the read-back, not at the end of
-   the session:
+In this order:
+
+1. **Company rules.** *"Does your company have rules about where information
+   like this may be kept?"* Their answer feeds
+   `preferences-and-constraints`. If it rules out reading their mail or
+   chats, there is no read: say so, and skip the consent question below.
+2. **About them.** One choice first: their name, with the `displayName` from
+   step 1 as the first option and "Other" for a different one. The language
+   of their evening note is a choice too. Their role is a choice when step 1 showed a
+   `jobTitle`: that title first, "Other" for their own words. Everything else
+   is open, asked in plain text in one message: what people call them, the
+   company they work for, their role if there was no title, one line of
+   background, and their working hours (start and end of a normal day). Record the company as they name it — their mail
+   domain is not a company name, and never infer one from it.
+3. **Where they are based.** Offer the time zone as a choice ("You're in
+   Brussels, so Brussels time?") rather than asking for an identifier, and
+   write it:
 
    ```bash
-   python3 "$VAULTLIB" scratch sweep --dir "$SCRATCH"
+   python3 "$VAULTLIB" config write --vault "$VAULT" --field timezone --value "Europe/Brussels"
    ```
 
-4. Read the draft back like any other block, alongside what they told you in
-   file 3. Only once they approve, write it to
-   `$SCRATCH/communication-style.block.md` and land it with
-   `context write --file communication-style`. Expect corrections: a draft
-   built from mail to their board is not how they write to their team, and
-   that correction is itself the most valuable line in the file.
+   Record their answer as the words of the option they chose ("Brussels
+   time"), not as "Yes", so the identity block can say it.
 
-If any of the four conditions fails — they declined, the connection did not
-happen, the tool is absent, the search returns nothing usable — the block
-written in file 3 stands and is perfectly good. Say which it was, in one line,
-and move on. A declined offer needs no commentary.
+Write the `identity` block from these answers through step 7 of "How every
+proposal works" (the check needs no read for a block made of their own
+words). Then make the owner's own record with the name they gave:
 
-**The mail is engagement data.** It never lands in the vault, it never appears
-in a summary, and the only thing that survives the read is the block they
-approved.
+```bash
+python3 "$VAULTLIB" person ensure --vault "$VAULT" --name "Alex Rivera"
+```
 
-### When a connector is unavailable or declined
+Take `slug` from the result — never slugify the name yourself — and record
+it as the join key every later skill uses for "the vault owner":
 
-Missing tool, failed sign-in, or a vault owner who would rather not connect it
-today: **skip it with an explicit line**, leave `enabled` false, and say what
-still works without it. Never enable an adapter you could not verify, and
-never present a skipped connector as merely "not set up yet" without saying
-what the vault loses until it is.
+```bash
+python3 "$VAULTLIB" config write --vault "$VAULT" --field owner --value alex-rivera
+```
 
-## Phase 3 — seeding
+If `config read` reported `sync.start-date` in `missing`, stamp today. There
+is no question to ask: this is the vault's start by definition.
 
-Three steps, in this order. The order is the point: entities give projects
-something to hang on, and both give the people list its meaning.
+```bash
+python3 "$VAULTLIB" config write --vault "$VAULT" --field sync.start-date --value <today, YYYY-MM-DD>
+```
 
-### Say two things before you start
+No sync ever considers a meeting dated before it. The read below is not a
+sync — it writes no meetings — which is why it has its own window.
 
-First, the shape of the next stretch, so nobody sits watching a cursor
-wondering whether it is their turn:
+### The consent question
 
-> *I'm going to set things up now — about ten to twenty minutes. I'll ask you
-> to confirm a few lists as I go, but there's nothing to prepare. Just keep
-> the session open.*
+With Microsoft 365 connected and no company rule against
+it, ask with **AskUserQuestion** (Yes / No):
 
-Second, the reassurance, **once, up front, covering everything that follows** —
-not buried in the projects step where it currently lives:
+> *May I look through your calendar, your sent mail and your list of Teams
+> chats for up to 5 minutes? I read the newest first, I never read the
+> text of your chats or your inbox, and I keep only what you approve.*
 
-> *Whatever we don't put in today can be added in under a minute later, any
-> time. So let's seed one or two of each and stop there — a short list you
-> recognize beats a long one you have to maintain.*
+**No** is a complete answer: skip step 3 and use "Without Microsoft 365"
+for every topic. Do not ask again, and do not argue.
 
-That sentence is what makes a small list feel deliberate rather than
-incomplete, and it applies to organizations, projects and people alike.
+## Step 3 — the read (up to 5 minutes)
 
-### 3a — Entities, from conversation only
+Only after a yes. Say it now: *"I'll look through them for up to 5 minutes —
+you'll hear from me when I'm done."* Then:
 
-Start by explaining what an entity *is*, in one breath: **a group of people,
-organized together, that they deal with** — and the vault keeps one page per
-group, so everything said about it collects in one place. Give the range
-concretely, because most people hear "entity" and think only of customers:
+```bash
+python3 "$VAULTLIB" discover window --timezone <tz>
+python3 "$VAULTLIB" discover clock-start --dir "$SCRATCH" --budget 300
+```
 
-- a client, or a prospect
-- a partner or a supplier
-- a regulator, an auditor, an industry body
-- **their own company** — the one most people forget
-- **a department or business unit inside their own company** — Finance, the
-  factory in Ghent, the shared-services centre. If they deal with it as a
-  counterpart, it is one of these.
+Dispatch **one** `setup-discovery-worker` agent. Its briefing names the
+contract path
+`${CLAUDE_PLUGIN_ROOT}/skills/setup-my-brain/references/discovery-contract.md`,
+`$SCRATCH`, `$VAULTLIB`, the `calendar` and `mail` windows and `page_caps`
+from the window result. Its whole reply is one outcome line of row counts.
 
-The last two go in as `business-unit`, and their own organization has to exist
-because 3b needs something to hang an internal responsibility on.
+Then build the evidence and delete the page files in the same call:
 
-Then ask them to name theirs. Follow up on what they say ("you mentioned the
-regulator earlier — is that one you'd want a page on?"), but keep the list to
-groups that matter to their work, not every logo they have met.
+```bash
+python3 "$VAULTLIB" discover build --vault "$VAULT" --dir "$SCRATCH" --expect "<source>=<rows>,..." --consume
+```
 
-**Entities are never derived from the calendar.** A recurring invite is not
-evidence that an organization matters to this vault owner; only they can say
-that, and a calendar-scraped list of vendors is exactly the kind of noise that
-makes an owner stop trusting the vault in week two.
+> If the build itself fails (`ok: false`), never open or edit a page file:
+> treat the whole read as failed and use "Without Microsoft 365" for every
+> topic.
 
-For each confirmed entity:
+`--expect` carries the row counts from the worker's outcome line
+(`profile=1,chats=62,sent=40,calendar=30`); pass `<source>=error` and
+`<source>=unread` through as they are. A count off by a row or two still
+builds and carries a `note` — the reader types rows by hand, and the pages
+are the truth. The build records any source whose count is further off, or
+that failed, with an `error` and skips it.
+
+Take only the `<source>=<rows>` pairs from the reply: drop the
+`discovery-ok:` prefix, the ` stopped-by-clock` flag and the `elapsed=`
+timings. Keep the whole reply line in mind: if the owner asks how the read
+went, show it to them as it is — the one exception to "never show
+machinery", because they asked for it. If the reply is not
+a `discovery-ok:` line at all — a `discovery-error:` line, or nothing
+usable — treat the whole read as failed: do not run the build, and use
+"Without Microsoft 365" for every topic.
+
+A source whose entry under `sources` carries an `error` is treated as empty:
+its topics fall back to their questions. A source marked `capped` was cut
+short, or never reached, by the clock: proposals from it speak of "your most
+recent" meetings, mails or chats. Say "done" with one plain sentence on what was looked at, from the
+`items` counts under `sources` ("I looked at 48 of your chats, 50 sent mails
+and 10 calendar entries"), and only what any gap means for them ("I couldn't
+read your calendar, so I'll ask about your meetings instead").
+
+The result's `entries` (id, kind, label, detail, text) are the **only**
+material any later proposal may use.
+
+## How every proposal works
+
+This loop is the same for every topic below.
+
+1. **Draft only from `entries`** and the owner's recorded answers. Never
+   from memory, from the raw rows, from public knowledge, or from what people
+   in this role usually do.
+2. **Write the proposal** to `$SCRATCH/m365_<topic>.payload.json`, where the
+   topic is one of `about-you`, `organisations`, `work`, `people`, `style`,
+   `systems`:
+
+   ```
+   {"topic": "work", "items": [
+     {"kind": "pick", "ref": "E7"},
+     {"kind": "claim", "text": "You meet your leadership team in the \"Weekly exco\".", "cites": ["E7"]}
+   ]}
+   ```
+
+   A **pick** is one list item — an organisation, a person, a forum, a
+   thread — and carries only the entry id; its name and evidence come from
+   the entry, never from you. A **claim** is prose: every name, number,
+   domain, email address and quoted title in it must appear in the entries or
+   answers it cites. Put meeting and thread titles in double quotes. Write
+   numbers as digits. Copy times exactly as the evidence or their answer
+   shows them. Never start a line of a claim with a name: lists go through
+   picks.
+3. **Check it:**
+
+   ```bash
+   python3 "$VAULTLIB" discover check --dir "$SCRATCH" --proposal "$SCRATCH/m365_work.payload.json"
+   ```
+
+   **Show only what is under `passed`.** A dropped item is gone: never
+   reword it until it passes, never mention it. If nothing passed, ask that
+   topic's own interview questions instead (see "Without Microsoft 365").
+4. **Show it plainly.** A claim is shown — in the Accept option's
+   `preview`, as every approval is — with a "Based on:" line that
+   repeats its `based_on` texts exactly as returned — never reworded or
+   summarised (you may translate only the words "Based on"). A pick becomes
+   an AskUserQuestion option: its `label` as the option, its `detail` as the
+   description. A person entry with a `note` has a name derived from their
+   email address: show the address too, and ask them to confirm the name.
+5. **Accept / Change / Skip.** On a change, record their words first, then
+   use them:
+
+   ```bash
+   python3 "$VAULTLIB" discover answer --dir "$SCRATCH" --question "<what you proposed>" --text "<their words, verbatim>"
+   ```
+
+   Their words become an `A…` entry that a claim may cite.
+6. **Interpretations are questions, never claims.** Whether something is a
+   standing responsibility or a project with an end, what type an
+   organisation is, which time zone, what time the evening run fires: offer
+   the likely answer as the first option of a choice, never state it.
+7. **Writing a context block.** Assemble it from accepted claims and the
+   owner's answers only — markdown prose and bullets, short and factual, no
+   marker comments. Write it to `$SCRATCH/<stem>.block.md` only now, check
+   it, then read it back as the Accept option's `preview` — the text exactly
+   as it will be written — and write it on approval:
+
+   ```bash
+   python3 "$VAULTLIB" discover check --dir "$SCRATCH" --block "$SCRATCH/identity.block.md"
+   python3 "$VAULTLIB" context write --vault "$VAULT" --file identity --content "$SCRATCH/identity.block.md"
+   ```
+
+   `passed: false` in the check's `result` lists the `unsupported` words:
+   take them out, or ask the owner and record their answer, then check again.
+   Never write a block that did not pass.
+
+For each context file, read `99-workflow-config/context/<stem>.md` with the
+Read tool first. Its `## Interview questions` are the full set for that
+file: skip a question only when an accepted proposal or a recorded answer
+already answers it; ask it when not, or when you are unsure.
+
+## Step 4 — your organisations
+
+Explain once: *an organisation is any group you deal with — a client, a
+partner, a supplier, a regulator, your own company, or a department inside
+it.* Propose from the `domain` entries as tick boxes, top first, plus their
+own company from step 2. For each ticked organisation, ask its type as a
+choice — `client`, `business-unit`, `partner`, `supplier`, `other` (their own
+company and its departments are `business-unit`) — and its name as they say
+it:
 
 ```bash
 python3 "$VAULTLIB" entity ensure --vault "$VAULT" --slug meridian-freight-holdings \
   --name "Meridian Freight Holdings" --type client --status active --owner alex-rivera
 ```
 
-`--type` is one of `client`, `business-unit`, `partner`, `supplier`, `other` —
-an AskUserQuestion where it is not obvious from what they said. `--status
-active` for the ones they work with today; `--owner` is the vault owner's slug
-from phase 1.
+The slug is the name they gave, lowercase and hyphenated
+(`meridian-freight-holdings`).
 
-### 3b — Projects, suggested prudently
+## Step 5 — your work
 
-Open with **their own words from file 2**: the responsibilities and the
-in-flight things they already described, read back as two short lists. Add,
-when m365 is connected, the recurring subjects on their calendar over the next
-and last two weeks (`outlook_calendar_search`, its `afterDateTime`/
-`beforeDateTime` taken from a query window computed deterministically by
-`dates window` rather than by hand). The tool caps at 25 events per call and
-four busy weeks far exceed that, so page — `offset` set to each response's
-`nextOffset` — until it stops. Then let the vault owner cut.
+The read has just gone through their chats and mail: open with what it
+found, never with a blank question.
 
-The distinction from file 2 is what decides `--type`:
+1. **What you're working on.** Propose the `chat` and `mail-subject` entries
+   as tick boxes, top first: *"These came up most in your chats and mail —
+   tick what you're working on."* For each ticked item, ask as a choice
+   whether it is a project that ends or something that is always theirs.
+   Then ask once, in plain text, what is missing from the list. For every
+   project they tick or name, ask for one line on what it is, in their
+   words, and record it.
+2. **Forums.** Propose any `recurring-meeting` entries as tick boxes. Then
+   ask in plain text which meetings they have every week and every month —
+   the read sees only a few days of calendar, so it rarely finds them itself.
+3. Ask openly: the three to five outcomes they are judged on, who reports to
+   them, and what lands on their desk that is not really theirs.
 
-- a standing responsibility — "pricing", "the yard network" — is an
-  `area-of-responsibility`
-- something with an end — "this year's tender" — is an `initiative`
-- a task — "finish the November board pack" — is neither, and does not become
-  an object at all
-
-Keeping those apart is what stops a vault filling with dead one-week folders.
-
-**Aim for three or four.** More is worse: an owner who watches ten thin project
-folders appear learns that the vault is a filing cabinet they now have to
-maintain. The reassurance was already given up front; if they hesitate, repeat
-the specific half — `/new-project` adds one in under a minute.
-
-For each confirmed project:
+Write the `role-and-responsibilities` block through the loop. Then create
+**three or four** projects at most — a short list they recognise beats a
+long one they have to maintain, and `/new-project` adds one any time:
 
 ```bash
 python3 "$VAULTLIB" project scaffold --vault "$VAULT" --name "Yard Automation Program" \
   --type initiative --entity meridian-freight-holdings --owner alex-rivera
 ```
 
-`--entity` is required and joins to 3a: an internal area of responsibility
-links to the vault owner's **own organization** entity — or to the business
-unit it sits in — which is exactly why those had to be created in 3a. Optional
-`--stage`, `--contacts` and `--source` each take one line and are worth
-passing when the vault owner has just said something that fits.
+`--type` is `area-of-responsibility` for "always theirs" and `initiative` for
+"something that ends" — ask it as a choice. `--entity` joins to an
+organisation created above; an internal responsibility links to their own
+company or department.
 
-### 3c — People, one list from both sources
+## Step 6 — your people
 
-When m365 is connected, pull attendees from the ±2-week calendar window and
-merge them with the names the vault owner mentioned during the interview into
-**one confirm/reject list**. One list, not two passes — the vault owner should
-not be asked about the same person twice with different framing, and the merged list is
-also how you catch that the person they described as "my chief of staff" is
-the same name that appears in every Monday invite.
-
-Walk it with them. Drop everyone they do not confirm, and do not argue for a
-name because the calendar is confident about it: attendance is not
-relationship. For each confirmed person:
+Propose from the `person` entries as tick boxes, top first, with each
+person's `detail` as the evidence. Attendance is not relationship: drop
+everyone they do not tick, and do not argue for a name. "Other" adds anyone
+missing. For each ticked person:
 
 ```bash
 python3 "$VAULTLIB" person ensure --vault "$VAULT" --name "Priya Nathan"
 ```
 
-Reading the calendar out loud tends to produce observations the interview did
-not — a standing forum nobody mentioned, a rhythm ("you're in back-to-back
-externals every Thursday"). **If the vault owner agrees the observation is real**,
-fold it into the relevant block and re-run `context write` for that file;
-those two are usually `role-and-responsibilities` and
-`preferences-and-constraints`. If they do not agree, drop it. A pattern in a
-calendar is a hypothesis, and this is the one moment in the deployment where
-the person who can confirm it is sitting right there.
+## Step 7 — how you write
 
-## Phase 4 — the first daily note
+Propose from the `sent-mail` entries: length, how they open and close,
+bullets or prose, formality. Each observation is a claim citing the mails it
+comes from, with their own phrases in double quotes. Ask openly how direct
+pushback should be, and which language for which audience. Expect corrections
+— how they write to their board is not how they write to their team — and use
+their words. Write the `communication-style` block.
 
-The close, and the moment the vault stops being a folder structure.
+## Step 8 — your systems and boundaries
 
-**Invoke the `/evening-sync` skill now, in this session** — follow
-`${CLAUDE_PLUGIN_ROOT}/skills/evening-sync/SKILL.md` in interactive mode. It
-reads the config you just filled (timezone, owner slug, the m365
-connection) and writes **tomorrow's** daily note: a prep section per real
-calendar meeting, naming the entities, projects and people seeded twenty
-minutes earlier. It is a pipeline run, not a CLI call — do not assemble a note
-by hand, and do not reimplement any of its stages here.
+Ask openly which business systems matter for their work, whether they use
+shared mailboxes, and where their files live; with what step 1 established
+(Microsoft 365, Plaud), write the `tools-and-systems` block.
 
-Then **open `60-daily-notes/{tomorrow}.md` on screen** and walk through it
-with them, section by section — naming what they are looking at as you go
-("this is your recap of today", "this is the prep for tomorrow's steerco").
+Ask openly what must never leave the vault without them reading it first.
+Offer the evening-run time as a choice built from the end of the working day
+they gave in step 2 ("your day usually ends at 18:00 — have the note ready by
+19:00?"). With the company-rules answer from step 2, write the
+`preferences-and-constraints` block.
 
-If the calendar was never connected, the note still gets written and carries
-the no-meetings line. Walk through it anyway; the recap and the structure are
-what you are showing them.
+## Step 9 — the first evening note
 
-## Phase 4b — the standing evening run
+Say it before you start: *"I'll now write tomorrow's note — you'll hear
+from me when it's done."* Then **invoke the `/evening-sync` skill, in this
+session**, typing a line in the chat as each of its parts starts (reading
+the calendar, checking today's meetings, writing the note) and saying why
+before any question it asks — follow `${CLAUDE_PLUGIN_ROOT}/skills/evening-sync/SKILL.md` in
+interactive mode. It reads the config just filled and writes **tomorrow's**
+note, naming the organisations, projects and people seeded minutes earlier.
+Do not assemble a note by hand and do not reimplement any of its stages.
 
-The note they are looking at was written because someone ran a skill. Nothing
-yet makes it happen again. **Do not say it arrives every evening until it
-does.**
+Say "done", open `60-daily-notes/{tomorrow}.md` on screen and walk them
+through it, naming each part ("this is your recap of today", "this is the
+prep for tomorrow's steerco"). Without a calendar the note carries the
+no-meetings line; walk through it anyway.
+
+## Step 10 — the standing evening run
 
 **Invoke `/schedule-daily-loop` now, in this session** — follow
-`${CLAUDE_PLUGIN_ROOT}/skills/schedule-daily-loop/SKILL.md`. It asks what time
-they want their evenings prepared, creates the scheduled task, starts it once
-by hand, and states the condition the routine depends on. Do not compose a
-schedule by hand here and do not reimplement its steps.
+`${CLAUDE_PLUGIN_ROOT}/skills/schedule-daily-loop/SKILL.md`. Do not compose a
+schedule by hand. They already chose the time in step 8: when
+`/schedule-daily-loop` asks for it, confirm that time with them rather than
+asking afresh. Its first manual run is what grants the routine access to
+their accounts; keep them in the room for it, and say before it starts that
+it runs once now. Type a line in the chat as each part starts and ends —
+checking for routines from an earlier setup and which vault they point to,
+creating or updating the routine, its first run — so they can follow it.
 
-Budget a few minutes for it, and keep the vault owner in the room: that first manual
-run is what grants the routine permission to reach their connectors, and it is
-the only chance they get to watch it work before they are asked to trust it.
+It ends **scheduled** — say the first automatic run as a day and a time, and
+what it depends on (the machine awake, Claude open) — or **handed off** — say
+plainly that the routine does not exist yet and that `/evening-sync` run on
+demand writes the same note meanwhile. Never end implying a routine nobody
+created.
 
-It ends one of two ways, and either is a fine end to Session 1:
+## Step 11 — close
 
-- **Scheduled** — say when the first automatic run is, as a day and a time,
-  and what it depends on (the machine awake, Claude open). *That* is the
-  sentence that used to be an overclaim and is now true.
-- **Handed off** — the scheduler was not available. Say plainly that the
-  routine does not exist yet, who is setting it up and by when, and that
-  `/evening-sync` run on demand writes the same note meanwhile.
-
-What must not happen is a session that ends implying a routine nobody created.
-
-## Phase 5 — close
-
-### Sweep first
-
-**Raw connector JSON is engagement data.** It must not outlive the session.
-Nothing persists from this run except what the vault owner confirmed into the
-vault; everything else was working material.
-
-Delete every scratch file this session wrote — whoami payloads and any mail
-sample (already swept at the point of use, but check), calendar results, and
-the draft blocks:
+Sweep first. Nothing read in this session outlives it except what they
+approved into the vault:
 
 ```bash
 python3 "$VAULTLIB" scratch sweep --dir "$SCRATCH"
 ```
 
-One call is the whole cleanup, because every scratch name this skill writes
-matches the sweep's built-in pattern list — that contract is stated up top,
-under Requirements. If a raw connector file somehow got a name outside the
-list, that is the naming bug to notice here; rename it to match a pattern
-and sweep again.
-
-### Then close from their side of the table
-
-The last thing they hear should be about their vault, not about your run. Not
-*"5 context files written, 2 adapters bound, 6/4/20 objects created"* — that
-is a deployment log with a person sitting in front of it.
-
-Close with, in this order:
+Then close from their side of the table, in this order:
 
 1. **What is true now** — *"You're set up. The vault knows who you are, how
-   you like to be written to, and what you're working on."*
-2. **What to go and look at**, by name and in the app — tomorrow's note first,
-   then one project page and one organization page, so they see the shape.
-3. **What happens next, and when** — the first automatic evening run as a day
-   and a time, or the hand-off from phase 4b.
-4. **What to do when something is missing** — `/new-project` and
-   `/update-entity` in one line each, framed as "you'll notice something's
-   missing in week two; here's what you do then".
-5. **Anything still owed**, named: connectors not switched on and who does it,
-   a routine not yet scheduled, a phase skipped on a re-run.
+   you write, and what you're working on."*
+2. **What to look at** — tomorrow's note first, then one project page and
+   one organisation page.
+3. **What happens next, and when** — the first automatic evening run, or the
+   hand-off from step 10.
+4. **When something is missing** — `/new-project` and `/update-entity`, one
+   line each: "you'll notice something missing in week two; here's what you
+   do then".
+5. **Anything still owed** — an account not switched on and who does it, a
+   routine not yet scheduled, a topic skipped.
 
-Then, and only then, **one line of counts for the consultant's own record** —
-files filled, connectors live, entities/projects/people seeded. One line, at
-the end, clearly the operator's footnote rather than the vault owner's summary.
+## Without Microsoft 365
+
+When Microsoft 365 is not connected, the company rules forbid reading, they
+declined the consent question, or a topic's proposals all failed the check,
+that topic becomes a short interview: read
+`99-workflow-config/context/<stem>.md` with the Read tool and ask its
+`## Interview questions` one at a time, conversationally, building each
+follow-up from what they already said. Record their answers with
+`discover answer`, draft the block from them, check it, read it back, write
+it. Organisations, projects and people then come from what they named.
 
 ## Degradation
 
-Every phase degrades to something honest. The interview alone still produces a
-valid vault.
+| Missing | Read | Topics | Evening note | Evening run |
+|---|---|---|---|---|
+| **Microsoft 365** | skipped | interview questions only | written, with the no-meetings line | unaffected |
+| **Plaud** | unaffected | unaffected | unaffected — `/sync-recordings` still reads `10-inbox/` | unaffected |
+| **Consent declined, or company rules forbid reading** | skipped | interview questions only | unaffected | unaffected |
+| **A source errors, is empty or its count is off by more than a couple of rows** | recorded | that source's topics fall back to questions | unaffected | unaffected |
+| **The clock stopped a source** | recorded as `capped` | proposals say "your most recent…" | unaffected | unaffected |
+| **Scheduler** | unaffected | unaffected | unaffected | handed off in writing, never implied |
 
-| Missing | File 3 | 3b projects | 3c people | Phase 4 | Phase 4b |
-|---|---|---|---|---|---|
-| **m365** | offer recorded, never acted on — the file-3 block stands | interview mentions only | interview-mentioned names only | note is written; it carries the no-meetings line | unaffected |
-| **Plaud** | unaffected | unaffected | unaffected | unaffected — `/sync-recordings` still runs its inbox adapter over `10-inbox/` | unaffected |
-| **both** | offer recorded, never acted on — the file-3 block stands | interview mentions only | interview-mentioned names only | note is written from the interview and the seeding alone | unaffected |
-| **scheduler** | unaffected | unaffected | unaffected | unaffected | routine is handed off in writing, never implied |
-
-With no connectors at all the vault is complete and usable: the portfolio is
-filled, entities, projects and people exist, and files dropped into
-`10-inbox/` sync as meetings. Say which connectors still need to be set up
-afterwards, and that re-running `/setup-my-brain` later picks the
-connection step back up exactly where this session left it.
+With no accounts at all the vault is still complete and usable. Say which
+accounts still need connecting, and that running `/setup-my-brain` again
+later picks the connection step up where this session left it.
 
 ## Hard rules
 
-1. **Fill, never scaffold.** A folder that is not a provisioned vault ends the
-   run at phase 0 with a pointer to the runbook — never with a folder this
-   skill created.
-2. **Pending migrations stop the session.** Interviewing into a stale
-   structure is not a smaller problem than rescheduling the session.
-3. **Nobody types an email address, and nothing is read before the account is
-   proven.** Every account hint is copied verbatim from a whoami payload, and
-   `config verify-account` must return `match: true` before any content is
-   listed through that adapter — calendar, recordings or mail alike.
-4. **A whoami payload — or a mail sample — is deleted the moment it has been
-   used**, not at the end of the session.
-5. **Entities come from the vault owner, never from the calendar.**
-6. **Every block is read back and approved before it is written**, including
-   one drafted from their own sent mail.
-7. **Every write goes through the CLI.** Context blocks, config fields,
-   people, entities and projects each have their subcommand; nothing here
-   edits a vault file directly.
-8. **Prefer fewer, confirmed objects to more, inferred ones.** Three projects
-   the vault owner named beat ten the calendar suggested, and `/new-project`,
-   `/update-entity` and the next session all exist.
-9. **The evening run is scheduled or explicitly handed off.** The session
-   never ends describing a routine that does not exist.
+1. **Fill, never scaffold — and never provision.** A folder that is not a
+   provisioned vault ends the session at step 0. Never run
+   `/provision-vault`, never create `99-workflow-config/`, never write a file
+   into an unprovisioned folder.
+2. **Pending migrations stop the session.**
+3. **Nobody types an email address, and nothing is read before the account
+   is proven.** Every hint is copied verbatim from a whoami payload, and
+   `config verify-account` must return `match: true` before the read.
+4. **Nothing is read without their explicit yes to the consent question**,
+   and the company-rules question comes first: a rule against reading means
+   no read.
+5. **The read stops at its time budget** — the clock decides, not you.
+6. **Raw reads are deleted the moment they are built into evidence**
+   (`discover build --consume`); everything else in scratch is swept at the
+   close.
+7. **Organisations may be proposed from calendar and mail; only the owner
+   confirms.**
+8. **Nothing is shown to the owner that `discover check` did not pass.**
+9. **Chat message text is never read, and neither is the Inbox.** Chats are
+   read as a list: who is in them and what they are called.
+10. **Every block is read back and approved before it is written.**
+11. **Every write goes through the CLI.**
+12. **Prefer fewer, confirmed objects to more, inferred ones.**
+13. **The evening run is scheduled or explicitly handed off.**
