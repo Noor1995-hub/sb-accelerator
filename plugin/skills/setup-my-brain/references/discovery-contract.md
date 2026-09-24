@@ -22,7 +22,12 @@ python3 "$VAULTLIB" discover clock-check --dir "$SCRATCH"
 ```
 
 When `result.continue` is false, stop at once: fetch nothing more, write
-nothing more, and reply. Never estimate the time yourself.
+nothing more, and reply.
+
+> If the command does not return `ok: true`, stop at once too, and reply
+> `discovery-error: clock unavailable`.
+
+Never estimate the time yourself.
 
 ## Order
 
@@ -85,5 +90,10 @@ a source's pages; markers are not rows:
 `discovery-ok: profile=1 calendar=<rows> sent=<rows> chats=<rows>`
 
 add ` stopped-by-clock` when the clock ended the read, and write
-`<source>=error` for a source that failed, e.g.
-`discovery-ok: profile=1 calendar=180 sent=64 chats=error stopped-by-clock`.
+`<source>=error` for a source that failed.
+
+> A source the clock stopped before its first page writes no file and is
+> reported `<source>=unread`.
+
+e.g.
+`discovery-ok: profile=1 calendar=180 sent=64 chats=unread stopped-by-clock`.

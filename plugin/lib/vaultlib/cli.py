@@ -594,8 +594,9 @@ def build_parser() -> argparse.ArgumentParser:
     discover_build.add_argument(
         "--expect",
         help="worker row counts from its outcome line, e.g. "
-             "inbox=398,sent=81; use <source>=error for a source the worker "
-             "reported as failed")
+             "calendar=180,sent=64; use <source>=error for a source the "
+             "worker reported as failed and <source>=unread for one the "
+             "clock stopped before its first page")
     discover_clock_start = discover_sub.add_parser(
         "clock-start", help="start the read's time budget (the worker cannot see a clock)")
     discover_clock_start.add_argument("--dir", required=True)
@@ -749,9 +750,9 @@ def _parse_expect(text: Optional[str]) -> Optional[dict]:
     for part in text.split(","):
         source, sep, value = part.strip().partition("=")
         if not sep or not source.strip():
-            raise ValueError(f"--expect entry {part!r} must look like inbox=398")
+            raise ValueError(f"--expect entry {part!r} must look like calendar=180")
         value = value.strip()
-        counts[source.strip()] = "error" if value == "error" else int(value)
+        counts[source.strip()] = value if value in ("error", "unread") else int(value)
     return counts
 
 

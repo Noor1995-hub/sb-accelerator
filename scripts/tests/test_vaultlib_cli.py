@@ -2282,6 +2282,17 @@ def test_discover_build_expect_is_parsed_and_enforced(capsys, tmp_path):
     assert "error" in payload["result"]["sources"]["profile"]
 
 
+def test_discover_build_accepts_unread(capsys, tmp_path):
+    root = make_vault(tmp_path)
+    scratch = tmp_path / "scratch"
+    scratch.mkdir()
+    _profile_page(scratch)
+    code, payload = run(capsys, ["discover", "build", "--vault", str(root),
+                                 "--dir", str(scratch), "--expect", "profile=1,chats=unread"])
+    assert code == 0
+    assert payload["result"]["sources"]["chats"]["capped"] is True
+
+
 def test_discover_build_rejects_a_malformed_expect(capsys, tmp_path):
     root = make_vault(tmp_path)
     scratch = tmp_path / "scratch"

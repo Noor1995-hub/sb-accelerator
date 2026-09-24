@@ -71,6 +71,7 @@ steps 4–8 fall back to the context files' interview questions.
   `m365_clock.payload.json`; `discover clock-check --dir "$SCRATCH"` returns
   `{"continue": …, "elapsed_s": …, "remaining_s": …}`. The worker checks after
   every page and stops when `continue` is false. It can overrun by one page.
+  A clock check that fails also stops the read.
 - **Round-robin:** after the profile, one page of calendar, then sent, then
   chats, and again, each source newest first, until the clock stops it or the
   source ends or reaches its limit.
@@ -79,6 +80,9 @@ steps 4–8 fall back to the context files' interview questions.
   page file of a source in page order; a source whose worker was stopped by the
   clock while it still had more is recorded `capped`. `--consume` deletes
   exactly the page files it read. The names match the existing sweep patterns.
+  A source the clock stopped before its first page is reported `unread` and
+  recorded `capped`; a page the build cannot parse costs only its source,
+  recorded with an `error`.
 - **One build:** `discover build` no longer takes `--read`; it builds all four
   sources at once. `--expect` checks the worker's row count per source as
   before.

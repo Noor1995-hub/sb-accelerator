@@ -1,6 +1,6 @@
 ---
 name: setup-my-brain
-description: The Session-1 setup, run by the vault owner on their own in about thirty minutes — connects their accounts, asks who they are, reads their calendar, sent mail and Teams chat list for up to five minutes with their consent, proposes their organisations, people and work for them to accept, change or skip, and ends with their first evening note and a scheduled evening run. Triggers when the user invokes /setup-my-brain.
+description: The Session-1 setup, run by the vault owner on their own — connects their accounts, asks who they are, reads their calendar, sent mail and Teams chat list for up to five minutes with their consent, proposes their organisations, people and work for them to accept, change or skip, and ends with their first evening note and a scheduled evening run. Triggers when the user invokes /setup-my-brain.
 user_invocable: true
 origin: net-new
 ---
@@ -11,7 +11,7 @@ Session 1, run by the **vault owner on their own**. Nobody from delaware is in
 the room, and nobody but the owner sees what is read. By the end the vault
 knows who its owner is, which accounts belong to it, what they work on and
 with whom; it has written tomorrow's evening note while they watch, and that
-note has a standing time it arrives. Target: about thirty minutes.
+note has a standing time it arrives.
 
 What only the owner knows — who they are, when they work, what they are
 working on — is **asked**. What their accounts show better than memory —
@@ -118,7 +118,7 @@ python3 "$VAULTLIB" migrate status --vault "$VAULT"
 ```
 
 If `pending` is non-empty, **stop** and hand off to `/upgrade-vault`, in one
-plain line: the vault needs a quick update before setup, and nothing has been
+plain line: the vault needs an update before setup, and nothing has been
 asked yet. Come back once the upgrade is done.
 
 ### Fresh run or re-run
@@ -283,15 +283,17 @@ python3 "$VAULTLIB" config write --vault "$VAULT" --field sync.start-date --valu
 No sync ever considers a meeting dated before it. The read below is not a
 sync — it writes no meetings — which is why it has its own window.
 
-4. **Consent.** With Microsoft 365 connected and no company rule against
-   it, ask with **AskUserQuestion** (Yes / No):
+### The consent question
 
-   > *May I look through your calendar, your sent mail and your list of Teams
-   > chats for up to 5 minutes? I read the newest first, I never read the
-   > text of your chats or your inbox, and I keep only what you approve.*
+With Microsoft 365 connected and no company rule against
+it, ask with **AskUserQuestion** (Yes / No):
 
-   **No** is a complete answer: skip step 3 and use "Without Microsoft 365"
-   for every topic. Do not ask again, and do not argue.
+> *May I look through your calendar, your sent mail and your list of Teams
+> chats for up to 5 minutes? I read the newest first, I never read the
+> text of your chats or your inbox, and I keep only what you approve.*
+
+**No** is a complete answer: skip step 3 and use "Without Microsoft 365"
+for every topic. Do not ask again, and do not argue.
 
 ## Step 3 — the read (up to 5 minutes)
 
@@ -315,10 +317,14 @@ Then build the evidence and delete the page files in the same call:
 python3 "$VAULTLIB" discover build --vault "$VAULT" --dir "$SCRATCH" --expect "<source>=<rows>,..." --consume
 ```
 
+> If the build itself fails (`ok: false`), never open or edit a page file:
+> treat the whole read as failed and use "Without Microsoft 365" for every
+> topic.
+
 `--expect` carries the row counts from the worker's outcome line
-(`profile=1,calendar=180,sent=64,chats=75`); for a source it reported as
-`error`, pass `<source>=error`. The build records any source whose count does
-not match, or that failed, with an `error` and skips it.
+(`profile=1,calendar=180,sent=64,chats=75`); pass `<source>=error` and
+`<source>=unread` through as they are. The build records any source whose
+count does not match, or that failed, with an `error` and skips it.
 
 Take only the `<source>=<rows>` pairs from the reply: drop the
 `discovery-ok:` prefix and the ` stopped-by-clock` flag. If the reply is not
@@ -328,10 +334,10 @@ usable — treat the whole read as failed: do not run the build, and use
 
 A source whose entry under `sources` carries an `error` is treated as empty:
 its topics fall back to their questions. A source marked `capped` was cut
-short by the clock: proposals from it speak of "your most recent" meetings,
-mails or chats. Say "done", and tell the owner only what any gap means for
-them ("I couldn't read your calendar, so I'll ask about your meetings
-instead").
+short, or never reached, by the clock: proposals from it speak of "your most
+recent" meetings, mails or chats. Say "done", and tell the owner only what
+any gap means for them ("I couldn't read your calendar, so I'll ask about
+your meetings instead").
 
 The result's `entries` (id, kind, label, detail, text) are the **only**
 material any later proposal may use.

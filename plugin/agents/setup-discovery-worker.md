@@ -1,6 +1,6 @@
 ---
 name: setup-discovery-worker
-description: Discovery reader for /setup-my-brain, dispatched with a full briefing to read part of the vault owner's Microsoft 365 account into scratch. Not for direct invocation — without a briefing it has nothing to act on.
+description: Discovery reader for /setup-my-brain, dispatched with a full briefing to read the vault owner's calendar, sent mail and chat list into scratch for up to 5 minutes. Not for direct invocation — without a briefing it has nothing to act on.
 model: sonnet
 color: green
 disallowedTools: Agent, Workflow, WebFetch, WebSearch, NotebookEdit, Skill, SlashCommand, TodoWrite, Artifact, ListAgents, ReportFindings, ShareOnboardingGuide, Monitor, SendMessage, PushNotification, RemoteTrigger, TaskStop, CronCreate, CronDelete, CronList

@@ -275,11 +275,15 @@ def test_a_profile_only_account_builds_without_failing(tmp_path):
     assert result["sources"]["calendar"] == {"present": False, "items": 0, "capped": False}
 
 
-def test_a_page_that_is_not_json_fails_the_build_naming_it(tmp_path):
+def test_a_page_that_is_not_json_is_recorded_and_the_other_sources_build(tmp_path):
     page(tmp_path, "profile", 1, [OWNER])
-    (tmp_path / "m365_calendar.p2.payload.json").write_text('{"subject": \n', encoding="utf-8")
-    with pytest.raises(discover.DiscoverError, match="m365_calendar.p2.payload.json"):
-        build_all(tmp_path)
+    page(tmp_path, "calendar", 1, [event("Weekly exco", 14, attendees=[SAM])])
+    (tmp_path / "m365_chats.p1.payload.json").write_text('{"topic": \n', encoding="utf-8")
+    result = build_all(tmp_path, consume=True)
+    assert result["sources"]["chats"]["error"] == (
+        "chats: m365_chats.p1.payload.json: a line is not valid JSON")
+    assert "profile" in result["by_kind"]
+    assert "m365_chats.p1.payload.json" in result["consumed"]
 
 
 def test_expect_skips_a_source_whose_count_does_not_match(tmp_path):
@@ -326,6 +330,18 @@ def test_expect_zero_for_a_source_with_no_pages_is_fine(tmp_path):
     page(tmp_path, "profile", 1, [OWNER])
     result = build_all(tmp_path, expect={"chats": 0})
     assert "error" not in result["sources"]["chats"]
+
+
+def test_a_source_the_clock_never_reached_is_recorded_as_capped(tmp_path):
+    page(tmp_path, "profile", 1, [OWNER])
+    result = build_all(tmp_path, expect={"chats": "unread"})
+    assert result["sources"]["chats"] == {"present": False, "items": 0, "capped": True}
+
+
+def test_unread_with_pages_written_is_a_mismatch(tmp_path):
+    result = build_all(full_scratch(tmp_path), expect={"chats": "unread"})
+    assert result["sources"]["chats"]["error"] == (
+        "chats: the reader reported it unread, but pages were written")
 
 
 def test_a_badly_shaped_row_is_recorded_not_fatal(tmp_path):
@@ -682,3 +698,9 @@ def test_a_company_suffix_in_capitals_still_ends_the_sentence():
 def test_emphasis_still_leaves_a_longer_name_checked():
     assert discover._tokens("*Tom Peeters* joins") == ["Peeters"]
     assert discover._tokens("*(Contoso)* runs it") == ["Contoso"]
+
+
+def test_a_name_after_a_dotted_initialism_is_checked():
+    assert "Globex" in discover._tokens("Meets U.K. Globex weekly")
+    assert discover._tokens("You work at Northwind BV. You chair the Weekly exco.") == [
+        "Northwind BV", "Weekly"]

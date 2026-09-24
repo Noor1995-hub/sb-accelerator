@@ -163,7 +163,7 @@ def _read_items(path: Path) -> Tuple[List[dict], bool]:
     try:
         chunks = m365.load_listing(text)
     except m365.M365Error as exc:
-        raise DiscoverError(f"{path.name}: {exc}") from exc
+        raise DiscoverError(f"{path.name}: a line is not valid JSON") from exc
     rows = [chunk for chunk in chunks if isinstance(chunk, dict) and not _is_marker(chunk)]
     last = chunks[-1] if chunks else None
     capped = _is_marker(last) and bool(
@@ -445,9 +445,8 @@ def _entries(stats: dict) -> List[dict]:
 
 
 def _assign_ids(entries: List[dict], ids: Dict[str, str]) -> None:
-    """Stable ids: a key keeps the id it got in read 1, a new key takes the
-    next free number, so a proposal drafted after read 1 still points at the
-    same entry after read 2."""
+    """Ids follow the fixed entry order, so the same pages always give the
+    same ids and a proposal keeps pointing at the entry it cites."""
     next_number = max((int(value[1:]) for value in ids.values()), default=0) + 1
     for entry in entries:
         if entry["key"] not in ids:
@@ -512,7 +511,9 @@ def build(scratch_dir: str, *, home_domains: Optional[List[str]] = None,
         paths = _page_files(root, source)
         if not paths:
             expected = (expect or {}).get(source)
-            if expected is not None and expected != 0:
+            if expected == "unread":
+                stats["sources"][source] = {"present": False, "items": 0, "capped": True}
+            elif expected is not None and expected != 0:
                 reason = ("the reader reported a failure" if expected == "error"
                           else f"the reader reported {expected} rows, no pages were written")
                 stats["sources"][source] = {"present": False, "items": 0, "capped": False,
@@ -520,11 +521,20 @@ def build(scratch_dir: str, *, home_domains: Optional[List[str]] = None,
             else:
                 stats["sources"][source] = {"present": False, "items": 0, "capped": False}
             continue
-        rows, capped = _read_pages(paths)
         consumed.extend(paths)
+        try:
+            rows, capped = _read_pages(paths)
+        except DiscoverError as exc:
+            # A page the reader wrote badly costs that source only; the raw
+            # file is still consumed, never opened again or hand-repaired.
+            stats["sources"][source] = {"present": True, "items": 0,
+                                        "capped": False, "error": f"{source}: {exc}"}
+            continue
         expected = (expect or {}).get(source)
         if expected is not None and expected != len(rows):
             reason = ("the reader reported a failure" if expected == "error"
+                      else "the reader reported it unread, but pages were written"
+                      if expected == "unread"
                       else f"the reader reported {expected} rows, the pages hold {len(rows)}")
             stats["sources"][source] = {"present": True, "items": len(rows),
                                         "capped": capped, "error": f"{source}: {reason}"}
@@ -612,13 +622,13 @@ _ABBREVIATIONS = frozenset({"e.g", "i.e", "etc", "incl", "approx", "vs", "cf", "
 def _continues_sentence(previous: str) -> bool:
     """True when the previous segment ended on an abbreviation ("e.g.",
     "etc.") rather than a sentence, so the next word is not sentence-initial.
-    An all-capitals word ("BV", "NV") is a name or suffix, so it ends the
-    sentence normally."""
+    An all-capitals word without dots ("BV", "NV") is a name or suffix, so it
+    ends the sentence normally; a dotted initialism ("U.K.") does not."""
     words = previous.rstrip().split()
     if not words:
         return False
     stem = words[-1].rstrip(".")
-    if stem.isupper():
+    if stem.isupper() and "." not in stem:
         return False
     last = stem.casefold()
     return last in _ABBREVIATIONS or ("." in last and last.replace(".", "").isalpha())

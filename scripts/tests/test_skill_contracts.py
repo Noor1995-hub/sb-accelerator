@@ -1938,6 +1938,8 @@ def test_discovery_contract_pins_the_privacy_rules():
     for source in discover.PAGE_CAPS:
         assert f"page_caps.{source}" in contract
     assert discover.BROADCAST_LIMIT == 15 and "more than 15" in contract
+    assert "discovery-error: clock unavailable" in contract
+    assert "`<source>=unread`" in contract
 
 
 def test_setup_my_brain_shows_only_what_the_check_passed():
