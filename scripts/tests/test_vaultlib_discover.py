@@ -626,3 +626,28 @@ def test_the_clock_file_is_swept(tmp_path):
     from vaultlib import scratch
     discover.clock_start(str(tmp_path))
     assert scratch.sweep(str(tmp_path))["deleted"] == [discover.CLOCK_FILE]
+
+
+@pytest.mark.parametrize("block", [
+    "- **Role:** Chief Commercial Officer\n",
+    "*Chairs* the Weekly exco.\n",
+    "- Handles pricing, suppliers, etc.\n- Chairs the Weekly exco\n",
+])
+def test_formatting_and_line_ends_do_not_turn_grammar_capitals_into_names(scratch, block):
+    assert discover.check_block(str(scratch), write_block(scratch, block))["passed"] is True
+
+
+@pytest.mark.parametrize("text", ["You meet them with dhr. Jansen.",
+                                  "You work with bv. Jansen.",
+                                  "You meet them, par ex. Dupont."])
+def test_a_name_after_a_dutch_or_french_abbreviation_is_checked(scratch, text):
+    assert propose(scratch, "work", claim(text, "E2"))["passed"] == []
+
+
+def test_a_block_from_answers_alone_is_checked_without_evidence(tmp_path):
+    discover.answer(str(tmp_path), question="Role?", text="Business analyst at Northwind")
+    good = write_block(tmp_path, "- Business analyst at Northwind\n")
+    assert discover.check_block(str(tmp_path), good)["passed"] is True
+    bad = write_block(tmp_path, "- Business analyst at Contoso\n")
+    assert discover.check_block(str(tmp_path), bad) == {"passed": False,
+                                                        "unsupported": ["Contoso"]}

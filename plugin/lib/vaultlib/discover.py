@@ -583,7 +583,8 @@ _QUOTED_RE = re.compile(
     "|(?:^|(?<=[\\s(]))[\\x27\\u2018]([^\\x27\\u2018\\u2019\\n]{2,}?)[\\x27\\u2019]"
     "(?=[\\s.,;:!?)]|$)",
     re.MULTILINE)
-_SEGMENT_RE = re.compile(r"\n+|(?<=[.!?])\s+")
+_SENTENCE_RE = re.compile(r"(?<=[.!?])\s+")
+_EMPHASIS_LEAD_RE = re.compile(r"\A[*_~`]+")
 _LIST_MARK_RE = re.compile(r"\A\s*(?:[#>*+|-]+|\d+[.)])\s+")
 _TOKEN_WORD_RE = re.compile("[^\\W\\d_][\\w\\x27\\u2019&-]*")
 _POSSESSIVE_RE = re.compile("[\\x27\\u2019]s\\Z")
@@ -597,7 +598,8 @@ _CAP_STOP = frozenset({
 })
 _ABBREVIATIONS = frozenset({"e.g", "i.e", "etc", "incl", "approx", "vs", "cf", "resp",
                             "ca", "bijv", "o.a", "d.w.z", "enz", "p.ex", "z.b", "usw",
-                            "c.-\u00e0-d"})
+                            "c.-\u00e0-d", "bv", "dhr", "mevr", "inkl", "bzw", "ggf",
+                            "ex", "esp"})
 
 
 def _continues_sentence(previous: str) -> bool:
@@ -670,34 +672,35 @@ def _close_run(run: List[str], opens_segment: bool, phrases: List[str]) -> None:
 
 
 def _proper_nouns(text: str) -> List[str]:
-    """Runs of adjacent capitalised words. A segment's first word is
+    """Runs of adjacent capitalised words. A sentence's first word is
     capitalised for grammar, so it is dropped from the run it opens \u2014 but only
-    when it really opens a sentence: not after an abbreviation like "e.g.",
-    and not when anything (a bracket, a quote) precedes it. Segments are
-    sentences and lines (spec \u00a77.2)."""
+    when it really opens a sentence: not after an abbreviation like "e.g." on
+    the same line, and not when anything but a list marker or markdown
+    emphasis precedes it. Segments are sentences within lines (spec \u00a77.2)."""
     phrases: List[str] = []
-    previous = ""
-    for raw in _SEGMENT_RE.split(text):
-        continues = _continues_sentence(previous)
-        previous = raw
-        segment = _LIST_MARK_RE.sub("", raw)
-        run: List[str] = []
-        opens_segment = False
-        previous_end: Optional[int] = None
-        for match in _TOKEN_WORD_RE.finditer(segment):
-            word = match.group(0)
-            capital = word[0].isupper() and word not in _CAP_STOP
-            adjacent = (previous_end is not None
-                        and not segment[previous_end: match.start()].strip())
-            if capital and run and adjacent:
-                run.append(word)
-            else:
-                _close_run(run, opens_segment, phrases)
-                sentence_start = (not continues and previous_end is None
-                                  and not segment[: match.start()].strip())
-                run, opens_segment = ([word], sentence_start) if capital else ([], False)
-            previous_end = match.end()
-        _close_run(run, opens_segment, phrases)
+    for line in text.split("\n"):
+        previous = ""
+        for raw in _SENTENCE_RE.split(line):
+            continues = _continues_sentence(previous)
+            previous = raw
+            segment = _EMPHASIS_LEAD_RE.sub("", _LIST_MARK_RE.sub("", raw))
+            run: List[str] = []
+            opens_segment = False
+            previous_end: Optional[int] = None
+            for match in _TOKEN_WORD_RE.finditer(segment):
+                word = match.group(0)
+                capital = word[0].isupper() and word not in _CAP_STOP
+                adjacent = (previous_end is not None
+                            and not segment[previous_end: match.start()].strip())
+                if capital and run and adjacent:
+                    run.append(word)
+                else:
+                    _close_run(run, opens_segment, phrases)
+                    sentence_start = (not continues and previous_end is None
+                                      and not segment[: match.start()].strip())
+                    run, opens_segment = ([word], sentence_start) if capital else ([], False)
+                previous_end = match.end()
+            _close_run(run, opens_segment, phrases)
     return phrases
 
 
@@ -796,16 +799,18 @@ def check(scratch_dir: str, proposal_path: str) -> dict:
 
 
 def check_block(scratch_dir: str, block_path: str) -> dict:
-    """The same token rule for a finished context block, against the whole
-    evidence list and every owner answer, right before it is read back.
-    Returns `{"passed": bool, "unsupported": [...]}`."""
+    """The same token rule for a finished context block, checked against the
+    evidence list when there is one, and every owner answer \u2014 so a block
+    written from answers before any read is checkable too, right before it
+    is read back. Returns `{"passed": bool, "unsupported": [...]}`."""
     root = _scratch(scratch_dir)
-    evidence = _load_evidence(root)
+    entries = (_load_evidence(root).get("entries", [])
+               if (root / EVIDENCE_FILE).is_file() else [])
     answers = _load_answers(root)
     try:
         text = Path(block_path).read_text(encoding="utf-8")
     except OSError as exc:
         raise DiscoverError(f"block file {block_path!r} is unreadable: {exc}") from exc
-    haystack = _haystack(list(evidence.get("entries", [])) + answers)
+    haystack = _haystack(list(entries) + answers)
     unsupported = [token for token in _tokens(text) if not _present(token, haystack)]
     return {"passed": not unsupported, "unsupported": unsupported}
