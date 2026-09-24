@@ -62,7 +62,7 @@ steps 4–8 fall back to the context files' interview questions.
 
 - **Sources:** `profile` (`get_me`, one call), `calendar`, `sent` (Sent Items),
   `chats` (`teams_list_chats`). The Inbox and the separate sent-mail sample are
-  gone; the first `sent` page (20 newest) keeps `summary` for "how you write",
+  gone; the first `sent` page (the 25 newest) keeps `summary` for "how you write",
   later pages keep `subject` and `recipients` only.
 - **Outer limits:** calendar from 12 weeks back to 2 weeks ahead; sent mail 12
   weeks back; the chat list as ordered by the connector. The existing page caps

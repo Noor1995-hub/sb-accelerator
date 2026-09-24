@@ -511,7 +511,14 @@ def build(scratch_dir: str, *, home_domains: Optional[List[str]] = None,
         home |= {_domain(address) for address in stats["owner_addresses"]}
         paths = _page_files(root, source)
         if not paths:
-            stats["sources"][source] = {"present": False, "items": 0, "capped": False}
+            expected = (expect or {}).get(source)
+            if expected is not None and expected != 0:
+                reason = ("the reader reported a failure" if expected == "error"
+                          else f"the reader reported {expected} rows, no pages were written")
+                stats["sources"][source] = {"present": False, "items": 0, "capped": False,
+                                            "error": f"{source}: {reason}"}
+            else:
+                stats["sources"][source] = {"present": False, "items": 0, "capped": False}
             continue
         rows, capped = _read_pages(paths)
         consumed.extend(paths)

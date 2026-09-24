@@ -307,6 +307,27 @@ def test_expect_for_an_unknown_source_is_refused(tmp_path):
         build_all(full_scratch(tmp_path), expect={"inbox": 4})
 
 
+def test_expect_error_for_a_source_with_no_pages_is_recorded(tmp_path):
+    page(tmp_path, "profile", 1, [OWNER])
+    result = build_all(tmp_path, expect={"sent": "error"})
+    assert result["sources"]["sent"] == {
+        "present": False, "items": 0, "capped": False,
+        "error": "sent: the reader reported a failure"}
+
+
+def test_expect_rows_for_a_source_with_no_pages_is_recorded(tmp_path):
+    page(tmp_path, "profile", 1, [OWNER])
+    result = build_all(tmp_path, expect={"calendar": 180})
+    assert result["sources"]["calendar"]["error"] == (
+        "calendar: the reader reported 180 rows, no pages were written")
+
+
+def test_expect_zero_for_a_source_with_no_pages_is_fine(tmp_path):
+    page(tmp_path, "profile", 1, [OWNER])
+    result = build_all(tmp_path, expect={"chats": 0})
+    assert "error" not in result["sources"]["chats"]
+
+
 def test_a_badly_shaped_row_is_recorded_not_fatal(tmp_path):
     page(tmp_path, "profile", 1, [OWNER])
     page(tmp_path, "calendar", 1, [{"subject": "Weekly exco", "attendees": 5}])
