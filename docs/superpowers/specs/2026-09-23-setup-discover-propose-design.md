@@ -3,6 +3,117 @@
 **Date:** 2026-09-23 · **Status:** design, awaiting Matthias's review
 **Issue:** none yet (this spec is the issue)
 
+> **Revision 2 (2026-09-24), after the first live test.** Section R below
+> supersedes the parts of §4–§9 it names. Where R and the original text
+> disagree, R wins. The tested first version is tagged
+> `setup-discover-v1-tested`.
+
+## R. Revision 2 — after the first live test
+
+### R.1 What the test showed (Cowork, 2026-09-24, one consultant's account)
+
+| Observed | Consequence |
+|---|---|
+| Read 1 took 13–14 minutes, to propose name, working hours and mail language | Those are asked, never discovered. The cost is the worker typing out every row (over 100 calendar events with attendee lists) |
+| Working hours from first and last meeting were meaningless; a language proposal was pointless | Both proposals are removed |
+| No explicit question before calendar, mail and Teams were read | An explicit consent question before any read |
+| Read 2 took about 10 minutes, announced as 1.5–2 | Row caps do not bound time. A time budget replaces them, and no other time estimate is given |
+| People: good. Projects and responsibilities: weak | People stay as designed; projects are asked explicitly, with evidence only as suggestions |
+| The first evening note ran 2.5 minutes unannounced | Every long step is announced before it starts |
+| The session set up an unprovisioned vault itself, against hard rule 1 | The stop is made unmistakable |
+| Bold labels at a line start (`**Company:**`) failed the block check | Fixed in the check |
+
+A second Cowork test the same day launched three agents in one message, each
+sleeping 30 seconds in the shell: they started together, but their shell
+commands ran one after another (106 seconds in total). Whether connector calls
+also queue is unmeasured.
+
+### R.2 Decisions (Matthias, 2026-09-24)
+
+| # | Decision |
+|---|---|
+| 9 | Identity is asked upfront, never discovered: name (prefilled from the account), what people call them, company, role, where they are based and so the time zone, working hours, the language of their notes |
+| 10 | An explicit consent question before any read, naming what is read and the time limit |
+| 11 | One read, of calendar, sent mail and the chat list. No Inbox |
+| 12 | The read is bounded by time — up to 5 minutes — not by row counts: one worker, round-robin across the sources, newest first |
+| 13 | Projects and responsibilities are asked explicitly; recurring meetings, mail threads and chat topics are offered as suggestions, and each project gets a line in the owner's words |
+| 14 | Every long step is announced; no time estimate except the read's budget |
+
+### R.3 Flow (supersedes §4)
+
+| # | Step | What the owner experiences |
+|---|---|---|
+| 0 | Preflight | Nothing, unless the vault is not provisioned: then the session stops and says who sets it up. The skill never runs `/provision-vault` and never creates vault structure |
+| 1 | Connect | Which accounts, "is this your account?", account proof, home domains |
+| 2 | Upfront questions | Company rules; then the identity questions of decision 9; then the consent question: *"May I look through your calendar, your sent mail and your list of Teams chats for up to 5 minutes? I read the newest first, I never read the text of your chats, and I keep only what you approve."* The `identity` block is written from their answers |
+| 3 | The read | Announced as *"up to 5 minutes"*, then one worker, then "done" |
+| 4 | Organisations | As before (§8) |
+| 5 | Your work | Forums from recurring meetings as tick boxes; standing responsibilities asked; projects asked, with suggestions to tick and a description in their words each; metrics, reports, what is not theirs asked |
+| 6 | Your people | As before |
+| 7 | How you write | Claims from the newest sent mails, as before |
+| 8 | Systems and boundaries | Asked (no Inbox, so no notification senders to propose from) |
+| 9 | First evening note | Announced first: *"I'll now write tomorrow's note; this takes a couple of minutes."* |
+| 10 | Evening run, close | As before |
+
+Without Microsoft 365, or when they decline consent, step 3 is skipped and
+steps 4–8 fall back to the context files' interview questions.
+
+### R.4 The read (supersedes §5.2–§5.4)
+
+- **Sources:** `profile` (`get_me`, one call), `calendar`, `sent` (Sent Items),
+  `chats` (`teams_list_chats`). The Inbox and the separate sent-mail sample are
+  gone; the first `sent` page (20 newest) keeps `summary` for "how you write",
+  later pages keep `subject` and `recipients` only.
+- **Outer limits:** calendar from 12 weeks back to 2 weeks ahead; sent mail 12
+  weeks back; the chat list as ordered by the connector. The existing page caps
+  stay as a safety maximum, not as the bound.
+- **The clock:** `discover clock start --dir "$SCRATCH" --budget 300` writes
+  `m365_clock.payload.json`; `discover clock check --dir "$SCRATCH"` returns
+  `{"continue": …, "elapsed_s": …, "remaining_s": …}`. The worker checks after
+  every page and stops when `continue` is false. It can overrun by one page.
+- **Round-robin:** after the profile, one page of calendar, then sent, then
+  chats, and again, each source newest first, until the clock stops it or the
+  source ends or reaches its limit.
+- **Page files:** each page is written as soon as it is fetched, to
+  `m365_<source>.p<n>.payload.json` (`n` from 1). `discover build` reads every
+  page file of a source in page order; a source whose worker was stopped by the
+  clock while it still had more is recorded `capped`. `--consume` deletes
+  exactly the page files it read. The names match the existing sweep patterns.
+- **One build:** `discover build` no longer takes `--read`; it builds all four
+  sources at once. `--expect` checks the worker's row count per source as
+  before.
+- **Why one worker, not three:** see R.1. One worker and one clock give about
+  5 minutes whatever the surface does; parallel workers are a later
+  optimisation once connector-call timing is measured.
+
+### R.5 Evidence and topics (supersedes parts of §6 and §7.1)
+
+- Entry kinds kept: `profile`, `recurring-meeting`, `domain`, `person`,
+  `mail-subject`, `chat`, `sent-mail`. Removed: `working-day`, `language`,
+  `system-sender`.
+- Pickable kinds per topic: `organisations` → `domain`; `work` →
+  `recurring-meeting`, `mail-subject`, `chat`; `people` → `person`.
+  `about-you`, `style` and `systems` have no picks (their claims still cite
+  entries or answers).
+
+### R.6 Check fixes (amends §7.2)
+
+- Markdown emphasis glued to a line's first word (`**Company:**`, `*Chairs*`)
+  no longer makes that word non-exempt.
+- An abbreviation ending a line does not carry over to the next line.
+- `bv`, `dhr`, `mevr`, `inkl`, `bzw`, `ggf`, `ex`, `esp` join the abbreviation
+  list.
+
+### R.7 Hard rules (amends §9.2)
+
+- Rule 1 now reads: **Fill, never scaffold — and never provision.** If step 0
+  finds no provisioned vault, the session stops. It never runs
+  `/provision-vault`, never creates `99-workflow-config/`, and never writes a
+  file into an unprovisioned folder.
+- New: **Nothing is read without the owner's explicit yes to the consent
+  question.**
+- New: **The read stops at its time budget.**
+
 ## 1. Problem
 
 `/setup-my-brain` takes 60–90 minutes. For the executive committee of La
