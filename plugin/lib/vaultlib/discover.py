@@ -604,11 +604,16 @@ _ABBREVIATIONS = frozenset({"e.g", "i.e", "etc", "incl", "approx", "vs", "cf", "
 
 def _continues_sentence(previous: str) -> bool:
     """True when the previous segment ended on an abbreviation ("e.g.",
-    "etc.") rather than a sentence, so the next word is not sentence-initial."""
+    "etc.") rather than a sentence, so the next word is not sentence-initial.
+    An all-capitals word ("BV", "NV") is a name or suffix, so it ends the
+    sentence normally."""
     words = previous.rstrip().split()
     if not words:
         return False
-    last = words[-1].rstrip(".").casefold()
+    stem = words[-1].rstrip(".")
+    if stem.isupper():
+        return False
+    last = stem.casefold()
     return last in _ABBREVIATIONS or ("." in last and last.replace(".", "").isalpha())
 
 

@@ -651,3 +651,13 @@ def test_a_block_from_answers_alone_is_checked_without_evidence(tmp_path):
     bad = write_block(tmp_path, "- Business analyst at Contoso\n")
     assert discover.check_block(str(tmp_path), bad) == {"passed": False,
                                                         "unsupported": ["Contoso"]}
+
+
+def test_a_company_suffix_in_capitals_still_ends_the_sentence():
+    assert discover._tokens("You work at Northwind BV. You chair the Weekly exco.") == [
+        "Northwind BV", "Weekly"]
+
+
+def test_emphasis_still_leaves_a_longer_name_checked():
+    assert discover._tokens("*Tom Peeters* joins") == ["Peeters"]
+    assert discover._tokens("*(Contoso)* runs it") == ["Contoso"]
