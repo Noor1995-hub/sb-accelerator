@@ -52,7 +52,7 @@ also queue is unmeasured.
 | 6 | Your people | As before |
 | 7 | How you write | Claims from the newest sent mails, as before |
 | 8 | Systems and boundaries | Asked (no Inbox, so no notification senders to propose from) |
-| 9 | First evening note | Announced first: *"I'll now write tomorrow's note; this takes a couple of minutes."* |
+| 9 | First evening note | Announced first: *"I'll now write tomorrow's note — you'll hear from me when it's done."* |
 | 10 | Evening run, close | As before |
 
 Without Microsoft 365, or when they decline consent, step 3 is skipped and

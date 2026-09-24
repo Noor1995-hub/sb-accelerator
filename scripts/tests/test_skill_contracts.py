@@ -1967,7 +1967,7 @@ def test_setup_my_brain_dispatches_the_worker_and_consumes_raw_reads():
     builds = [line for line in text.splitlines() if "discover build --vault" in line]
     assert len(builds) == 1, "one build for the one read"
     assert all("--consume" in line and "--expect" in line for line in builds), (
-        "both reads delete their raw rows and enforce the worker's counts")
+        "the read deletes its raw rows and enforces the worker's counts")
 
 
 def test_setup_my_brain_is_written_for_the_owner_alone():

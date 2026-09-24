@@ -143,7 +143,7 @@ already there") and move on.
 
 Open with one plain sentence about what happens and why:
 
-> *In the next half hour I'll set up your second brain. I'll ask you a few
+> *Let's set up your second brain. I'll ask you a few
 > things only you know, look through your recent calendar, mail and chats if
 > you allow it, suggest who and what you work with, and you tell me what's
 > right. Nothing is kept except what you approve.*
@@ -156,6 +156,10 @@ what "neither" means (the degradation table at the bottom is the script).
 Then, for each one chosen, check whether it is live in this session. If it
 is not, say who needs to switch it on and move on without treating it as a
 failure.
+
+Connect accounts only here, before step 2. An account switched on later in
+the session waits for the next run of /setup-my-brain: reconnecting now
+would sweep away the answers already recorded.
 
 **Nobody types an email address — no exceptions.** The account hint is
 copied **verbatim from the whoami payload**, character for character, or the
@@ -251,6 +255,9 @@ In this order:
    python3 "$VAULTLIB" config write --vault "$VAULT" --field timezone --value "Europe/Brussels"
    ```
 
+   Record their answer as the words of the option they chose ("Brussels
+   time"), not as "Yes", so the identity block can say it.
+
 Write the `identity` block from these answers through step 7 of "How every
 proposal works" (the check needs no read for a block made of their own
 words). Then make the owner's own record with the name they gave:
@@ -312,6 +319,12 @@ python3 "$VAULTLIB" discover build --vault "$VAULT" --dir "$SCRATCH" --expect "<
 (`profile=1,calendar=180,sent=64,chats=75`); for a source it reported as
 `error`, pass `<source>=error`. The build records any source whose count does
 not match, or that failed, with an `error` and skips it.
+
+Take only the `<source>=<rows>` pairs from the reply: drop the
+`discovery-ok:` prefix and the ` stopped-by-clock` flag. If the reply is not
+a `discovery-ok:` line at all — a `discovery-error:` line, or nothing
+usable — treat the whole read as failed: do not run the build, and use
+"Without Microsoft 365" for every topic.
 
 A source whose entry under `sources` carries an `error` is treated as empty:
 its topics fall back to their questions. A source marked `capped` was cut
@@ -431,8 +444,7 @@ This is where their own words matter most; the read only offers suggestions.
 
 Write the `role-and-responsibilities` block through the loop. Then create
 **three or four** projects at most — a short list they recognise beats a
-long one they have to maintain, and `/new-project` adds one in under a
-minute:
+long one they have to maintain, and `/new-project` adds one any time:
 
 ```bash
 python3 "$VAULTLIB" project scaffold --vault "$VAULT" --name "Yard Automation Program" \
@@ -478,8 +490,8 @@ they gave in step 2 ("your day usually ends at 18:00 — have the note ready by
 
 ## Step 9 — the first evening note
 
-Say it before you start: *"I'll now write tomorrow's note; this takes a
-couple of minutes."* Then **invoke the `/evening-sync` skill, in this
+Say it before you start: *"I'll now write tomorrow's note — you'll hear
+from me when it's done."* Then **invoke the `/evening-sync` skill, in this
 session** — follow `${CLAUDE_PLUGIN_ROOT}/skills/evening-sync/SKILL.md` in
 interactive mode. It reads the config just filled and writes **tomorrow's**
 note, naming the organisations, projects and people seeded minutes earlier.
