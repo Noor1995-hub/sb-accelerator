@@ -1,9 +1,10 @@
 """Session-1 discovery for /setup-my-brain: the evidence list, and the check.
 
-A discovery worker writes trimmed Microsoft 365 rows into scratch. `build`
-turns them into one numbered evidence list; `check` refuses any proposal
-that names, counts or quotes something the evidence does not hold. The model
-drafts; this module decides what the vault owner may be shown.
+A discovery worker writes trimmed Microsoft 365 rows into scratch, page by
+page, within a time budget. `build` turns them into one numbered evidence
+list; `check` refuses any proposal that names, counts or quotes something
+the evidence does not hold. The model drafts; this module decides what the
+vault owner may be shown.
 
 Stdlib only, Python 3.10 floor: this runs inside the Cowork Linux VM.
 """
@@ -14,23 +15,16 @@ import json
 import re
 from datetime import datetime, time, timedelta, timezone as _timezone
 from pathlib import Path
-from statistics import median
 from typing import Dict, List, Optional, Tuple
 
 from . import dates, m365
 
 EVIDENCE_FILE = "m365_evidence.payload.json"
 ANSWERS_FILE = "m365_answers.payload.json"
-# Read 1 feeds "About you"; read 2 everything after it. Every name matches
-# scratch.SWEEP_PATTERNS, so the close-of-session sweep catches them all.
-READ_FILES = {
-    1: {"profile": "m365_profile.payload.json",
-        "calendar": "m365_calendar.payload.json",
-        "sentsample": "m365_sentsample.payload.json"},
-    2: {"inbox": "m365_inbox.payload.json",
-        "sent": "m365_sent.payload.json",
-        "chats": "m365_chats.payload.json"},
-}
+# One read, four sources. The worker writes each page as soon as it is fetched
+# to m365_<source>.p<n>.payload.json; every name matches scratch.SWEEP_PATTERNS.
+SOURCES = ("profile", "calendar", "sent", "chats")
+_PAGE_RE = re.compile(r"\Am365_(?P<source>[a-z]+)\.p(?P<n>\d+)\.payload\.json\Z")
 PAGE_SIZE = 25
 # A safety maximum only: the read is bounded by the clock (spec R.4).
 PAGE_CAPS = {"calendar": 12, "sent": 12, "chats": 4}
@@ -39,18 +33,17 @@ DEFAULT_BUDGET_S = 300
 BROADCAST_LIMIT = 15
 RECURRING_MIN = 3
 TOP = {"recurring-meeting": 15, "domain": 12, "person": 20, "mail-subject": 15,
-       "chat": 15, "system-sender": 10, "sent-mail": 20}
+       "chat": 15, "sent-mail": 20}
 PROFILE_FIELDS = (("displayName", "Name"), ("jobTitle", "Job title"),
                   ("department", "Department"), ("officeLocation", "Office"),
                   ("mail", "Email"), ("userPrincipalName", "Sign-in name"))
-LANGUAGES = {"de": "German", "en": "English", "fr": "French", "nl": "Dutch"}
 TOPIC_KINDS = {
-    "about-you": frozenset({"profile", "working-day", "language"}),
+    "about-you": frozenset(),
     "organisations": frozenset({"domain"}),
     "work": frozenset({"recurring-meeting", "mail-subject", "chat"}),
     "people": frozenset({"person"}),
-    "style": frozenset({"language"}),
-    "systems": frozenset({"system-sender"}),
+    "style": frozenset(),
+    "systems": frozenset(),
 }
 
 _UTC_FMT = "%Y-%m-%dT%H:%M:%SZ"
@@ -65,21 +58,7 @@ _SYSTEM_HINTS = ("azuredevops", "visualstudio", "salesforce", "servicenow",
                  "service-now", "atlassian", "workday", "concur", "successfactors")
 _BOT_DOMAIN = "teams.microsoft.com"
 _EMAIL_RE = re.compile(r"\A[^@\s<>]+@[^@\s<>]+\.[^@\s<>]+\Z")
-_WORD_RE = re.compile(r"[a-zà-öø-ÿß]+")
 _QUOTE_CUT_RE = re.compile(r"_{5,}|-{5,}|\b(?:From|Van|Von|De)\s?:", re.IGNORECASE)
-_STOPWORDS = {
-    "de": frozenset({"der", "die", "das", "und", "mit", "nicht", "wir", "sie", "ist",
-                     "sind", "bitte", "danke", "für", "auch", "aber", "ich"}),
-    "en": frozenset({"the", "and", "for", "with", "not", "that", "we", "you", "is",
-                     "are", "please", "thanks", "regards", "hi", "of", "to", "also",
-                     "but"}),
-    "fr": frozenset({"le", "la", "les", "des", "une", "et", "pour", "avec", "pas",
-                     "que", "nous", "vous", "je", "est", "sont", "merci", "bonjour",
-                     "cordialement", "aussi", "mais"}),
-    "nl": frozenset({"de", "het", "een", "en", "van", "voor", "met", "niet", "dat",
-                     "wij", "jullie", "ik", "je", "op", "zijn", "graag", "groeten",
-                     "bedankt", "ook", "maar"}),
-}
 
 
 class DiscoverError(Exception):
@@ -237,15 +216,6 @@ def _is_system(address: str) -> bool:
         hint in address for hint in _SYSTEM_HINTS)
 
 
-def _language(text: str) -> Optional[str]:
-    """The language with the most stop-word hits, when it has at least 3."""
-    words = _WORD_RE.findall(text.casefold())
-    scores = sorted(((sum(1 for word in words if word in stop), code)
-                     for code, stop in _STOPWORDS.items()), reverse=True)
-    score, code = scores[0]
-    return code if score >= 3 else None
-
-
 def _own_words(summary: str) -> str:
     """The part of a sent-mail summary the owner wrote: cut at the first
     quoted-reply marker, whitespace collapsed."""
@@ -268,9 +238,8 @@ def _write_json(path: Path, obj) -> None:
 
 def _empty_stats() -> dict:
     return {"profile": {}, "owner_addresses": [], "people": {}, "names": {},
-            "domains": {}, "recurring": {}, "days": {}, "mail_subjects": {},
-            "chats": [], "system_senders": {},
-            "language": {"total": 0, "counts": {}}, "sent_mail": [], "sources": {}}
+            "domains": {}, "recurring": {}, "mail_subjects": {},
+            "chats": [], "sent_mail": [], "sources": {}}
 
 
 def _countable(address: str, stats: dict) -> bool:
@@ -294,7 +263,7 @@ def _count_parties(stats: dict, parties: List[str], source: str, home: set) -> N
         _bump(stats["domains"], domain, source)
 
 
-def _ingest_profile(stats, rows, home, timezone, utc_offset) -> None:
+def _ingest_profile(stats, rows, home) -> None:
     profile = rows[0] if rows else {}
     for field, _label in PROFILE_FIELDS:
         value = profile.get(field)
@@ -306,32 +275,17 @@ def _ingest_profile(stats, rows, home, timezone, utc_offset) -> None:
     stats["owner_addresses"] = sorted(set(stats["owner_addresses"]) | owners)
 
 
-def _note_working_day(stats, event, timezone, utc_offset) -> None:
-    start = dates.utc_to_local(m365._event_start(event), timezone, utc_offset)[0]
-    end_utc = m365._event_end(event)
-    end = dates.utc_to_local(end_utc, timezone, utc_offset)[0] if end_utc else start
-    if start.weekday() >= 5 or end.date() != start.date():
-        return
-    day = start.date().isoformat()
-    first_new, last_new = start.hour * 60 + start.minute, end.hour * 60 + end.minute
-    first, last = stats["days"].get(day, [first_new, last_new])
-    stats["days"][day] = [min(first, first_new), max(last, last_new)]
-
-
-def _ingest_calendar(stats, rows, home, timezone, utc_offset) -> None:
+def _ingest_calendar(stats, rows, home) -> None:
     for event in rows:
         if event.get("isCancelled"):
             continue
         subject = _subject(event.get("subject"))
         if _is_noise_subject(subject):
             continue
-        if not event.get("isAllDay"):
-            if subject:
-                row = stats["recurring"].setdefault(
-                    subject.casefold(), {"subject": subject, "count": 0})
-                row["count"] += 1
-            if str(event.get("showAs") or "").casefold() in ("busy", "tentative"):
-                _note_working_day(stats, event, timezone, utc_offset)
+        if not event.get("isAllDay") and subject:
+            row = stats["recurring"].setdefault(
+                subject.casefold(), {"subject": subject, "count": 0})
+            row["count"] += 1
         listed = [event.get("organizer"), *(event.get("attendees") or [])]
         parties = sorted({address for address in map(_address, listed)
                           if address and _countable(address, stats)})
@@ -343,43 +297,21 @@ def _ingest_calendar(stats, rows, home, timezone, utc_offset) -> None:
         _count_parties(stats, parties, "calendar", home)
 
 
-def _count_language(stats: dict, text: str) -> None:
-    stats["language"]["total"] += 1
-    code = _language(text)
-    if code:
-        counts = stats["language"]["counts"]
-        counts[code] = counts.get(code, 0) + 1
-
-
-def _ingest_sentsample(stats, rows, home, timezone, utc_offset) -> None:
-    for mail in rows[: TOP["sent-mail"]]:
-        summary = _own_words(str(mail.get("summary") or ""))
-        if not summary:
-            continue
-        stats["sent_mail"].append({"subject": _subject(mail.get("subject")),
-                                   "summary": summary})
-        _count_language(stats, summary)
-
-
-def _ingest_mail(stats, rows, home, direction: str) -> None:
+def _ingest_sent(stats, rows, home) -> None:
+    """Sent mail: who the owner writes to, the threads they keep writing in,
+    and \u2014 from rows that carry a summary \u2014 their own words for "how you write"."""
     for mail in rows:
         subject = _subject(mail.get("subject"))
         if _is_noise_subject(subject):
             continue
-        if direction == "inbox":
-            sender = _address(mail.get("sender") or mail.get("from"))
-            if sender and _is_system(sender):
-                senders = stats["system_senders"]
-                senders[sender] = senders.get(sender, 0) + 1
-                continue
-            listed = [sender] if sender else []
+        summary = _own_words(str(mail.get("summary") or ""))
+        if summary and len(stats["sent_mail"]) < TOP["sent-mail"]:
+            stats["sent_mail"].append({"subject": subject, "summary": summary})
+        listed = [address for address in map(_address, mail.get("recipients") or [])
+                  if address]
+        size = mail.get("recipientCount")
+        if not isinstance(size, int):
             size = len(listed)
-        else:
-            listed = [address for address in map(_address, mail.get("recipients") or [])
-                      if address]
-            size = mail.get("recipientCount")
-            if not isinstance(size, int):
-                size = len(listed)
         parties = sorted({address for address in listed if _countable(address, stats)})
         if size > BROADCAST_LIMIT:
             parties = []
@@ -392,15 +324,7 @@ def _ingest_mail(stats, rows, home, direction: str) -> None:
             row["domains"] = sorted(set(row["domains"]) | set(external))
 
 
-def _ingest_inbox(stats, rows, home, timezone, utc_offset) -> None:
-    _ingest_mail(stats, rows, home, "inbox")
-
-
-def _ingest_sent(stats, rows, home, timezone, utc_offset) -> None:
-    _ingest_mail(stats, rows, home, "sent")
-
-
-def _ingest_chats(stats, rows, home, timezone, utc_offset) -> None:
+def _ingest_chats(stats, rows, home) -> None:
     """The chat list, never message text: type, topic and members. Names
     are taken from every chat that lists members; only chats at or under the
     broadcast limit count towards people and organisations."""
@@ -434,8 +358,6 @@ def _ingest_chats(stats, rows, home, timezone, utc_offset) -> None:
 _INGEST = {
     "profile": _ingest_profile,
     "calendar": _ingest_calendar,
-    "sentsample": _ingest_sentsample,
-    "inbox": _ingest_inbox,
     "sent": _ingest_sent,
     "chats": _ingest_chats,
 }
@@ -456,11 +378,6 @@ def _total(row: dict) -> int:
     return row.get("calendar", 0) + row.get("mail", 0) + row.get("chat", 0)
 
 
-def _hhmm(minutes: float) -> str:
-    whole = int(round(minutes))
-    return f"{whole // 60:02d}:{whole % 60:02d}"
-
-
 def _entry(key: str, kind: str, label: str, detail: str, text: str, facts: dict) -> dict:
     return {"key": key, "kind": kind, "label": label, "detail": detail,
             "text": text, "facts": facts}
@@ -475,23 +392,6 @@ def _entries(stats: dict) -> List[dict]:
         if value:
             out.append(_entry(f"profile:{field}", "profile", label, value,
                               f"{label}: {value}", {"field": field, "value": value}))
-    days = list(stats["days"].values())
-    if len(days) >= 3:
-        first = _hhmm(median(day[0] for day in days))
-        last = _hhmm(median(day[1] for day in days))
-        out.append(_entry(
-            "working-day", "working-day", "Working day", f"{first} to {last}",
-            f"Typical weekday: first meeting starts {first}, last meeting ends "
-            f"{last} (median over {len(days)} days)",
-            {"first_start": first, "last_end": last, "days": len(days)}))
-    language = stats["language"]
-    if language["counts"]:
-        code, count = sorted(language["counts"].items(), key=lambda kv: (-kv[1], kv[0]))[0]
-        name, total = LANGUAGES[code], language["total"]
-        out.append(_entry(
-            "language", "language", name, f"{count} of {total} messages",
-            f"Language of your sent mail: {name} in {count} of {total} messages",
-            {"language": name, "count": count, "total": total}))
     recurring = sorted((row for row in stats["recurring"].values()
                         if row["count"] >= RECURRING_MIN),
                        key=lambda row: (-row["count"], row["subject"].casefold()))
@@ -537,12 +437,6 @@ def _entries(stats: dict) -> List[dict]:
             f"chat:{chat['type']}:{chat['topic'].casefold()}", "chat", chat["topic"],
             members, f"Teams {chat['type']} chat \"{chat['topic']}\" ({members})",
             dict(chat)))
-    senders = sorted(stats["system_senders"].items(), key=lambda item: (-item[1], item[0]))
-    for address, count in senders[: TOP["system-sender"]]:
-        mails = _plural(count, "mail")
-        out.append(_entry(f"system:{address}", "system-sender", address, mails,
-                          f"Notifications from {address}: {mails}",
-                          {"address": address, "count": count}))
     for index, mail in enumerate(stats["sent_mail"][: TOP["sent-mail"]]):
         out.append(_entry(f"sent:{index}", "sent-mail", mail["subject"] or "(no subject)",
                           mail["summary"],
@@ -572,73 +466,76 @@ def _public_entry(entry: dict) -> dict:
     return out
 
 
-def build(scratch_dir: str, *, read: int, home_domains: Optional[List[str]] = None,
-          timezone: Optional[str] = None, utc_offset: Optional[str] = None,
-          consume: bool = False,
-          expect: Optional[Dict[str, object]] = None) -> dict:
-    """Turn one read's payload files into the evidence list.
+def _page_files(root: Path, source: str) -> List[Path]:
+    """A source's page files in page order \u2014 numeric, so p10 follows p2."""
+    pages = []
+    for path in root.iterdir():
+        match = _PAGE_RE.match(path.name)
+        if match and match.group("source") == source and path.is_file():
+            pages.append((int(match.group("n")), path))
+    return [path for _, path in sorted(pages)]
 
-    Read 1 starts a fresh evidence file; read 2 merges into it (stable ids,
-    per-source counts added). With `consume`, exactly the payload files this
-    call read are deleted once the evidence is written — the only deletion
-    here, so raw rows never outlive their use. A source whose rows the
-    connector shaped unexpectedly is recorded with an `error` and skipped;
-    the other sources still build. With `expect`, a source whose row count
-    differs from the reader's report, or which the reader reported as
-    failed, is recorded with an `error` and not ingested."""
+
+def _read_pages(paths: List[Path]) -> Tuple[List[dict], bool]:
+    """All rows of a source, and whether its last page says there was more."""
+    rows: List[dict] = []
+    capped = False
+    for path in paths:
+        page_rows, capped = _read_items(path)
+        rows.extend(page_rows)
+    return rows, capped
+
+
+def build(scratch_dir: str, *, home_domains: Optional[List[str]] = None,
+          consume: bool = False, expect: Optional[Dict[str, object]] = None) -> dict:
+    """Turn the read's page files into the evidence list.
+
+    Every build starts fresh from the pages present. With `consume`, exactly
+    the page files this call read are deleted once the evidence is written \u2014
+    the only deletion here, so raw rows never outlive their use. A source
+    whose rows the connector shaped unexpectedly is recorded with an `error`
+    and skipped; the other sources still build. With `expect`, a source whose
+    row count differs from the reader's report, or which the reader reported
+    as failed, is recorded with an `error` and not ingested."""
     root = _scratch(scratch_dir)
-    if read not in READ_FILES:
-        raise DiscoverError(f"--read {read!r} must be 1 or 2")
-    unknown = sorted(set(expect or {}) - set(READ_FILES[read]))
+    unknown = sorted(set(expect or {}) - set(SOURCES))
     if unknown:
         raise DiscoverError(
-            f"--expect names {', '.join(unknown)}, which read {read} does not read")
+            f"--expect names {', '.join(unknown)}, which the read does not cover")
     evidence_path = root / EVIDENCE_FILE
-    if read == 1:
-        evidence = {"schema": 1, "ids": {}, "stats": _empty_stats(), "entries": []}
-    else:
-        if not evidence_path.is_file():
-            raise DiscoverError(
-                "no evidence from read 1 in this scratch directory — run "
-                "`discover build --read 1` first; read 2 merges into it")
-        evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
-        if any(source in evidence["stats"]["sources"] for source in READ_FILES[2]):
-            raise DiscoverError(
-                "read 2 is already in this evidence — start again from read 1 "
-                "rather than counting mail twice")
+    evidence = {"schema": 2, "ids": {}, "stats": _empty_stats(), "entries": []}
     stats = evidence["stats"]
     home = {domain.casefold() for domain in (home_domains or [])}
     consumed: List[Path] = []
-    for source, name in READ_FILES[read].items():
+    for source in SOURCES:
         home |= {_domain(address) for address in stats["owner_addresses"]}
-        path = root / name
-        if not path.is_file():
+        paths = _page_files(root, source)
+        if not paths:
             stats["sources"][source] = {"present": False, "items": 0, "capped": False}
             continue
-        rows, capped = _read_items(path)
+        rows, capped = _read_pages(paths)
+        consumed.extend(paths)
         expected = (expect or {}).get(source)
         if expected is not None and expected != len(rows):
             reason = ("the reader reported a failure" if expected == "error"
-                      else f"the reader reported {expected} rows, the file holds {len(rows)}")
+                      else f"the reader reported {expected} rows, the pages hold {len(rows)}")
             stats["sources"][source] = {"present": True, "items": len(rows),
-                                        "capped": capped, "error": f"{name}: {reason}"}
-            consumed.append(path)
+                                        "capped": capped, "error": f"{source}: {reason}"}
             continue
         trial = copy.deepcopy(stats)
         try:
-            _INGEST[source](trial, rows, home, timezone, utc_offset)
+            _INGEST[source](trial, rows, home)
         except (m365.M365Error, AttributeError, KeyError, TypeError, ValueError) as exc:
-            # One source's data the connector shaped unexpectedly (e.g. a
-            # non-UTC calendar) must not cost the other sources their
-            # evidence: record it, keep nothing half-counted, carry on.
+            # One source's data the connector shaped unexpectedly must not
+            # cost the other sources their evidence: record it, keep nothing
+            # half-counted, carry on.
             stats["sources"][source] = {"present": True, "items": len(rows),
-                                        "capped": capped, "error": f"{name}: {exc}"}
+                                        "capped": capped, "error": f"{source}: {exc}"}
         else:
             stats.clear()
             stats.update(trial)
             stats["sources"][source] = {"present": True, "items": len(rows),
                                         "capped": capped}
-        consumed.append(path)
     entries = _entries(stats)
     _assign_ids(entries, evidence["ids"])
     evidence["entries"] = entries
@@ -650,7 +547,6 @@ def build(scratch_dir: str, *, read: int, home_domains: Optional[List[str]] = No
     for entry in entries:
         by_kind[entry["kind"]] = by_kind.get(entry["kind"], 0) + 1
     return {
-        "read": read,
         "evidence": evidence_path.name,
         "sources": stats["sources"],
         "by_kind": by_kind,

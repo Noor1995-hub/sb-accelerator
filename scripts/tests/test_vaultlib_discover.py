@@ -111,12 +111,6 @@ def test_noise_subjects_and_system_senders():
     assert not discover._is_system("priya.nathan@contoso.example")
 
 
-def test_language_needs_three_stop_words():
-    assert discover._language("Dag Priya, dat is goed voor mij en ik kijk het na") == "nl"
-    assert discover._language("Hi all, the update is ready for you") == "en"
-    assert discover._language("Ok, thanks") is None
-
-
 def test_own_words_cuts_the_quoted_reply():
     text = "Prima, doen we zo.\n________________\nFrom: Priya\nolder text"
     assert discover._own_words(text) == "Prima, doen we zo."
@@ -139,159 +133,39 @@ def event(subject, day, start="07:00", end="08:00", *, attendees=(),
             "isAllDay": all_day, "isCancelled": cancelled, "showAs": show}
 
 
-def read1_scratch(tmp_path):
-    write_rows(tmp_path / "m365_profile.payload.json", [OWNER])
-    write_rows(tmp_path / "m365_calendar.payload.json", [
-        event("Weekly exco", 14, attendees=[SAM]),                      # Mon
-        event("Weekly exco", 21, attendees=[SAM]),                      # Mon
-        event("Weekly exco", 28, attendees=[SAM]),                      # Mon
-        event("Supplier review", 15, "13:00", "16:00", attendees=[PRIYA]),  # Tue
-        event("Pricing sync", 16, "07:00", "16:00", attendees=[PRIYA, SAM]),  # Wed
+def entries_of(result, kind):
+    return [entry for entry in result["entries"] if entry["kind"] == kind]
+
+
+def page(scratch, source, n, rows, *, more=False):
+    return write_rows(scratch / f"m365_{source}.p{n}.payload.json", rows, more=more)
+
+
+def full_scratch(tmp_path):
+    page(tmp_path, "profile", 1, [OWNER])
+    page(tmp_path, "calendar", 1, [
+        event("Weekly exco", 14, attendees=[SAM]),
+        event("Weekly exco", 21, attendees=[SAM]),
+        event("Supplier review", 15, "13:00", "16:00", attendees=[PRIYA]),
         event("Company all-hands", 17,
               attendees=[f"person{i}@northwind.example" for i in range(20)]),
         event("Office closed", 18, all_day=True, show="free"),
         event("Accepted: Pricing sync", 16),
         event("Cancelled thing", 16, cancelled=True),
     ])
-    write_rows(tmp_path / "m365_sentsample.payload.json", [
-        {"subject": "RE: planning",
-         "summary": "Dag Priya, dat is goed voor mij en ik kijk het na. Groeten\n"
-                    "________________\nFrom: Priya"},
-        {"subject": "offerte", "summary": "Graag de offerte van de week, bedankt en groeten"},
-        {"subject": "update", "summary": "Hi all, the update is ready for you to review, thanks"},
-    ])
-    return tmp_path
-
-
-def entries_of(result, kind):
-    return [entry for entry in result["entries"] if entry["kind"] == kind]
-
-
-def build1(tmp_path, **kwargs):
-    return discover.build(str(tmp_path), read=1, home_domains=["northwind.example"],
-                          utc_offset=OFFSET, **kwargs)
-
-
-def test_read1_profile_entries_come_first_and_skip_absent_fields(tmp_path):
-    result = build1(read1_scratch(tmp_path))
-    profile = entries_of(result, "profile")
-    assert [entry["label"] for entry in profile] == ["Name", "Job title", "Email", "Sign-in name"]
-    assert profile[0]["id"] == "E1"
-    assert profile[1]["text"] == "Job title: Chief Commercial Officer"
-
-
-def test_read1_working_day_is_the_median_of_busy_weekdays(tmp_path):
-    [day] = entries_of(build1(read1_scratch(tmp_path)), "working-day")
-    assert day["text"] == ("Typical weekday: first meeting starts 09:00, last meeting "
-                           "ends 10:00 (median over 6 days)")
-
-
-def test_read1_recurring_meetings_need_three_and_skip_noise(tmp_path):
-    recurring = entries_of(build1(read1_scratch(tmp_path)), "recurring-meeting")
-    assert [entry["label"] for entry in recurring] == ["Weekly exco"]
-    assert recurring[0]["text"] == 'Recurring meeting "Weekly exco": 3 times in the window'
-
-
-def test_read1_people_exclude_the_owner_and_broadcasts(tmp_path):
-    people = entries_of(build1(read1_scratch(tmp_path)), "person")
-    assert [entry["label"] for entry in people] == ["Sam Okafor", "Priya Nathan"]
-    assert people[0]["detail"] == "4 meetings"
-    assert people[1]["text"] == "Priya Nathan (priya.nathan@contoso.example): 2 meetings"
-
-
-def test_read1_domains_are_external_only(tmp_path):
-    domains = entries_of(build1(read1_scratch(tmp_path)), "domain")
-    assert [entry["label"] for entry in domains] == ["contoso.example"]
-    assert domains[0]["detail"] == "2 meetings"
-
-
-def test_read1_language_and_sent_mail_use_the_owners_own_words(tmp_path):
-    result = build1(read1_scratch(tmp_path))
-    [language] = entries_of(result, "language")
-    assert language["text"] == "Language of your sent mail: Dutch in 2 of 3 messages"
-    sent = entries_of(result, "sent-mail")
-    assert sent[0]["text"] == ('Sent mail "planning": Dag Priya, dat is goed voor mij '
-                               'en ik kijk het na. Groeten')
-
-
-def test_read1_writes_evidence_and_consumes_only_its_own_files(tmp_path):
-    scratch = read1_scratch(tmp_path)
-    (scratch / "identity.block.md").write_text("draft", encoding="utf-8")
-    result = build1(scratch, consume=True)
-    assert result["consumed"] == ["m365_calendar.payload.json", "m365_profile.payload.json",
-                                  "m365_sentsample.payload.json"]
-    assert (scratch / discover.EVIDENCE_FILE).is_file()
-    assert (scratch / "identity.block.md").is_file()
-    assert not (scratch / "m365_calendar.payload.json").exists()
-
-
-def test_read1_without_consume_keeps_the_raw_rows(tmp_path):
-    scratch = read1_scratch(tmp_path)
-    assert build1(scratch)["consumed"] == []
-    assert (scratch / "m365_calendar.payload.json").is_file()
-
-
-def test_a_profile_only_mailbox_builds_without_failing(tmp_path):
-    write_rows(tmp_path / "m365_profile.payload.json", [OWNER])
-    result = build1(tmp_path)
-    assert set(result["by_kind"]) == {"profile"}
-    assert result["sources"]["calendar"] == {"present": False, "items": 0, "capped": False}
-
-
-def test_a_non_utc_calendar_is_recorded_and_the_other_sources_still_build(tmp_path):
-    scratch = read1_scratch(tmp_path)
-    rows = [event("Weekly exco", 14, attendees=[SAM]), event("Weekly exco", 21, attendees=[SAM])]
-    rows[1]["start"]["timeZone"] = "Romance Standard Time"
-    write_rows(scratch / "m365_calendar.payload.json", rows)
-    result = build1(scratch, consume=True)
-    calendar = result["sources"]["calendar"]
-    assert calendar["error"].startswith("m365_calendar.payload.json: ")
-    assert calendar["items"] == 2
-    assert "recurring-meeting" not in result["by_kind"]
-    assert "person" not in result["by_kind"], "no half-counted rows from the failed source"
-    assert {"profile", "language", "sent-mail"} <= set(result["by_kind"])
-    assert "m365_calendar.payload.json" in result["consumed"]
-
-
-def test_a_payload_that_is_not_json_still_fails_the_build(tmp_path):
-    write_rows(tmp_path / "m365_profile.payload.json", [OWNER])
-    (tmp_path / "m365_calendar.payload.json").write_text('{"subject": \n', encoding="utf-8")
-    with pytest.raises(discover.DiscoverError, match="m365_calendar.payload.json"):
-        build1(tmp_path)
-
-
-def test_read2_before_read1_is_refused(tmp_path):
-    with pytest.raises(discover.DiscoverError, match="read 1"):
-        discover.build(str(tmp_path), read=2)
-
-
-def test_an_unknown_read_is_refused(tmp_path):
-    with pytest.raises(discover.DiscoverError, match="1 or 2"):
-        discover.build(str(tmp_path), read=3)
-
-
-def test_every_discovery_file_name_is_swept(tmp_path):
-    from vaultlib import scratch
-    names = [discover.EVIDENCE_FILE, discover.ANSWERS_FILE]
-    names += [name for files in discover.READ_FILES.values() for name in files.values()]
-    names += [f"m365_{topic}.payload.json" for topic in discover.TOPIC_KINDS]
-    for name in names:
-        (tmp_path / name).write_text("x", encoding="utf-8")
-    assert sorted(scratch.sweep(str(tmp_path))["deleted"]) == sorted(names)
-
-
-def read2_files(scratch):
-    write_rows(scratch / "m365_inbox.payload.json", [
-        {"subject": "Budget 2027", "sender": "Priya.Nathan@Contoso.example"},
-        {"subject": "RE: Budget 2027", "sender": PRIYA},
-        {"subject": "Work item 4411 assigned", "sender": "azuredevops@microsoft.com"},
-        {"subject": "Automatic reply: away", "sender": "lee@fabrikam.example"},
+    page(tmp_path, "calendar", 2, [
+        event("Weekly exco", 28, attendees=[SAM]),
+        event("Pricing sync", 16, "07:00", "16:00", attendees=[PRIYA, SAM]),
     ], more=True)
-    write_rows(scratch / "m365_sent.payload.json", [
-        {"subject": "Budget 2027", "recipients": [PRIYA, SAM]},
-        {"subject": "Town hall", "recipientCount": 40},
+    page(tmp_path, "sent", 1, [
+        {"subject": "RE: Budget 2027", "recipients": [PRIYA, SAM],
+         "summary": "Dag Priya, prima zo. Groeten\n________________\nFrom: Priya"},
+        {"subject": "Budget 2027", "recipients": ["Priya.Nathan@Contoso.example"],
+         "summary": "Graag de cijfers"},
+        {"subject": "Town hall", "recipientCount": 40, "summary": "Hi all"},
     ])
-    write_rows(scratch / "m365_chats.payload.json", [
+    page(tmp_path, "sent", 2, [{"subject": "Budget 2027", "recipients": [PRIYA]}])
+    page(tmp_path, "chats", 1, [
         {"chatType": "group", "topic": "Yard automation", "memberCount": 3,
          "members": [{"displayName": "Morgan Ellery", "email": OWNER["mail"]},
                      {"displayName": "Priya Nathan-Shah", "email": PRIYA},
@@ -301,84 +175,168 @@ def read2_files(scratch):
          "members": [{"displayName": "Morgan Ellery", "email": OWNER["mail"]},
                      {"displayName": "Lee Wong", "email": "lee@fabrikam.example"}]},
     ])
-    return scratch
+    return tmp_path
 
 
-def build_both(tmp_path):
-    scratch = read1_scratch(tmp_path)
-    first = build1(scratch, consume=True)
-    read2_files(scratch)
-    second = discover.build(str(scratch), read=2, home_domains=["northwind.example"],
-                            consume=True)
-    return first, second
+def build_all(tmp_path, **kwargs):
+    return discover.build(str(tmp_path), home_domains=["northwind.example"], **kwargs)
 
 
 def by_label(result, kind):
     return {entry["label"]: entry for entry in entries_of(result, kind)}
 
 
-def test_read2_merges_counts_and_keeps_ids_stable(tmp_path):
-    first, second = build_both(tmp_path)
-    before = {entry["text"].split(" (")[0]: entry["id"]
-              for entry in entries_of(first, "person")}
-    after = by_label(second, "person")
-    assert after["Priya Nathan-Shah"]["id"] == before["Priya Nathan"]
-    assert after["Priya Nathan-Shah"]["detail"] == "2 meetings, 3 mails, 1 chat"
-    assert after["Sam Okafor"]["detail"] == "4 meetings, 1 mail, 1 chat"
+def test_profile_entries_come_first_and_skip_absent_fields(tmp_path):
+    profile = entries_of(build_all(full_scratch(tmp_path)), "profile")
+    assert [entry["label"] for entry in profile] == ["Name", "Job title", "Email", "Sign-in name"]
+    assert profile[0]["id"] == "E1"
 
 
-def test_read2_chat_names_override_address_derived_ones(tmp_path):
-    _, second = build_both(tmp_path)
-    assert "Priya Nathan-Shah" in by_label(second, "person")
-    assert "Priya Nathan" not in by_label(second, "person")
+def test_recurring_meetings_count_across_pages_and_skip_noise(tmp_path):
+    [row] = entries_of(build_all(full_scratch(tmp_path)), "recurring-meeting")
+    assert row["text"] == 'Recurring meeting "Weekly exco": 3 times in the window'
 
 
-def test_read2_counts_one_person_across_letter_case(tmp_path):
-    _, second = build_both(tmp_path)
-    addresses = [entry["text"] for entry in entries_of(second, "person")
-                 if "contoso" in entry["text"]]
-    assert len(addresses) == 1
+def test_people_merge_all_sources_and_exclude_the_owner_and_broadcasts(tmp_path):
+    people = by_label(build_all(full_scratch(tmp_path)), "person")
+    assert set(people) == {"Priya Nathan-Shah", "Sam Okafor"}
+    assert people["Priya Nathan-Shah"]["detail"] == "2 meetings, 3 mails, 1 chat"
+    assert people["Sam Okafor"]["detail"] == "4 meetings, 1 mail, 1 chat"
 
 
-def test_read2_domains_count_items_not_heads(tmp_path):
-    _, second = build_both(tmp_path)
-    assert by_label(second, "domain")["contoso.example"]["detail"] == (
-        "2 meetings, 3 mails, 1 chat")
-    assert "fabrikam.example" not in by_label(second, "domain")
+def test_domains_are_external_and_count_items_not_heads(tmp_path):
+    domains = by_label(build_all(full_scratch(tmp_path)), "domain")
+    assert set(domains) == {"contoso.example"}
+    assert domains["contoso.example"]["detail"] == "2 meetings, 3 mails, 1 chat"
 
 
-def test_read2_system_senders_are_not_people(tmp_path):
-    _, second = build_both(tmp_path)
-    [sender] = entries_of(second, "system-sender")
-    assert sender["text"] == "Notifications from azuredevops@microsoft.com: 1 mail"
-    assert all("azuredevops" not in entry["text"] for entry in entries_of(second, "person"))
-
-
-def test_read2_mail_threads_group_reply_prefixes(tmp_path):
-    _, second = build_both(tmp_path)
-    [thread] = entries_of(second, "mail-subject")
+def test_mail_threads_group_reply_prefixes(tmp_path):
+    [thread] = entries_of(build_all(full_scratch(tmp_path)), "mail-subject")
     assert thread["text"] == 'Mail thread "Budget 2027": 3 mails, with contoso.example'
 
 
-def test_read2_chat_topics_include_large_chats_but_not_their_members(tmp_path):
-    _, second = build_both(tmp_path)
-    assert [entry["label"] for entry in entries_of(second, "chat")] == [
-        "Yard automation", "Commercial leadership"]
-    assert by_label(second, "chat")["Yard automation"]["text"] == (
-        'Teams group chat "Yard automation" (3 members)')
+def test_sent_mail_evidence_keeps_the_owners_own_words(tmp_path):
+    sent = entries_of(build_all(full_scratch(tmp_path)), "sent-mail")
+    assert len(sent) == 3
+    assert sent[0]["text"] == 'Sent mail "Budget 2027": Dag Priya, prima zo. Groeten'
 
 
-def test_read2_records_the_inbox_cap(tmp_path):
-    _, second = build_both(tmp_path)
-    assert second["sources"]["inbox"] == {"present": True, "items": 4, "capped": True}
-    assert second["sources"]["sent"]["capped"] is False
+def test_chat_topics_include_large_chats_but_not_their_members(tmp_path):
+    chats = by_label(build_all(full_scratch(tmp_path)), "chat")
+    assert list(chats) == ["Yard automation", "Commercial leadership"]
+    assert chats["Yard automation"]["text"] == 'Teams group chat "Yard automation" (3 members)'
 
 
-def test_read2_twice_is_refused(tmp_path):
-    build_both(tmp_path)
-    read2_files(tmp_path)
-    with pytest.raises(discover.DiscoverError, match="already"):
-        discover.build(str(tmp_path), read=2)
+def test_the_removed_kinds_are_gone(tmp_path):
+    kinds = set(build_all(full_scratch(tmp_path))["by_kind"])
+    assert not kinds & {"working-day", "language", "system-sender"}
+
+
+def test_sources_report_rows_and_the_clock_cap(tmp_path):
+    sources = build_all(full_scratch(tmp_path))["sources"]
+    assert sources["calendar"] == {"present": True, "items": 9, "capped": True}
+    assert sources["sent"] == {"present": True, "items": 4, "capped": False}
+    assert sources["chats"]["items"] == 3 and sources["profile"]["items"] == 1
+
+
+def test_pages_sort_numerically_so_the_cap_comes_from_the_last_page(tmp_path):
+    page(tmp_path, "profile", 1, [OWNER])
+    page(tmp_path, "calendar", 1, [event("A", 14)], more=True)
+    page(tmp_path, "calendar", 2, [event("B", 15)], more=True)
+    page(tmp_path, "calendar", 10, [event("C", 16)])
+    calendar = build_all(tmp_path)["sources"]["calendar"]
+    assert calendar == {"present": True, "items": 3, "capped": False}
+
+
+def test_consume_deletes_exactly_the_page_files(tmp_path):
+    scratch = full_scratch(tmp_path)
+    (scratch / "identity.block.md").write_text("draft", encoding="utf-8")
+    discover.answer(str(scratch), question="q", text="kept")
+    result = build_all(scratch, consume=True)
+    assert result["consumed"] == [
+        "m365_calendar.p1.payload.json", "m365_calendar.p2.payload.json",
+        "m365_chats.p1.payload.json", "m365_profile.p1.payload.json",
+        "m365_sent.p1.payload.json", "m365_sent.p2.payload.json"]
+    assert (scratch / "identity.block.md").is_file()
+    assert (scratch / discover.ANSWERS_FILE).is_file()
+    assert (scratch / discover.EVIDENCE_FILE).is_file()
+
+
+def test_without_consume_the_pages_stay(tmp_path):
+    scratch = full_scratch(tmp_path)
+    assert build_all(scratch)["consumed"] == []
+    assert (scratch / "m365_calendar.p1.payload.json").is_file()
+
+
+def test_a_profile_only_account_builds_without_failing(tmp_path):
+    page(tmp_path, "profile", 1, [OWNER])
+    result = build_all(tmp_path)
+    assert set(result["by_kind"]) == {"profile"}
+    assert result["sources"]["calendar"] == {"present": False, "items": 0, "capped": False}
+
+
+def test_a_page_that_is_not_json_fails_the_build_naming_it(tmp_path):
+    page(tmp_path, "profile", 1, [OWNER])
+    (tmp_path / "m365_calendar.p2.payload.json").write_text('{"subject": \n', encoding="utf-8")
+    with pytest.raises(discover.DiscoverError, match="m365_calendar.p2.payload.json"):
+        build_all(tmp_path)
+
+
+def test_expect_skips_a_source_whose_count_does_not_match(tmp_path):
+    result = build_all(full_scratch(tmp_path), expect={"calendar": 3})
+    assert result["sources"]["calendar"]["error"].endswith(
+        "the reader reported 3 rows, the pages hold 9")
+    assert "recurring-meeting" not in result["by_kind"]
+    assert "profile" in result["by_kind"]
+
+
+def test_expect_error_skips_a_source_the_reader_reported_as_failed(tmp_path):
+    result = build_all(full_scratch(tmp_path), expect={"chats": "error"})
+    assert "the reader reported a failure" in result["sources"]["chats"]["error"]
+    assert "chat" not in result["by_kind"]
+
+
+def test_matching_expect_builds_normally(tmp_path):
+    result = build_all(full_scratch(tmp_path),
+                       expect={"profile": 1, "calendar": 9, "sent": 4, "chats": 3})
+    assert all("error" not in source for source in result["sources"].values())
+
+
+def test_expect_for_an_unknown_source_is_refused(tmp_path):
+    with pytest.raises(discover.DiscoverError, match="inbox"):
+        build_all(full_scratch(tmp_path), expect={"inbox": 4})
+
+
+def test_a_badly_shaped_row_is_recorded_not_fatal(tmp_path):
+    page(tmp_path, "profile", 1, [OWNER])
+    page(tmp_path, "calendar", 1, [{"subject": "Weekly exco", "attendees": 5}])
+    result = build_all(tmp_path)
+    assert "error" in result["sources"]["calendar"]
+    assert "profile" in result["by_kind"]
+
+
+def test_derived_names_are_flagged_to_the_model(tmp_path):
+    scratch = full_scratch(tmp_path)
+    (scratch / "m365_chats.p1.payload.json").unlink()
+    people = entries_of(build_all(scratch), "person")
+    assert people and all(entry.get("note") == "name derived from the email address"
+                          for entry in people)
+
+
+def test_building_twice_gives_the_same_ids(tmp_path):
+    scratch = full_scratch(tmp_path)
+    first = [entry["id"] for entry in build_all(scratch)["entries"]]
+    assert [entry["id"] for entry in build_all(scratch)["entries"]] == first
+
+
+def test_every_discovery_file_name_is_swept(tmp_path):
+    from vaultlib import scratch
+    names = [discover.EVIDENCE_FILE, discover.ANSWERS_FILE, discover.CLOCK_FILE]
+    names += [f"m365_{source}.p1.payload.json" for source in discover.SOURCES]
+    names += [f"m365_{topic}.payload.json" for topic in discover.TOPIC_KINDS]
+    for name in names:
+        (tmp_path / name).write_text("x", encoding="utf-8")
+    assert sorted(scratch.sweep(str(tmp_path))["deleted"]) == sorted(names)
 
 
 EVIDENCE = {"schema": 1, "ids": {}, "stats": {}, "entries": [
@@ -632,45 +590,6 @@ def test_a_sent_mail_cannot_be_picked(scratch):
          "text": 'Sent mail "planning": x', "facts": {"subject": "planning", "summary": "x"}}]}),
         encoding="utf-8")
     assert propose(scratch, "style", {"kind": "pick", "ref": "E5"})["passed"] == []
-
-
-def test_expect_skips_a_source_whose_count_does_not_match(tmp_path):
-    result = build1(read1_scratch(tmp_path), expect={"calendar": 3})
-    assert result["sources"]["calendar"]["error"].endswith(
-        "the reader reported 3 rows, the file holds 9")
-    assert "recurring-meeting" not in result["by_kind"]
-    assert "profile" in result["by_kind"]
-
-
-def test_expect_error_skips_a_source_the_reader_reported_as_failed(tmp_path):
-    result = build1(read1_scratch(tmp_path), expect={"sentsample": "error"})
-    assert "the reader reported a failure" in result["sources"]["sentsample"]["error"]
-    assert "sent-mail" not in result["by_kind"]
-
-
-def test_matching_expect_builds_normally(tmp_path):
-    result = build1(read1_scratch(tmp_path), expect={"profile": 1, "calendar": 9, "sentsample": 3})
-    assert "error" not in result["sources"]["calendar"]
-    assert "recurring-meeting" in result["by_kind"]
-
-
-def test_expect_for_a_source_the_read_does_not_read_is_refused(tmp_path):
-    with pytest.raises(discover.DiscoverError, match="inbox"):
-        build1(read1_scratch(tmp_path), expect={"inbox": 4})
-
-
-def test_a_badly_shaped_calendar_row_is_recorded_not_fatal(tmp_path):
-    scratch = read1_scratch(tmp_path)
-    write_rows(scratch / "m365_calendar.payload.json",
-               [{"subject": "Weekly exco", "start": "2026-09-14", "showAs": "busy"}])
-    result = build1(scratch)
-    assert "error" in result["sources"]["calendar"]
-    assert "profile" in result["by_kind"]
-
-
-def test_derived_names_are_flagged_to_the_model(tmp_path):
-    people = entries_of(build1(read1_scratch(tmp_path)), "person")
-    assert all(entry.get("note") == "name derived from the email address" for entry in people)
 
 
 def test_clock_counts_down_from_its_start(tmp_path):
