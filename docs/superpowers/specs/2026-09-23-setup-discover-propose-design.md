@@ -126,8 +126,8 @@ steps 4–8 fall back to the context files' interview questions.
 
 ## 1. Problem
 
-`/setup-my-brain` takes 60–90 minutes. For the executive committee of La
-Lorraine Bakery Group that is too long. The time goes to 26 open interview
+`/setup-my-brain` takes 60–90 minutes. For a client's executive
+committee that is too long. The time goes to 26 open interview
 questions (the five context files hold 6 + 6 + 6 + 3 + 5), asked one at a time
 **before** any account is connected. The skill already proposes in a few
 places (timezone, a sent-mail style draft, ±2 weeks of calendar for projects
@@ -344,8 +344,8 @@ main session only ever sees the evidence list.
     {"id": "E1", "kind": "profile", "text": "Job title: Chief Commercial Officer",
      "facts": {"field": "jobTitle", "value": "Chief Commercial Officer"}},
     {"id": "E12", "kind": "recurring-meeting",
-     "text": "Recurring meeting \"Weekly exco\", 9 times in 4 weeks, organised from llbg.com",
-     "facts": {"subject": "Weekly exco", "count": 9, "organizer_domain": "llbg.com"}}
+     "text": "Recurring meeting \"Weekly exco\", 9 times in 4 weeks, organised from northwind.example",
+     "facts": {"subject": "Weekly exco", "count": 9, "organizer_domain": "northwind.example"}}
   ]
 }
 ```
@@ -392,7 +392,7 @@ The model writes one proposal file per topic, `m365_<topic>.payload.json`:
 {
   "topic": "about-you",
   "items": [
-    {"kind": "claim", "text": "You're Chief Commercial Officer at La Lorraine Bakery Group.",
+    {"kind": "claim", "text": "You're Chief Commercial Officer at Northwind Traders.",
      "cites": ["E1", "E2"]},
     {"kind": "pick", "ref": "E31"}
   ]
@@ -507,7 +507,7 @@ is dropped: there is no consultant in the room.
 
 The context files keep their `## Interview questions` sections unchanged: no
 template edit, no structure-version bump, no migration, and already
-provisioned vaults (La Lorraine's included) work as they are. For each
+provisioned vaults (every live deployment included) work as they are. For each
 question the skill decides whether an **accepted** proposal already answers
 it. If so it is skipped; if not, or if unsure, it is asked. Without M365 every
 question is asked, which is today's interview.

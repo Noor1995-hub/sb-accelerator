@@ -142,7 +142,7 @@ def test_address_normalises_every_connector_shape(value, expected):
 @pytest.mark.parametrize("address, expected", [
     ("jane.doe@x.example", "Jane Doe"),
     ("pieter-jan.coppe@x.example", "Pieter Jan Coppe"),
-    ("t.suys@x.example", None),
+    ("j.smith@x.example", None),
     ("info@x.example", None),
 ])
 def test_name_from_address_only_reads_plain_first_last(address, expected):
