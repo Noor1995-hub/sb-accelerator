@@ -72,9 +72,15 @@ steps 4–8 fall back to the context files' interview questions.
   `{"continue": …, "elapsed_s": …, "remaining_s": …}`. The worker checks after
   every page and stops when `continue` is false. It can overrun by one page.
   A clock check that fails also stops the read.
-- **Round-robin:** after the profile, one page of calendar, then sent, then
-  chats, and again, each source newest first, until the clock stops it or the
-  source ends or reaches its limit.
+- **Round-robin:** after the profile, one page of chats, then sent, then
+  calendar — cheapest first, so each source gets a page within the budget —
+  and again, each source newest first, until the clock stops it or the source
+  ends or reaches its limit. Calendar pages hold 10 events (the others 25),
+  and calendar rows carry no times, since nothing uses them any more.
+  (Revised after the second live test, 2026-09-24: 7:15 for calendar only,
+  sent mail and chats never reached; cause inferred, not measured.) The
+  worker's reply ends with the clock's `elapsed=` after every page, so the
+  next test measures where the time goes.
 - **Page files:** each page is written as soon as it is fetched, to
   `m365_<source>.p<n>.payload.json` (`n` from 1). `discover build` reads every
   page file of a source in page order; a source whose worker was stopped by the

@@ -704,3 +704,15 @@ def test_a_name_after_a_dotted_initialism_is_checked():
     assert "Globex" in discover._tokens("Meets U.K. Globex weekly")
     assert discover._tokens("You work at Northwind BV. You chair the Weekly exco.") == [
         "Northwind BV", "Weekly"]
+
+
+def test_calendar_rows_without_times_still_build(tmp_path):
+    page(tmp_path, "profile", 1, [OWNER])
+    row = {"subject": "Weekly exco", "organizer": OWNER["mail"], "attendees": [SAM],
+           "isAllDay": False, "isCancelled": False}
+    page(tmp_path, "calendar", 1, [row, dict(row), dict(row)])
+    result = build_all(tmp_path)
+    assert "error" not in result["sources"]["calendar"]
+    [meeting] = entries_of(result, "recurring-meeting")
+    assert meeting["text"] == 'Recurring meeting "Weekly exco": 3 times in the window'
+    assert by_label(result, "person")["Sam Okafor"]["detail"] == "3 meetings"

@@ -2007,3 +2007,19 @@ def test_setup_my_brain_asks_identity_instead_of_discovering_it():
 
 def test_setup_my_brain_announces_the_first_evening_note():
     assert "I'll now write tomorrow's note" in read_skill("setup-my-brain")
+
+
+def test_discovery_contract_reads_cheap_sources_first_and_reports_timings():
+    contract = re.sub(r"\s+", " ", read_ref("setup-my-brain", "discovery-contract.md"))
+    assert "one page of `chats`, one page of `sent`, one page of `calendar`" in contract
+    assert '`order: "newest"`, `limit: 10`' in contract, "calendar pages are the heavy ones"
+    for unused in ("`start`", "`end`", "`showAs`"):
+        assert unused not in contract, f"the build no longer uses {unused}; don't make the worker type it"
+    assert "elapsed=" in contract
+
+
+def test_setup_my_brain_keeps_open_questions_out_of_the_picker():
+    text = read_skill("setup-my-brain")
+    assert "An open question goes in plain text" in text
+    assert "the company as they name it" in text
+    assert "`elapsed=`" in text

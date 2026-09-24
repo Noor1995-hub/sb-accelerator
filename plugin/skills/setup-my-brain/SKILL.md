@@ -44,7 +44,9 @@ this. Everything they read must make sense without help.
 - **Choices as choices.** Use **AskUserQuestion** for anything with known
   options: Accept / Change / Skip on a proposal, tick boxes for lists, the
   type of an organisation, a time. It shows at most four options per question
-  and four questions per screen. Keep open questions open.
+  and four questions per screen, and it needs those fixed options: it fails on
+  a question without them. An open question goes in plain text, in the chat —
+  several short ones may share one message.
 - **Announce every long step** before it starts, and say "done" when it ends.
   Never guess a duration: the only one you may give is "up to 5 minutes" for
   the read, because a clock enforces it.
@@ -241,12 +243,13 @@ In this order:
    like this may be kept?"* Their answer feeds
    `preferences-and-constraints`. If it rules out reading their mail or
    chats, there is no read: say so, and skip the consent question below.
-2. **About them**, on one or two quick screens plus short open questions:
-   their name (offer the `displayName` from step 1 as the first option),
-   what people call them, the company they work for (offer their mail domain
-   as written — never a company name you infer from it), their role, one line
-   of background, their working hours (start and end of a normal day), and
-   the language their evening note should be in.
+2. **About them.** One choice first: their name, with the `displayName` from
+   step 1 as the first option and "Other" for a different one. The language
+   of their evening note is a choice too. Everything else is open, asked in
+   plain text in one message: what people call them, the company they work
+   for, their role, one line of background, and their working hours (start
+   and end of a normal day). Record the company as they name it — their mail
+   domain is not a company name, and never infer one from it.
 3. **Where they are based.** Offer the time zone as a choice ("You're in
    Brussels, so Brussels time?") rather than asking for an identifier, and
    write it:
@@ -322,12 +325,14 @@ python3 "$VAULTLIB" discover build --vault "$VAULT" --dir "$SCRATCH" --expect "<
 > topic.
 
 `--expect` carries the row counts from the worker's outcome line
-(`profile=1,calendar=180,sent=64,chats=75`); pass `<source>=error` and
+(`profile=1,chats=62,sent=40,calendar=30`); pass `<source>=error` and
 `<source>=unread` through as they are. The build records any source whose
 count does not match, or that failed, with an `error` and skips it.
 
 Take only the `<source>=<rows>` pairs from the reply: drop the
-`discovery-ok:` prefix and the ` stopped-by-clock` flag. If the reply is not
+`discovery-ok:` prefix, the ` stopped-by-clock` flag and the `elapsed=`
+timings. Keep the whole reply line in mind: if the owner asks how the read
+went, show it to them as it is. If the reply is not
 a `discovery-ok:` line at all — a `discovery-error:` line, or nothing
 usable — treat the whole read as failed: do not run the build, and use
 "Without Microsoft 365" for every topic.

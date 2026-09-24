@@ -22,7 +22,8 @@ python3 "$VAULTLIB" discover clock-check --dir "$SCRATCH"
 ```
 
 When `result.continue` is false, stop at once: fetch nothing more, write
-nothing more, and reply.
+nothing more, and reply. Note the `elapsed_s` of every check: your reply
+reports them.
 
 > If the command does not return `ok: true`, stop at once too, and reply
 > `discovery-error: clock unavailable`.
@@ -32,8 +33,9 @@ Never estimate the time yourself.
 ## Order
 
 1. `profile`: call `get_me` once and write `m365_profile.p1.payload.json`.
-2. Then **round-robin**, newest first: one page of `calendar`, one page of
-   `sent`, one page of `chats`, and again, until the clock says stop. A source
+2. Then **round-robin**, newest first, cheapest source first: one page of
+   `chats`, one page of `sent`, one page of `calendar`, and again, until the
+   clock says stop. A source
    leaves the rotation when its last response had no `nextOffset` or
    `nextCursor`, when it reaches its `page_caps` maximum, or when it failed
    twice. When all three have left, reply.
@@ -46,7 +48,7 @@ the name below. Call nothing else.
 | Source | Tool | Arguments | Next page | Maximum |
 |---|---|---|---|---|
 | `profile` | `get_me` | none | — | one call |
-| `calendar` | `outlook_calendar_search` | `query: "*"`, `afterDateTime` and `beforeDateTime` from the calendar window, `order: "newest"`, `limit: 25` | `offset` = the previous response's `nextOffset` | `page_caps.calendar` pages |
+| `calendar` | `outlook_calendar_search` | `query: "*"`, `afterDateTime` and `beforeDateTime` from the calendar window, `order: "newest"`, `limit: 10` | `offset` = the previous response's `nextOffset` | `page_caps.calendar` pages |
 | `sent` | `outlook_email_search` | `folderName: "Sent Items"`, `afterDateTime` from the mail window, `order: "newest"`, `limit: 25` | `offset` = `nextOffset` | `page_caps.sent` pages |
 | `chats` | `teams_list_chats` | `limit: 25` | `cursor` = the previous response's `nextCursor` | `page_caps.chats` pages |
 
@@ -68,12 +70,13 @@ One JSON object per line, with only these keys:
 | Source | Keys |
 |---|---|
 | `profile` | `displayName`, `jobTitle`, `department`, `officeLocation`, `mail`, `userPrincipalName` — those present |
-| `calendar` | `subject`, `start`, `end`, `organizer`, `attendees` (only when 15 or fewer; otherwise `attendeeCount`), `isAllDay`, `isCancelled`, `showAs` |
+| `calendar` | `subject`, `organizer`, `attendees` (only when 15 or fewer; otherwise `attendeeCount`), `isAllDay`, `isCancelled` |
 | `sent` | `subject`, `recipients` (only when 15 or fewer; otherwise `recipientCount`); on page 1 only, also `summary` |
 | `chats` | `chatType`, `topic`, `memberCount`, `members` (each `displayName`, `email`; only when `memberCount` is 15 or fewer) |
 
-- Values exactly as the tool returned them: same spelling, same case, and
-  `start`/`end` as their `{"dateTime", "timeZone"}` objects.
+- Values exactly as the tool returned them: same spelling, same case.
+  Calendar rows carry no times: nothing downstream uses them, and typing them
+  out costs time the read does not have.
 - **Large lists become a count**: an event with more than 15 attendees, a
   mail with more than 15 recipients, a chat with more than 15 members.
 - Leave out paging markers and every other key.
@@ -87,7 +90,7 @@ One JSON object per line, with only these keys:
 One outcome line, nothing else — never content. Rows are summed over all of
 a source's pages; markers are not rows:
 
-`discovery-ok: profile=1 calendar=<rows> sent=<rows> chats=<rows>`
+`discovery-ok: profile=1 chats=<rows> sent=<rows> calendar=<rows>`
 
 add ` stopped-by-clock` when the clock ended the read, and write
 `<source>=error` for a source that failed.
@@ -95,5 +98,7 @@ add ` stopped-by-clock` when the clock ended the read, and write
 > A source the clock stopped before its first page writes no file and is
 > reported `<source>=unread`.
 
+End the line with ` elapsed=` and the clock's `elapsed_s` after each page, in
+the order you wrote them, as `<source>.p<n>:<seconds>` joined by commas —
 e.g.
-`discovery-ok: profile=1 calendar=180 sent=64 chats=unread stopped-by-clock`.
+`discovery-ok: profile=1 chats=62 sent=40 calendar=30 stopped-by-clock elapsed=chats.p1:21,sent.p1:48,calendar.p1:95,chats.p2:117`.
