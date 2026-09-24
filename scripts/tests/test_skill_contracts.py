@@ -1396,7 +1396,8 @@ def fenced_dates_window_invocations(text: str):
 
 @pytest.mark.parametrize("subcommand", ["dates window", "m365 agenda", "discover window",
                                         "discover build", "discover answer",
-                                        "discover check"])
+                                        "discover check", "discover clock-start",
+                                        "discover clock-check"])
 @pytest.mark.parametrize("path", SKILL_FILES + REF_FILES,
                          ids=lambda p: p.parent.name)
 def test_every_fenced_invocation_of_a_parsed_subcommand_parses(path, subcommand):

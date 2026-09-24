@@ -67,8 +67,8 @@ steps 4–8 fall back to the context files' interview questions.
 - **Outer limits:** calendar from 12 weeks back to 2 weeks ahead; sent mail 12
   weeks back; the chat list as ordered by the connector. The existing page caps
   stay as a safety maximum, not as the bound.
-- **The clock:** `discover clock start --dir "$SCRATCH" --budget 300` writes
-  `m365_clock.payload.json`; `discover clock check --dir "$SCRATCH"` returns
+- **The clock:** `discover clock-start --dir "$SCRATCH" --budget 300` writes
+  `m365_clock.payload.json`; `discover clock-check --dir "$SCRATCH"` returns
   `{"continue": …, "elapsed_s": …, "remaining_s": …}`. The worker checks after
   every page and stops when `continue` is false. It can overrun by one page.
 - **Round-robin:** after the profile, one page of calendar, then sent, then

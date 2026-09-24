@@ -2212,23 +2212,26 @@ def test_discover_window_via_the_cli(capsys):
     code, payload = run(capsys, ["discover", "window", "--utc-offset", "+02:00",
                                  "--now", "2026-09-23T10:00:00Z"])
     assert code == 0
-    assert payload["result"]["calendar"]["utc_from"] == "2026-08-25T22:00:00Z"
+    assert payload["result"]["calendar"]["utc_from"] == "2026-06-30T22:00:00Z"
+
+
+def _profile_page(scratch):
+    (scratch / "m365_profile.p1.payload.json").write_text(json.dumps(
+        {"displayName": "Morgan Ellery", "jobTitle": "Chief Commercial Officer",
+         "mail": "morgan.ellery@northwind.example"}) + "\n", encoding="utf-8")
 
 
 def test_discover_build_answer_and_check_round_trip(capsys, tmp_path):
     root = make_vault(tmp_path)
     scratch = tmp_path / "scratch"
     scratch.mkdir()
-    (scratch / "m365_profile.payload.json").write_text(json.dumps(
-        {"displayName": "Morgan Ellery", "jobTitle": "Chief Commercial Officer",
-         "mail": "morgan.ellery@northwind.example"}) + "\n", encoding="utf-8")
+    _profile_page(scratch)
     code, payload = run(capsys, ["discover", "build", "--vault", str(root),
-                                 "--dir", str(scratch), "--read", "1",
-                                 "--utc-offset", "+02:00", "--consume"])
+                                 "--dir", str(scratch), "--consume"])
     assert code == 0
     job = next(entry for entry in payload["result"]["entries"]
                if entry["label"] == "Job title")
-    assert payload["result"]["consumed"] == ["m365_profile.payload.json"]
+    assert payload["result"]["consumed"] == ["m365_profile.p1.payload.json"]
 
     code, payload = run(capsys, ["discover", "answer", "--dir", str(scratch),
                                  "--question", "What do people call you?",
@@ -2272,11 +2275,9 @@ def test_discover_build_expect_is_parsed_and_enforced(capsys, tmp_path):
     root = make_vault(tmp_path)
     scratch = tmp_path / "scratch"
     scratch.mkdir()
-    (scratch / "m365_profile.payload.json").write_text(json.dumps(
-        {"displayName": "Morgan Ellery", "mail": "morgan.ellery@northwind.example"}) + "\n",
-        encoding="utf-8")
-    code, payload = run(capsys, ["discover", "build", "--vault", str(root), "--dir", str(scratch),
-                                 "--read", "1", "--utc-offset", "+02:00", "--expect", "profile=2"])
+    _profile_page(scratch)
+    code, payload = run(capsys, ["discover", "build", "--vault", str(root),
+                                 "--dir", str(scratch), "--expect", "profile=2"])
     assert code == 0
     assert "error" in payload["result"]["sources"]["profile"]
 
@@ -2285,6 +2286,27 @@ def test_discover_build_rejects_a_malformed_expect(capsys, tmp_path):
     root = make_vault(tmp_path)
     scratch = tmp_path / "scratch"
     scratch.mkdir()
-    code, payload = run(capsys, ["discover", "build", "--vault", str(root), "--dir", str(scratch),
-                                 "--read", "1", "--utc-offset", "+02:00", "--expect", "profile"])
+    code, payload = run(capsys, ["discover", "build", "--vault", str(root),
+                                 "--dir", str(scratch), "--expect", "profile"])
     assert code == 1 and payload["ok"] is False
+
+
+def test_discover_build_no_longer_takes_a_read(capsys, tmp_path):
+    root = make_vault(tmp_path)
+    with pytest.raises(SystemExit):
+        cli.main(["discover", "build", "--vault", str(root), "--dir", str(tmp_path),
+                  "--read", "1"])
+
+
+def test_discover_clock_via_the_cli(capsys, tmp_path):
+    code, payload = run(capsys, ["discover", "clock-start", "--dir", str(tmp_path),
+                                 "--budget", "300", "--now", "2026-09-24T10:00:00Z"])
+    assert code == 0 and payload["result"]["budget_s"] == 300
+    code, payload = run(capsys, ["discover", "clock-check", "--dir", str(tmp_path),
+                                 "--now", "2026-09-24T10:06:00Z"])
+    assert code == 0 and payload["result"]["continue"] is False
+
+
+def test_discover_clock_check_without_a_start_fails_inside_the_envelope(capsys, tmp_path):
+    code, payload = run(capsys, ["discover", "clock-check", "--dir", str(tmp_path)])
+    assert code == 1 and "clock-start" in payload["error"]

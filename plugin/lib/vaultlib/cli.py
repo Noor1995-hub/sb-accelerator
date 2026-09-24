@@ -579,7 +579,7 @@ def build_parser() -> argparse.ArgumentParser:
     discover_window.add_argument("--timezone", help="IANA timezone name")
     discover_window.add_argument("--utc-offset", dest="utc_offset",
                                  help="explicit offset like +02:00")
-    discover_window.add_argument("--days-back", dest="days_back", type=int, default=28)
+    discover_window.add_argument("--days-back", dest="days_back", type=int, default=84)
     discover_window.add_argument("--days-forward", dest="days_forward", type=int, default=14)
     discover_window.add_argument("--now", help="UTC ISO datetime override (tests)")
     discover_build = discover_sub.add_parser(
@@ -587,10 +587,6 @@ def build_parser() -> argparse.ArgumentParser:
     _add_vault_argument(discover_build)
     discover_build.add_argument("--dir", required=True,
                                 help="the session scratch directory (never the vault)")
-    discover_build.add_argument("--read", type=int, choices=(1, 2), required=True)
-    discover_build.add_argument("--timezone", help="IANA timezone name")
-    discover_build.add_argument("--utc-offset", dest="utc_offset",
-                                help="explicit offset like +02:00")
     discover_build.add_argument(
         "--consume", action="store_true",
         help="delete exactly the payload files this build read, once the "
@@ -600,6 +596,17 @@ def build_parser() -> argparse.ArgumentParser:
         help="worker row counts from its outcome line, e.g. "
              "inbox=398,sent=81; use <source>=error for a source the worker "
              "reported as failed")
+    discover_clock_start = discover_sub.add_parser(
+        "clock-start", help="start the read's time budget (the worker cannot see a clock)")
+    discover_clock_start.add_argument("--dir", required=True)
+    discover_clock_start.add_argument(
+        "--budget", type=int, default=discover.DEFAULT_BUDGET_S,
+        help="seconds the read may take (default 300)")
+    discover_clock_start.add_argument("--now", help="UTC ISO datetime override (tests)")
+    discover_clock_check = discover_sub.add_parser(
+        "clock-check", help="may the read go on? answers continue true or false")
+    discover_clock_check.add_argument("--dir", required=True)
+    discover_clock_check.add_argument("--now", help="UTC ISO datetime override (tests)")
     discover_answer = discover_sub.add_parser(
         "answer", help="record what the owner said, verbatim, as citable evidence")
     discover_answer.add_argument("--dir", required=True)
@@ -987,12 +994,15 @@ def _dispatch(args: argparse.Namespace) -> int:
             return _ok(discover.window(
                 timezone=args.timezone, utc_offset=args.utc_offset,
                 days_back=args.days_back, days_forward=args.days_forward, now=args.now))
+        if args.action == "clock-start":
+            return _ok(discover.clock_start(args.dir, budget_s=args.budget, now=args.now))
+        if args.action == "clock-check":
+            return _ok(discover.clock_check(args.dir, now=args.now))
         if args.action == "build":
             home_domains, _warning = config.m365_home_domains(root)
             return _ok(discover.build(
-                args.dir, read=args.read, home_domains=home_domains,
-                timezone=args.timezone, utc_offset=args.utc_offset,
-                consume=args.consume, expect=_parse_expect(args.expect)))
+                args.dir, home_domains=home_domains, consume=args.consume,
+                expect=_parse_expect(args.expect)))
         if args.action == "answer":
             return _ok(discover.answer(args.dir, question=args.question, text=args.text))
         if args.proposal is not None:
