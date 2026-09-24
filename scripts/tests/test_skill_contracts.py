@@ -1924,19 +1924,20 @@ def test_setup_discovery_worker_agent_frontmatter():
 
 
 def test_discovery_contract_pins_the_privacy_rules():
+    from vaultlib import discover
     contract = re.sub(r"\s+", " ", read_ref("setup-my-brain", "discovery-contract.md"))
     assert "never call `chat_message_search`" in contract
     assert "one folder at a time" in contract
     assert "never add, merge or guess a row" in contract
-    from vaultlib import discover
-    for files in discover.READ_FILES.values():
-        for name in files.values():
-            assert name in contract, f"the contract must name {name}"
-    for source, cap in discover.PAGE_CAPS.items():
-        assert f"page_caps.{source}" in contract or source == "sentsample"
-    assert discover.BROADCAST_LIMIT == 15 and "more than 15" in contract, (
-        "the contract states the broadcast threshold; keep it equal to "
-        "discover.BROADCAST_LIMIT")
+    assert "Inbox" in contract and "never read the Inbox" in contract
+    assert "round-robin" in contract
+    assert 'discover clock-check --dir "$SCRATCH"' in contract
+    assert "m365_<source>.p<n>.payload.json" in contract
+    for source in discover.SOURCES:
+        assert f"`{source}`" in contract, f"the contract must name source {source}"
+    for source in discover.PAGE_CAPS:
+        assert f"page_caps.{source}" in contract
+    assert discover.BROADCAST_LIMIT == 15 and "more than 15" in contract
 
 
 def test_setup_my_brain_shows_only_what_the_check_passed():
