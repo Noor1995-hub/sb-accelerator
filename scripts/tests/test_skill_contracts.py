@@ -2036,3 +2036,12 @@ def test_setup_my_brain_opens_your_work_with_what_the_read_found():
     work = text[text.index("## Step 5"):text.index("## Step 6")]
     assert work.index("`chat` and `mail-subject` entries") < work.index("every week and every month")
     assert "I looked at" in text, "the read ends with a plain summary of what was looked at"
+
+
+def test_setup_my_brain_keeps_approvals_and_heads_ups_on_screen():
+    text = " ".join(read_skill("setup-my-brain").split())
+    assert "Every heads-up is typed in the chat" in text
+    assert "carries the full text as its `preview`" in text
+    assert "no command in between" in text
+    note = text[text.index("## Step 9"):text.index("## Step 10")]
+    assert "typing a line in the chat" in note

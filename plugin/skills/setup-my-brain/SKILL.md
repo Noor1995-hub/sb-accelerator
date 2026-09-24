@@ -55,6 +55,17 @@ this. Everything they read must make sense without help.
 - **Announce every long step** before it starts, and say "done" when it ends.
   Never guess a duration: the only one you may give is "up to 5 minutes" for
   the read, because a clock enforces it.
+- **Every heads-up is typed in the chat.** A command's description, or a
+  line between commands, is folded away out of sight: only a message you
+  type stays on screen. In a long step, type one line before each part of
+  it ("Now I'm checking this morning's meeting") and one when it is done,
+  and say in half a sentence why any question in the middle of it comes up.
+- **What they approve travels with the question.** A question asking them
+  to approve text — a claim, a context block — is a single choice (Accept /
+  Change / Skip) whose Accept option carries the full text as its `preview`,
+  so the text is on screen beside the options. If the preview cannot be
+  used, type the text as your last message and ask at once, with no command
+  in between.
 - **Their words over your summary.** When they change a proposal, use what
   they typed. Compress and organise; do not re-voice.
 
@@ -392,7 +403,8 @@ This loop is the same for every topic below.
    **Show only what is under `passed`.** A dropped item is gone: never
    reword it until it passes, never mention it. If nothing passed, ask that
    topic's own interview questions instead (see "Without Microsoft 365").
-4. **Show it plainly.** A claim is shown with a "Based on:" line that
+4. **Show it plainly.** A claim is shown — in the Accept option's
+   `preview`, as every approval is — with a "Based on:" line that
    repeats its `based_on` texts exactly as returned — never reworded or
    summarised (you may translate only the words "Based on"). A pick becomes
    an AskUserQuestion option: its `label` as the option, its `detail` as the
@@ -413,7 +425,8 @@ This loop is the same for every topic below.
 7. **Writing a context block.** Assemble it from accepted claims and the
    owner's answers only — markdown prose and bullets, short and factual, no
    marker comments. Write it to `$SCRATCH/<stem>.block.md` only now, check
-   it, read it back, and write it on approval:
+   it, then read it back as the Accept option's `preview` — the text exactly
+   as it will be written — and write it on approval:
 
    ```bash
    python3 "$VAULTLIB" discover check --dir "$SCRATCH" --block "$SCRATCH/identity.block.md"
@@ -515,7 +528,9 @@ they gave in step 2 ("your day usually ends at 18:00 — have the note ready by
 
 Say it before you start: *"I'll now write tomorrow's note — you'll hear
 from me when it's done."* Then **invoke the `/evening-sync` skill, in this
-session** — follow `${CLAUDE_PLUGIN_ROOT}/skills/evening-sync/SKILL.md` in
+session**, typing a line in the chat as each of its parts starts (reading
+the calendar, checking today's meetings, writing the note) and saying why
+before any question it asks — follow `${CLAUDE_PLUGIN_ROOT}/skills/evening-sync/SKILL.md` in
 interactive mode. It reads the config just filled and writes **tomorrow's**
 note, naming the organisations, projects and people seeded minutes earlier.
 Do not assemble a note by hand and do not reimplement any of its stages.
@@ -533,7 +548,9 @@ schedule by hand. They already chose the time in step 8: when
 `/schedule-daily-loop` asks for it, confirm that time with them rather than
 asking afresh. Its first manual run is what grants the routine access to
 their accounts; keep them in the room for it, and say before it starts that
-it runs once now.
+it runs once now. Type a line in the chat as each part starts and ends —
+checking for routines from an earlier setup and which vault they point to,
+creating or updating the routine, its first run — so they can follow it.
 
 It ends **scheduled** — say the first automatic run as a day and a time, and
 what it depends on (the machine awake, Claude open) — or **handed off** — say
