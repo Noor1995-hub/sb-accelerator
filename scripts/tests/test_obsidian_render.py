@@ -314,8 +314,8 @@ def test_triage_controls_survive_a_1440_window(tour, base_surfaces):
     behind a scrollbar under a two-line row. This pins it so the next column
     added to Triage cannot silently push it back off screen.
 
-    Since 0.12.5 the confirm and the disposal are one adjacent pair — ✅ Keep,
-    🗑 Discard — right after Projects: the two per-row decisions, read after
+    Since 0.12.5 the confirm and the archive are one adjacent pair — ✅ Keep,
+    🗑 Archive — right after Projects: the two per-row decisions, read after
     the fields they decide on. Both are pinned, because a queue with only one
     of its two answers on screen is the confusion the pair exists to remove.
 
@@ -339,7 +339,7 @@ def test_triage_controls_survive_a_1440_window(tour, base_surfaces):
     if triage is None:
         pytest.skip("tour captured no Meetings.base Triage view")
     headers = set(triage["dom"].get("headers") or [])
-    missing = {"✅ Keep", "🗑 Discard"} - headers
+    missing = {"✅ Keep", "🗑 Archive"} - headers
     assert not missing, (
         f"Triage at {width}px is missing {sorted(missing)} from its rendered "
         f"headers {sorted(headers)} — a control needed for the queue is off "

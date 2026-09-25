@@ -47,7 +47,7 @@ Full background: `docs/visual-verification.md`.
    captured rather than implying full coverage. The 1440 capture is the one
    that matters for Meetings.base Triage. Its column order (since 0.12.5)
    is `→`, Date, Cal, Subject, Attendees, Projects, then the decision pair
-   `✅ Keep` and `🗑 Discard` side by side, then `↗` and `⚠ Duplicate of`.
+   `✅ Keep` and `🗑 Archive` side by side, then `↗` and `⚠ Duplicate of`.
    Confirm everything up to and including `↗` is visible without horizontal
    scrolling, with the Date value and both decision headers readable in full
    (the fixed `columnSize` widths are budgeted for exactly that) — the pair is

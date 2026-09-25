@@ -70,7 +70,7 @@ From there, she works the row:
 - **`✅ Keep`** — tick it once she is satisfied the note is right. The
   next sync run folds the tick into the note's own review status; it is not
   instant.
-- **`🗑 Discard`** — tick it to drop something that reached `20-meetings/`
+- **`🗑 Archive`** — tick it to drop something that reached `20-meetings/`
   but is not worth keeping visible in Triage.
 - **`⚠ Duplicate of`** — if this column is filled, the note conflicts with
   another one already in the vault. A tick on a note carrying this field

@@ -31,7 +31,7 @@ They're pinned at the top of the sidebar.
 
 ## Reviewing
 
-Everything in the **Meetings** table arrives marked **needs-review** because something was inferred rather than known — a name matched by guess, a calendar entry matched loosely, an email routed to a project by its sender's domain. Open the *Triage* view and, per row, tick **✅ Keep** once it looks right, or **🗑 Discard** if it is noise (a bad recording, something that was not really a meeting — the file stays, it just leaves the queue). Keep is the signal that a row can be trusted downstream; nothing else writes it.
+Everything in the **Meetings** table arrives marked **needs-review** because something was inferred rather than known — a name matched by guess, a calendar entry matched loosely, an email routed to a project by its sender's domain. Open the *Triage* view and, per row, tick **✅ Keep** once it looks right, or **🗑 Archive** if it is noise (a bad recording, something that was not really a meeting — the file stays, it just leaves the queue). Keep is the signal that a row can be trusted downstream; nothing else writes it.
 
 A row typed `note` is a capture rather than a meeting: a forwarded email or a voice memo that carried context worth keeping. Its **Cal** column is empty because no calendar was ever consulted — nothing corroborated it but the item itself.
 
