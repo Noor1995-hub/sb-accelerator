@@ -67,7 +67,7 @@ reviewed or archived.
 
 From there, she works the row:
 
-- **`✓ Reviewed`** — tick it once she is satisfied the note is right. The
+- **`✅ Keep`** — tick it once she is satisfied the note is right. The
   next sync run folds the tick into the note's own review status; it is not
   instant.
 - **`🗑 Archive`** — tick it to drop something that reached `20-meetings/`
@@ -79,7 +79,7 @@ From there, she works the row:
 
 ## Hands-on: `/log-decision` on a reviewed meeting
 
-Once a meeting note is ticked `✓ Reviewed`, it is a candidate for
+Once a meeting note is ticked `✅ Keep`, it is a candidate for
 `/log-decision <project-slug>`. Point it at the note (paste the text, name
 the file, or describe what was decided) and let it extract. Not every
 meeting produces one — a reviewed meeting with nothing that committed the
@@ -163,7 +163,7 @@ Do this together, on her machine, against the real vault:
 2. Run `/sync-recordings` (interactive — watch the plan-confirmation step
    she will never see once it runs on schedule).
 3. Open `Meetings.base`'s Triage view and find the new row.
-4. Tick `✓ Reviewed` on it, and note that the tick folds in on the *next*
+4. Tick `✅ Keep` on it, and note that the tick folds in on the *next*
    run, not instantly.
 5. Run `/log-decision` against the project it landed on, and confirm or
    drop whatever it proposes.

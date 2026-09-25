@@ -223,6 +223,7 @@ RETIRED_OR_OPAQUE = (
     "needs-attention",
     "needs_attention_ticks",
     "Reviewed ticks folded",
+    "Meetings you ticked as reviewed",
     "reviewed: false)",
 )
 
@@ -235,7 +236,7 @@ def test_sync_summaries_speak_plainly(name):
             f"{name}: {token!r} is a field name or a retired status — say it "
             f"in words the vault owner can read"
         )
-    assert "**Meetings you ticked as reviewed:**" in text, (
+    assert "**Meetings you ticked Keep on:**" in text, (
         f"{name}: the fold result needs a plain-speech summary line"
     )
 

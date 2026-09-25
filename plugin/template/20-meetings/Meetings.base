@@ -27,7 +27,7 @@ properties:
   note.conflicts-with:
     displayName: "⚠ Duplicate of"
   note.reviewed:
-    displayName: "✓ Reviewed"
+    displayName: "✅ Keep"
   note.archived:
     displayName: "🗑 Archive"
   note.recording-duration:
@@ -48,19 +48,23 @@ views:
       - calendar_match
       - calendar-subject
       - attendees
-      - reviewed
       - projects
-      - formula.project-links
+      - reviewed
       - archived
+      - formula.project-links
       - conflicts-with
     sort:
       - property: date
         direction: DESC
     rowHeight: medium
     columnSize:
+      note.date: 165
       note.calendar_match: 54
-      note.attendees: 251
-      note.reviewed: 36
+      note.calendar-subject: 190
+      note.attendees: 150
+      note.projects: 140
+      note.reviewed: 96
+      note.archived: 116
       formula.project-links: 32
   - type: table
     name: All Meetings

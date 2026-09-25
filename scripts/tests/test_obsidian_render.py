@@ -310,15 +310,20 @@ def test_recap_callouts_render_their_colour_tint(note_surfaces):
 
 def test_triage_controls_survive_a_1440_window(tour, base_surfaces):
     """#66: at 1440x900 (a 13" client laptop) Meetings.base Triage used to
-    stop rendering columns before reaching ✓ Reviewed — the one-click confirm,
-    off screen behind a scrollbar under a two-line row. This pins it so the
-    next column added to Triage cannot silently push it back off screen.
+    stop rendering columns before reaching the one-click confirm, off screen
+    behind a scrollbar under a two-line row. This pins it so the next column
+    added to Triage cannot silently push it back off screen.
 
-    ⚠ Duplicate of is deliberately not pinned: the product owner's Triage
-    layout (0.10.28) puts the disposal columns — Archive, Duplicate of — last,
-    after Projects and its ↗ link, and with the navigator's two-pane sidebar
-    open they sit behind a horizontal scroll at 1440. Duplicate of is rare (a
-    `-v{n}` sibling only) and is not the everyday control; Reviewed is.
+    Since 0.12.5 the confirm and the archive are one adjacent pair — ✅ Keep,
+    🗑 Archive — right after Projects: the two per-row decisions, read after
+    the fields they decide on. Both are pinned, because a queue with only one
+    of its two answers on screen is the confusion the pair exists to remove.
+
+    ⚠ Duplicate of is deliberately not pinned: it sits last, after the ↗
+    project link, and with the navigator's two-pane sidebar open it sits
+    behind a horizontal scroll at 1440 — the columnSize widths are budgeted
+    to fit everything up to ↗ and no further. It is rare (a `-v{n}` sibling only)
+    and is not an everyday control.
 
     Only bites when the capture was actually taken at <=1440 wide — an older
     capture predating summary.json's recorded window skips cleanly, as does
@@ -334,7 +339,7 @@ def test_triage_controls_survive_a_1440_window(tour, base_surfaces):
     if triage is None:
         pytest.skip("tour captured no Meetings.base Triage view")
     headers = set(triage["dom"].get("headers") or [])
-    missing = {"✓ Reviewed"} - headers
+    missing = {"✅ Keep", "🗑 Archive"} - headers
     assert not missing, (
         f"Triage at {width}px is missing {sorted(missing)} from its rendered "
         f"headers {sorted(headers)} — a control needed for the queue is off "

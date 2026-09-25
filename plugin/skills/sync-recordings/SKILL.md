@@ -1273,7 +1273,7 @@ Count what exists, not what you intended (a lab run once reported
 **Parked:** {N} → `90-archive/inbox/` ({filenames, each with why it was not a capture})
 **Inbox swept:** {N} files → `90-archive/inbox/{YYYY-MM}/` · {N} left pending in `10-inbox/`
 **New people:** {N} created in `50-people/`
-**Meetings you ticked as reviewed:** {N} now confirmed
+**Meetings you ticked Keep on:** {N} now confirmed
 **Possible duplicates:** {N} ({list the stems}) — kept as separate notes; each landed on a meeting that already had a note (one you confirmed, or one written from another source this run), so nothing was overwritten; also includes any imprecise or weak-overlap collision warning appended to a worker's `written:` outcome line this run
 **Cross-adapter duplicates skipped:** {N} ({subject} → already synced as {stem}; undo: `sync unsettle-duplicate --id <id> --event-id <id> --start-utc <utc>` | `sync m365-forget --event-id <id> --start-utc <utc>`)
 **Skipped / errors:** {N} (will retry next run) (excluding any parked this run) · {N} tiny clips auto-skipped ({list each with its duration}) — permanent, not a retry
