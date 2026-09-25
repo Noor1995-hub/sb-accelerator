@@ -508,7 +508,7 @@ reported "Processed: 0" after writing a meeting correctly):
 ```
 ## Evening Sync Complete
 **Synced:** {N} recordings → `20-meetings/` ({stems})
-**Meetings you ticked as reviewed:** {N} now confirmed
+**Meetings you ticked Keep on:** {N} now confirmed
 **Possible duplicates:** {N} ({list the stems}) — kept as separate notes; each would have overwritten a meeting you already confirmed
 **Metrics refreshed:** {P} projects · {Q} people
 **Projects updated:** {N} ({slugs}) — {M} decisions captured for review, {K} candidates skipped

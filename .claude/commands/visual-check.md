@@ -45,16 +45,17 @@ Full background: `docs/visual-verification.md`.
    legibility, spacing, column widths, empty states and anything that simply
    looks wrong. Report what you see, and say plainly if a surface was not
    captured rather than implying full coverage. The 1440 capture is the one
-   that matters for Meetings.base Triage. Its column order (since 0.10.28)
-   is `→`, Date, Cal, Subject, Attendees, `✓ Reviewed`, Projects, `↗`, then
-   the disposal columns `🗑 Archive` and `⚠ Duplicate of` last. Confirm
-   everything up to and including the `↗` project link is visible without
-   horizontal scrolling — `✓ Reviewed` is the one-click confirm the queue
-   depends on, and the only header
-   `test_triage_controls_survive_a_1440_window` pins. `🗑 Archive` and
+   that matters for Meetings.base Triage. Its column order (since 0.12.5)
+   is `→`, Date, Cal, Subject, Attendees, Projects, then the decision pair
+   `✅ Keep` and `🗑 Discard` side by side, then `↗` and `⚠ Duplicate of`.
+   Confirm everything up to and including `↗` is visible without horizontal
+   scrolling, with the Date value and both decision headers readable in full
+   (the fixed `columnSize` widths are budgeted for exactly that) — the pair is
+   what `test_triage_controls_survive_a_1440_window` pins. Only
    `⚠ Duplicate of` may sit behind a horizontal scroll at 1440 with the
    navigator's two-pane sidebar open; that is the intended layout, not a
-   regression.
+   regression. A long project slug wrapping inside the Projects cell is
+   expected too — `↗` is the click-through.
 
 The tour is invisible — the probe window shows for the few seconds the
 instance takes to boot, then `up` cloaks it (opacity 0, clicks pass through)
