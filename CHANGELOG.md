@@ -15,6 +15,8 @@ delivers them.
 
 ## Unreleased
 
+- Teams meetings now sync, and tomorrow's meetings are prepped in the daily note, for a mailbox set to its own time zone. Outlook answers such a mailbox's calendar in local time ("Romance Standard Time" for Brussels) instead of UTC, and the plugin used to refuse every event it could not read as UTC, so the M365 sync and calendar prep never ran. It now converts Windows and IANA time zone names; a zone it cannot identify is still refused rather than guessed. (#PR)
+
 ## v0.12.5 — 2026-09-25
 
 - The Meetings *Triage* view's two checkboxes now say what they do: **✅ Keep** (was ✓ Reviewed) confirms a note, **🗑 Archive** takes noise out of the queue while the file stays. They sit side by side right after Projects, so you check a row first and then decide, and both headers are readable in full on a 13" laptop. Only the labels and layout changed: ticks work exactly as before. A vault whose Meetings view was never customised picks this up at the next `/upgrade-vault`; a customised one is asked first. (#230)

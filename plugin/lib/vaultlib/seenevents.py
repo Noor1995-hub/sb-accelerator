@@ -29,7 +29,8 @@ from pathlib import Path
 from typing import List, Optional, Tuple
 
 from . import dates, syncjob, vault
-from .m365 import _parse_graph_dt, event_uri, M365Error
+from .m365 import (_parse_graph_dt, _resolve_zone, event_uri, graph_dt_utc,
+                   M365Error)
 
 CACHE_RELPATH = Path("99-workflow-config") / "sync-state" / "seen-events.json"
 CACHE_VERSION = 1
@@ -133,12 +134,20 @@ def _occurrence_dt(event: dict, field: str) -> Optional[datetime]:
     """The UTC datetime of one listing field, or None when absent/unusable."""
     node = event.get(field)
     if isinstance(node, dict):
-        tz = node.get("timeZone")
-        if tz is not None and str(tz).casefold() != "utc":
-            raise SeenEventsError(
-                f"event {field}.timeZone {tz!r} is not UTC — the listing "
-                "must be queried with UTC bounds; refusing to guess")
-        node = node.get("dateTime")
+        if not node.get("dateTime"):
+            return None
+        # The zone label is resolved (or the whole listing refused) before
+        # the datetime's own parse gets to fail open below: an unreadable
+        # zone is a listing-wide fact, not one bad entry.
+        if node.get("timeZone") is not None:
+            try:
+                _resolve_zone(node.get("timeZone"), f"event {field}.timeZone")
+            except M365Error as exc:
+                raise SeenEventsError(str(exc)) from exc
+        try:
+            return graph_dt_utc(node, f"event {field}")
+        except M365Error:
+            return None
     if not node:
         return None
     try:

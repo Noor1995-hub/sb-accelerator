@@ -46,7 +46,7 @@ Your briefing carries the event's URI, verbatim, and your scratch stem
    `skipped` carrying `"reason": "no-transcript-url"` → reply
    `still-no-transcript` and stop — there is nothing to fetch or classify.
    Otherwise take `recording_id` and `transcript_url` from the one entry
-   in `ids`. A refusal from `m365 ids` itself (non-UTC `end.timeZone`, a
+   in `ids`. A refusal from `m365 ids` itself (an unresolvable `end.timeZone`, a
    missing `start.dateTime`, or another required key absent) means the
    event is malformed, not that a classification is yours to make — reply
    `fetch-error: <the CLI's own error>` verbatim and stop.
@@ -121,5 +121,5 @@ every other scratch read this contract or the worker's makes.
 | `transcript-found: <recording_id> (event at <path>, transcript-url: <verbatim url>)` | the transcript read returned content |
 | `no-access` | 403 on the transcript read, body carries Graph code 3003 / "does not have access to lookup meeting" — or the body is unreadable / carries no readable Graph error code at all (safer default); the transcript is not reachable from this account, either because the organizer's domain is missing from `adapters.m365.home_domains` (or the list is unset) or because the tenant's Microsoft Graph transcript-access setting is off; permanent |
 | `forbidden` | a 403 on the transcript read whose body positively names a different cause — another tenant, permanent |
-| `fetch-error: <one clause why>` | transport failure or oversized result after 3 retries, or `m365 ids` itself refused the event (non-UTC `end.timeZone`, missing `start.dateTime`, or another required key absent) — reply with the CLI's own error verbatim; append `(recording-id: <ns:id>)` when your own `m365 ids` call has already given you one — never before it |
+| `fetch-error: <one clause why>` | transport failure or oversized result after 3 retries, or `m365 ids` itself refused the event (unresolvable `end.timeZone`, missing `start.dateTime`, or another required key absent) — reply with the CLI's own error verbatim; append `(recording-id: <ns:id>)` when your own `m365 ids` call has already given you one — never before it |
 | `auth-error` | connector wants re-authentication — stop |

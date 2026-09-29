@@ -150,25 +150,62 @@ def test_a_malformed_transcript_url_raises():
         m365.derive_id({**EVENT, "meetingTranscriptUrl": "https://graph/x"})
 
 
-def test_a_non_utc_event_start_is_refused_not_guessed():
+def _needs_tz_database():
+    try:
+        from zoneinfo import ZoneInfo
+        ZoneInfo("Europe/Paris")
+    except Exception:
+        pytest.skip("no tz database on host")
+
+
+# A mailbox with its own time zone set gets every start/end back as a wall
+# clock in that zone, labelled with its Windows name — and all of them used
+# to be refused, so neither Teams sync nor calendar prep ever ran for it.
+
+def test_a_windows_zone_event_derives_the_same_id_as_its_utc_twin():
+    _needs_tz_database()
+    local = {**EVENT,
+             "start": {"dateTime": "2026-08-25T16:00:00.0000000",
+                       "timeZone": "Romance Standard Time"},
+             "end": {"dateTime": "2026-08-25T17:00:00.0000000",
+                     "timeZone": "Romance Standard Time"}}
+    assert m365.derive_id(local) == m365.derive_id(EVENT)
+    assert m365.ids([local], timezone="Europe/Brussels")["ids"][0][
+        "recorded_local"] == "2026-08-25T16:00"
+
+
+def test_an_iana_zone_label_converts_across_dst():
+    _needs_tz_database()
+    winter = {"dateTime": "2026-01-12T09:00:00", "timeZone": "Europe/Brussels"}
+    summer = {"dateTime": "2026-08-25T09:00:00", "timeZone": "Europe/Brussels"}
+    assert m365.graph_dt_utc(winter, "x").hour == 8
+    assert m365.graph_dt_utc(summer, "x").hour == 7
+
+
+def test_an_explicit_offset_on_the_datetime_wins_over_the_label():
+    node = {"dateTime": "2026-08-25T14:00:00Z", "timeZone": "Pacific Standard Time"}
+    assert m365.graph_dt_utc(node, "x").hour == 14
+
+
+def test_an_unresolvable_event_start_zone_is_refused_not_guessed():
     event = {**EVENT, "start": {"dateTime": "2026-08-25T16:00:00",
-                                "timeZone": "Romance Standard Time"}}
-    with pytest.raises(m365.M365Error, match="is not UTC"):
+                                "timeZone": "tzone://Microsoft/Custom"}}
+    with pytest.raises(m365.M365Error, match="start.timeZone.*refusing to guess"):
         m365.derive_id(event)
 
 
-def test_a_non_utc_event_end_is_refused_not_guessed():
+def test_an_unresolvable_event_end_zone_is_refused_not_guessed():
     """end.timeZone must be checked exactly as symmetrically as
-    start.timeZone — a non-UTC end used to be parsed as if it were UTC,
-    which would silently mis-window a recurring series' transcript filter
-    and the duration fallbacks derived from the same span."""
+    start.timeZone — an end in an unknown zone must never be parsed as if it
+    were UTC, which would silently mis-window a recurring series' transcript
+    filter and the duration fallbacks derived from the same span."""
     event = {**EVENT, "end": {"dateTime": "2026-08-25T17:00:00",
-                              "timeZone": "Romance Standard Time"}}
-    with pytest.raises(m365.M365Error, match="end.timeZone.*is not UTC"):
+                              "timeZone": "Not A Zone"}}
+    with pytest.raises(m365.M365Error, match="end.timeZone.*refusing to guess"):
         m365.ids([event], utc_offset="+02:00")
 
 
-def test_a_non_utc_event_end_is_refused_with_no_timezone_flags_at_all():
+def test_an_unresolvable_event_end_zone_is_refused_with_no_timezone_flags_at_all():
     """PR #217 review finding: `_event_end` used to be reachable only
     through `_event_duration_min`, which `ids()` calls only when
     `timezone`/`utc_offset` is supplied — the probe's own `m365 ids` call
@@ -176,11 +213,19 @@ def test_a_non_utc_event_end_is_refused_with_no_timezone_flags_at_all():
     Sonnet worker re-derived ids later, after the expensive dispatch this
     PR exists to avoid. Validation must not depend on an optional flag."""
     event = {**EVENT, "end": {"dateTime": "2026-08-25T17:00:00",
-                              "timeZone": "Romance Standard Time"}}
-    with pytest.raises(m365.M365Error, match="end.timeZone.*is not UTC"):
+                              "timeZone": "Not A Zone"}}
+    with pytest.raises(m365.M365Error, match="end.timeZone.*refusing to guess"):
         m365.ids([event])
-    with pytest.raises(m365.M365Error, match="end.timeZone.*is not UTC"):
+    with pytest.raises(m365.M365Error, match="end.timeZone.*refusing to guess"):
         m365.derive_id(event)
+
+
+def test_every_windows_zone_in_the_table_resolves():
+    _needs_tz_database()
+    from vaultlib import winzones
+    for name in winzones.WINDOWS_TO_IANA:
+        m365.graph_dt_utc({"dateTime": "2026-08-25T12:00:00", "timeZone": name},
+                          name)
 
 
 def test_ids_with_no_timezone_flags_still_derives_an_event_with_no_end():
@@ -550,10 +595,22 @@ def test_agenda_drops_all_day_cancelled_and_other_days_with_counts():
     assert result["date"] == "2026-09-21"
 
 
-def test_agenda_refuses_a_non_utc_listing():
-    event = _listing_event("Odd", "2026-09-21T10:00:00.0000000")
+def test_agenda_renders_a_windows_zone_listing_in_local_time():
+    _needs_tz_database()
+    event = _listing_event("Local", "2026-09-21T10:00:00.0000000",
+                           "2026-09-21T11:30:00.0000000")
     event["start"]["timeZone"] = "Romance Standard Time"
-    with pytest.raises(m365.M365Error, match="not UTC"):
+    event["end"]["timeZone"] = "Romance Standard Time"
+    result = m365.agenda([event], timezone="Europe/Brussels", date="2026-09-21")
+    meeting = result["meetings"][0]
+    assert (meeting["time"], meeting["end"]) == ("10:00", "11:30")
+    assert meeting["start_utc"] == "2026-09-21T08:00:00"
+
+
+def test_agenda_refuses_a_listing_in_an_unresolvable_zone():
+    event = _listing_event("Odd", "2026-09-21T10:00:00.0000000")
+    event["start"]["timeZone"] = "Not A Zone"
+    with pytest.raises(m365.M365Error, match="refusing to guess"):
         m365.agenda([event], utc_offset="+02:00")
 
 
