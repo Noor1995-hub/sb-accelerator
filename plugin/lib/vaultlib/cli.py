@@ -438,6 +438,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--start-utc", dest="start_utc",
         help="the occurrence's start_utc key, when known — travels with "
              "--event-id")
+    sync_settle.add_argument(
+        "--now", help="UTC ISO datetime override (tests); defaults to now")
 
     sync_unskip = sync_sub.add_parser(
         "unskip",
@@ -946,7 +948,8 @@ def _dispatch(args: argparse.Namespace) -> int:
         if args.action == "settle-duplicate":
             return _ok(seenevents.settle_duplicate(
                 root, args.recording_id, args.existing_id, args.stem,
-                event_id=args.event_id, start_utc=args.start_utc))
+                event_id=args.event_id, start_utc=args.start_utc,
+                now_utc=seenevents.parse_now(args.now)))
         if args.action == "unskip":
             return _ok(syncjob.unskip(root, args.recording_id))
         if args.action == "unsettle-duplicate":
