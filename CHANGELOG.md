@@ -15,7 +15,7 @@ delivers them.
 
 ## Unreleased
 
-- Teams meetings now sync, and tomorrow's meetings are prepped in the daily note, for a mailbox set to its own time zone. Outlook answers such a mailbox's calendar in local time ("Romance Standard Time" for Brussels) instead of UTC, and the plugin used to refuse every event it could not read as UTC, so the M365 sync and calendar prep never ran. It now converts Windows and IANA time zone names; a zone it cannot identify is still refused rather than guessed. (#PR)
+- Teams meetings now sync, and tomorrow's meetings are prepped in the daily note, for a mailbox set to its own time zone. Outlook answers such a mailbox's calendar in local time ("Romance Standard Time" for Brussels) instead of UTC, and the plugin used to refuse every event it could not read as UTC, so the M365 sync and calendar prep never ran. It now converts Windows and IANA time zone names; a zone it cannot identify is still refused rather than guessed. (#233)
 
 ## v0.12.5 — 2026-09-25
 
