@@ -59,6 +59,36 @@ def test_fresh_cache_sends_every_event_to_fetch(tmp_path):
                                   "external": 0}
 
 
+def test_a_windows_zone_listing_keys_on_the_same_utc_start(tmp_path):
+    """A mailbox with its own time zone answers in it ("Romance Standard
+    Time"); triage used to refuse the whole listing, so nothing synced."""
+    try:
+        from zoneinfo import ZoneInfo
+        ZoneInfo("Europe/Paris")
+    except Exception:
+        pytest.skip("no tz database on host")
+    root = make_vault(tmp_path)
+    seenevents.record(root, [outcome()], NOW)
+    event = listing_event(start="2026-08-28T16:00:00.0000000",
+                          end="2026-08-28T17:00:00.0000000")
+    event["start"]["timeZone"] = event["end"]["timeZone"] = "Romance Standard Time"
+    fresh = listing_event(event_id="AAMkAGId2", start="2026-08-28T16:00:00.0000000",
+                          end="2026-08-28T17:00:00.0000000")
+    fresh["start"]["timeZone"] = fresh["end"]["timeZone"] = "Romance Standard Time"
+    result = seenevents.triage(root, [event, fresh], NOW)
+    assert result["filtered"]["written"] == 1
+    assert [(e["id"], e["start_utc"]) for e in result["fetch"]] == [
+        ("AAMkAGId2", "2026-08-28T14:00:00")]
+
+
+def test_a_listing_in_an_unresolvable_zone_is_refused(tmp_path):
+    root = make_vault(tmp_path)
+    event = listing_event()
+    event["start"]["timeZone"] = "Not A Zone"
+    with pytest.raises(seenevents.SeenEventsError, match="refusing to guess"):
+        seenevents.triage(root, [event], NOW)
+
+
 def test_triage_filters_written_and_skipped_occurrences(tmp_path):
     root = make_vault(tmp_path)
     seenevents.record(root, [

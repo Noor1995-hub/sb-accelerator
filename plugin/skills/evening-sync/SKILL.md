@@ -336,8 +336,9 @@ The result's `meetings[]` is already filtered (all-day, cancelled and
 other-day entries dropped and counted under `dropped`), sorted by start, and
 rendered in the vault owner's local time. **Carry each entry's `time` and
 `subject` into the payload verbatim.** Never read `start.dateTime` yourself:
-the connector answers every start as a UTC wall clock labelled
-`timeZone: "UTC"`, and a hand-copied clock put every meeting two hours early
+the connector answers every start as a wall clock in the mailbox's own
+zone (`"UTC"` on some mailboxes, a Windows name like `"Romance Standard
+Time"` on others), and a hand-copied clock put every meeting two hours early
 in a daily note once — the offset is the CLI's to apply, not yours. The
 remaining fields (`organizer`, `attendees`, `location`, `show_as`,
 `is_organizer`, `uri`) are the inputs for the prep below.

@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import List, Optional, Tuple
 from urllib.parse import quote
 
-from . import dates
+from . import dates, winzones
 
 URL_PREFIX = "meeting-transcript:///events/"
 EVENT_URI_PREFIX = "calendar:///events/"
@@ -49,9 +49,18 @@ def _load(path: Optional[str], label: str):
 def _parse_graph_dt(value, label: str) -> datetime:
     """Graph ISO datetime -> naive UTC. Graph emits 7-digit fractional
     seconds, which fromisoformat rejects; truncate to 6 before parsing."""
+    parsed = _parse_graph_wall(value, label)
+    if parsed.tzinfo is not None:
+        parsed = parsed.astimezone(_timezone.utc).replace(tzinfo=None)
+    return parsed
+
+
+def _parse_graph_wall(value, label: str) -> datetime:
+    """`_parse_graph_dt` without the UTC normalisation: naive when the text
+    carries no offset, aware when it does (`Z` counts as one)."""
     text = str(value or "").strip()
     if text.endswith(("Z", "z")):
-        text = text[:-1]
+        text = text[:-1] + "+00:00"
     if "." in text:
         head, _, frac = text.partition(".")
         tail = ""
@@ -65,38 +74,77 @@ def _parse_graph_dt(value, label: str) -> datetime:
         parsed = datetime.fromisoformat(text)
     except ValueError as exc:
         raise M365Error(f"{label} {value!r} is not an ISO datetime") from exc
-    if parsed.tzinfo is not None:
-        parsed = parsed.astimezone(_timezone.utc).replace(tzinfo=None)
     return parsed
+
+
+_UTC_NAMES = frozenset({"utc", "etc/utc", "gmt", "etc/gmt", "z"})
+_WINDOWS_ZONES = {name.casefold(): iana
+                  for name, iana in winzones.WINDOWS_TO_IANA.items()}
+
+
+def _resolve_zone(name, label: str):
+    """The tzinfo a Graph `timeZone` label names, or None for UTC itself.
+
+    The calendar connector answers in the *mailbox's* own zone and only
+    falls back to UTC when the mailbox has none — so a mailbox set to
+    Brussels time answers `"Romance Standard Time"`, a Windows name
+    zoneinfo cannot read, and every such event used to be refused. A
+    Windows name goes through CLDR's mapping (`winzones`), anything else is
+    tried as an IANA name. A label that resolves to neither is still
+    refused: converting through a named zone is arithmetic, inventing one
+    is a guess."""
+    text = str(name).strip()
+    if text.casefold() in _UTC_NAMES:
+        return None
+    iana = _WINDOWS_ZONES.get(text.casefold(), text)
+    try:
+        from zoneinfo import ZoneInfo
+        return ZoneInfo(iana)
+    except Exception as exc:
+        raise M365Error(
+            f"{label} {name!r} is neither UTC, a Windows time zone name nor "
+            f"an IANA name this host can resolve ({exc.__class__.__name__}) "
+            "— refusing to guess the offset; a Windows host without a tz "
+            "database needs `pip install tzdata`") from exc
+
+
+def graph_dt_utc(node, label: str) -> datetime:
+    """One Graph `{dateTime, timeZone}` pair -> naive UTC.
+
+    The wall clock is read in the named zone and converted. A wall clock
+    that occurs twice (the autumn DST hour) is read as its first
+    occurrence (`fold=0`); only a meeting starting inside that one hour can
+    land an hour off, and only in its local rendering's offset, never its
+    date. A `dateTime` that already carries an offset wins over the label.
+    """
+    wall = _parse_graph_wall(node.get("dateTime"), f"{label}.dateTime")
+    if wall.tzinfo is None:
+        zone = _resolve_zone(node.get("timeZone") or "UTC", f"{label}.timeZone")
+        if zone is None:
+            return wall
+        wall = wall.replace(tzinfo=zone)
+    return wall.astimezone(_timezone.utc).replace(tzinfo=None)
 
 
 def _event_start(event: dict) -> datetime:
     start = event.get("start") or {}
     if not start.get("dateTime"):
         raise M365Error("event is missing start.dateTime")
-    tz = start.get("timeZone")
-    if tz is not None and str(tz).casefold() != "utc":
-        raise M365Error(
-            f"event start.timeZone {tz!r} is not UTC — refusing to guess the offset")
-    return _parse_graph_dt(start.get("dateTime"), "event start.dateTime")
+    return graph_dt_utc(start, "event start")
 
 
 def _event_end(event: dict) -> Optional[datetime]:
     """Event end as a UTC datetime, or None with no end at all — the
     calendar-event span is optional throughout this module. When an end IS
-    present, its timeZone is checked exactly as `_event_start` checks
-    start's: a non-UTC end must be refused, not silently misread, or a
-    recurring series' window (`_transcript_window`) and duration fallbacks
-    (`_event_span_ms`, `_event_duration_min`) would mis-scope by the
-    offset."""
+    present, its timeZone is resolved exactly as `_event_start` resolves
+    start's: an end in an unresolvable zone must be refused, not silently
+    read as UTC, or a recurring series' window (`_transcript_window`) and
+    duration fallbacks (`_event_span_ms`, `_event_duration_min`) would
+    mis-scope by the offset."""
     end = event.get("end") or {}
     if not end.get("dateTime"):
         return None
-    tz = end.get("timeZone")
-    if tz is not None and str(tz).casefold() != "utc":
-        raise M365Error(
-            f"event end.timeZone {tz!r} is not UTC — refusing to guess the offset")
-    return _parse_graph_dt(end.get("dateTime"), "event end.dateTime")
+    return graph_dt_utc(end, "event end")
 
 
 def _canonical(event: dict) -> Tuple[str, str, str]:
@@ -257,19 +305,22 @@ def agenda(events, *, timezone: Optional[str] = None,
     and rendered in the vault owner's local time — the deterministic half of
     /evening-sync Stage 5.
 
-    The connector returns every `start`/`end` as a UTC wall clock with
-    `timeZone: "UTC"`. When the heading time was left to the orchestrator to
-    "render locally", one run copied the UTC clock straight into the daily
-    note and every meeting showed two hours early. So `time` (owner-local
-    `HH:MM`) is computed here, by the same `dates.utc_to_local` the meeting
-    notes use, and the skill carries it into the payload verbatim.
+    The connector returns every `start`/`end` as a wall clock in the
+    mailbox's own zone (`timeZone: "UTC"` on some mailboxes, a Windows name
+    such as "Romance Standard Time" on others). When the heading time was
+    left to the orchestrator to "render locally", one run copied the UTC
+    clock straight into the daily note and every meeting showed two hours
+    early. So `time` (owner-local `HH:MM`) is computed here: `graph_dt_utc`
+    to UTC, then the same `dates.utc_to_local` the meeting notes use, and
+    the skill carries it into the payload verbatim.
 
     All-day and cancelled entries are dropped and counted; so are paging
     markers (`load_listing` passes them through). With `date` (local
     `YYYY-MM-DD`) an event whose *local* start falls on another day is
     dropped too — the query window is built in UTC and can graze a
-    neighbouring day at the edges. A non-UTC listing is refused, exactly as
-    `ids` refuses it: guessing an offset is how this bug happened.
+    neighbouring day at the edges. A listing in a zone that cannot be
+    resolved is refused, exactly as `ids` refuses it: guessing an offset is
+    how this bug happened.
     """
     if not isinstance(events, list):
         raise M365Error("--events must hold a JSON array of calendar-search results")
@@ -334,7 +385,7 @@ def ids(events, *, timezone: Optional[str] = None,
     Supplied, each transcript-bearing entry also gains `recorded_local` (for
     `sync collide --start` and `meeting write`'s `date`) and
     `event_duration_min` (for `sync collide --duration-min`) — the latter
-    only when the event carries an `end`. A non-UTC `end.timeZone` is
+    only when the event carries an `end`. An unresolvable `end.timeZone` is
     refused unconditionally, via `derive_id`, whether or not `timezone`/
     `utc_offset` are supplied — validation must not depend on an optional
     flag a caller (the probe, in particular) may never pass.

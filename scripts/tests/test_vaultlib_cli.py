@@ -695,6 +695,7 @@ def test_sync_settle_duplicate_through_the_cli_with_event_keys(
         "--id", "m365:aaaa111122223333", "--existing", "plaud:abc123",
         "--stem", "28-08-26-weekly-sync",
         "--event-id", "AAMkAGId1", "--start-utc", "2026-08-28T14:00:00",
+        "--now", "2026-08-28T18:00:00",
     ])
     assert code == 0
     assert payload["result"]["seen_events_recorded"] is True
@@ -906,6 +907,7 @@ def test_sync_unsettle_duplicate_reverses_both_writes(capsys, tmp_path):
         "--id", "m365:aaaa111122223333", "--existing", "plaud:abc123",
         "--stem", "28-08-26-weekly-sync",
         "--event-id", "AAMkAGId1", "--start-utc", "2026-08-28T14:00:00",
+        "--now", "2026-08-28T18:00:00",
     ])
     assert code == 0
 
