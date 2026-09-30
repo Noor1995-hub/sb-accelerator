@@ -57,6 +57,7 @@ welcome side effects, not the purpose.
 | 15 | **Digests feed project-state updates without review**, with two guards: only **strong** links queue a project (organisation domain, project name in subject or topic), and everything stage 4 takes from a digest is marked as coming from mail or chat, with a link to the digest |
 | 16 | **Person notes:** backlinks, plus auto-maintained `messages-7d` / `messages-30d` counters next to the meeting counters. No body writes. A written per-person summary belongs with #184 |
 | 17 | A run crossing midnight adds late items to the previous day's digest, never duplicating one |
+| 18 | **The owner can teach the routing:** a project carries optional `keywords` (codes, nicknames, client terms), added by asking. The colleague's learning loop, without a table to maintain: what lands in *Not linked to a project* shows which keyword is missing |
 
 ## 3. Prior work this builds on
 
@@ -99,7 +100,9 @@ next morning:
 - Each linked project note shows it under **Recent messages**.
 - Decisions found in mail or chat appear in Decisions.base's **Needs review**.
 - The daily note's run summary gets one line: *"Mail and Teams: 34 messages
-  read, 6 linked to 3 projects."* Gaps and failures are named there too.
+  read, 6 linked to 3 projects, 5 not linked."* Gaps and failures are named
+  there too. The *Not linked* count is the owner's cue to teach a keyword
+  (§4.3).
 
 ### 4.3 On request
 
@@ -107,6 +110,7 @@ next morning:
 |---|---|
 | "catch up on my mail from last week" | One run over that window, one digest per calendar day, within the night's caps; what does not fit is recorded as a gap with the command that fills it |
 | "don't read my chats with Jordan anymore" | Exclusion added; read back: *"From tonight, mails to or from jordan@… and your 1:1 chat with Jordan are skipped. In group chats, only Jordan's own messages are skipped."* Then: *"I found 4 older digests that mention Jordan. Shall I remove those lines?"* Nothing changes without a yes |
+| "link mails about P-2317 to the operating-model project" | Keyword added to that project; read back: *"From tonight, mails and chats with 'P-2317' in the subject or chat name are linked to Operating model."* Earlier digests are not re-linked |
 | "what don't you read?" | The scope and every exclusion, in plain words |
 | "stop reading my mail and Teams" | Switched off; existing digests stay; read back |
 
@@ -134,6 +138,7 @@ is off, M365 is not connected or the account proof fails.
 | `plugin/skills/setup-my-brain/SKILL.md` | changed | the switch-on step (§4.1) |
 | `plugin/lib/vaultlib/updatequeue.py` | changed | strong digest links count as project activity; `messages-7d/30d` person counters (§7.2) |
 | `plugin/lib/vaultlib/projectstate.py` | changed | the `## Recent messages` section |
+| `plugin/lib/vaultlib/project.py`, `cli.py` | changed | `project keywords add/remove/list`, writing the optional `keywords` field (decision 18) |
 | template, ontology, `Messages.base`, migration 003 | changed/new | §8 |
 
 ### 5.3 Data flow of one run
@@ -203,7 +208,8 @@ gaps: []
 - Frontmatter follows the Meeting pattern (`projects[]`, `people[]`,
   `entities[]`), so existing joins and Bases work unchanged. `projects[]` holds
   every linked project; `projects-weak[]` is the subset linked only through a
-  stakeholder (§7.1 rule c), which the update queue ignores (decision 15).
+  stakeholder or a keyword in the message text (§7.1 rules c and d), which the
+  update queue ignores (decision 15).
 - Sections per project, then *Not linked to a project*. The owner's own
   messages are included; "you" means the owner.
 - A run's window can cross midnight; items go to the digest of their own date.
@@ -257,9 +263,12 @@ of a hand-kept table:
    senders of incoming mail are never created, only linked when they exist.
 2. **Project, strongest first:** (a) an address domain matches a project's
    entity, the same rule as meetings' `entity-domain-match`; (b) the subject or
-   chat topic contains the project name; (c) a linked person is a stakeholder or
-   key person of exactly one active project. (a) and (b) are **strong** links;
-   (c) is **weak** and goes to `projects-weak[]` as well.
+   chat topic contains the project name or one of its `keywords`
+   (case-insensitive, word-boundary matched, as in the colleague's table);
+   (c) a message summary contains one of those `keywords`; (d) a linked person
+   is a stakeholder or key person of exactly one active project. (a) and (b)
+   are **strong** links; (c) and (d) are **weak** and go to `projects-weak[]` as
+   well.
 3. **Several projects match:** the group is linked to all of them and shown
    under the first. **None match:** *Not linked to a project*, still linked to
    its people.
@@ -298,7 +307,8 @@ of a hand-kept table:
   `projects`, `people`, `counts`; optional `projects-weak`, `entities`, `gaps`,
   `window-from`, `window-to`); Decision's `source` may name a digest; Person
   gains optional `messages-7d`, `messages-30d`; the update-queue exception of
-  §7.2.
+  §7.2; Project gains optional `keywords` (a list of strings; absent means
+  none, so existing projects need no migration).
 - The vault's `CLAUDE.md` folder table gains the row.
 
 ### 8.2 Migration `003-structure-version-4`
@@ -356,7 +366,8 @@ cursor lives in vault state beside `lastsync`, not in config.
    exclusion kind including the group-chat rule of decision 7; grouping per
    calendar day across midnight; routing rules and their order; the
    person-creation rule (1:1 and direct To with ≤5 recipients create, CC and
-   incoming never); weak links never queue a project; `messages-7d/30d`
+   incoming never); keyword matching (word boundary, case, subject vs
+   summary); weak links never queue a project; `messages-7d/30d`
    counts; cursor
    advance and non-advance; gap recording; digest render and merge without
    duplicates; `--consume` deletes exactly the pages read; scrub matching.
