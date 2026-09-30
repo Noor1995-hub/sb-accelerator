@@ -3,8 +3,7 @@
 **Date:** 2026-09-30 · **Status:** design, awaiting Matthias's review
 **Issue:** #236 (lessons and prior work in its first comment)
 
-Items marked **[proposal]** were not discussed yet; everything else is a
-decision taken in the brainstorm of 2026-09-30 (§2).
+Every choice below is a decision taken in the brainstorm of 2026-09-30 (§2).
 
 ## 1. Problem and goal
 
@@ -54,6 +53,10 @@ welcome side effects, not the purpose.
 | 11 | **No automatic backfill.** The first run starts at yesterday 00:00; "catch up on last week" runs only on request |
 | 12 | Digests live in **their own folder, `25-messages/`**, with `Messages.base`: a new object type and a structure-version bump |
 | 13 | Digests are **kept** like meeting notes. When an exclusion is added later, older digests are cleaned up **only on request**, after the owner confirms |
+| 14 | **New person notes** only for real working relationships: 1:1 chat partners, and direct recipients (To, not CC) of the owner's sent mail with at most 5 recipients. Everyone else is linked only when a note already exists, so People.base's Uncurated view does not flood |
+| 15 | **Digests feed project-state updates without review**, with two guards: only **strong** links queue a project (organisation domain, project name in subject or topic), and everything stage 4 takes from a digest is marked as coming from mail or chat, with a link to the digest |
+| 16 | **Person notes:** backlinks, plus auto-maintained `messages-7d` / `messages-30d` counters next to the meeting counters. No body writes. A written per-person summary belongs with #184 |
+| 17 | A run crossing midnight adds late items to the previous day's digest, never duplicating one |
 
 ## 3. Prior work this builds on
 
@@ -129,7 +132,7 @@ is off, M365 is not connected or the account proof fails.
 | `plugin/lib/vaultlib/cli.py` | changed | `messages cursor`, `messages build`, `messages check`, `messages write`, `messages exclude add/remove/list`, `messages scrub` |
 | `plugin/skills/evening-sync/SKILL.md` | changed | stage 3b; the summary line |
 | `plugin/skills/setup-my-brain/SKILL.md` | changed | the switch-on step (§4.1) |
-| `plugin/lib/vaultlib/updatequeue.py` | changed | digests count as project activity (§7.2) |
+| `plugin/lib/vaultlib/updatequeue.py` | changed | strong digest links count as project activity; `messages-7d/30d` person counters (§7.2) |
 | `plugin/lib/vaultlib/projectstate.py` | changed | the `## Recent messages` section |
 | template, ontology, `Messages.base`, migration 003 | changed/new | §8 |
 
@@ -183,6 +186,7 @@ date: 2026-09-30
 window-from: 2026-09-29T18:47Z
 window-to: 2026-09-30T18:47Z
 projects: ["[[acme-industries-operating-model]]"]
+projects-weak: []
 people: ["[[jordan-reyes]]"]
 entities: ["[[acme-industries]]"]
 counts: {teams: 88, inbox: 31, sent: 9, dropped-noise: 22, linked: 6}
@@ -197,13 +201,15 @@ gaps: []
 ```
 
 - Frontmatter follows the Meeting pattern (`projects[]`, `people[]`,
-  `entities[]`), so existing joins and Bases work unchanged.
+  `entities[]`), so existing joins and Bases work unchanged. `projects[]` holds
+  every linked project; `projects-weak[]` is the subset linked only through a
+  stakeholder (§7.1 rule c), which the update queue ignores (decision 15).
 - Sections per project, then *Not linked to a project*. The owner's own
   messages are included; "you" means the owner.
 - A run's window can cross midnight; items go to the digest of their own date.
   Appending to an existing digest is a CLI merge that never duplicates an item
   (the item ids are recorded in the digest's `ids` block, hidden from reading
-  view). **[proposal]**
+  view). Decision 17.
 - `gaps` names any uncovered interval and the command that fills it.
 
 ## 6. Privacy
@@ -238,18 +244,22 @@ billing). The count is reported, the content is not.
 
 ## 7. Linking
 
-### 7.1 Routing a group to projects and people **[proposal]**
+### 7.1 Routing a group to projects and people
 
 Deterministic, in `messages build`, from what the vault already knows, instead
 of a hand-kept table:
 
-1. **People:** every sender, recipient and chat member whose address matches
-   an existing person note's `email` is linked. **No new person notes are
-   created from mail or chat** (a day's mail would flood `50-people/`).
+1. **People (decision 14):** every sender, recipient and chat member whose
+   address matches an existing person note's `email` is linked. A **new**
+   person note (created the way meeting attendees are, `relationship` empty) is
+   made only for the partner of a 1:1 chat, and for a direct `To` recipient of
+   a mail the owner sent with at most 5 recipients. CC, group-chat members and
+   senders of incoming mail are never created, only linked when they exist.
 2. **Project, strongest first:** (a) an address domain matches a project's
    entity, the same rule as meetings' `entity-domain-match`; (b) the subject or
    chat topic contains the project name; (c) a linked person is a stakeholder or
-   key person of exactly one active project.
+   key person of exactly one active project. (a) and (b) are **strong** links;
+   (c) is **weak** and goes to `projects-weak[]` as well.
 3. **Several projects match:** the group is linked to all of them and shown
    under the first. **None match:** *Not linked to a project*, still linked to
    its people.
@@ -259,14 +269,21 @@ of a hand-kept table:
 - **Project notes:** `project state write` gains `## Recent messages`, a
   Dataview list of digests linking the project (`LIMIT 10`), next to
   `## Recent meetings`.
-- **Project-state updates:** the update queue today counts **confirmed
-  meetings only** ("triage is the quality gate"). Decision 4 means digests
-  count **without** confirmation: a digest linking a project after its
-  `state-updated` queues it, and stage 4 gets that project's digest sections as
-  input next to its meetings. This is a deliberate exception, recorded in the
-  ontology. **[proposal]**
-- **Person notes:** no writes; the digest shows in the person's backlinks.
-  A `messages-7d` count on People.base is left for later. **[proposal]**
+- **Project-state updates (decision 15):** the update queue today counts
+  **confirmed meetings only** ("triage is the quality gate"). Digests count
+  **without** confirmation, a deliberate exception recorded in the ontology,
+  with two guards:
+  - only a **strong** link queues: a digest whose `projects[]` minus
+    `projects-weak[]` names a project, dated after its `state-updated`;
+  - stage 4 gets that project's digest section as input next to its meetings,
+    and every item it takes from it (a Hot potato, an Owe, an Awaiting, a
+    closed action) is marked as coming from mail or chat and links the digest,
+    so the owner always sees the source.
+- **Person notes (decision 16):** no body writes; the digest shows in the
+  person's backlinks. `messages-7d` and `messages-30d` are auto-maintained next
+  to `meetings-7d` / `meetings-30d` by the same metrics pass, counting the
+  digest groups the person is linked in, so People.base can sort by who the
+  owner actually talks to. A written per-person summary is left to #184.
 - **Decisions:** `source` may name a digest as well as a meeting (ontology
   change, §8.1). `reviewed: false`, so they queue in Needs review.
 - **Organisation dossiers:** not written; #184 stays its own issue.
@@ -278,9 +295,10 @@ of a hand-kept table:
 - New folder `25-messages/` and `Messages.base` (views: *This week*, *By
   project*, *Not linked*).
 - Ontology: a **Digest** object (`object: digest`, required `date`,
-  `projects`, `people`, `counts`; optional `entities`, `gaps`,
-  `window-from`, `window-to`); Decision's `source` may name a digest; the
-  update-queue exception of §7.2.
+  `projects`, `people`, `counts`; optional `projects-weak`, `entities`, `gaps`,
+  `window-from`, `window-to`); Decision's `source` may name a digest; Person
+  gains optional `messages-7d`, `messages-30d`; the update-queue exception of
+  §7.2.
 - The vault's `CLAUDE.md` folder table gains the row.
 
 ### 8.2 Migration `003-structure-version-4`
@@ -336,7 +354,10 @@ cursor lives in vault state beside `lastsync`, not in config.
 
 1. **Unit tests** on made-up fixtures, never real data: noise rules; each
    exclusion kind including the group-chat rule of decision 7; grouping per
-   calendar day across midnight; routing rules and their order; cursor
+   calendar day across midnight; routing rules and their order; the
+   person-creation rule (1:1 and direct To with ≤5 recipients create, CC and
+   incoming never); weak links never queue a project; `messages-7d/30d`
+   counts; cursor
    advance and non-advance; gap recording; digest render and merge without
    duplicates; `--consume` deletes exactly the pages read; scrub matching.
 2. **CLI tests** for every new subcommand's envelope.
@@ -353,5 +374,6 @@ cursor lives in vault state beside `lastsync`, not in config.
 - **Mail volume vs the 2-page cap:** a busy inbox may pass 50 mails a day.
   Measure in the Cowork run before raising it.
 - **Language of the digest:** follows the owner's configured note language.
-- Items marked **[proposal]** (§5.5 merge, §7.1 routing, §7.2 update-queue
-  exception and person notes) need Matthias's confirmation.
+- **Routing quality is unmeasured.** Check in the Cowork run how many groups
+  land in *Not linked to a project* and how many strong links are wrong; tune
+  the rules from that.
