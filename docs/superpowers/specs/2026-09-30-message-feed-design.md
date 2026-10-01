@@ -33,9 +33,9 @@ welcome side effects.
 1. After one evening run, a session asked about a project can answer from the
    vault what was said about it in mail and chat that day.
 2. Excluded people, domains, chats and words never appear in the vault.
-3. A missed evening, a cap that is hit or a failing source never leaves a
-   silent gap: it is recorded, filled automatically on the following nights,
-   and mentioned to the owner, in plain words, only if it lasts (§9).
+3. Nothing is lost silently: a missed evening or a failing source is caught up
+   automatically for up to 7 days, and the owner is told in plain words only
+   when it lasts or cannot be caught up (§9).
 4. The owner can see the benefit every morning without opening anything
    extra, and is asked to act only when something needs them (§4.2).
 5. The nightly cost is measured on a real account before release (§9).
@@ -63,7 +63,7 @@ welcome side effects.
 | 17 | A run crossing midnight adds late items to the previous day's digest, never duplicating one |
 | 18 | **The routing learns keywords:** a project carries optional `keywords` (codes, nicknames, client terms). Claude **proposes** them, at most once a week, from words that recur in unlinked messages; the owner only says yes. Adding one by asking still works. The colleague's learning loop, without a table to maintain (revised 2026-10-01) |
 | 19 | **Honest consent** that names what is read, that short notes are **kept** in the vault, and that they hold other people's words; and that the owner can skip, stop and delete at any time (§4.1) |
-| 20 | **Gaps fill themselves** on the following nights. The owner hears about a gap only when it lasts more than 2 nights, in plain words, without a command. Caps are sized on an executive's volume before release |
+| 20 | **The cap is a safety limit, not the normal coverage.** One fixed limit, set well above a busy executive's day (sized on an executive's account before release), so a normal day is read in full and only an extreme day hits it. A day that hits it is read **most important first** and the rest of that day is skipped, not owed: no backlog. Catching up happens only after a missed evening or a failing source, for at most 7 days back; anything older is closed with one plain line in the daily note (revised 2026-10-01, replacing "gaps fill themselves") |
 | 21 | **A visible moment every morning:** a short *Mail and Teams* block in the daily note, direct, with a clear call to action only when something needs the owner (§4.2). No counts and no internal terms |
 | 22 | **Exclusions at setup** default to *nothing to exclude*: one short open question plus "you can tell me any time", not a list of chats |
 | 23 | **The first morning** says once that mail and Teams are now included. Asked about mail from before switching on, or from an excluded person, Claude says plainly it has not read it and offers a live Outlook search |
@@ -145,7 +145,7 @@ Elsewhere, without the owner opening anything:
 
 | The owner says | What happens |
 |---|---|
-| "catch up on my mail from last week" | One run over that window, one digest per calendar day, within the night's caps; what does not fit is filled on the following nights (decision 20) |
+| "catch up on my mail from last week" | One run over that window, one digest per calendar day, within the cap, most important first; at most 7 days back (decision 20) |
 | "don't read my chats with Jordan anymore" | Exclusion added; read back: *"From tonight, mails to or from jordan@… and your 1:1 chat with Jordan are skipped. In group chats, only Jordan's own messages are skipped."* Then: *"I found 4 older notes that mention Jordan. Shall I remove those lines?"* Nothing changes without a yes |
 | "forget what you saved about the reorganisation" | The lines in digests that match are shown in plain words; only the confirmed ones are removed (decision 13) |
 | "link P-2317 to Operating model", or yes to a proposal | Keyword added to that project; read back: *"From tonight, mails and chats with 'P-2317' in the subject or chat name are linked to Operating model."* Earlier digests are not re-linked |
@@ -260,8 +260,9 @@ gaps: []
   Appending to an existing digest is a CLI merge that never duplicates an item
   (the item ids are recorded in the digest's `ids` block, hidden from reading
   view). Decision 17.
-- `gaps` names any uncovered interval; the CLI keeps the list of open gaps in
-  vault state and fills them on later nights (§9).
+- `gaps` names a missed interval still to catch up (after a missed evening or a
+  failing source); the CLI keeps open gaps in vault state, at most 7 days
+  back (§9).
 
 ## 6. Privacy
 
@@ -409,21 +410,29 @@ cursor lives in vault state beside `lastsync`, not in config.
 
 ## 9. Cost and limits
 
-- **Caps per night:** Teams feed 20 pages (the colleague's; a busy day is 5–8),
-  mail 2 pages per folder, 5 full-message reads. These are starting values from
-  a consultant's account; they are **sized on an executive's volume before
-  release** (decision 20).
-- **Gaps fill themselves (decision 20).** A cap that is hit still advances the
-  cursor to the newest item seen and records the uncovered interval as an open
-  gap. Each later night first fetches the newest messages, then spends what is
-  left of its caps on the oldest open gap:
-  - mail fills a gap exactly (`afterDateTime` / `beforeDateTime` on one folder);
-  - the Teams feed has no usable date filter, so a gap is reached by paging past
-    newer messages, and only while it lies within the feed's 1000-offset limit
-    (about 3 weeks on a consultant's account). A Teams gap beyond that limit is
-    closed as unrecoverable and told to the owner once, plainly.
-- **What the owner hears:** nothing, unless a gap is older than 2 nights; then
-  one plain line in the daily note (§4.2). No commands.
+- **The cap is a safety limit (decision 20).** It exists so that one extreme
+  day (a mailing-list flood, a paging loop) cannot make the evening run take
+  hours or spend the owner's usage. It is **fixed**, and set well above a busy
+  executive's day: a normal day never reaches it and is read in full. The
+  starting values (Teams feed 20 pages, mail 2 pages per folder, 5 full-message
+  reads) come from a consultant's account and are **raised to an executive's
+  measured volume before release**. They do not move at run time.
+- **A day that hits the cap** is read most important first, and what is left
+  is skipped for good, counted in the digest's `counts` as `skipped`; it is
+  never owed to a later night, so no backlog can build up. The order:
+  1. Sent Items;
+  2. 1:1 chats, and group chats the owner wrote in;
+  3. mail with the owner in `To`;
+  4. mail with the owner only in CC, then group chats the owner did not write in.
+- **Catching up after a missed evening** (laptop off, a failing source): the
+  next run covers the newest messages first, then the missed interval, within
+  the same cap. Mail is fetched for exactly that interval (`afterDateTime` /
+  `beforeDateTime` on one folder); Teams is reached by paging past newer
+  messages, within the feed's 1000-offset limit. At most **7 days** back; an
+  older gap is closed with one plain line in the daily note: *"I couldn't catch
+  up on your mail from 3 to 5 October."*
+- **What the owner hears:** nothing, unless a missed interval is still open
+  after 2 nights or is closed unread; then one plain line (§4.2). No commands.
 - **Where the cost is:** the model's writing, not the reading. The worker
   writes trimmed page files and condensed points only; it never retypes whole
   messages.
@@ -441,7 +450,7 @@ cursor lives in vault state beside `lastsync`, not in config.
 | Feature off, no M365, account proof fails | Stage skipped, one line in the summary |
 | A source errors | Retry once; then that source is recorded as a gap, the others continue |
 | Teams feed page 1 empty (search index down) | Recorded as a gap; no fallback to per-chat reads in v1 (they throttle and cap at 20 messages) |
-| Cap hit | Cursor advances, gap recorded and filled on later nights (§9) |
+| Cap hit | That day is read most important first; the rest is counted as skipped, never owed (§9) |
 | Worker fails before `messages write` | Cursor does not move; next run covers the window again |
 | A missed evening or a week with the laptop off | The cursor still points at the last item seen; the next run covers the newest messages and the rest is filled as gaps on later nights |
 | Condensed point fails the check | Dropped, counted in the outcome line |
@@ -457,8 +466,9 @@ cursor lives in vault state beside `lastsync`, not in config.
    incoming never); keyword matching (word boundary, case, subject vs
    summary); weak links never queue a project; `messages-7d/30d`
    counts; cursor
-   advance and non-advance; gap recording and filling (mail exact, Teams within
-   the offset limit, unrecoverable closed once); a domain matching several
+   advance and non-advance; a capped day read in priority order with the rest
+   counted as skipped and never owed; catch-up after a missed evening (mail
+   exact, Teams within the offset limit, at most 7 days, older closed once); a domain matching several
    projects is weak; digest render and merge without duplicates; `--consume`
    deletes exactly the pages read; scrub, forget and unlink each queue the
    affected projects; keyword proposals; the *Mail and Teams* block (at most 5
