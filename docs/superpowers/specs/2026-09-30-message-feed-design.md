@@ -63,7 +63,7 @@ welcome side effects.
 | 17 | A run crossing midnight adds late items to the previous day's digest, never duplicating one |
 | 18 | **The routing learns keywords:** a project carries optional `keywords` (codes, nicknames, client terms). Claude **proposes** them, at most once a week, from words that recur in unlinked messages; the owner only says yes. Adding one by asking still works. The colleague's learning loop, without a table to maintain (revised 2026-10-01) |
 | 19 | **Honest consent** that names what is read, that short notes are **kept** in the vault, and that they hold other people's words; and that the owner can skip, stop and delete at any time (§4.1) |
-| 20 | **The cap is a safety limit, not the normal coverage.** One fixed limit, set well above a busy executive's day (sized on an executive's account before release), so a normal day is read in full and only an extreme day hits it. A day that hits it is read **most important first** and the rest of that day is skipped, not owed: no backlog. Catching up happens only after a missed evening or a failing source, for at most 7 days back; anything older is closed with one plain line in the daily note (revised 2026-10-01, replacing "gaps fill themselves") |
+| 20 | **The cap is a safety limit, not the normal coverage.** One fixed limit, set generously above a busy executive's day (Teams 20 pages, mail 8 pages per folder; checked in real use through `/health-check`, not measured up front), so a normal day is read in full and only an extreme day hits it. A day that hits it is read **most important first** and the rest of that day is skipped, not owed: no backlog. Catching up happens only after a missed evening or a failing source, for at most 7 days back; anything older is closed with one plain line in the daily note (revised 2026-10-01, replacing "gaps fill themselves") |
 | 21 | **A visible moment every morning:** a short *Mail and Teams* block in the daily note, direct, with a clear call to action only when something needs the owner (§4.2). No counts and no internal terms |
 | 22 | **Exclusions at setup** default to *nothing to exclude*: one short open question plus "you can tell me any time", not a list of chats |
 | 23 | **The first morning** says once that mail and Teams are now included. Asked about mail from before switching on, or from an excluded person, Claude says plainly it has not read it and offers a live Outlook search |
@@ -177,6 +177,7 @@ is off, M365 is not connected or the account proof fails.
 | `plugin/skills/evening-sync/SKILL.md` | changed | stage 3b; stage 4 reads digest sections and applies the decision test to them; stage 6 writes the *Mail and Teams* block |
 | `plugin/lib/vaultlib/dailynote.py` | changed | renders the *Mail and Teams* block (§4.2) from a payload whose lines cite digest groups |
 | `plugin/skills/setup-my-brain/SKILL.md` | changed | the switch-on step (§4.1) |
+| `plugin/lib/vaultlib/health.py`, `/health-check` | changed | one content-free number: days that hit the limit (§9) |
 | `plugin/lib/vaultlib/updatequeue.py` | changed | strong digest links count as project activity; `messages-7d/30d` person counters (§7.2) |
 | `plugin/lib/vaultlib/project.py`, `cli.py` | changed | `project keywords add/remove/list`, writing the optional `keywords` field (decision 18) |
 | template (`_messages/`, hide settings), ontology, migration 003 | changed/new | §8 |
@@ -413,10 +414,15 @@ cursor lives in vault state beside `lastsync`, not in config.
 - **The cap is a safety limit (decision 20).** It exists so that one extreme
   day (a mailing-list flood, a paging loop) cannot make the evening run take
   hours or spend the owner's usage. It is **fixed**, and set well above a busy
-  executive's day: a normal day never reaches it and is read in full. The
-  starting values (Teams feed 20 pages, mail 2 pages per folder, 5 full-message
-  reads) come from a consultant's account and are **raised to an executive's
-  measured volume before release**. They do not move at run time.
+  executive's day: a normal day never reaches it and is read in full. Values:
+  **Teams feed 20 pages** (the colleague's; his busy days take 5–8), **mail 8
+  pages per folder** (200 mails a day each for Inbox and Sent Items), **5
+  full-message reads**. No measurement before release: real use tells whether
+  they are high enough (below). They do not move at run time.
+- **Learning from real use.** The digest counts what a capped day skipped, and
+  `/health-check` gains one content-free number, *days that hit the limit*,
+  shared with delaware the way its other numbers are. If it shows up on real
+  accounts, the limit is raised in a release.
 - **A day that hits the cap** is read most important first, and what is left
   is skipped for good, counted in the digest's `counts` as `skipped`; it is
   never owed to a later night, so no backlog can build up. The order:
@@ -483,9 +489,8 @@ cursor lives in vault state beside `lastsync`, not in config.
 
 ## 12. Open points
 
-- **Executive volume is unmeasured**; the caps come from a consultant's
-  account. A busy inbox may pass 50 mails a day, the 2-page cap. Size the caps
-  on an executive's account before release (decision 20).
+- **Executive volume is unmeasured.** The limits are set generously instead
+  (§9) and checked through `/health-check`'s *days that hit the limit*.
 - **Sensitivity labels.** Skipping mail marked Private or Confidential would be
   a strong default, but the connector returned no sensitivity field in the
   2026-09-30 test (neither in search results nor in a full read). Re-check
