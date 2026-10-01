@@ -20,7 +20,8 @@ JSON object per line, keeping only these keys, values verbatim:
 | Inbox | `msg_inbox.p<n>.payload.json` | `id`, `subject`, `sender`, `recipients`, `receivedDateTime`, `summary` |
 | Sent Items | `msg_sent.p<n>.payload.json` | the same as Inbox |
 
-`<n>` counts from 1 per source. Never write a page file with no rows; if a call
+`<n>` counts from 1 per source. Every paging loop below also stops when the
+connector returns no next offset or cursor. Never write a page file with no rows; if a call
 returns nothing, write no file. When you stop a source at its page limit while
 the connector still reported more, append one line `{"moreResults": true}` to
 that source's last page.
@@ -50,23 +51,30 @@ row's `summary` before writing the page.
 
 **Gaps.** For each gap in `GAPS`, after the normal fetch: for mail, call the same
 search with `afterDateTime` = gap `from` and `beforeDateTime` = gap `to`; for
-Teams, keep paging the feed past `SINCE` until you reach the gap's interval,
-and only while `offset` stays below 1000. Write these pages as
+Teams, continue the feed from the offset where the normal fetch stopped: skip
+results newer than the gap's `to`, keep results within `from` to `to`, and stop
+at the first result at or before the gap's `from`. Stay within the shared
+20-page limit and only while `offset` stays below 1000. Write these pages as
 `msg_<source>.gap<id>.p<n>.payload.json`. The page limits above are shared:
 stop a gap when its source's limit is reached.
 
 A tool error: retry once with the same arguments; then leave that source and go
-on with the others. Note the source in your outcome line.
+on with the others. Pass every source you gave up on as `--failed <source>` to
+`messages build` (`teams`, `inbox` or `sent`), so the CLI records it as a gap,
+and name it in your outcome line.
 
 ## 2. Build
 
 ```bash
 python3 "$VAULTLIB" messages build --vault "$VAULT" --dir "$SCRATCH" \
   --now "$NOW" --timezone "$TIMEZONE" --since "$SINCE" --consume \
-  --owner-address <each address> [--gap <id> ...]
+  --owner-address a@example.com --owner-address b@example.com   [--gap <id> ...] [--failed <source> ...]
 ```
 
-Read `ok`. On failure, reply `fetch-error: build: <error>` and stop.
+Flags repeat: repeat `--owner-address` once per address; repeat `--gap` once per open gap id;
+repeat `--failed` once per failed source. The example shows two owner
+addresses. Every CLI step returns JSON: read `ok`. When it is false, reply
+`fetch-error: <build|check|write>: <error>` and stop.
 
 ## 3. Condense
 
@@ -76,6 +84,10 @@ each a short sentence, "you" meaning the owner. Every point cites the ids of
 the messages it rests on. Use only names, numbers, dates and titles that appear
 in those messages; write numbers as digits. Set `needs_owner: true` only when a
 message asks the owner for something or is waiting on them.
+
+If build's `groups` is 0 (an empty night), write
+`{"groups": []}` to the condensed file, still run check and write (they advance
+the cursor and the gap bookkeeping), and reply `nothing-new`.
 
 Write `$SCRATCH/msg_condensed.payload.json`:
 
@@ -99,8 +111,17 @@ by hand: leave it, and name it in your outcome line.
 | Line | When |
 |---|---|
 | `written: <n> logs, <m> groups, <d> dropped points[, at-limit][, refused: <stems>][, failed: <sources>]` | `messages write` returned `ok` |
-| `nothing-new` | the build found no messages |
+| `nothing-new` | build's `groups` is 0 (after check and write ran on the empty file) |
 | `fetch-error: <what>` | a step failed and nothing was written |
 | `auth-error` | the connector refused the account |
+
+Fields of the `written` line, all taken from CLI output:
+
+- `<n>`: the number of entries in write's `written`.
+- `<m>`: build's `groups`.
+- `<d>`: the number of entries in check's `dropped`.
+- `at-limit`: present when build's `at_limit` is true.
+- `refused: <stems>`: the `stem` of each entry in write's `refused`.
+- `failed: <sources>`: the sources you passed as `--failed`.
 
 Never include message content, names or subjects in the outcome line.

@@ -2376,6 +2376,23 @@ def test_messages_round_trip_through_the_cli(capsys, tmp_path):
     assert code == 0 and payload["result"]["written"] == ["2026-09-30-messages"]
 
 
+def test_messages_build_accepts_failed_sources(capsys, tmp_path):
+    root = make_vault(tmp_path)
+    write_vault_config(root, {"timezone": "Europe/Brussels"})
+    scratch = tmp_path / "scratch"
+    scratch.mkdir()
+    (scratch / "msg_inbox.p1.payload.json").write_text(json.dumps({
+        "id": "m1", "subject": "Workshop 2 agenda", "sender": "jordan.reyes@acme.example",
+        "recipients": ["morgan.ellery@northwind.example"], "receivedDateTime": "2026-09-30T09:00:00Z",
+        "summary": "Can we move workshop 2 to 14 Oct?"}), encoding="utf-8")
+    code, payload = run(capsys, ["messages", "build", "--vault", str(root), "--dir", str(scratch),
+                                 "--now", "2026-09-30T18:47:00Z", "--timezone", "Europe/Brussels",
+                                 "--owner-address", "morgan.ellery@northwind.example",
+                                 "--since", "2026-09-29T22:00:00Z", "--failed", "teams"])
+    assert code == 0 and payload["result"]["new_gaps"] == [
+        {"source": "teams", "from": "2026-09-29T22:00:00Z", "to": "2026-09-30T18:47:00Z"}]
+
+
 def test_messages_errors_stay_inside_the_envelope(capsys, tmp_path):
     root = make_vault(tmp_path)
     code, payload = run(capsys, ["messages", "check", "--dir", str(tmp_path)])

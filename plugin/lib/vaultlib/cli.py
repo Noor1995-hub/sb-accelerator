@@ -774,6 +774,7 @@ def build_parser() -> argparse.ArgumentParser:
     m_build.add_argument("--since", required=True)
     m_build.add_argument("--owner-address", dest="owner_address", action="append", required=True)
     m_build.add_argument("--gap", action="append", default=[])
+    m_build.add_argument("--failed", action="append", choices=["teams", "inbox", "sent"], default=[])
     m_build.add_argument("--consume", action="store_true")
     _tz(m_build)
 
@@ -933,7 +934,8 @@ def _dispatch(args: argparse.Namespace) -> int:
                 root, args.dir, timezone=args.timezone, utc_offset=args.utc_offset,
                 owner_addresses=args.owner_address, home_domains=home_domains or [],
                 exclusions=settings["exclusions"], today=args.now[:10], since=args.since,
-                gap_ids=args.gap, consume=args.consume))
+                gap_ids=args.gap, consume=args.consume,
+                failed_sources=args.failed, now=args.now))
         if args.action == "check":
             return _ok(msglog.check(args.dir))
         if args.action == "write":

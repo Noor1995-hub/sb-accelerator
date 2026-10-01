@@ -35,7 +35,8 @@ def _read_json(path: Path, label: str):
 
 
 def build(root: Path, scratch_dir: str, *, timezone, utc_offset, owner_addresses, home_domains,
-          exclusions, today: str, since: str, gap_ids: List[str], consume: bool) -> dict:
+          exclusions, today: str, since: str, gap_ids: List[str], consume: bool,
+          failed_sources: List[str] = (), now: str = None) -> dict:
     loaded = msgrows.load(scratch_dir)
     groups, counts = msgrows.group(loaded, exclusions=exclusions, owner_addresses=set(owner_addresses),
                                    timezone=timezone, utc_offset=utc_offset)
@@ -55,6 +56,11 @@ def build(root: Path, scratch_dir: str, *, timezone, utc_offset, owner_addresses
         if owed_until > since_dt:
             new_gaps.append({"source": source, "from": since_dt.strftime(_FMT),
                              "to": owed_until.strftime(_FMT)})
+    if failed_sources:
+        to = seenevents.parse_now(now).strftime(_FMT) if now else today + "T23:59:59Z"
+        for source in failed_sources:
+            if not any(g["source"] == source for g in new_gaps):
+                new_gaps.append({"source": source, "from": since_dt.strftime(_FMT), "to": to})
     filled = []
     for gid in gap_ids:
         pages = [loaded[s]["gap_pages"][gid] for s in ("teams", "inbox", "sent") if gid in loaded[s]["gap_pages"]]

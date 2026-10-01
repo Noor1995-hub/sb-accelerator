@@ -2064,11 +2064,15 @@ def test_messages_contract_pins_the_tool_rules():
     assert "at most 5" in text
     assert "20 pages" in text and "8 pages" in text
     assert "25 rows" not in text
+    assert "--failed <source>" in text and '{"groups": []}' in text
+    assert "fetch-error: <build|check|write>: <error>" in text
+    assert "repeat `--owner-address` once per address" in text
 
 
 def test_messages_contract_orders_build_check_write():
     text = read_contract()
-    assert text.index("messages build") < text.index("messages check") < text.index("messages write")
+    assert (text.index("messages build --vault") < text.index("messages check --dir")
+            < text.index("messages write --vault"))
 
 
 def test_messages_worker_agent_definition():

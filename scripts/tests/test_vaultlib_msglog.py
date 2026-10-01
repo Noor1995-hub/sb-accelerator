@@ -105,6 +105,36 @@ def test_a_capped_source_over_a_missed_evening_records_the_older_part_as_a_gap(e
     assert result["new_gaps"] == [{"source": "inbox", "from": "2026-09-27T00:00:00Z", "to": "2026-09-29T09:00:00Z"}]
 
 
+def test_a_failed_source_is_recorded_as_a_gap(env):
+    root, scratch = env
+    result = msglog.build(root, str(scratch), consume=False,
+                          **{**KW, "failed_sources": ["teams"], "now": "2026-09-30T18:47:00Z"})
+    assert result["new_gaps"] == [{"source": "teams", "from": "2026-09-29T22:00:00Z",
+                                   "to": "2026-09-30T18:47:00Z"}]
+
+
+def test_a_failed_and_capped_source_yields_one_gap(env):
+    root, scratch = env
+    page(scratch, "msg_inbox.p1.payload.json", [
+        mail("m1", "Workshop 2 agenda", "jordan.reyes@acme.example", [], at="2026-09-30T09:00:00Z")], more=True)
+    result = msglog.build(root, str(scratch), consume=False,
+                          **{**KW, "since": "2026-09-27T00:00:00Z", "failed_sources": ["inbox"],
+                             "now": "2026-09-30T18:47:00Z"})
+    assert [g["source"] for g in result["new_gaps"]] == ["inbox"]
+
+
+def test_an_empty_night_checks_and_writes_with_empty_groups(tmp_path):
+    root = make_vault(tmp_path)
+    scratch = tmp_path / "scratch"
+    scratch.mkdir()
+    result = msglog.build(root, str(scratch), consume=False, **KW)
+    assert result["groups"] == 0
+    (scratch / msglog.CONDENSED_FILE).write_text(json.dumps({"groups": []}), encoding="utf-8")
+    msglog.check(str(scratch))
+    written = msglog.write(root, str(scratch), now="2026-09-30T18:52:00Z")
+    assert written["written"] == []
+
+
 def test_frontmatter_round_trips_ints_and_lists(env):
     root, scratch = env
     msglog.build(root, str(scratch), consume=False, **KW)
