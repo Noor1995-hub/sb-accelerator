@@ -373,8 +373,12 @@ of a hand-kept table:
   - the file list: Notebook Navigator's `hiddenFolders` in the template's
     `.obsidian/plugins/notebook-navigator/data.json` (the setting exists and is
     empty today);
-  - search, graph and quick switcher: Obsidian's excluded files
-    (`userIgnoreFilters` in `.obsidian/app.json`).
+  - search and graph: Obsidian's excluded files (`userIgnoreFilters` in
+    `.obsidian/app.json`). By Obsidian's design, excluded files are only made
+    less prominent in the quick switcher and link suggestions, not removed:
+    typing a log's exact name still finds it. Verified in Obsidian on
+    2026-10-01 (PR #249 visual check): hidden in the file list and search,
+    offered but demoted in the quick switcher, links into the folder open.
 
   Wikilinks and backlinks into the folder keep working, and Claude reads it
   like any other folder. No Base.
