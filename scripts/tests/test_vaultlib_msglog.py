@@ -387,3 +387,61 @@ def test_a_recurring_code_with_one_projects_people_is_proposed_once_a_week(tmp_p
     assert msglog.keywords_propose(root, today="2026-09-30") == {
         "keyword": "P-2317", "project": "acme-industries-rollout", "count": 3}
     assert msglog.keywords_propose(root, today="2026-10-02") is None
+
+
+def _proposal_vault(tmp_path, links=("", "", ""), weak=True):
+    root = make_vault(tmp_path)
+    from test_vaultlib_msgroute import add_project
+    from vaultlib import person
+    person.ensure(root, "Sam Lee", "2026-09-01", email="sam.lee@acme.example")
+    add_project(root, "acme-industries-rollout", "Rollout", "acme-industries", stakeholders=["sam-lee"])
+    for day, link in zip(("2026-09-28", "2026-09-29", "2026-09-30"), links):
+        projects = [link] if link else []
+        data = {"schema": 1, "date": day, "ids": [day], "groups": [{
+            "gid": day[-2:], "key": "mail:x", "kind": "mail", "label": f"Status P-2317 {day}", "chat_type": None,
+            "people": ["sam-lee"], "names": {}, "participants": ["sam.lee@acme.example"],
+            "projects": projects, "projects_weak": projects if weak else [], "entities": [],
+            "needs_owner": False, "points": [{"text": "x", "cites": [day]}]}]}
+        msglog.save_log(root, data, {"type": "message-log", "date": day, "updated-at": f"{day}T18:00",
+                                     "projects": projects, "people": ["sam-lee"], "messages-read": 1})
+    return root
+
+
+def test_weak_only_links_still_count_as_unlinked_for_proposals(tmp_path):
+    link = "acme-industries-rollout"
+    root = _proposal_vault(tmp_path, links=(link, link, link))
+    assert msglog.keywords_propose(root, today="2026-09-30") == {
+        "keyword": "P-2317", "project": link, "count": 3}
+
+
+def test_a_strongly_linked_group_is_not_counted(tmp_path):
+    link = "acme-industries-rollout"
+    root = _proposal_vault(tmp_path, links=(link, link, link), weak=False)
+    assert msglog.keywords_propose(root, today="2026-09-30") is None
+
+
+def test_the_real_routing_path_leaves_a_proposable_group(tmp_path):
+    root = _proposal_vault(tmp_path)
+    from vaultlib import msgroute
+    g = {"gid": "01", "kind": "mail", "chat_type": None, "label": "Status P-2317", "key": "mail:x",
+         "names": {}, "participants": ["sam.lee@acme.example"], "sources": ["inbox"], "direct": False,
+         "messages": [{"text": "x"}]}
+    msgroute.route(root, [g], home_domains=[], owner_addresses=set(), today="2026-09-30")
+    assert g["projects"] == g["projects_weak"] == ["acme-industries-rollout"]
+    assert not msglog._strong(g)
+
+
+def test_a_proposed_pair_is_never_proposed_again(tmp_path):
+    root = _proposal_vault(tmp_path)
+    assert msglog.keywords_propose(root, today="2026-09-30")
+    assert msglog.keywords_propose(root, today="2026-10-08") is None
+
+
+def test_check_lines_refuses_a_cite_that_is_not_a_log_stem(env, tmp_path):
+    root = written_log(env)
+    lines = tmp_path / "lines.json"
+    lines.write_text(json.dumps({"lines": [
+        {"kind": "context", "text": "Workshop 2 moves.", "cites": ["../x#a"]}]}), encoding="utf-8")
+    result = msglog.check_lines(root, str(lines))
+    assert result["passed"] == []
+    assert "'../x#a' is not a message-log cite" in result["dropped"][0]["reasons"]
