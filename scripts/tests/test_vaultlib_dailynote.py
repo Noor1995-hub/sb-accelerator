@@ -1472,3 +1472,11 @@ def test_a_log_in_the_window_feeds_the_fingerprint(tmp_path):
     names = [n for n, _ in dailynote._fingerprint_inputs(root, date(2026, 9, 30), date(2026, 9, 30))]
     assert "_messages/2026-09-30-messages.md" in names
     assert "_messages/2026-09-01-messages.md" not in names
+
+
+def test_a_oddly_named_log_never_enters_the_fingerprint(tmp_path):
+    root = make_vault(tmp_path)
+    (root / "_messages").mkdir()
+    (root / "_messages" / "2026-09-30-backup-messages.md").write_text("x", encoding="utf-8")
+    names = [n for n, _ in dailynote._fingerprint_inputs(root, date(2026, 9, 30), date(2026, 9, 30))]
+    assert names == []

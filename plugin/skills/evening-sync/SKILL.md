@@ -461,6 +461,11 @@ names the field, so one retry always suffices.
      and use only the `passed` lines (`{kind, text}`) as `items`. No counts,
      no internal terms.
 
+  Run steps 1 and 2 exactly once per evening and reuse their results on any
+  retry of the daily-note payload — never run them again: `messages status`
+  clears the closed-unread state and `messages keywords-propose` records the
+  proposal, so a second run would lose or double what the first one did.
+
 The catch-up banner is the CLI's: `dates plan`'s `is_catchup` becomes the
 callout on write, and a banner you put in a payload is stripped with a
 warning.

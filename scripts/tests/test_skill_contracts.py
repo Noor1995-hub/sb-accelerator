@@ -2169,3 +2169,5 @@ def test_evening_sync_stage_6_builds_the_messages_field_with_the_real_cli():
                    "msg_lines.payload.json", "decisions_to_confirm",
                    "keyword_proposal", "<YYYY-MM-DD>-messages#<gid>"):
         assert needle in stage6, f"stage 6 must carry {needle}"
+    assert ("Run steps 1 and 2 exactly once per evening and reuse their results "
+            "on any retry of the daily-note payload") in stage6
