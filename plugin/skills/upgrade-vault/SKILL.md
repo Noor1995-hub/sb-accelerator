@@ -179,9 +179,11 @@ provenance, so **every** differing managed file needs consent — there is
 no silent set at all this first time.
 
 State plainly, once, before the gate: a refresh **replaces the whole
-file**, not a merge; any `.base` marked `resets_column_widths: true` loses
-its saved column widths (Obsidian rebuilds them from defaults on next
-open); and every replaced file is backed up first under
+file**, not a merge; a replaced `.base` loses anything the owner changed in
+Obsidian itself — a header they renamed (right-click → rename is stored in
+the file) and, where `resets_column_widths` is true, the column widths they
+dragged — and comes back with the shipped names and widths; and every
+replaced file is backed up first under
 `99-workflow-config/snapshots/template-refresh-<stamp>/` (the three newest
 runs kept).
 

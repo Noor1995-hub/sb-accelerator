@@ -360,7 +360,7 @@ def test_every_decision_fixture_declares_whether_it_was_reviewed():
         fm = parse_frontmatter(path)
         assert isinstance(fm.get("reviewed"), bool), (
             f"{path}: reviewed must be present and boolean — Decisions.base's "
-            "'Needs review' view filters on it, and a missing key makes that "
+            "'To review' view filters on it, and a missing key makes that "
             "view silently incomplete"
         )
 
@@ -476,11 +476,11 @@ def test_decisions_base_columns_all_exist_in_the_ontology():
         )
 
 
-def test_decisions_base_has_a_needs_review_view():
+def test_decisions_base_has_a_to_review_view():
     base = ONTOLOGY_DOC.parents[2] / "30-projects" / "Decisions.base"
     config = yaml.safe_load(base.read_text(encoding="utf-8"))
     names = [view.get("name") for view in config.get("views", [])]
-    assert "Needs review" in names, (
+    assert "To review" in names, (
         f"the unattended-capture audit needs its own view; found {names}"
     )
 

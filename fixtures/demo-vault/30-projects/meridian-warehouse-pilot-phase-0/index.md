@@ -32,8 +32,7 @@ _none scheduled_
 TABLE WITHOUT ID
   link(file.path, dateformat(date, "ccc dd-MM")) AS "Date",
   calendar-subject AS "Subject",
-  slice(attendees, 0, 3) AS "With",
-  recording-duration AS "Min"
+  slice(attendees, 0, 3) AS "With"
 FROM "20-meetings"
 WHERE econtains(projects, this.slug)
 SORT date DESC

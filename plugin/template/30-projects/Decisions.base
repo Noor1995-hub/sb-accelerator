@@ -4,9 +4,12 @@ filters:
     - type == "decision"
 formulas:
   open: link(file.path, "→")
+  decision-status: if(status == "superseded", "Replaced", if(status == "withdrawn", "Withdrawn", if(status == "active", "Active", status)))
 properties:
   formula.open:
     displayName: " "
+  formula.decision-status:
+    displayName: Status
   note.summary:
     displayName: Decision
   note.project:
@@ -16,26 +19,29 @@ properties:
   note.status:
     displayName: Status
   note.reviewed:
-    displayName: ✓ Reviewed
+    displayName: Keep
   note.supersedes:
-    displayName: Supersedes
+    displayName: Replaces
 views:
   - type: table
-    name: Needs review
+    name: To review
     filters:
       and:
         - reviewed != true
     order:
       - formula.open
+      - date
       - summary
       - project
-      - date
       - reviewed
-      - status
+      - formula.decision-status
       - supersedes
     sort:
       - property: date
         direction: DESC
+    columnSize:
+      note.summary: 260
+      formula.decision-status: 104
   - type: table
     name: Active
     filters:
@@ -43,9 +49,9 @@ views:
         - status == "active"
     order:
       - formula.open
+      - date
       - summary
       - project
-      - date
     sort:
       - property: date
         direction: DESC
@@ -53,12 +59,15 @@ views:
     name: All
     order:
       - formula.open
+      - date
       - summary
       - project
-      - date
-      - status
       - reviewed
+      - formula.decision-status
       - supersedes
     sort:
       - property: date
         direction: DESC
+    columnSize:
+      note.summary: 260
+      formula.decision-status: 104

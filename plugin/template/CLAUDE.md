@@ -68,7 +68,7 @@ new note **and** `status: superseded` on the prior one, which also gains a
 by hand leaves a half-edge.
 
 `reviewed` says whether a human validated the note (`true`) or it was captured
-unattended overnight (`false`). Decisions.base's **Needs review** view is the
+unattended overnight (`false`). Decisions.base's **To review** view is the
 queue; tick the checkbox there once you have read one.
 
 ### Heavy Assets

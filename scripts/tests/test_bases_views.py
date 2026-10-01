@@ -73,13 +73,16 @@ EXPECTED = [
     # and not yet validated by the vault owner. The absence-tolerant
     # `reviewed != true` filter would also catch pre-0.2.0 notes that carry
     # no reviewed key at all.
-    ("30-projects/Decisions.base", "Needs review", {
+    ("30-projects/Decisions.base", "To review", {
         CRM_DECISIONS.format("2026-06-01-vendor-shortlist-approved"),
         CRM_DECISIONS.format("2026-06-01-phased-migration-by-region-adopted"),
         NORDBRIDGE_DECISIONS.format("2026-06-12-phase-1-site-nomination-deferred"),
     }),
 
-    ("20-meetings/Meetings.base", "All Meetings", ALL_MEETINGS),
+    # Dismissed (archived) notes leave All Meetings too, not only Triage: the
+    # file stays in 20-meetings/, the table stops listing it (#237).
+    ("20-meetings/Meetings.base", "All Meetings",
+     ALL_MEETINGS - {MEETINGS.format("05-06-26-pipeline-governance-review")}),
     # Each exclusion path stays represented: 20-04 is reviewed-but-not-yet-
     # reconciled (reviewed: true holds it out of Triage until reconcile-reviews
     # flips it to confirmed), 05-06 is archived, and the five `confirmed`
@@ -164,7 +167,7 @@ def test_template_only_vault_has_no_object_rows(tmp_path):
 # The view a human lands on when they open a .base file is the first view in
 # the file. Triage-first posture, and a row-set test cannot see a reordering.
 DEFAULT_VIEWS = [
-    ("30-projects/Decisions.base", "Needs review"),
+    ("30-projects/Decisions.base", "To review"),
     ("20-meetings/Meetings.base", "Triage"),
 ]
 
@@ -182,7 +185,7 @@ def test_first_view_is_the_review_queue(vault, base_path, expected):
 # (base file, view, property) — a control the human must reach to work the
 # queue. A filter that hides ticked rows is a dead end without the checkbox.
 REQUIRED_COLUMNS = [
-    ("30-projects/Decisions.base", "Needs review", "reviewed"),
+    ("30-projects/Decisions.base", "To review", "reviewed"),
     ("20-meetings/Meetings.base", "Triage", "reviewed"),
     # The clobber-risk signal, relocated off review_status in #58: triage has
     # to show which capture is a duplicate of a confirmed note.

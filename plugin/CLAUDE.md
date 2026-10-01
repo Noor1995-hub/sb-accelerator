@@ -111,7 +111,7 @@ the stored form.
 `decision write` requires exactly one of `--foreground` or `--background`, and
 it has no default. Foreground writes `reviewed: true` — a claim that a human
 validated the note as it was written. Background writes `reviewed: false`, which
-is what `Decisions.base`'s **Needs review** view queues up. A default here would
+is what `Decisions.base`'s **To review** view queues up. A default here would
 write a lie into the audit trail, which is why argparse is made to refuse the
 call instead.
 

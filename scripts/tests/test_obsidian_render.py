@@ -314,16 +314,16 @@ def test_triage_controls_survive_a_1440_window(tour, base_surfaces):
     behind a scrollbar under a two-line row. This pins it so the next column
     added to Triage cannot silently push it back off screen.
 
-    Since 0.12.5 the confirm and the archive are one adjacent pair — ✅ Keep,
-    🗑 Archive — right after Projects: the two per-row decisions, read after
-    the fields they decide on. Both are pinned, because a queue with only one
-    of its two answers on screen is the confusion the pair exists to remove.
+    The confirm and the dismiss are one adjacent pair — Keep, Dismiss —
+    right after Date, Subject, Projects and Attendees: the two per-row
+    decisions, read after the fields that identify the row (#237). Both are
+    pinned, because a queue with only one of its two answers on screen is
+    the confusion the pair exists to remove.
 
-    ⚠ Duplicate of is deliberately not pinned: it sits last, after the ↗
-    project link, and with the navigator's two-pane sidebar open it sits
-    behind a horizontal scroll at 1440 — the columnSize widths are budgeted
-    to fit everything up to ↗ and no further. It is rare (a `-v{n}` sibling only)
-    and is not an everyday control.
+    ⚠ Duplicate of is deliberately not pinned: it sits last, after Calendar
+    match, and with a wide navigator sidebar open it can sit behind a
+    horizontal scroll at 1440. It is rare (a `-v{n}` sibling only) and is
+    not an everyday control.
 
     Only bites when the capture was actually taken at <=1440 wide — an older
     capture predating summary.json's recorded window skips cleanly, as does
@@ -339,7 +339,7 @@ def test_triage_controls_survive_a_1440_window(tour, base_surfaces):
     if triage is None:
         pytest.skip("tour captured no Meetings.base Triage view")
     headers = set(triage["dom"].get("headers") or [])
-    missing = {"✅ Keep", "🗑 Archive"} - headers
+    missing = {"Keep", "Dismiss"} - headers
     assert not missing, (
         f"Triage at {width}px is missing {sorted(missing)} from its rendered "
         f"headers {sorted(headers)} — a control needed for the queue is off "

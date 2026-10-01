@@ -5,11 +5,14 @@ filters:
 formulas:
   open: link(file.path, "→")
   project-links: projects.map(link("30-projects/" + value + "/index.md", "↗"))
+  review-state: if(archived, "Dismissed", if(reviewed || review_status == "confirmed", "Kept", "To review"))
 properties:
   formula.open:
     displayName: " "
   formula.project-links:
-    displayName: "↗"
+    displayName: Open project
+  formula.review-state:
+    displayName: Status
   note.date:
     displayName: Date
   note.type:
@@ -17,7 +20,7 @@ properties:
   note.calendar-subject:
     displayName: Subject
   note.calendar_match:
-    displayName: Cal
+    displayName: Calendar match
   note.attendees:
     displayName: Attendees
   note.projects:
@@ -27,9 +30,9 @@ properties:
   note.conflicts-with:
     displayName: "⚠ Duplicate of"
   note.reviewed:
-    displayName: "✅ Keep"
+    displayName: Keep
   note.archived:
-    displayName: "🗑 Archive"
+    displayName: Dismiss
   note.recording-duration:
     displayName: Duration
   note.source:
@@ -45,41 +48,42 @@ views:
     order:
       - formula.open
       - date
-      - calendar_match
       - calendar-subject
-      - attendees
       - projects
+      - attendees
       - reviewed
       - archived
-      - formula.project-links
+      - calendar_match
       - conflicts-with
     sort:
       - property: date
         direction: DESC
     rowHeight: medium
     columnSize:
-      note.date: 165
-      note.calendar_match: 54
-      note.calendar-subject: 190
-      note.attendees: 150
-      note.projects: 140
-      note.reviewed: 96
-      note.archived: 116
-      formula.project-links: 32
+      note.date: 150
+      note.calendar-subject: 170
+      note.projects: 150
+      note.attendees: 140
+      note.reviewed: 66
+      note.archived: 80
+      note.calendar_match: 128
+      note.conflicts-with: 130
   - type: table
     name: All Meetings
+    filters:
+      and:
+        - archived != true
     order:
       - formula.open
       - date
       - calendar-subject
-      - type
-      - attendees
       - projects
+      - attendees
+      - formula.review-state
+      - type
       - formula.project-links
-      - review_status
-      - recording-duration
     sort:
       - property: date
         direction: DESC
     columnSize:
-      formula.project-links: 32
+      formula.project-links: 112

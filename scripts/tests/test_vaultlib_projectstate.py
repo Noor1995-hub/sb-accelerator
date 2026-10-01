@@ -71,6 +71,10 @@ def test_write_renders_the_v2_body_and_touches_frontmatter(tmp_path):
     assert body.index("Commissioning schedule to Leo") < body.index("Vendor contract signature |")
     assert "## Coming up\n\n| When | What |\n|---|---|\n| Mon 22 June | Commissioning schedule to Leo |" in body
     assert "## Recent meetings" in body and 'dateformat(date, "ccc dd-MM")' in body and "LIMIT 10" in body
+    # #237: no duration column — the field is 0 on most notes and the column
+    # had no unit; the field itself stays for the duplicate check
+    assert 'slice(attendees, 0, 3) AS "With"\nFROM' in body
+    assert "recording-duration" not in body
     assert "## Recent decisions" in body and f'FROM "30-projects/{slug}/decisions"' in body
     assert "## Background" in body
     assert "> [!todo]- 📤 Owe — by owner\n> - **Priya Nathan**\n>   - Revised commissioning schedule" in body
