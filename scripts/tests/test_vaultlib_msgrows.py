@@ -60,6 +60,8 @@ def test_gap_pages_are_kept_apart(scratch):
     ("inbox", mail("m2", "Automatic reply: away", "a@acme.example", []), "meeting-response"),
     ("inbox", mail("m3", "PR #12", "notifications@github.com", []), "notification"),
     ("inbox", mail("m4", "Factuur september", "billing@telco.example", []), "billing"),
+    ("inbox", mail("m6", "Tentative: Weekly sync", "a@acme.example", []), "meeting-response"),
+    ("inbox", mail("m7", "Tentative agenda for workshop 2", "a@acme.example", []), None),
     ("inbox", mail("m5", "Workshop 2 agenda", "jordan.reyes@acme.example", []), None),
 ])
 def test_noise_rules(source, row, reason):
@@ -102,7 +104,7 @@ def test_grouping_per_local_day_threads_inbox_and_sent_and_drops_the_owner(scrat
     thread = by_key[("mail:workshop 2 agenda", "2026-09-30")]
     assert sorted(thread["sources"]) == ["inbox", "sent"] and thread["owner_wrote"] is True
     assert "morgan.ellery@northwind.example" not in thread["participants"]
-    assert counts == {"read": 4, "noise": 0, "excluded": 0}
+    assert counts == {"read": 4, "noise": 0, "excluded": 0, "unresolved": 0, "unparsed": 0}
 
 
 def test_an_empty_subject_groups_per_sender(scratch):
@@ -135,3 +137,50 @@ def test_priority_order_and_trim_counts_what_was_skipped():
     kept, skipped = msgrows.trim(groups, limit=3)
     assert [x["key"] for x in kept] == ["sent", "one", "direct"]
     assert skipped == {"d1": 2}
+
+
+def run_group(scratch, exclusions=(), owners=OWNER):
+    return msgrows.group(msgrows.load(str(scratch)), exclusions=list(exclusions), owner_addresses=owners,
+                         timezone="Europe/Brussels", utc_offset=None)
+
+
+def test_teams_rows_of_an_unlisted_chat_fail_closed(scratch):
+    ex = [{"id": "x1", "kind": "person", "value": "jordan.reyes@acme.example", "label": None, "added": "d"}]
+    page(scratch, "msg_chats.p1.payload.json", [chat("c7", "group", "Other", "sam.lee@acme.example")])
+    page(scratch, "msg_teams.p1.payload.json", [
+        teams("t1", "c1", "morgan.ellery@northwind.example", "private"),
+        teams("t2", "c1", "jordan.reyes@acme.example", "private too")])
+    groups, counts = run_group(scratch, ex)
+    assert groups == []
+    assert counts["unresolved"] == 2 and counts["read"] == 0
+
+
+def test_a_row_with_an_empty_or_bad_timestamp_is_skipped_not_fatal(scratch):
+    page(scratch, "msg_inbox.p1.payload.json", [
+        mail("m1", "Good", "a@acme.example", []),
+        mail("m2", "Empty", "a@acme.example", [], at=""),
+        mail("m3", "Bad", "a@acme.example", [], at="not a date")])
+    groups, counts = run_group(scratch)
+    assert [g["label"] for g in groups] == ["Good"]
+    assert counts["unparsed"] == 2 and counts["read"] == 1
+
+
+def test_a_zone_less_teams_timestamp_groups_on_the_local_day(scratch):
+    page(scratch, "msg_chats.p1.payload.json", [chat("c1", "oneOnOne", None, "sam.lee@acme.example", "morgan.ellery@northwind.example")])
+    page(scratch, "msg_teams.p1.payload.json", [
+        teams("t1", "c1", "sam.lee@acme.example", "x", at="2026-09-30T22:30:00")])  # taken as UTC -> 00:30 on 1 Oct
+    groups, counts = run_group(scratch)
+    assert [g["date"] for g in groups] == ["2026-10-01"] and counts["unparsed"] == 0
+
+
+def test_two_mixed_case_owner_addresses_are_never_participants(scratch):
+    owners = {"Morgan.Ellery@northwind.example", "m.ellery@northwind.example"}
+    page(scratch, "msg_chats.p1.payload.json", [chat("c1", "group", "Team", "sam.lee@acme.example",
+         "M.Ellery@northwind.example", "morgan.ellery@northwind.example")])
+    page(scratch, "msg_teams.p1.payload.json", [teams("t1", "c1", "M.Ellery@northwind.example", "hi")])
+    page(scratch, "msg_inbox.p1.payload.json", [mail("m1", "Plan", "sam.lee@acme.example",
+         ["m.ellery@northwind.example", "MORGAN.ELLERY@northwind.example"])])
+    groups, _ = run_group(scratch, owners=owners)
+    for g in groups:
+        assert g["participants"] == ["sam.lee@acme.example"]
+    assert {g["key"]: g["owner_wrote"] for g in groups} == {"chat:c1": True, "mail:plan": False}

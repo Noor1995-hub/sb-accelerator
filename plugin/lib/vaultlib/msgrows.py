@@ -30,7 +30,7 @@ BOT_SUFFIX = "@teams.microsoft.com"
 NOTIFICATION_SENDERS = ("azuredevops@microsoft.com", "notifications@github.com")
 NOTIFICATION_HINTS = ("deskbird",)
 BILLING_WORDS = ("factuur", "invoice")
-RESPONSE_PREFIXES = ("accepted:", "declined:", "tentative", "automatic reply:", "following:")
+RESPONSE_PREFIXES = ("accepted:", "declined:", "tentative:", "automatic reply:", "following:")
 _MARKER_KEYS = {"moreResults", "nextOffset", "totalResultCount", "nextCursor"}
 
 
@@ -169,7 +169,7 @@ def group(loaded: Dict[str, dict], *, exclusions: List[dict], owner_addresses: S
           timezone, utc_offset) -> Tuple[List[dict], Dict[str, int]]:
     owners = {a.casefold() for a in owner_addresses}
     chats = {c.get("id"): c for c in loaded["chats"]["rows"]}
-    counts = {"read": 0, "noise": 0, "excluded": 0}
+    counts = {"read": 0, "noise": 0, "excluded": 0, "unresolved": 0, "unparsed": 0}
     groups: Dict[Tuple[str, str], dict] = {}
     seen_ids: Set[str] = set()
 
@@ -196,12 +196,20 @@ def group(loaded: Dict[str, dict], *, exclusions: List[dict], owner_addresses: S
                 counts["noise"] += 1
                 continue
             chat = chats.get(row.get("chatId")) if source == "teams" else None
+            if source == "teams" and chat is None:
+                counts["unresolved"] += 1  # fail closed: exclusions cannot be checked
+                continue
             if is_excluded(source, row, chat, exclusions):
                 counts["excluded"] += 1
                 continue
+            field = "createdDateTime" if source == "teams" else "receivedDateTime"
+            try:
+                day, at = _local_day(row.get(field), field, timezone, utc_offset)
+            except (m365.M365Error, ValueError, TypeError, OverflowError):
+                counts["unparsed"] += 1
+                continue
             counts["read"] += 1
             if source == "teams":
-                day, at = _local_day(row.get("createdDateTime"), "createdDateTime", timezone, utc_offset)
                 sender = _address(row.get("from"))
                 members = [m for m in (chat or {}).get("members") or []]
                 others = sorted({(_name(m) or _address(m)) for m in members
@@ -219,7 +227,6 @@ def group(loaded: Dict[str, dict], *, exclusions: List[dict], owner_addresses: S
                 g["direct"] = chat_type == "oneOnOne"
                 text = str(row.get("summary") or "").strip()
             else:
-                day, at = _local_day(row.get("receivedDateTime"), "receivedDateTime", timezone, utc_offset)
                 sender = _address(row.get("sender"))
                 subject = discover._subject(str(row.get("subject") or ""))
                 if subject:
