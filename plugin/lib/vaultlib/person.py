@@ -7,6 +7,7 @@ the vault owner has to clear.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Dict, Optional
 
 from . import markdown, naming, vault
 
@@ -26,7 +27,7 @@ def _existing_note(root: Path, slug: str):
     return None
 
 
-def ensure(root: Path, name: str, today: str) -> dict:
+def ensure(root: Path, name: str, today: str, email: Optional[str] = None) -> dict:
     """Create 50-people/{slug}.md if no note for this person exists yet.
 
     Never rewrites an existing note — curation added through People.base must
@@ -57,7 +58,7 @@ def ensure(root: Path, name: str, today: str) -> dict:
     frontmatter = {
         "person-name": name,
         "slug": slug,
-        "email": None,
+        "email": (email.strip().casefold() if email and "@" in email else None),
         # Key present with an empty value = uncurated. People.base's
         # "Uncurated" view filters on exactly this.
         "relationship": None,
@@ -74,3 +75,34 @@ def ensure(root: Path, name: str, today: str) -> dict:
         target, markdown.emit_frontmatter(frontmatter, PERSON_QUOTE_KEYS)
     )
     return {"slug": slug, "path": target.relative_to(root).as_posix(), "created": True}
+
+
+def set_email_if_missing(root: Path, slug: str, email: str) -> bool:
+    """Fill a person note's empty `email` (the message feed learns addresses
+    from Teams chat members). Never overwrites one that is set."""
+    found = _existing_note(root, slug)
+    address = str(email or "").strip().casefold()
+    if found is None or "@" not in address:
+        return False
+    text = found.read_text(encoding="utf-8")
+    frontmatter, _ = markdown.split_frontmatter(text)
+    if frontmatter.get("email"):
+        return False
+    updated = markdown.upsert_scalar_field(text, "email", markdown.emit_scalar(address, quoted=False))
+    vault.atomic_write(found, updated)
+    return True
+
+
+def address_book(root: Path) -> Dict[str, str]:
+    """Map every person note's email to its slug."""
+    book: Dict[str, str] = {}
+    people = root / PEOPLE_DIR
+    for path in sorted(people.glob("*.md")) if people.is_dir() else []:
+        try:
+            frontmatter, _ = markdown.split_frontmatter(path.read_text(encoding="utf-8"))
+        except (ValueError, OSError):
+            continue
+        address = str(frontmatter.get("email") or "").strip().casefold()
+        if "@" in address and frontmatter.get("slug"):
+            book.setdefault(address, str(frontmatter["slug"]))
+    return book

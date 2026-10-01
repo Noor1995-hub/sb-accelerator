@@ -102,3 +102,23 @@ def test_ensure_uses_lf_endings(tmp_path):
     person.ensure(root, "Morgan Ellery", "2026-08-23")
     raw = (root / "50-people" / "morgan-ellery.md").read_bytes()
     assert b"\r\n" not in raw
+
+
+def test_a_new_person_from_the_feed_carries_their_address(tmp_path):
+    root = make_vault(tmp_path)
+    result = person.ensure(root, "Jordan Reyes", "2026-09-30", email="Jordan.Reyes@acme.example")
+    fm, _ = md.split_frontmatter((root / result["path"]).read_text(encoding="utf-8"))
+    assert fm["email"] == "jordan.reyes@acme.example"
+
+
+def test_an_existing_person_gets_a_missing_email_once_and_never_overwritten(tmp_path):
+    root = make_vault(tmp_path)
+    person.ensure(root, "Jordan Reyes", "2026-09-30")
+    assert person.set_email_if_missing(root, "jordan-reyes", "jordan.reyes@acme.example") is True
+    assert person.set_email_if_missing(root, "jordan-reyes", "other@acme.example") is False
+    assert person.address_book(root) == {"jordan.reyes@acme.example": "jordan-reyes"}
+
+
+def test_enrichment_of_an_unknown_slug_is_a_no_op(tmp_path):
+    root = make_vault(tmp_path)
+    assert person.set_email_if_missing(root, "nobody", "x@acme.example") is False

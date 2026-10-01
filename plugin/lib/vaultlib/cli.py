@@ -166,6 +166,7 @@ def build_parser() -> argparse.ArgumentParser:
     _add_vault_argument(person_ensure)
     person_ensure.add_argument("--name", required=True, help="display name")
     person_ensure.add_argument("--today", help="ISO date; defaults to today")
+    person_ensure.add_argument("--email", help="email address for a new note")
 
     projects = top.add_parser("project", help="project folders")
     projects_sub = projects.add_subparsers(dest="action", required=True)
@@ -833,7 +834,7 @@ def _dispatch(args: argparse.Namespace) -> int:
         return _ok(config.verify_account(root, args.adapter, payload))
     if args.group == "person":
         today = vault.today_iso(getattr(args, "today", None))
-        return _ok(person.ensure(root, args.name, today))
+        return _ok(person.ensure(root, args.name, today, email=args.email))
     if args.group == "project":
         if args.action == "state":
             payload = (json.load(sys.stdin) if args.state == "-"

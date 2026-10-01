@@ -77,6 +77,17 @@ def test_person_ensure_returns_the_created_note(capsys, tmp_path):
     }
 
 
+def test_person_ensure_takes_an_optional_email(capsys, tmp_path):
+    root = make_vault(tmp_path)
+    code, payload = run(capsys, [
+        "person", "ensure", "--vault", str(root), "--name", "Jordan Reyes",
+        "--today", "2026-09-30", "--email", "Jordan.Reyes@acme.example",
+    ])
+    assert code == 0
+    text = (root / payload["result"]["path"]).read_text(encoding="utf-8")
+    assert "email: jordan.reyes@acme.example" in text
+
+
 def test_a_bad_vault_path_is_a_structured_error_not_a_traceback(capsys, tmp_path):
     code, payload = run(capsys, [
         "person", "ensure", "--vault", str(tmp_path / "nope"), "--name", "A",
