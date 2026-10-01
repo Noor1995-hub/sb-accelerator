@@ -202,6 +202,17 @@ def build_parser() -> argparse.ArgumentParser:
     proj_touch.add_argument("--next-milestone-date", dest="next_milestone_date",
                             help="ISO date; requires --next-milestone")
 
+    proj_kw = projects_sub.add_parser(
+        "keywords", help="a project's routing keywords: add, remove, list")
+    proj_kw_sub = proj_kw.add_subparsers(dest="keywords_action", required=True)
+    for kw_name in ("add", "remove", "list"):
+        kw_parser = proj_kw_sub.add_parser(kw_name, help=f"{kw_name} project keywords")
+        _add_vault_argument(kw_parser)
+        kw_parser.add_argument("--slug", required=True)
+        if kw_name != "list":
+            kw_parser.add_argument("--keyword", required=True)
+            kw_parser.add_argument("--today", help="ISO date; defaults to today")
+
     proj_state = projects_sub.add_parser(
         "state", help="project state: render the index body from JSON")
     proj_state_sub = proj_state.add_subparsers(dest="state_action", required=True)
@@ -842,6 +853,13 @@ def _dispatch(args: argparse.Namespace) -> int:
             return _ok(projectstate.write(
                 root, slug=args.slug, payload=payload,
                 today=vault.today_iso(args.today), timestamp=args.timestamp))
+        if args.action == "keywords":
+            if args.keywords_action == "list":
+                return _ok(project.keywords_list(root, slug=args.slug))
+            fn = (project.keywords_add if args.keywords_action == "add"
+                  else project.keywords_remove)
+            return _ok(fn(root, slug=args.slug, keyword=args.keyword,
+                          today=vault.today_iso(args.today)))
         if args.action == "touch":
             return _ok(project.touch(
                 root, slug=args.slug, date_iso=vault.today_iso(args.date),

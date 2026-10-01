@@ -491,3 +491,15 @@ def test_derive_entities_refuses_when_a_project_index_is_missing(tmp_path):
 def test_derive_entities_empty_input_returns_empty_list(tmp_path):
     root = vault_with_entity(tmp_path)
     assert project.derive_entities(root, []) == []
+
+
+def test_keywords_add_remove_and_list(tmp_path):
+    root = vault_with_entity(tmp_path, "acme-industries")
+    project.scaffold(root, name="Operating model", project_type="initiative",
+                     entity="acme-industries", owner="morgan-ellery", today="2026-09-30")
+    slug = "acme-industries-operating-model"
+    project.keywords_add(root, slug=slug, keyword="P-2317", today="2026-09-30")
+    project.keywords_add(root, slug=slug, keyword="p-2317", today="2026-09-30")  # dedup, case-insensitive
+    assert project.keywords_list(root, slug=slug)["keywords"] == ["P-2317"]
+    project.keywords_remove(root, slug=slug, keyword="P-2317", today="2026-09-30")
+    assert project.keywords_list(root, slug=slug)["keywords"] == []

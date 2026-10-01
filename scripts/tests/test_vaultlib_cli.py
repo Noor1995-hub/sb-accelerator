@@ -2334,3 +2334,20 @@ def test_discover_clock_via_the_cli(capsys, tmp_path):
 def test_discover_clock_check_without_a_start_fails_inside_the_envelope(capsys, tmp_path):
     code, payload = run(capsys, ["discover", "clock-check", "--dir", str(tmp_path)])
     assert code == 1 and "clock-start" in payload["error"]
+
+
+def test_project_keywords_through_the_cli(capsys, tmp_path):
+    from test_vaultlib_project import vault_with_entity
+    root = vault_with_entity(tmp_path)
+    run(capsys, ["project", "scaffold", "--vault", str(root), "--name", "Operating model",
+                 "--type", "initiative", "--entity", "meridian-freight-holdings",
+                 "--owner", "morgan-ellery", "--today", "2026-09-30"])
+    slug = "meridian-freight-holdings-operating-model"
+    code, payload = run(capsys, ["project", "keywords", "add", "--vault", str(root),
+                                 "--slug", slug, "--keyword", "P-2317", "--today", "2026-09-30"])
+    assert code == 0 and payload["result"]["keywords"] == ["P-2317"]
+    code, payload = run(capsys, ["project", "keywords", "list", "--vault", str(root), "--slug", slug])
+    assert payload["result"]["keywords"] == ["P-2317"]
+    code, payload = run(capsys, ["project", "keywords", "remove", "--vault", str(root),
+                                 "--slug", slug, "--keyword", "nope"])
+    assert code != 0 and payload["ok"] is False

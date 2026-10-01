@@ -9,7 +9,7 @@ from __future__ import annotations
 import re
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
 from . import markdown, naming, schema, vault
 
@@ -346,3 +346,49 @@ def touch(root, *, slug: str, date_iso: str, timestamp: Optional[str] = None,
         "next-milestone-date": milestone_date,
         "changed": changed,
     }
+
+
+def _keywords_of(frontmatter: dict) -> List[str]:
+    raw = frontmatter.get("keywords") or []
+    return [str(k) for k in raw] if isinstance(raw, list) else [str(raw)]
+
+
+def _write_keywords(root: Path, slug: str, keywords: List[str], today: str) -> dict:
+    path = root / PROJECTS_DIR / slug / "index.md"
+    if not path.is_file():
+        raise ProjectError(f"no project {slug!r} at {path.relative_to(root).as_posix()}")
+    text = path.read_text(encoding="utf-8")
+    rendered = "[{}]".format(", ".join(markdown.emit_scalar(k, quoted=True) for k in keywords))
+    updated = markdown.upsert_scalar_field(text, "keywords", rendered)
+    frontmatter, _ = markdown.split_frontmatter(updated)
+    errors = schema.validate("project", frontmatter)
+    if errors:
+        raise ProjectError("; ".join(errors))
+    if updated != text:
+        vault.atomic_write(path, updated)
+    return {"slug": slug, "keywords": keywords, "changed": updated != text}
+
+
+def keywords_list(root: Path, *, slug: str) -> dict:
+    data = _load_project(root, slug)
+    if data is None:
+        raise ProjectError(f"no project {slug!r}")
+    return {"slug": slug, "keywords": _keywords_of(data)}
+
+
+def keywords_add(root: Path, *, slug: str, keyword: str, today: str) -> dict:
+    clean = " ".join(str(keyword or "").split())
+    if not clean:
+        raise ProjectError("a keyword must be a non-empty string")
+    current = keywords_list(root, slug=slug)["keywords"]
+    if clean.casefold() in {k.casefold() for k in current}:
+        return {"slug": slug, "keywords": current, "changed": False}
+    return _write_keywords(root, slug, current + [clean], today)
+
+
+def keywords_remove(root: Path, *, slug: str, keyword: str, today: str) -> dict:
+    current = keywords_list(root, slug=slug)["keywords"]
+    kept = [k for k in current if k.casefold() != str(keyword).strip().casefold()]
+    if len(kept) == len(current):
+        raise ProjectError(f"project {slug!r} has no keyword {keyword!r}")
+    return _write_keywords(root, slug, kept, today)
