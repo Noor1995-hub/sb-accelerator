@@ -2445,3 +2445,12 @@ def test_messages_unlink_and_forget_stamp_the_requeue_in_local_time(capsys, tmp_
                                  "--now", "2026-09-30T20:10:00Z", "--utc-offset", "+02:00"])
     assert code == 0 and payload["result"]["deleted"] == ["2026-09-30-messages"]
     assert msgstate.load(root)["requeue"][0]["at"] == "2026-09-30T22:10"
+
+
+def test_messages_status_takes_auth_error(capsys, tmp_path):
+    root = make_vault(tmp_path)
+    write_vault_config(root)
+    code, payload = run(capsys, ["messages", "status", "--vault", str(root), "--now", "2026-09-30T19:00:00Z",
+                                 "--auth-error"])
+    assert code == 0 and payload["result"]["lines"] == [
+        "I can't reach your mail and Teams \u2014 please reconnect Microsoft 365."]

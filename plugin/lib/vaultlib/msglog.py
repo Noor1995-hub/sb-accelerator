@@ -433,22 +433,55 @@ def _day_label(text: str) -> str:
     return f"{dt.day} {_MONTHS[dt.month - 1]}"
 
 
-def status(root: Path, *, now: str, first_run_since: Optional[str]) -> List[str]:
+STATUS_LIMIT = 3  # the recap's cap on recap.messages.status
+AUTH_LINE = "I can't reach your mail and Teams \u2014 please reconnect Microsoft 365."
+BEHIND_AFTER_DAYS = 2
+
+
+def _what(sources) -> str:
+    return "your mail" if set(sources) <= {"inbox", "sent"} else "your mail and Teams"
+
+
+def status(root: Path, *, now: str, first_run_since: Optional[str], auth_error: bool = False) -> List[str]:
+    """At most STATUS_LIMIT plain lines, most urgent first.
+
+    Behind: a gap open for more than BEHIND_AFTER_DAYS whole days, or a feed
+    that has not moved for that long. "Not moved" is measured from the later
+    of the cursor and the last successful run: a lasting failure (auth or
+    fetch error) moves neither, while a quiet weekend with no new messages
+    still records its run, so it never reads as being behind.
+    Closed intervals: one line per (from, to), sources merged; a line that
+    does not fit stays in the state for the next morning.
+    """
     state = msgstate.load(root)
     now_dt = seenevents.parse_now(now)
     lines = []
+    if auth_error:
+        lines.append(AUTH_LINE)
     if first_run_since:
         lines.append("From today, this note also covers your mail and Teams.")
-    ages = [(now_dt - seenevents.parse_now(g["from"])).days for g in state["gaps"]]
-    if any(age > 2 for age in ages):
-        lines.append(f"I'm {max(ages)} days behind on your mail; I'll catch up tonight.")
+    behind = [((now_dt - seenevents.parse_now(g["from"])).days, g["source"]) for g in state["gaps"]]
+    moved = [seenevents.parse_now(s) for s in (state["cursor"], state["last_run"]) if s]
+    if moved:
+        behind.append(((now_dt - max(moved)).days, "all"))
+    behind = [(days, source) for days, source in behind if days > BEHIND_AFTER_DAYS]
+    if behind:
+        days = max(d for d, _ in behind)
+        lines.append(f"I'm {days} days behind on {_what(s for _, s in behind)}; I'll catch up tonight.")
+    spans: Dict[tuple, List[str]] = {}
     for gap in state["closed_unread"]:
-        lines.append(f"I couldn't catch up on your mail from {_day_label(gap['from'])} "
-                     f"to {_day_label(gap['to'])}.")
-    if state["closed_unread"]:
-        state["closed_unread"] = []
+        spans.setdefault((gap["from"], gap["to"]), []).append(str(gap.get("source")))
+    shown = set()
+    for (start, end), sources in spans.items():
+        if len(lines) >= STATUS_LIMIT:
+            break
+        lines.append(f"I couldn't catch up on {_what(sources)} from {_day_label(start)} "
+                     f"to {_day_label(end)}.")
+        shown.add((start, end))
+    if shown:
+        state["closed_unread"] = [g for g in state["closed_unread"] if (g["from"], g["to"]) not in shown]
         msgstate.save(root, state)
-    return lines
+    return lines[:STATUS_LIMIT]
 
 
 def check_lines(root: Path, lines_path: str) -> dict:

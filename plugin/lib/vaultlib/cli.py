@@ -835,6 +835,8 @@ def build_parser() -> argparse.ArgumentParser:
     _add_vault_argument(m_status)
     m_status.add_argument("--now", required=True)
     m_status.add_argument("--first-run-since", dest="first_run_since")
+    m_status.add_argument("--auth-error", dest="auth_error", action="store_true",
+                          help="tonight's run could not reach Microsoft 365: add the reconnect line")
 
     return parser
 
@@ -979,7 +981,8 @@ def _dispatch(args: argparse.Namespace) -> int:
         if args.action == "check-lines":
             return _ok(msglog.check_lines(root, args.lines))
         if args.action == "status":
-            return _ok({"lines": msglog.status(root, now=args.now, first_run_since=args.first_run_since)})
+            return _ok({"lines": msglog.status(root, now=args.now, first_run_since=args.first_run_since,
+                                               auth_error=args.auth_error)})
     if args.group == "project":
         if args.action == "state":
             payload = (json.load(sys.stdin) if args.state == "-"

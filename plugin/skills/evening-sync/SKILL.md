@@ -441,11 +441,16 @@ names the field, so one retry always suffices.
   `sync_notes`, which renders folded, and never in `watch`.
 - `carried_forward` — jottings worth carrying, one line each.
 - `sync_notes` — the mechanics, one line each; also in the run summary.
-- `messages` — only when stage 3b ran; omit the field otherwise. The CLI
-  renders it as the *Mail and Teams* block right after *At a glance*. Build
-  it in this order:
-  1. `python3 "$VAULTLIB" messages status --vault "$VAULT" --now <now UTC> [--first-run-since <since from stage 3b, first run only>]`
+- `messages` — whenever `messages.enabled` is true in `config read`,
+  whatever stage 3b did (ran, skipped or failed): a feed that keeps failing
+  must still say so in the note. Omit the field only when the feed is off.
+  The CLI renders it as the *Mail and Teams* block right after *At a
+  glance*. Build it in this order:
+  1. `python3 "$VAULTLIB" messages status --vault "$VAULT" --now <now UTC> [--first-run-since <since from stage 3b, first run only>] [--auth-error]`
      gives `{"lines": [...]}`; use those lines verbatim as `status` (at most 3).
+     Pass `--auth-error` when stage 3b's outcome line was `auth-error`: the
+     CLI then adds the one line asking the owner to reconnect Microsoft 365;
+     never write that line yourself.
   2. `python3 "$VAULTLIB" messages keywords-propose --vault "$VAULT" --today <today>`
      gives `{"proposal": {"keyword", "project", "count"} | null}`;
      `keyword_proposal` is the proposal's `keyword` and `project` without

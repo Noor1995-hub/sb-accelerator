@@ -362,7 +362,9 @@ def test_status_says_behind_only_after_two_nights_and_closed_gaps_once(tmp_path)
     assert lines == ["I'm 3 days behind on your mail; I'll catch up tonight."]
     msgstate.cursor(root, now="2026-10-06T19:00:00Z", timezone="UTC", utc_offset=None)  # closes it
     assert msglog.status(root, now="2026-10-06T19:00:00Z", first_run_since=None) == [
+        "I'm 6 days behind on your mail and Teams; I'll catch up tonight.",  # the cursor never moved
         "I couldn't catch up on your mail from 27 September to 27 September."]
+    msgstate.advance(root, newest="2026-10-07T18:00:00Z", filled=[], now="2026-10-07T18:50:00Z", new_gaps=[])
     assert msglog.status(root, now="2026-10-07T19:00:00Z", first_run_since=None) == []
 
 
@@ -371,8 +373,10 @@ def test_status_reports_a_clamped_cursor_once(tmp_path):
     msgstate.advance(root, newest="2026-09-20T18:00:00Z", filled=[], now="2026-09-20T18:50:00Z", new_gaps=[])
     msgstate.cursor(root, now="2026-10-01T19:00:00Z", timezone="UTC", utc_offset=None)
     assert msglog.status(root, now="2026-10-01T19:00:00Z", first_run_since=None) == [
-        "I couldn't catch up on your mail from 20 September to 24 September."]
-    assert msglog.status(root, now="2026-10-01T19:00:00Z", first_run_since=None) == []
+        "I'm 7 days behind on your mail and Teams; I'll catch up tonight.",
+        "I couldn't catch up on your mail and Teams from 20 September to 24 September."]
+    assert msglog.status(root, now="2026-10-01T19:00:00Z", first_run_since=None) == [
+        "I'm 7 days behind on your mail and Teams; I'll catch up tonight."]
 
 
 def test_status_first_morning_line(tmp_path):
@@ -615,3 +619,38 @@ def test_a_log_written_after_the_state_update_queues_across_utc_plus_two(env):
     queue = updatequeue.run(root, "2026-09-30", "morgan-ellery")["projectsNeedingUpdate"]
     assert [q["slug"] for q in queue] == ["acme-workshops"]
     assert queue[0]["newLogs"] == ["2026-09-30-messages"]
+
+
+def test_status_merges_one_interval_closed_for_several_sources_and_never_exceeds_three(tmp_path):
+    """I4: one line per interval, sources merged; at most 3 lines, the rest wait a morning."""
+    root = make_vault(tmp_path)
+    msgstate.advance(root, newest="2026-10-01T18:00:00Z", filled=[], now="2026-10-01T18:50:00Z", new_gaps=[])
+    state = msgstate.load(root)
+    span = {"from": "2026-09-20T00:00:00Z", "to": "2026-09-22T00:00:00Z"}
+    state["closed_unread"] = [{"source": s, **span} for s in ("teams", "inbox", "sent")] + [
+        {"source": "inbox", "from": "2026-09-23T00:00:00Z", "to": "2026-09-24T00:00:00Z"},
+        {"source": "sent", "from": "2026-09-23T00:00:00Z", "to": "2026-09-24T00:00:00Z"},
+        {"source": "teams", "from": "2026-09-25T00:00:00Z", "to": "2026-09-25T12:00:00Z"}]
+    msgstate.save(root, state)
+    lines = msglog.status(root, now="2026-10-01T19:00:00Z", first_run_since="2026-09-30T22:00:00Z")
+    assert lines == ["From today, this note also covers your mail and Teams.",
+                     "I couldn't catch up on your mail and Teams from 20 September to 22 September.",
+                     "I couldn't catch up on your mail from 23 September to 24 September."]
+    assert msglog.status(root, now="2026-10-01T19:00:00Z", first_run_since=None) == [
+        "I couldn't catch up on your mail and Teams from 25 September to 25 September."]
+    assert msglog.status(root, now="2026-10-01T19:00:00Z", first_run_since=None) == []
+
+
+def test_status_is_behind_when_the_cursor_has_not_moved_for_more_than_two_days(tmp_path):
+    """I5: a lasting failure leaves no gap; the cursor's age shows it."""
+    root = make_vault(tmp_path)
+    msgstate.advance(root, newest="2026-09-27T18:00:00Z", filled=[], now="2026-09-27T18:50:00Z", new_gaps=[])
+    assert msglog.status(root, now="2026-09-29T19:00:00Z", first_run_since=None) == []
+    assert msglog.status(root, now="2026-09-30T19:00:00Z", first_run_since=None) == [
+        "I'm 3 days behind on your mail and Teams; I'll catch up tonight."]
+
+
+def test_status_adds_the_reconnect_line_on_an_auth_error(tmp_path):
+    root = make_vault(tmp_path)
+    assert msglog.status(root, now="2026-09-30T19:00:00Z", first_run_since=None, auth_error=True) == [
+        "I can't reach your mail and Teams \u2014 please reconnect Microsoft 365."]

@@ -2197,3 +2197,12 @@ def test_sync_messages_passes_the_timezone_on_every_removal():
                 "--apply" in line or "--all" in line or "unlink" in line):
             assert '--timezone "<timezone>"' in line, line
     assert "takes\n`--timezone` with the `timezone` from `config read`" in skill
+
+
+def test_stage_6_reports_the_feed_whenever_it_is_enabled():
+    text = _normalized(_evening_sync())
+    stage6 = text[text.index("## Stage 6"):]
+    assert ("whenever `messages.enabled` is true in `config read`, whatever stage 3b did "
+            "(ran, skipped or failed)") in stage6
+    assert "only when stage 3b ran" not in stage6
+    assert "[--auth-error]" in stage6 and "outcome line was `auth-error`" in stage6
