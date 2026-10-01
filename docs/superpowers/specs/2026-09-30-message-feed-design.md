@@ -1,9 +1,10 @@
 # Message feed: mail and Teams into the vault, every evening
 
-**Date:** 2026-09-30 · **Status:** design, awaiting Matthias's review
+**Date:** 2026-09-30, revised 2026-10-01 · **Status:** design, awaiting Matthias's review
 **Issue:** #236 (lessons and prior work in its first comment)
 
-Every choice below is a decision taken in the brainstorm of 2026-09-30 (§2).
+Every choice below is a decision taken in the brainstorm of 2026-09-30, or in
+the revision of 2026-10-01 after an end-user review of the first draft (§2).
 
 ## 1. Problem and goal
 
@@ -33,8 +34,11 @@ welcome side effects.
    vault what was said about it in mail and chat that day.
 2. Excluded people, domains, chats and words never appear in the vault.
 3. A missed evening, a cap that is hit or a failing source never leaves a
-   silent gap: it is recorded with the command that fills it.
-4. The nightly cost is measured on a real account before release (§9).
+   silent gap: it is recorded, filled automatically on the following nights,
+   and mentioned to the owner, in plain words, only if it lasts (§9).
+4. The owner can see the benefit every morning without opening anything
+   extra, and is asked to act only when something needs them (§4.2).
+5. The nightly cost is measured on a real account before release (§9).
 
 ## 2. Decisions (Matthias, 2026-09-30)
 
@@ -43,7 +47,7 @@ welcome side effects.
 | 1 | Purpose is ambient context for later sessions (§1) |
 | 2 | **One digest per day** with all of that day's mail and chat, linked to projects, people and decisions. No note per thread, no copy per message. Follows the colleague's `m365-daily-capture` |
 | 3 | Why not per thread: the mail search carries no `conversationId` (verified 2026-09-30; only a single-mail read returns it, with the full HTML body), and a Teams chat is not a thread. Multi-day topics are followed through the project and person links |
-| 4 | **Review:** the digest and its links flow in without review. Only **decisions** found in mail or chat are written `reviewed: false` and land in Decisions.base's Needs review queue |
+| 4 | **Review:** the digest and its links flow in without review. **Decisions** from mail and chat are treated exactly like decisions from meetings: the stage-4 project update applies the same material-decision test (`/log-decision`: commits the engagement *and* changes a stakeholder's behaviour; writing nothing is valid), writes `reviewed: false`, and they are triaged in Decisions.base's Needs review. The daily note only points there (revised 2026-10-01) |
 | 5 | **Read:** Teams 1:1, group and meeting chats (message text from the feed); Inbox and Sent Items (the ~250-character summary). **Not read:** Teams channels, full mails, attachments. At most 5 long chat messages per night are opened in full |
 | 6 | **Exclusions** are in the first version: person, domain, chat, word (§6) |
 | 7 | A **person** exclusion drops their mails and the 1:1 chat; in group chats only their own messages are dropped (option A). A **chat** exclusion drops a whole group chat |
@@ -52,12 +56,17 @@ welcome side effects.
 | 10 | **Off by default.** Switched on in `/setup-my-brain` after M365 is connected, or by asking in any session, with an explicit consent question. Switched off the same way |
 | 11 | **No automatic backfill.** The first run starts at yesterday 00:00; "catch up on last week" runs only on request |
 | 12 | Digests are **machine material, not reading material**: the owner reads mail in Outlook and chat in Teams, and sees the digests' effect, not the digests. They live in **`_messages/`** (the underscore convention of `_heavy-assets/`), hidden from the file list, search and graph. No Base, no project-note section. A new object type and a structure-version bump |
-| 13 | Digests are **kept** like meeting notes. When an exclusion is added later, older digests are cleaned up **only on request**, after the owner confirms |
+| 13 | Digests are **kept** like meeting notes. Removal only on request, after the owner confirms: when an exclusion is added, with "forget what you saved about X" at any time, and when switching off ("keep or delete what I saved?") (revised 2026-10-01) |
 | 14 | **New person notes** only for real working relationships: 1:1 chat partners, and direct recipients (To, not CC) of the owner's sent mail with at most 5 recipients. Everyone else is linked only when a note already exists, so People.base's Uncurated view does not flood |
-| 15 | **Digests feed project-state updates without review**, with two guards: only **strong** links queue a project (organisation domain, project name in subject or topic), and everything stage 4 takes from a digest is marked as coming from mail or chat, with a link to the digest |
+| 15 | **Digests feed project-state updates without review**, with three guards: only **strong** links queue a project (organisation domain matching exactly one project, project name or keyword in subject or topic); everything stage 4 takes from a digest is marked as coming from mail or chat, with a link to the digest; and "that's not about this project" in a session removes the link and the item (revised 2026-10-01) |
 | 16 | **Person notes:** backlinks, plus auto-maintained `messages-7d` / `messages-30d` counters next to the meeting counters. No body writes. A written per-person summary belongs with #184 |
 | 17 | A run crossing midnight adds late items to the previous day's digest, never duplicating one |
-| 18 | **The owner can teach the routing:** a project carries optional `keywords` (codes, nicknames, client terms), added by asking. The colleague's learning loop, without a table to maintain: what lands in *Not linked to a project* shows which keyword is missing |
+| 18 | **The routing learns keywords:** a project carries optional `keywords` (codes, nicknames, client terms). Claude **proposes** them, at most once a week, from words that recur in unlinked messages; the owner only says yes. Adding one by asking still works. The colleague's learning loop, without a table to maintain (revised 2026-10-01) |
+| 19 | **Honest consent** that names what is read, that short notes are **kept** in the vault, and that they hold other people's words; and that the owner can skip, stop and delete at any time (§4.1) |
+| 20 | **Gaps fill themselves** on the following nights. The owner hears about a gap only when it lasts more than 2 nights, in plain words, without a command. Caps are sized on an executive's volume before release |
+| 21 | **A visible moment every morning:** a short *Mail and Teams* block in the daily note, direct, with a clear call to action only when something needs the owner (§4.2). No counts and no internal terms |
+| 22 | **Exclusions at setup** default to *nothing to exclude*: one short open question plus "you can tell me any time", not a list of chats |
+| 23 | **The first morning** says once that mail and Teams are now included. Asked about mail from before switching on, or from an excluded person, Claude says plainly it has not read it and offers a live Outlook search |
 
 ## 3. Prior work this builds on
 
@@ -78,44 +87,72 @@ welcome side effects.
 In `/setup-my-brain`, right after Microsoft 365 is connected and proven, or
 when the owner says something like "start reading my mail and Teams":
 
-1. **Consent**, in plain words: *"May I read your mail and Teams chats every
-   evening, to keep your second brain up to date? I read only short summaries,
-   never attachments or Teams channels, and I skip anything you tell me to."*
-   No means nothing is switched on and the question is not repeated in this
-   session.
-2. **Exclusions**, as tick boxes built from the 1:1 and group chats in the chat
-   list (`teams_list_chats`, names only), plus *Something else* for a person,
-   domain or word in their own words. *"Nothing to exclude"* is a valid answer.
+1. **Consent** (decision 19), in plain words: *"Each evening I can look through
+   your inbox, your sent mail and your Teams chats (not Teams channels, not
+   attachments). I read the opening lines of each mail and your chat messages,
+   and save short notes on what was said in your second brain, which only you
+   can see. I keep them like your meeting notes; they include what other people
+   wrote to you. You can tell me at any time to skip a person, a company or a
+   topic, or to stop and delete everything. Shall I start?"* No means nothing is
+   switched on and the question is not repeated in this session.
+2. **Exclusions** (decision 22): *"Is there anyone or anything I should never
+   read? For example HR matters or a private chat. You can also tell me later."*
+   Open answer; no answer means nothing is excluded.
 3. **Read back:** what will be read, what is excluded, from when (*"from
    tonight, starting with today's messages"*). Written through `config write`
    with the consent date and the exact scope (§8.3).
 
 ### 4.2 Every evening
 
-Nothing visible. `/evening-sync` runs `/sync-messages` as a stage (§5.1). The
-next morning:
+Nothing to do in the evening. `/evening-sync` runs `/sync-messages` as a stage
+(§5.1). The next morning, the daily note has a short block (decision 21):
+
+```markdown
+### Mail and Teams
+- **Needs you:** Sam is waiting for your budget figures (mail, Tuesday).
+- Operating model: Jordan moved workshop 2 to 14 Oct; you agreed.
+- Acme rollout: the supplier confirmed the new delivery date in the project chat.
+- **1 decision from mail to confirm** → [[Decisions.base#Needs review]]
+```
+
+- At most 5 lines. Lines that need the owner come first, marked **Needs you**,
+  each with one concrete action; lines that are only context follow, one per
+  project. No counts, no "linked", no internal terms.
+- **Needs you** is used only when a message asks the owner for something or
+  waits on them; a quiet day has none. Every line cites its digest group and
+  passes the same check as the digest itself (§5.3 step 5).
+- Decisions are triaged in the Base, never in the note: the note only points
+  there, and only when one is waiting (decision 4).
+- Once a week at most, a keyword proposal (decision 18): *"Mails about
+  'P-2317' seem to be about Operating model. Say 'link P-2317' to me and I'll
+  link them from now on."*
+- When something is wrong for more than 2 nights (decision 20): *"I'm two days
+  behind on your mail; I'll catch up tonight."* Otherwise, nothing about the
+  machinery.
+- The first morning after switching on (decision 23): *"From today, this note
+  also covers your mail and Teams."*
+
+Elsewhere, without the owner opening anything:
 
 - A project's **Where it stands** reflects what happened in mail and chat, each
   such item marked as coming from mail or chat with a link to its source. That
   link is the only way the owner meets a digest, and only when they want the
   source.
-- Decisions found in mail or chat appear in Decisions.base's **Needs review**.
 - A session asked about a project or a person already knows what was said.
 - The digest itself (`_messages/2026-09-30.md`) is out of sight.
-- The daily note's run summary gets one line: *"Mail and Teams: 34 messages
-  read, 6 linked to 3 projects, 5 not linked."* Gaps and failures are named
-  there too. The *Not linked* count is the owner's cue to teach a keyword
-  (§4.3).
 
 ### 4.3 On request
 
 | The owner says | What happens |
 |---|---|
-| "catch up on my mail from last week" | One run over that window, one digest per calendar day, within the night's caps; what does not fit is recorded as a gap with the command that fills it |
-| "don't read my chats with Jordan anymore" | Exclusion added; read back: *"From tonight, mails to or from jordan@… and your 1:1 chat with Jordan are skipped. In group chats, only Jordan's own messages are skipped."* Then: *"I found 4 older digests that mention Jordan. Shall I remove those lines?"* Nothing changes without a yes |
-| "link mails about P-2317 to the operating-model project" | Keyword added to that project; read back: *"From tonight, mails and chats with 'P-2317' in the subject or chat name are linked to Operating model."* Earlier digests are not re-linked |
+| "catch up on my mail from last week" | One run over that window, one digest per calendar day, within the night's caps; what does not fit is filled on the following nights (decision 20) |
+| "don't read my chats with Jordan anymore" | Exclusion added; read back: *"From tonight, mails to or from jordan@… and your 1:1 chat with Jordan are skipped. In group chats, only Jordan's own messages are skipped."* Then: *"I found 4 older notes that mention Jordan. Shall I remove those lines?"* Nothing changes without a yes |
+| "forget what you saved about the reorganisation" | The lines in digests that match are shown in plain words; only the confirmed ones are removed (decision 13) |
+| "link P-2317 to Operating model", or yes to a proposal | Keyword added to that project; read back: *"From tonight, mails and chats with 'P-2317' in the subject or chat name are linked to Operating model."* Earlier digests are not re-linked |
+| "that mail isn't about Operating model" | The link is removed from that digest group, and the project is queued so tonight's update drops the item (decision 15) |
+| "what did Jordan mail me in August?" (before switching on, or excluded) | *"I haven't read that, because [it was before you switched this on / you asked me to skip Jordan]. Shall I search Outlook for it now?"* (decision 23) |
 | "what don't you read?" | The scope and every exclusion, in plain words |
-| "stop reading my mail and Teams" | Switched off; existing digests stay; read back |
+| "stop reading my mail and Teams" | *"Shall I keep what I saved so far, or delete it?"* Then switched off; read back (decision 13) |
 
 ## 5. Architecture
 
@@ -136,8 +173,9 @@ is off, M365 is not connected or the account proof fails.
 | `plugin/skills/sync-messages/references/messages-contract.md` | new reference | the worker's calls, paging, caps, kept keys, outcome line |
 | `plugin/agents/sync-messages-worker.md` | new agent | fetches, condenses, writes through the CLI; replies with counts only |
 | `plugin/lib/vaultlib/messages.py` | new module | cursor, window, noise and exclusion filters, grouping, routing, digest render, scrub |
-| `plugin/lib/vaultlib/cli.py` | changed | `messages cursor`, `messages build`, `messages check`, `messages write`, `messages exclude add/remove/list`, `messages scrub` |
-| `plugin/skills/evening-sync/SKILL.md` | changed | stage 3b; the summary line |
+| `plugin/lib/vaultlib/cli.py` | changed | `messages cursor`, `messages build`, `messages check`, `messages write`, `messages exclude add/remove/list`, `messages scrub`, `messages unlink`, `messages forget`, `messages keywords-propose` |
+| `plugin/skills/evening-sync/SKILL.md` | changed | stage 3b; stage 4 reads digest sections and applies the decision test to them; stage 6 writes the *Mail and Teams* block |
+| `plugin/lib/vaultlib/dailynote.py` | changed | renders the *Mail and Teams* block (§4.2) from a payload whose lines cite digest groups |
 | `plugin/skills/setup-my-brain/SKILL.md` | changed | the switch-on step (§4.1) |
 | `plugin/lib/vaultlib/updatequeue.py` | changed | strong digest links count as project activity; `messages-7d/30d` person counters (§7.2) |
 | `plugin/lib/vaultlib/project.py`, `cli.py` | changed | `project keywords add/remove/list`, writing the optional `keywords` field (decision 18) |
@@ -162,15 +200,16 @@ is off, M365 is not connected or the account proof fails.
    groups by chat (Teams) and by normalised subject (mail) **per calendar day**,
    routes every group (§7.1), counts from the files, records gaps, writes
    `msg_groups.payload.json`, and deletes the raw pages it read.
-4. **Condense** (worker). Per group: 1–4 key points, and decisions if any, as
-   claims citing the group's message ids. Kept in the worker; the main
-   conversation never sees message content.
+4. **Condense** (worker). Per group: 1–4 key points as claims citing the
+   group's message ids, and a `needs-owner` flag when a message asks the owner
+   for something or waits on them (it feeds **Needs you**, §4.2). No decision
+   extraction here: decisions are found in stage 4 (§7.2). Kept in the worker;
+   the main conversation never sees message content.
 5. **Check** (CLI). `messages check` applies the `discover check` token rule:
    every name, number, address, domain and quoted title in a point must occur
    in the cited messages. A failing point is dropped, never rewritten.
-6. **Write** (CLI). `messages write` renders the digest (§5.5), writes decision
-   candidates through the existing decision writer with `reviewed: false` and
-   `source: "[[<digest>]]"`, and advances the cursor to the newest item seen.
+6. **Write** (CLI). `messages write` renders the digest (§5.5), records any
+   gap, and advances the cursor to the newest item seen.
 7. **Report.** The worker replies with one outcome line of counts; the skill
    sweeps scratch and hands the summary line to `/evening-sync`.
 
@@ -221,7 +260,8 @@ gaps: []
   Appending to an existing digest is a CLI merge that never duplicates an item
   (the item ids are recorded in the digest's `ids` block, hidden from reading
   view). Decision 17.
-- `gaps` names any uncovered interval and the command that fills it.
+- `gaps` names any uncovered interval; the CLI keeps the list of open gaps in
+  vault state and fills them on later nights (§9).
 
 ## 6. Privacy
 
@@ -242,7 +282,11 @@ conversation, and their page files are deleted by the build.
 
 `messages scrub --exclusion <id>` lists the lines in existing digests that
 match the new exclusion (by address, chat name or word) for the owner to
-confirm; only confirmed lines are removed.
+confirm; only confirmed lines are removed. `messages forget --text "<what>"`
+does the same for anything the owner names, at any time, and
+`messages forget --all` backs "delete everything" when switching off. Removing
+a digest line also queues the projects it was linked to, so their next state
+update drops what came from it.
 
 ### 6.2 Noise, dropped before routing
 
@@ -273,10 +317,20 @@ of a hand-kept table:
    (c) a message summary contains one of those `keywords`; (d) a linked person
    is a stakeholder or key person of exactly one active project. (a) and (b)
    are **strong** links; (c) and (d) are **weak** and go to `projects-weak[]` as
-   well.
+   well. **A domain that matches more than one active project** (a client with
+   several projects) makes (a) weak for all of them; only (b) can then make a
+   link strong.
 3. **Several projects match:** the group is linked to all of them and shown
    under the first. **None match:** *Not linked to a project*, still linked to
    its people.
+4. **Keyword proposals (decision 18):** `messages keywords-propose` counts, over
+   the last 7 days, words and codes that recur in subjects and chat topics of
+   unlinked groups and co-occur with one project's people or domain. The top
+   candidate, if any, becomes the weekly proposal in §4.2. Deterministic; the
+   owner's yes is the only write.
+5. **Corrections (decision 15):** `messages unlink --digest <d> --group <g>
+   --project <slug>` removes one link and queues the project. Learning from
+   corrections is left to #183.
 
 ### 7.2 What the rest of the vault does with a digest
 
@@ -297,8 +351,16 @@ of a hand-kept table:
   to `meetings-7d` / `meetings-30d` by the same metrics pass, counting the
   digest groups the person is linked in, so People.base can sort by who the
   owner actually talks to. A written per-person summary is left to #184.
-- **Decisions:** `source` may name a digest as well as a meeting (ontology
-  change, §8.1). `reviewed: false`, so they queue in Needs review.
+- **Decisions (decision 4):** the stage-4 agent of a queued project already runs
+  decision capture over its new meetings via `/log-decision --background`. It
+  now gives that the project's digest sections too, with the rules unchanged:
+  the material-decision test (commits the engagement *and* changes a
+  stakeholder's behaviour; tasks, opinions, scheduling and preferences are not
+  decisions), dedup against `existingDecisions`, supersession only on explicit
+  conflict language, never delete, writing nothing is valid. Decisions land with
+  `reviewed: false` in Needs review and `source` naming the digest (ontology
+  change, §8.1). A wrong one is `withdrawn`, as today. Stage 6 adds the pointer
+  line to the daily note when one was written.
 - **Organisation dossiers:** not written; #184 stays its own issue.
 
 ## 8. Vault changes
@@ -348,9 +410,20 @@ cursor lives in vault state beside `lastsync`, not in config.
 ## 9. Cost and limits
 
 - **Caps per night:** Teams feed 20 pages (the colleague's; a busy day is 5–8),
-  mail 2 pages per folder, 5 full-message reads. A cap that is hit still
-  advances the cursor to the newest item seen and records the uncovered
-  interval as a gap, with `/sync-messages since <time>` to fill it.
+  mail 2 pages per folder, 5 full-message reads. These are starting values from
+  a consultant's account; they are **sized on an executive's volume before
+  release** (decision 20).
+- **Gaps fill themselves (decision 20).** A cap that is hit still advances the
+  cursor to the newest item seen and records the uncovered interval as an open
+  gap. Each later night first fetches the newest messages, then spends what is
+  left of its caps on the oldest open gap:
+  - mail fills a gap exactly (`afterDateTime` / `beforeDateTime` on one folder);
+  - the Teams feed has no usable date filter, so a gap is reached by paging past
+    newer messages, and only while it lies within the feed's 1000-offset limit
+    (about 3 weeks on a consultant's account). A Teams gap beyond that limit is
+    closed as unrecoverable and told to the owner once, plainly.
+- **What the owner hears:** nothing, unless a gap is older than 2 nights; then
+  one plain line in the daily note (§4.2). No commands.
 - **Where the cost is:** the model's writing, not the reading. The worker
   writes trimmed page files and condensed points only; it never retypes whole
   messages.
@@ -368,10 +441,12 @@ cursor lives in vault state beside `lastsync`, not in config.
 | Feature off, no M365, account proof fails | Stage skipped, one line in the summary |
 | A source errors | Retry once; then that source is recorded as a gap, the others continue |
 | Teams feed page 1 empty (search index down) | Recorded as a gap; no fallback to per-chat reads in v1 (they throttle and cap at 20 messages) |
-| Cap hit | Cursor advances, gap recorded (§9) |
+| Cap hit | Cursor advances, gap recorded and filled on later nights (§9) |
 | Worker fails before `messages write` | Cursor does not move; next run covers the window again |
-| A missed evening | The cursor still points at the last item seen, so the next run covers it, within the caps |
+| A missed evening or a week with the laptop off | The cursor still points at the last item seen; the next run covers the newest messages and the rest is filled as gaps on later nights |
 | Condensed point fails the check | Dropped, counted in the outcome line |
+| A wrong project link | The item shows "from mail" with its source; "that's not about this project" removes it (§4.3) |
+| Something sensitive was saved | "Forget what you saved about X" at any time (§6.1) |
 
 ## 11. Testing
 
@@ -382,8 +457,13 @@ cursor lives in vault state beside `lastsync`, not in config.
    incoming never); keyword matching (word boundary, case, subject vs
    summary); weak links never queue a project; `messages-7d/30d`
    counts; cursor
-   advance and non-advance; gap recording; digest render and merge without
-   duplicates; `--consume` deletes exactly the pages read; scrub matching.
+   advance and non-advance; gap recording and filling (mail exact, Teams within
+   the offset limit, unrecoverable closed once); a domain matching several
+   projects is weak; digest render and merge without duplicates; `--consume`
+   deletes exactly the pages read; scrub, forget and unlink each queue the
+   affected projects; keyword proposals; the *Mail and Teams* block (at most 5
+   lines, Needs-you first, no counts, the decision pointer only when one was
+   written).
 2. **CLI tests** for every new subcommand's envelope.
 3. **Skill contract tests** pinning: no date filter on the Teams feed, mail
    always folder-scoped, never a full-mail read, the caps, stage 3b's place.
@@ -394,9 +474,19 @@ cursor lives in vault state beside `lastsync`, not in config.
 ## 12. Open points
 
 - **Executive volume is unmeasured**; the caps come from a consultant's
-  account. Tune after the first real run.
-- **Mail volume vs the 2-page cap:** a busy inbox may pass 50 mails a day.
-  Measure in the Cowork run before raising it.
+  account. A busy inbox may pass 50 mails a day, the 2-page cap. Size the caps
+  on an executive's account before release (decision 20).
+- **Sensitivity labels.** Skipping mail marked Private or Confidential would be
+  a strong default, but the connector returned no sensitivity field in the
+  2026-09-30 test (neither in search results nor in a full read). Re-check
+  before release; if it is exposed, add it as a default exclusion.
+- **Decision volume from mail** is expected to be low under the material test;
+  measure it in the Cowork run.
+- **Delegated mailboxes** (an assistant sending on the owner's behalf) are out of
+  scope for v1.
+- **Two machines running the evening sync on one synced vault:** relies on the
+  evening sync's existing guard against a second run; verify the cursor and
+  gap state survive it.
 - **Language of the digest:** follows the owner's configured note language.
 - **Routing quality is unmeasured.** Check in the Cowork run how many groups
   land in *Not linked to a project* and how many strong links are wrong; tune
