@@ -205,6 +205,16 @@ The instructions each subagent gets:
 
 1. Read the `newFiles` meetings end-to-end — Key Takeaways, Debrief, Action
    Items.
+   When the entry has `newLogs`, also run
+   `python3 "$VAULTLIB" messages for-project --vault "$VAULT" --slug <slug> --logs <comma-separated newLogs>`
+   and read the returned groups as input next to the meetings. Every state item
+   you take from one (a Hot potato, an Owe, an Awaiting, a closed action) ends
+   with its source marker, `(mail · <link>)` or `(chat · <link>)`, where
+   `<link>` is the group's `link` verbatim. The marker counts toward the item's
+   word cap (hot potatoes ≤ 30 words, owe and awaiting items ≤ 40), so write
+   the item short enough to carry it. When the entry has `removedSources`, drop
+   every current item whose marker links one of those logs unless a meeting or
+   a remaining group still supports it.
 2. Compose the project's **state** as JSON and write it to
    `$SCRATCH/project-state-<slug>.json`. The CLI renders the whole index body
    from it and refuses anything over its caps, naming the field:
@@ -247,11 +257,12 @@ python3 "$VAULTLIB" project state write --vault "$VAULT" --slug <slug> \
 3. Never edit `index.md` with your editor — the body is machine-rendered and
    a hand edit is overwritten on the next run; the owner's own `## Notes`
    section at the bottom, if present, is the one thing the CLI preserves.
-4. Decision capture: extract candidates from the new meetings AND the
-   harvest jottings, then follow
+4. Decision capture: extract candidates from the new meetings, the
+   harvest jottings AND the message log groups read in step 1, then follow
    `${CLAUDE_PLUGIN_ROOT}/skills/log-decision/SKILL.md` in **background mode**
    (`/log-decision <slug> --background`) with those candidates as the
-   source. Its rules apply unchanged: the material-decision test (commits
+   source. A decision from a message log group carries `source: <log stem>`.
+   Its rules apply unchanged: the material-decision test (commits
    the engagement AND changes a stakeholder's behaviour), dedup against
    `existingDecisions`, supersession only on explicit conflict language,
    never delete, status flips only. Writing nothing is a valid outcome.

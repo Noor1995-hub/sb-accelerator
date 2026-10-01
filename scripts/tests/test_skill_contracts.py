@@ -2145,3 +2145,12 @@ def test_sync_messages_never_writes_without_the_owner_on_removals():
 def test_sync_messages_unattended_mode_never_asks():
     unattended = read_skill("sync-messages").split("## Unattended mode")[1]
     assert "never ask" in unattended.lower()
+
+
+def test_stage4_reads_logs_marks_their_items_and_captures_decisions():
+    stage4 = read_skill("evening-sync").split("## Stage 4")[1].split("## Stage 5")[0]
+    flat = re.sub(r"\s+", " ", stage4)
+    assert "messages for-project" in flat and "newLogs" in flat
+    assert "(mail ·" in flat or "(chat ·" in flat
+    assert "removedSources" in flat
+    assert flat.index("messages for-project") < flat.index("log-decision")
