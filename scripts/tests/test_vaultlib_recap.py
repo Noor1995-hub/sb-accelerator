@@ -273,7 +273,7 @@ def test_messages_decision_pointer_does_not_trip_link_normalisation(tmp_path):
     clean, offenders, warnings = recap.validate(root, {**full_payload(), "messages": _messages(
         decisions_to_confirm=2)})
     out = recap.render(root, clean, meetings=0, window_label="today")
-    assert "**2 decisions from mail to confirm** → Decisions, Needs review" in out
+    assert "**2 decisions from mail to confirm** → Decisions, To review" in out
     assert "[[" not in out.split("Mail and Teams")[1].split("\n\n")[0]
     assert offenders == [] and warnings == []
 

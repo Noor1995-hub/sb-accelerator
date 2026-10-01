@@ -271,7 +271,7 @@ def render(root: Path, clean: dict, *, meetings: int, window_label: str) -> str:
                   else f"> - {it['text']}" for it in m["items"]]
         if m["decisions_to_confirm"]:
             noun = _plural(m["decisions_to_confirm"], "decision")
-            lines.append(f"> - **{noun} from mail to confirm** → Decisions, Needs review")
+            lines.append(f"> - **{noun} from mail to confirm** → Decisions, To review")
         if m["keyword_proposal"] and m["keyword_proposal"]["project"]:
             p = m["keyword_proposal"]
             lines.append(f"> - Mails about '{p['keyword']}' seem to be about {p['project']}. "

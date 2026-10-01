@@ -257,7 +257,7 @@ enums:
   a slug of the summary sentence is a truncated paragraph.
 - `reviewed` is the triage marker: `true` when a human validated the note as it
   was written, `false` when it was captured unattended. It is in
-  `keys_present`, so the key always exists — `Decisions.base`'s **Needs review**
+  `keys_present`, so the key always exists — `Decisions.base`'s **To review**
   view filters on `reviewed != true`, and a missing key would make that view
   silently incomplete. Same one-click convention as Meeting's `reviewed`, and
   that view carries the checkbox, so the queue is worked where it is read.

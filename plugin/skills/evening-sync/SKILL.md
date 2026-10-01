@@ -229,11 +229,11 @@ cat > "$SCRATCH/project-state-<slug>.json" <<'JSON'
                    {"signal": "amber", "text": "≤ 30 words — a risk building, nothing to do yet"}],
   "insights": ["≤ 30 words, at most two"],
   "defining_decision": "<decision stem under this project, or null>",
-  "coming_up": [{"when": "Wed 16 Sept", "what": "≤ 40 words", "date": "2026-09-16"}],
+  "coming_up": [{"when": "Wed 16 Sept", "what": "≤ 40 words", "date": "2026-09-16"},
+                {"when": "Thu 1 Oct", "what": "Contract signature", "date": "2026-10-01", "milestone": true}],
   "owe": [{"owner": "Full Name", "items": ["one task per item — never chain with ';'"]}],
   "awaiting": ["…"], "questions": ["…"], "pending": ["…"], "watch": ["…"],
-  "context": {"contacts": "…", "source": "…"},
-  "next_milestone": {"text": "one line", "date": "<ISO>"}
+  "context": {"contacts": "…", "source": "…"}
 }
 JSON
 python3 "$VAULTLIB" project state write --vault "$VAULT" --slug <slug> \
@@ -245,8 +245,13 @@ python3 "$VAULTLIB" project state write --vault "$VAULT" --slug <slug> \
    in — carry items that are still open, drop the ones the meetings closed,
    never invent. `hot_potatoes` are the ≤ 3 things the owner must act on or
    watch this week; `insights` are patterns, not events. `coming_up` holds
-   dated events only, ≤ 10 rows, the `date` sorts them. Omit
-   `next_milestone` when no concrete next event exists. Identity names
+   dated events only, ≤ 10 rows, the `date` sorts them; drop the ones that
+   have passed. Mark the significant events — a go-live, a signature, a
+   steerco decision, not a routine sync — with `"milestone": true`; it needs
+   a `date`. The Projects table's next milestone is the first marked row
+   dated today or later, and with none it is cleared, so carry the mark
+   forward on rows that keep it (the current one is `next-milestone` in the
+   frontmatter). Identity names
    (entities, projects, people) go in as `[[slug]]` wikilinks — the CLI
    rewrites them to links that open. A refusal names the field and the cap;
    fix that field and retry once. `state write` also stamps `last-updated`

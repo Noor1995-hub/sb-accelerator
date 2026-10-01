@@ -218,7 +218,7 @@ def test_base_property_keys_are_namespaced():
 def test_every_ordered_column_has_a_display_name():
     """A prefix fix only helps a column that has a declaration at all. A column
     listed in a view's `order:` with no `properties:` entry renders its raw
-    property name — `type` beside `Subject` and `✅ Keep`. That is the same
+    property name — `type` beside `Subject` and `Keep`. That is the same
     defect as an inert displayName, one step earlier, and it is what promoting
     `type` to the second Triage column exposed: it was the only unlabelled
     column on the vault's busiest surface."""

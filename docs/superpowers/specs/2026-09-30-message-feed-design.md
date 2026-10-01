@@ -47,7 +47,7 @@ welcome side effects.
 | 1 | Purpose is ambient context for later sessions (§1) |
 | 2 | **One message log per day** with all of that day's mail and chat, linked to projects, people and decisions. No note per thread, no copy per message. Follows the colleague's `m365-daily-capture` |
 | 3 | Why not per thread: the mail search carries no `conversationId` (verified 2026-09-30; only a single-mail read returns it, with the full HTML body), and a Teams chat is not a thread. Multi-day topics are followed through the project and person links |
-| 4 | **Review:** the message log and its links flow in without review. **Decisions** from mail and chat are treated exactly like decisions from meetings: the stage-4 project update applies the same material-decision test (`/log-decision`: commits the engagement *and* changes a stakeholder's behaviour; writing nothing is valid), writes `reviewed: false`, and they are triaged in Decisions.base's Needs review. The daily note only points there (revised 2026-10-01) |
+| 4 | **Review:** the message log and its links flow in without review. **Decisions** from mail and chat are treated exactly like decisions from meetings: the stage-4 project update applies the same material-decision test (`/log-decision`: commits the engagement *and* changes a stakeholder's behaviour; writing nothing is valid), writes `reviewed: false`, and they are triaged in Decisions.base's To review. The daily note only points there (revised 2026-10-01) |
 | 5 | **Read:** Teams 1:1, group and meeting chats (message text from the feed); Inbox and Sent Items (the ~250-character summary). **Not read:** Teams channels, full mails, attachments. At most 5 long chat messages per night are opened in full |
 | 6 | **Exclusions** are in the first version: person, domain, chat, word (§6) |
 | 7 | A **person** exclusion drops their mails and the 1:1 chat; in group chats only their own messages are dropped (option A). A **chat** exclusion drops a whole group chat |
@@ -112,7 +112,7 @@ Nothing to do in the evening. `/evening-sync` runs `/sync-messages` as a stage
 - **Needs you:** Sam is waiting for your budget figures (mail, Tuesday).
 - Operating model: Jordan moved workshop 2 to 14 Oct; you agreed.
 - Acme rollout: the supplier confirmed the new delivery date in the project chat.
-- **1 decision from mail to confirm** → [[Decisions.base#Needs review]]
+- **1 decision from mail to confirm** → Decisions, To review
 ```
 
 - At most 5 lines. Lines that need the owner come first, marked **Needs you**,
@@ -360,7 +360,7 @@ of a hand-kept table:
   stakeholder's behaviour; tasks, opinions, scheduling and preferences are not
   decisions), dedup against `existingDecisions`, supersession only on explicit
   conflict language, never delete, writing nothing is valid. Decisions land with
-  `reviewed: false` in Needs review and `source` naming the message log (ontology
+  `reviewed: false` in To review and `source` naming the message log (ontology
   change, §8.1). A wrong one is `withdrawn`, as today. Stage 6 adds the pointer
   line to the daily note when one was written.
 - **Organisation dossiers:** not written; #184 stays its own issue.

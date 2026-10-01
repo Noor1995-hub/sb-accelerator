@@ -29,7 +29,7 @@ PLACEHOLDER = "_none yet_"
 SIGNALS = {"red": "🔴", "amber": "🟠"}
 _LIST_KEYS = ("awaiting", "questions", "pending", "watch")
 _ALLOWED = ("as_of", "stage", "hot_potatoes", "insights", "defining_decision",
-            "coming_up", "owe") + _LIST_KEYS + ("context", "next_milestone")
+            "coming_up", "owe") + _LIST_KEYS + ("context",)
 _MONTHS = ("January", "February", "March", "April", "May", "June", "July",
            "August", "September", "October", "November", "December")
 _NOTES_MARKER = "\n## Notes\n"
@@ -86,8 +86,7 @@ def _dataview_meetings() -> str:
         "```dataview", "TABLE WITHOUT ID",
         '  link(file.path, dateformat(date, "ccc dd-MM")) AS "Date",',
         '  calendar-subject AS "Subject",',
-        '  slice(attendees, 0, 3) AS "With",',
-        '  recording-duration AS "Min"',
+        '  slice(attendees, 0, 3) AS "With"',
         f'FROM "{vault.MEETINGS_DIR}"',
         "WHERE econtains(projects, this.slug)",
         "SORT date DESC", "LIMIT 10", "```"])
@@ -170,6 +169,10 @@ def validate(root: Path, slug: str, raw) -> Tuple[dict, List[str], List[str]]:
     """
     if not isinstance(raw, dict):
         raise ProjectStateError("state must be a JSON object")
+    if "next_milestone" in raw:
+        raise ProjectStateError(
+            "next_milestone is derived from coming_up — drop the key and "
+            "mark that event's row with \"milestone\": true")
     unknown = sorted(set(raw) - set(_ALLOWED))
     if unknown:
         raise ProjectStateError(f"state: unknown key(s) {unknown}")
@@ -220,12 +223,30 @@ def validate(root: Path, slug: str, raw) -> Tuple[dict, List[str], List[str]]:
         raise ProjectStateError("coming_up: ≤ 10 rows")
     rows = []
     for i, row in enumerate(coming):
-        if not isinstance(row, dict) or not {"when", "what"} <= set(row) or set(row) - {"when", "what", "date"}:
-            raise ProjectStateError(f"coming_up[{i}] needs when, what and optionally date")
+        if not isinstance(row, dict) or not {"when", "what"} <= set(row) \
+                or set(row) - {"when", "what", "date", "milestone"}:
+            raise ProjectStateError(
+                f"coming_up[{i}] needs when, what and optionally date and milestone")
         date_value = str(row.get("date") or "")
         if date_value and not vault.ISO_DATE_RE.match(date_value):
             raise ProjectStateError(f"coming_up[{i}].date must be ISO YYYY-MM-DD")
+        if date_value:
+            # the shape check passes 2026-02-30, which would then be written
+            # as next-milestone-date — a value the Projects table can't read
+            try:
+                datetime.strptime(date_value, "%Y-%m-%d")
+            except ValueError:
+                raise ProjectStateError(
+                    f"coming_up[{i}].date is not a calendar date") from None
+        flagged = row.get("milestone", False)
+        if not isinstance(flagged, bool):
+            raise ProjectStateError(f"coming_up[{i}].milestone must be true or false")
+        if flagged and not date_value:
+            raise ProjectStateError(
+                f"coming_up[{i}] is a milestone without a date — the Projects "
+                "table needs one; add it or drop the flag")
         rows.append((date_value or "9999-12-31", i, {
+            "date": date_value or None, "milestone": flagged,
             "when": _line(row["when"], f"coming_up[{i}].when", 8),
             "what": _norm(root, _line(row["what"], f"coming_up[{i}].what", 40),
                           f"coming_up[{i}]", offenders, warnings)}))
@@ -257,19 +278,24 @@ def validate(root: Path, slug: str, raw) -> Tuple[dict, List[str], List[str]]:
     state["context"] = {k: (_norm(root, _line(v, f"context.{k}", 60), f"context.{k}", offenders, warnings)
                             if str(v or "").strip() else None) for k, v in context.items()}
 
-    milestone = raw.get("next_milestone")
-    if milestone is not None:
-        if not isinstance(milestone, dict) or set(milestone) != {"text", "date"}:
-            raise ProjectStateError("next_milestone needs exactly text and date")
-        milestone_date = str(milestone["date"] or "").strip()
-        if not vault.ISO_DATE_RE.match(milestone_date):
-            raise ProjectStateError("next_milestone.date must be ISO YYYY-MM-DD")
-        datetime.strptime(milestone_date, "%Y-%m-%d")
-        state["next_milestone"] = {"text": _line(milestone["text"], "next_milestone.text", 40),
-                                   "date": milestone_date}
-    else:
-        state["next_milestone"] = None
     return state, offenders, warnings
+
+
+def next_milestone(coming_up: List[dict], today: str) -> Optional[dict]:
+    """The first `coming_up` row flagged `milestone` and dated today or
+    later, as {text, date}.
+
+    The model still chooses which events are milestones — the significant
+    ones, not merely the next — but the frontmatter pair is derived from the
+    flagged row rather than sent alongside, so the Projects table and the
+    page's Coming up cannot disagree; with no such row the pair is cleared
+    instead of keeping a date that has passed (issue #241). Rows arrive
+    sorted by date, so a later flagged row takes over once the first passes.
+    """
+    for row in coming_up:
+        if row.get("milestone") and row["date"] >= today:
+            return {"text": row["what"], "date": row["date"]}
+    return None
 
 
 def write(root: Path, *, slug: str, payload, today: str,
@@ -301,12 +327,13 @@ def write(root: Path, *, slug: str, payload, today: str,
     changed = new_text != text
     if changed:
         vault.atomic_write(index_path, new_text)
-    milestone = state["next_milestone"]
+    milestone = next_milestone(state["coming_up"], today)
     try:
         touched = project.touch(
             root, slug=slug, date_iso=today, timestamp=timestamp,
             next_milestone=milestone["text"] if milestone else None,
-            next_milestone_date=milestone["date"] if milestone else None)
+            next_milestone_date=milestone["date"] if milestone else None,
+            clear_milestone=milestone is None)
     except project.ProjectError as exc:
         raise ProjectStateError(str(exc)) from exc
     return {"slug": slug, "path": f"{vault.PROJECTS_DIR}/{slug}/index.md",
