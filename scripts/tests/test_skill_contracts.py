@@ -1237,6 +1237,17 @@ def _normalized(text: str) -> str:
     return re.sub(r"\s+", " ", text)
 
 
+def test_evening_sync_runs_messages_between_sync_and_project_updates():
+    text = read_skill("evening-sync")
+    stage3, stage4 = text.index("## Stage 3"), text.index("## Stage 4")
+    marker = text.index("### Stage 3b — Mail and Teams")
+    assert stage3 < marker < stage4
+    assert text.index("skills/sync-messages/SKILL.md") > stage3
+    refresh = text.index('"$VAULTLIB" sync update-queue')
+    assert refresh > marker, "the queue must see tonight's logs"
+    assert refresh < stage4
+
+
 def test_evening_sync_states_the_no_back_fill_rule():
     # Decision 16: one catch-up note covers the window; the vault owner is told so.
     text = _evening_sync().lower()

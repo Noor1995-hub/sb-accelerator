@@ -148,6 +148,16 @@ Carry `changed` (a count worth mentioning if non-zero) and `unresolved` (a
 project slug missing its `entity:` field, or missing outright — the note is
 left untouched, not silently skipped) into the final summary.
 
+### Stage 3b — Mail and Teams
+
+When `messages.enabled` is true in `config read`: run the `/sync-messages`
+workflow (follow `${CLAUDE_PLUGIN_ROOT}/skills/sync-messages/SKILL.md`),
+unattended when this run is unattended. Record its outcome line for the
+summary, verbatim, and `since` when it reports a first run (stage 6 needs it).
+It runs before the refresh below so tonight's update queue sees tonight's
+logs. A failed stage 3b is recorded and the evening continues. Off, or no
+M365: skip with one line in the summary.
+
 **Refresh:**
 
 ```bash
@@ -511,6 +521,7 @@ reported "Processed: 0" after writing a meeting correctly):
 **Synced:** {N} recordings → `20-meetings/` ({stems})
 **Meetings you ticked Keep on:** {N} now confirmed
 **Possible duplicates:** {N} ({list the stems}) — kept as separate notes; each would have overwritten a meeting you already confirmed
+**Mail and Teams:** {outcome line, or "off"}
 **Metrics refreshed:** {P} projects · {Q} people
 **Projects updated:** {N} ({slugs}) — {M} decisions captured for review, {K} candidates skipped
 **Next note:** `60-daily-notes/{date}.md` ({DayName}, {tomorrow | today — for-today catch-up}) — {N} meetings prepped | calendar unavailable | calendar REFUSED — signed in as a different account (account-mismatch) | calendar REFUSED — no account bound to this vault yet (no-account-hint) | m365 disabled
@@ -521,8 +532,9 @@ reported "Processed: 0" after writing a meeting correctly):
 
 A non-empty warnings block means investigate before tomorrow's run.
 
-**Scratch hygiene, one last time.** Stage 3's `/sync-recordings` run already
-swept its own scratch files at its own end; this run may also have written
+**Scratch hygiene, one last time.** Stage 3's `/sync-recordings` and `/sync-messages`
+runs already swept their own scratch files at their own end (including
+`msg_*.payload.json`); this run may also have written
 `m365.whoami.json` and `m365_calendar.json` in stage 5. Sweep once more
 before the run ends, whether or not stage 5 ran:
 
