@@ -32,7 +32,7 @@ if __package__ in (None, ""):
     # the skills invoke it.
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from vaultlib import config, dailynote, dates, decision, discover, entity, feedback, fetcherrors, health, lastsync, m365, meeting, migrate, person, plaud, project, projectstate, provenance, runlog, scratch, schema, seenevents, syncjob, template, updatequeue, vault  # noqa: E402
+from vaultlib import config, dailynote, dates, decision, discover, entity, feedback, fetcherrors, health, lastsync, m365, meeting, migrate, msglog, msgrows, msgstate, person, plaud, project, projectstate, provenance, runlog, scratch, schema, seenevents, syncjob, template, updatequeue, vault  # noqa: E402
 
 
 def _emit(payload: dict) -> None:
@@ -754,6 +754,82 @@ def build_parser() -> argparse.ArgumentParser:
         "--write", action="store_true",
         help="also render to 99-workflow-config/health-reports/{today}.md")
 
+    messages_group = top.add_parser("messages", help="the nightly mail and Teams feed")
+    messages_sub = messages_group.add_subparsers(dest="action", required=True)
+
+    def _tz(parser):
+        parser.add_argument("--timezone", help="IANA timezone name")
+        parser.add_argument("--utc-offset", dest="utc_offset", help="explicit offset like +02:00")
+
+    m_cursor = messages_sub.add_parser("cursor", help="where tonight's read starts, and open gaps")
+    _add_vault_argument(m_cursor)
+    m_cursor.add_argument("--now", required=True)
+    m_cursor.add_argument("--since", help="an explicit start the owner asked for")
+    _tz(m_cursor)
+
+    m_build = messages_sub.add_parser("build", help="page files in --dir into day groups")
+    _add_vault_argument(m_build)
+    m_build.add_argument("--dir", required=True, help="the session scratch directory (never the vault)")
+    m_build.add_argument("--now", required=True)
+    m_build.add_argument("--since", required=True)
+    m_build.add_argument("--owner-address", dest="owner_address", action="append", required=True)
+    m_build.add_argument("--gap", action="append", default=[])
+    m_build.add_argument("--consume", action="store_true")
+    _tz(m_build)
+
+    m_check = messages_sub.add_parser("check", help="drop condensed points the cited messages do not hold")
+    m_check.add_argument("--dir", required=True)
+
+    m_write = messages_sub.add_parser("write", help="merge checked groups into _messages/ and advance the cursor")
+    _add_vault_argument(m_write)
+    m_write.add_argument("--dir", required=True)
+    m_write.add_argument("--now", required=True)
+
+    m_exclude = messages_sub.add_parser("exclude", help="what the feed never reads")
+    m_exclude_sub = m_exclude.add_subparsers(dest="exclude_action", required=True)
+    m_ex_add = m_exclude_sub.add_parser("add")
+    _add_vault_argument(m_ex_add)
+    m_ex_add.add_argument("--kind", required=True, choices=list(config.EXCLUSION_KINDS))
+    m_ex_add.add_argument("--value", required=True)
+    m_ex_add.add_argument("--label")
+    m_ex_add.add_argument("--today")
+    m_ex_remove = m_exclude_sub.add_parser("remove")
+    _add_vault_argument(m_ex_remove)
+    m_ex_remove.add_argument("--id", required=True)
+    m_ex_list = m_exclude_sub.add_parser("list")
+    _add_vault_argument(m_ex_list)
+
+    m_forget = messages_sub.add_parser("forget", help="find, then remove, saved lines")
+    _add_vault_argument(m_forget)
+    m_forget_target = m_forget.add_mutually_exclusive_group(required=True)
+    m_forget_target.add_argument("--text")
+    m_forget_target.add_argument("--exclusion", help="an exclusion id")
+    m_forget_target.add_argument("--all", action="store_true")
+    m_forget.add_argument("--apply", action="append", default=[], help="a ref from the find step")
+
+    m_unlink = messages_sub.add_parser("unlink", help="remove one project link from one group")
+    _add_vault_argument(m_unlink)
+    for flag in ("--log", "--gid", "--project"):
+        m_unlink.add_argument(flag, required=True)
+
+    m_for_project = messages_sub.add_parser("for-project", help="a project's strongly linked groups")
+    _add_vault_argument(m_for_project)
+    m_for_project.add_argument("--slug", required=True)
+    m_for_project.add_argument("--logs", required=True, help="comma-separated log stems")
+
+    m_propose = messages_sub.add_parser("keywords-propose", help="at most one keyword proposal a week")
+    _add_vault_argument(m_propose)
+    m_propose.add_argument("--today")
+
+    m_lines = messages_sub.add_parser("check-lines", help="check the morning block's lines")
+    _add_vault_argument(m_lines)
+    m_lines.add_argument("--lines", required=True)
+
+    m_status = messages_sub.add_parser("status", help="plain status lines for the morning block")
+    _add_vault_argument(m_status)
+    m_status.add_argument("--now", required=True)
+    m_status.add_argument("--first-run-since", dest="first_run_since")
+
     return parser
 
 
@@ -846,6 +922,52 @@ def _dispatch(args: argparse.Namespace) -> int:
     if args.group == "person":
         today = vault.today_iso(getattr(args, "today", None))
         return _ok(person.ensure(root, args.name, today, email=args.email))
+    if args.group == "messages":
+        if args.action == "cursor":
+            return _ok(msgstate.cursor(root, now=args.now, timezone=args.timezone,
+                                       utc_offset=args.utc_offset, since=args.since))
+        if args.action == "build":
+            settings = config.messages_settings(root)
+            home_domains, _warning = config.m365_home_domains(root)
+            return _ok(msglog.build(
+                root, args.dir, timezone=args.timezone, utc_offset=args.utc_offset,
+                owner_addresses=args.owner_address, home_domains=home_domains or [],
+                exclusions=settings["exclusions"], today=args.now[:10], since=args.since,
+                gap_ids=args.gap, consume=args.consume))
+        if args.action == "check":
+            return _ok(msglog.check(args.dir))
+        if args.action == "write":
+            return _ok(msglog.write(root, args.dir, now=args.now))
+        if args.action == "exclude":
+            if args.exclude_action == "add":
+                return _ok(config.exclusion_add(root, kind=args.kind, value=args.value,
+                                                label=args.label, today=vault.today_iso(args.today)))
+            if args.exclude_action == "remove":
+                return _ok(config.exclusion_remove(root, args.id))
+            return _ok({"exclusions": config.messages_settings(root)["exclusions"]})
+        if args.action == "forget":
+            if args.all:
+                return _ok(msglog.forget_all(root))
+            if args.apply:
+                return _ok(msglog.forget_apply(root, args.apply))
+            exclusion = None
+            if args.exclusion:
+                matches = [e for e in config.messages_settings(root)["exclusions"] if e["id"] == args.exclusion]
+                if not matches:
+                    return _fail(f"no exclusion {args.exclusion!r}", "List them with messages exclude list.")
+                exclusion = matches[0]
+            return _ok({"found": msglog.forget_find(root, text=args.text, exclusion=exclusion)})
+        if args.action == "unlink":
+            return _ok(msglog.unlink(root, log=args.log, gid=args.gid, project=args.project))
+        if args.action == "for-project":
+            stems = [s.strip() for s in args.logs.split(",") if s.strip()]
+            return _ok({"groups": msglog.for_project(root, slug=args.slug, logs=stems)})
+        if args.action == "keywords-propose":
+            return _ok({"proposal": msglog.keywords_propose(root, today=vault.today_iso(args.today))})
+        if args.action == "check-lines":
+            return _ok(msglog.check_lines(root, args.lines))
+        if args.action == "status":
+            return _ok({"lines": msglog.status(root, now=args.now, first_run_since=args.first_run_since)})
     if args.group == "project":
         if args.action == "state":
             payload = (json.load(sys.stdin) if args.state == "-"
@@ -1181,6 +1303,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             hint += (" These files need a human first: "
                      + "; ".join(exc.needs_human))
         return _fail(str(exc), hint)
+    except msgrows.MessagesError as exc:
+        return _fail(str(exc), "Fix the named file or argument and retry; nothing was written for that step.")
     except json.JSONDecodeError as exc:
         return _fail(f"payload is not valid JSON: {exc}",
                      "Pass a JSON object in a file, or - to read stdin.")

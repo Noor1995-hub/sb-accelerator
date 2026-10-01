@@ -2351,3 +2351,42 @@ def test_project_keywords_through_the_cli(capsys, tmp_path):
     code, payload = run(capsys, ["project", "keywords", "remove", "--vault", str(root),
                                  "--slug", slug, "--keyword", "nope"])
     assert code != 0 and payload["ok"] is False
+
+
+def test_messages_round_trip_through_the_cli(capsys, tmp_path):
+    root = make_vault(tmp_path)
+    write_vault_config(root, {"timezone": "Europe/Brussels"})
+    scratch = tmp_path / "scratch"
+    scratch.mkdir()
+    (scratch / "msg_inbox.p1.payload.json").write_text(json.dumps({
+        "id": "m1", "subject": "Workshop 2 agenda", "sender": "jordan.reyes@acme.example",
+        "recipients": ["morgan.ellery@northwind.example"], "receivedDateTime": "2026-09-30T09:00:00Z",
+        "summary": "Can we move workshop 2 to 14 Oct?"}), encoding="utf-8")
+    code, payload = run(capsys, ["messages", "build", "--vault", str(root), "--dir", str(scratch),
+                                 "--now", "2026-09-30T18:47:00Z", "--timezone", "Europe/Brussels",
+                                 "--owner-address", "morgan.ellery@northwind.example",
+                                 "--since", "2026-09-29T22:00:00Z", "--consume"])
+    assert code == 0 and payload["result"]["groups"] == 1
+    gid = json.loads((scratch / "msg_groups.payload.json").read_text(encoding="utf-8"))["groups"][0]["gid"]
+    (scratch / "msg_condensed.payload.json").write_text(json.dumps({"groups": [{"gid": gid, "needs_owner": False,
+        "points": [{"text": "Jordan asks to move workshop 2 to 14 Oct.", "cites": ["m1"]}]}]}), encoding="utf-8")
+    assert run(capsys, ["messages", "check", "--dir", str(scratch)])[1]["result"]["passed"] == 1
+    code, payload = run(capsys, ["messages", "write", "--vault", str(root), "--dir", str(scratch),
+                                 "--now", "2026-09-30T18:52:00Z"])
+    assert code == 0 and payload["result"]["written"] == ["2026-09-30-messages"]
+
+
+def test_messages_errors_stay_inside_the_envelope(capsys, tmp_path):
+    root = make_vault(tmp_path)
+    code, payload = run(capsys, ["messages", "check", "--dir", str(tmp_path)])
+    assert code == 1 and payload["ok"] is False and "msg_groups" in payload["error"] and payload["hint"]
+
+
+def test_messages_exclude_add_list_remove(capsys, tmp_path):
+    root = make_vault(tmp_path)
+    write_vault_config(root)
+    code, payload = run(capsys, ["messages", "exclude", "add", "--vault", str(root), "--kind", "word",
+                                 "--value", "salaris", "--today", "2026-09-30"])
+    assert code == 0 and payload["result"]["id"] == "x1"
+    assert run(capsys, ["messages", "exclude", "list", "--vault", str(root)])[1]["result"]["exclusions"][0]["value"] == "salaris"
+    assert run(capsys, ["messages", "exclude", "remove", "--vault", str(root), "--id", "x1"])[0] == 0
