@@ -15,7 +15,7 @@ transcripts, inbox drops) and in the **calendar**, but not what happened in
 **Goal: more context, not more tasks.** When the owner opens a session and talks
 about anything, what went on in mail and chat is already in the vault, so the
 session does not have to ask or search M365. Follow-ups and project updates are
-welcome side effects, not the purpose.
+welcome side effects.
 
 **Constraints**
 
@@ -51,7 +51,7 @@ welcome side effects, not the purpose.
 | 9 | **Cost:** page caps per night plus a measured baseline before release; no fixed amount |
 | 10 | **Off by default.** Switched on in `/setup-my-brain` after M365 is connected, or by asking in any session, with an explicit consent question. Switched off the same way |
 | 11 | **No automatic backfill.** The first run starts at yesterday 00:00; "catch up on last week" runs only on request |
-| 12 | Digests live in **their own folder, `25-messages/`**, with `Messages.base`: a new object type and a structure-version bump |
+| 12 | Digests are **machine material, not reading material**: the owner reads mail in Outlook and chat in Teams, and sees the digests' effect, not the digests. They live in **`_messages/`** (the underscore convention of `_heavy-assets/`), hidden from the file list, search and graph. No Base, no project-note section. A new object type and a structure-version bump |
 | 13 | Digests are **kept** like meeting notes. When an exclusion is added later, older digests are cleaned up **only on request**, after the owner confirms |
 | 14 | **New person notes** only for real working relationships: 1:1 chat partners, and direct recipients (To, not CC) of the owner's sent mail with at most 5 recipients. Everyone else is linked only when a note already exists, so People.base's Uncurated view does not flood |
 | 15 | **Digests feed project-state updates without review**, with two guards: only **strong** links queue a project (organisation domain, project name in subject or topic), and everything stage 4 takes from a digest is marked as coming from mail or chat, with a link to the digest |
@@ -95,10 +95,13 @@ when the owner says something like "start reading my mail and Teams":
 Nothing visible. `/evening-sync` runs `/sync-messages` as a stage (§5.1). The
 next morning:
 
-- `25-messages/2026-09-30.md` holds the day, grouped by project, linked in its
-  properties.
-- Each linked project note shows it under **Recent messages**.
+- A project's **Where it stands** reflects what happened in mail and chat, each
+  such item marked as coming from mail or chat with a link to its source. That
+  link is the only way the owner meets a digest, and only when they want the
+  source.
 - Decisions found in mail or chat appear in Decisions.base's **Needs review**.
+- A session asked about a project or a person already knows what was said.
+- The digest itself (`_messages/2026-09-30.md`) is out of sight.
 - The daily note's run summary gets one line: *"Mail and Teams: 34 messages
   read, 6 linked to 3 projects, 5 not linked."* Gaps and failures are named
   there too. The *Not linked* count is the owner's cue to teach a keyword
@@ -137,9 +140,8 @@ is off, M365 is not connected or the account proof fails.
 | `plugin/skills/evening-sync/SKILL.md` | changed | stage 3b; the summary line |
 | `plugin/skills/setup-my-brain/SKILL.md` | changed | the switch-on step (§4.1) |
 | `plugin/lib/vaultlib/updatequeue.py` | changed | strong digest links count as project activity; `messages-7d/30d` person counters (§7.2) |
-| `plugin/lib/vaultlib/projectstate.py` | changed | the `## Recent messages` section |
 | `plugin/lib/vaultlib/project.py`, `cli.py` | changed | `project keywords add/remove/list`, writing the optional `keywords` field (decision 18) |
-| template, ontology, `Messages.base`, migration 003 | changed/new | §8 |
+| template (`_messages/`, hide settings), ontology, migration 003 | changed/new | §8 |
 
 ### 5.3 Data flow of one run
 
@@ -182,7 +184,10 @@ is off, M365 is not connected or the account proof fails.
 
 ### 5.5 The digest
 
-`25-messages/YYYY-MM-DD.md`, one per calendar day of messages:
+`_messages/YYYY-MM-DD.md`, one per calendar day of messages. Its readers are
+Claude sessions and the stage-4 project update; its properties are how a
+session finds what was said about a project or a person, and it is the
+evidence every mail- or chat-derived line elsewhere traces back to:
 
 ```markdown
 ---
@@ -275,9 +280,8 @@ of a hand-kept table:
 
 ### 7.2 What the rest of the vault does with a digest
 
-- **Project notes:** `project state write` gains `## Recent messages`, a
-  Dataview list of digests linking the project (`LIMIT 10`), next to
-  `## Recent meetings`.
+- **Project notes:** no new section (decision 12). Mail and chat reach a
+  project note only through its state update, below.
 - **Project-state updates (decision 15):** the update queue today counts
   **confirmed meetings only** ("triage is the quality gate"). Digests count
   **without** confirmation, a deliberate exception recorded in the ontology,
@@ -289,7 +293,7 @@ of a hand-kept table:
     closed action) is marked as coming from mail or chat and links the digest,
     so the owner always sees the source.
 - **Person notes (decision 16):** no body writes; the digest shows in the
-  person's backlinks. `messages-7d` and `messages-30d` are auto-maintained next
+  person's backlinks (backlinks work into a hidden folder). `messages-7d` and `messages-30d` are auto-maintained next
   to `meetings-7d` / `meetings-30d` by the same metrics pass, counting the
   digest groups the person is linked in, so People.base can sort by who the
   owner actually talks to. A written per-person summary is left to #184.
@@ -301,8 +305,15 @@ of a hand-kept table:
 
 ### 8.1 Structure version 4
 
-- New folder `25-messages/` and `Messages.base` (views: *This week*, *By
-  project*, *Not linked*).
+- New folder `_messages/`, hidden in two places:
+  - the file list: Notebook Navigator's `hiddenFolders` in the template's
+    `.obsidian/plugins/notebook-navigator/data.json` (the setting exists and is
+    empty today);
+  - search, graph and quick switcher: Obsidian's excluded files
+    (`userIgnoreFilters` in `.obsidian/app.json`).
+
+  Wikilinks and backlinks into the folder keep working, and Claude reads it
+  like any other folder. No Base.
 - Ontology: a **Digest** object (`object: digest`, required `date`,
   `projects`, `people`, `counts`; optional `projects-weak`, `entities`, `gaps`,
   `window-from`, `window-to`); Decision's `source` may name a digest; Person
@@ -313,8 +324,10 @@ of a hand-kept table:
 
 ### 8.2 Migration `003-structure-version-4`
 
-Creates the folder and the Base, updates the ontology and `CLAUDE.md` rows.
-Moves nothing, lossless, so `/upgrade-vault` needs no confirmation gate.
+Creates the folder, adds it to both hide settings (merging into whatever the
+owner already has there, never replacing it), updates the ontology and
+`CLAUDE.md` rows. Moves nothing, lossless, so `/upgrade-vault` needs no
+confirmation gate.
 
 ### 8.3 Config
 
@@ -374,7 +387,7 @@ cursor lives in vault state beside `lastsync`, not in config.
 2. **CLI tests** for every new subcommand's envelope.
 3. **Skill contract tests** pinning: no date filter on the Teams feed, mail
    always folder-scoped, never a full-mail read, the caps, stage 3b's place.
-4. **Migration test** for 003 on a structure-3 fixture vault.
+4. **Migration test** for 003 on a structure-3 fixture vault, including hide settings the owner already had (merged, not replaced).
 5. **Cowork run** on a consultant's own account from the dryrun channel, with
    the cost baseline of §9, before anything reaches `sb-dist`.
 
