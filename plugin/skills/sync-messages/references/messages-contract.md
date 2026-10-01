@@ -22,12 +22,18 @@ JSON object per line, keeping only these keys, values verbatim:
 
 `<n>` counts from 1 per source. Every paging loop below also stops when the
 connector returns no next offset or cursor. Never write a page file with no rows; if a call
-returns nothing, write no file. When you stop a source at its page limit while
+returns nothing, write no file. The one exception is a gap (below) whose fetch
+returns no rows at all: write `msg_<source>.gap<id>.p1.payload.json` holding
+exactly `{"moreResults": false}`, so the CLI knows the gap was read and closes
+it. When you stop a source at its page limit while
 the connector still reported more, append one line `{"moreResults": true}` to
 that source's last page.
 
 **Teams.** Call `chat_message_search` with `query: "*"`, `limit: 25`, starting at
-`offset: 0`, then the returned `nextOffset`. A page may hold fewer rows than the
+`offset: 0`, then the returned `nextOffset`. If the first page (`offset: 0`)
+comes back with no results at all, the search index is down, not your chats
+quiet: write no Teams page, treat Teams as failed (pass `--failed teams` to
+build) and go on with mail. A page may hold fewer rows than the
 `limit` you asked for (Teams pages hold 19); never assume a page size, and
 page by `nextOffset`. Never pass a date filter to `chat_message_search`: with
 one it scans chat by chat and is throttled. Keep paging while every result on

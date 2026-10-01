@@ -2206,3 +2206,11 @@ def test_stage_6_reports_the_feed_whenever_it_is_enabled():
             "(ran, skipped or failed)") in stage6
     assert "only when stage 3b ran" not in stage6
     assert "[--auth-error]" in stage6 and "outcome line was `auth-error`" in stage6
+
+
+def test_messages_contract_closes_an_empty_gap_and_fails_an_empty_teams_feed():
+    text = re.sub(r"\s+", " ", read_contract())
+    assert ('write `msg_<source>.gap<id>.p1.payload.json` holding exactly `{"moreResults": false}`'
+            in text)
+    assert "If the first page (`offset: 0`) comes back with no results at all" in text
+    assert "treat Teams as failed (pass `--failed teams` to build)" in text

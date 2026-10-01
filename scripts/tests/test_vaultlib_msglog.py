@@ -654,3 +654,22 @@ def test_status_adds_the_reconnect_line_on_an_auth_error(tmp_path):
     root = make_vault(tmp_path)
     assert msglog.status(root, now="2026-09-30T19:00:00Z", first_run_since=None, auth_error=True) == [
         "I can't reach your mail and Teams \u2014 please reconnect Microsoft 365."]
+
+
+def test_an_empty_gap_fetch_closes_the_gap_end_to_end(tmp_path):
+    """I3: a marker-only gap page reads as zero rows and fills the gap."""
+    root = make_vault(tmp_path)
+    msgstate.advance(root, newest="2026-09-29T18:00:00Z", filled=[], now="2026-09-29T18:50:00Z",
+                     new_gaps=[{"source": "inbox", "from": "2026-09-27T00:00:00Z", "to": "2026-09-28T00:00:00Z"}])
+    gap_id = msgstate.load(root)["gaps"][0]["id"]
+    scratch = tmp_path / "scratch"
+    scratch.mkdir()
+    (scratch / f"msg_inbox.gap{gap_id}.p1.payload.json").write_text('{"moreResults": false}', encoding="utf-8")
+    loaded = msgrows.load(str(scratch))
+    assert loaded["inbox"]["gap_pages"][gap_id] == {"rows": [], "capped": False}
+    result = msglog.build(root, str(scratch), consume=True, **{**KW, "gap_ids": [gap_id]})
+    assert result["filled"] == [gap_id] and result["groups"] == 0
+    (scratch / msglog.CONDENSED_FILE).write_text('{"groups": []}', encoding="utf-8")
+    msglog.check(str(scratch))
+    msglog.write(root, str(scratch), now="2026-09-30T18:52:00Z", **TZ)
+    assert msgstate.load(root)["gaps"] == []
