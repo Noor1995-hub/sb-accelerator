@@ -159,6 +159,32 @@
         "processed"
       ]
     },
+    "message-log": {
+      "enums": {
+        "type": [
+          "message-log"
+        ]
+      },
+      "keys_present": [
+        "projects",
+        "people",
+        "messages-read"
+      ],
+      "optional": [
+        "projects-weak",
+        "entities",
+        "window-from",
+        "window-to",
+        "skipped",
+        "at-limit",
+        "gaps"
+      ],
+      "required": [
+        "type",
+        "date",
+        "updated-at"
+      ]
+    },
     "person": {
       "enums": {
         "relationship": [
@@ -179,7 +205,9 @@
         "created",
         "last-updated",
         "meetings-7d",
-        "meetings-30d"
+        "meetings-30d",
+        "messages-7d",
+        "messages-30d"
       ],
       "required": [
         "person-name",
@@ -217,7 +245,8 @@
         "key-people",
         "next-milestone",
         "next-milestone-date",
-        "state-updated"
+        "state-updated",
+        "keywords"
       ],
       "required": [
         "project-name",

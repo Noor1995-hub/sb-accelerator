@@ -240,10 +240,12 @@ def _resolve_source(root: Path, raw: Optional[str]) -> Optional[str]:
     stem = canonical_stem(raw, field="source")
     found = _find_note(root / MEETINGS_DIR, stem)
     if found is None:
+        found = _find_note(root / vault.MESSAGES_DIR, stem)
+    if found is None:
         raise DecisionError(
-            f"source {stem!r} matches no meeting note at "
-            f"{MEETINGS_DIR}/{stem}.md — omit 'source' and put the provenance "
-            "in the 'why' text, or create the meeting note first"
+            f"source {stem!r} matches no meeting note at {MEETINGS_DIR}/{stem}.md "
+            f"and no log at {vault.MESSAGES_DIR}/{stem}.md — omit 'source' and "
+            "put the provenance in the 'why' text"
         )
     return found.stem
 

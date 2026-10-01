@@ -9,6 +9,7 @@ from pathlib import Path
 from vaultlib import links
 
 from test_vaultlib_dailynote import make_linkable_vault
+from test_vaultlib_vault import make_vault
 
 
 def test_resolve_bare_entity_project_person_meeting_decision_daily(tmp_path):
@@ -88,3 +89,24 @@ def test_normalise_warns_when_display_name_is_missing(tmp_path):
     assert len(warnings) == 1 and "entity-name" in warnings[0]
     # falls back to the slug as display so the link still opens the object
     assert text == "[[40-entities/acme-industries/dossier|acme-industries]]"
+
+
+def test_a_log_resolves_by_stem_and_by_path(tmp_path):
+    root = make_vault(tmp_path)
+    folder = root / "_messages"
+    folder.mkdir()
+    (folder / "2026-09-30-messages.md").write_text("---\ntype: message-log\n---\n", encoding="utf-8")
+    kind, path, key = links.resolve(root, "2026-09-30-messages")
+    assert kind == "message log" and path.name == "2026-09-30-messages.md" and key is None
+    kind, _, _ = links.resolve(root, "_messages/2026-09-30-messages")
+    assert kind == "message log"
+
+
+def test_a_daily_note_and_a_log_never_share_a_stem(tmp_path):
+    root = make_vault(tmp_path)
+    (root / "60-daily-notes").mkdir(exist_ok=True)
+    (root / "60-daily-notes" / "2026-09-30.md").write_text("---\n---\n", encoding="utf-8")
+    (root / "_messages").mkdir()
+    (root / "_messages" / "2026-09-30-messages.md").write_text("---\ntype: message-log\n---\n", encoding="utf-8")
+    assert links.resolve(root, "2026-09-30")[0] == "daily note"
+    assert links.resolve(root, "2026-09-30-messages")[0] == "message log"
