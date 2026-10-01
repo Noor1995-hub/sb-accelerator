@@ -34,7 +34,7 @@ from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple
 
-from . import decision, markdown, naming, vault
+from . import decision, markdown, msglog, msgstate, naming, vault
 
 MEETINGS_DIR = vault.MEETINGS_DIR
 PROJECTS_DIR = vault.PROJECTS_DIR
@@ -154,6 +154,34 @@ def _index_meetings(root: Path) -> Tuple[List[dict], List[str]]:
     return meetings, warnings
 
 
+def _index_logs(root: Path) -> Tuple[List[dict], List[str]]:
+    """Message logs as activity sources. A damaged log warns and is skipped —
+    it must never abort the queue. A project in `projects-weak` never counts."""
+    out: List[dict] = []
+    warnings: List[str] = []
+    folder = root / vault.MESSAGES_DIR
+    for path in sorted(folder.glob("*-messages.md")) if folder.is_dir() else []:
+        rel = f"{vault.MESSAGES_DIR}/{path.name}"
+        try:
+            loaded = msglog.load_log(path)
+        except (msglog.MessagesError, ValueError, OSError) as exc:
+            warnings.append(f"{rel}: {exc}")
+            continue
+        fm, data = loaded["frontmatter"], loaded["data"]
+        weak = set(_slug_list(fm.get("projects-weak"), "projects-weak", rel,
+                              warnings))
+        strong = [p for p in _slug_list(fm.get("projects"), "projects", rel,
+                                        warnings) if p not in weak]
+        out.append({
+            "stem": path.stem,
+            "date": _parse_first_iso_date(fm.get("date")),
+            "updated": _parse_iso_datetime(fm.get("updated-at")),
+            "strong": strong,
+            "people_groups": [p for g in data["groups"] for p in g["people"]],
+        })
+    return out, warnings
+
+
 def _activity(meeting: dict) -> datetime:
     """The moment a confirmed meeting last became new information for its
     projects: its datetime, or its `confirmed-at` stamp when that is later.
@@ -253,6 +281,11 @@ def run(root: Path, today: str, owner: str) -> dict:
     d90 = today_date - timedelta(days=KEY_PEOPLE_WINDOW_DAYS)
 
     meetings, warnings = _index_meetings(root)
+    logs, log_warnings = _index_logs(root)
+    warnings.extend(log_warnings)
+    requeued: Dict[str, List[str]] = {}
+    for entry in msgstate.requeue_take(root):
+        requeued.setdefault(entry["slug"], []).append(entry["log"])
     confirmed = [m for m in meetings
                  if m["review_status"] == "confirmed" and m["date"]]
     # confirmed drives the queue and the self-check; countable drives every
@@ -327,7 +360,11 @@ def run(root: Path, today: str, owner: str) -> dict:
         threshold = (state_updated if state_updated is not None
                      else datetime.combine(last_updated, time.min))
         new_meetings = [m for m in for_project if _activity(m) >= threshold]
-        if new_meetings:
+        new_logs = [d["stem"] for d in logs
+                    if slug in d["strong"] and d["updated"] is not None
+                    and d["updated"] >= threshold]
+        removed = requeued.get(slug, [])
+        if new_meetings or new_logs or removed:
             queue.append({
                 "slug": slug,
                 "indexPath": rel,
@@ -335,8 +372,10 @@ def run(root: Path, today: str, owner: str) -> dict:
                 "lastUpdated": last_updated.isoformat(),
                 "stateUpdated": (state_updated.isoformat(timespec="minutes")
                                  if state_updated is not None else None),
-                "newCount": len(new_meetings),
+                "newCount": len(new_meetings) + len(new_logs),
                 "newFiles": [m["file"] for m in new_meetings],
+                "newLogs": new_logs,
+                "removedSources": removed,
                 "existingDecisions":
                     decision.list_decisions(root, slug)["decisions"],
             })
@@ -361,8 +400,14 @@ def run(root: Path, today: str, owner: str) -> dict:
                  if slug in m["attendees"] and m["date"] > d7)
         m30 = sum(1 for m in countable
                   if slug in m["attendees"] and m["date"] > d30)
+        msg7 = sum(d["people_groups"].count(slug) for d in logs
+                   if d["date"] and d["date"] > d7)
+        msg30 = sum(d["people_groups"].count(slug) for d in logs
+                    if d["date"] and d["date"] > d30)
         updated = _upsert_all(text, {"meetings-7d": str(m7),
-                                     "meetings-30d": str(m30)})
+                                     "meetings-30d": str(m30),
+                                     "messages-7d": str(msg7),
+                                     "messages-30d": str(msg30)})
         if updated != text:
             vault.atomic_write(path, updated)
         people_written += 1

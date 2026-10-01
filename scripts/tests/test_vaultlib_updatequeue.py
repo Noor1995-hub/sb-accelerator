@@ -579,3 +579,95 @@ def test_reconcile_then_queue_picks_up_the_late_tick(tmp_path):
     assert [e["slug"] for e in result["projectsNeedingUpdate"]] == ["alpha"]
     assert result["projectsNeedingUpdate"][0]["newFiles"] == [
         "20-meetings/yesterday.md"]
+
+
+# --- message logs as activity (D1) -----------------------------------------
+
+def vault_with_project_and_owner(tmp_path, slug, state_updated):
+    root = make_vault(tmp_path)
+    write_person(root, "morgan-ellery")
+    write_project(root, slug, state_updated=state_updated)
+    return root
+
+
+def write_log(root, day, groups, updated_at):
+    from vaultlib import msglog
+    data = {"schema": 1, "date": day, "ids": [g["gid"] for g in groups],
+            "groups": groups}
+    projects = sorted({p for g in groups for p in g["projects"]})
+    weak = sorted({p for g in groups for p in g["projects_weak"]})
+    msglog.save_log(root, data, {
+        "type": "message-log", "date": day, "updated-at": updated_at,
+        "projects": projects, "projects-weak": weak,
+        "people": sorted({p for g in groups for p in g["people"]}),
+        "messages-read": len(groups)})
+
+
+def g(gid, projects=(), weak=(), people=()):
+    return {"gid": gid, "key": f"mail:{gid}", "kind": "mail", "label": gid,
+            "chat_type": None, "people": list(people), "names": {},
+            "participants": [], "projects": list(projects),
+            "projects_weak": list(weak), "entities": [],
+            "needs_owner": False,
+            "points": [{"text": "x", "cites": [gid]}]}
+
+
+def test_a_strong_log_after_state_updated_queues_the_project(tmp_path):
+    root = vault_with_project_and_owner(
+        tmp_path, "acme-industries-rollout", "2026-09-29T19:00")
+    write_log(root, "2026-09-30",
+              [g("a1", projects=["acme-industries-rollout"])],
+              "2026-09-30T18:52")
+    queue = updatequeue.run(root, "2026-09-30", "morgan-ellery")[
+        "projectsNeedingUpdate"]
+    assert queue[0]["slug"] == "acme-industries-rollout"
+    assert queue[0]["newLogs"] == ["2026-09-30-messages"]
+    assert queue[0]["newFiles"] == [] and queue[0]["newCount"] == 1
+
+
+def test_a_weak_log_never_queues(tmp_path):
+    root = vault_with_project_and_owner(
+        tmp_path, "acme-industries-rollout", "2026-09-29T19:00")
+    write_log(root, "2026-09-30",
+              [g("a1", projects=["acme-industries-rollout"],
+                 weak=["acme-industries-rollout"])], "2026-09-30T18:52")
+    assert updatequeue.run(root, "2026-09-30", "morgan-ellery")[
+        "projectsNeedingUpdate"] == []
+
+
+def test_a_requeued_project_carries_the_removed_source_once(tmp_path):
+    from vaultlib import msgstate
+    root = vault_with_project_and_owner(
+        tmp_path, "acme-industries-rollout", "2026-10-01T19:00")
+    msgstate.requeue_add(root, "acme-industries-rollout", "2026-09-30-messages")
+    first = updatequeue.run(root, "2026-10-01", "morgan-ellery")[
+        "projectsNeedingUpdate"]
+    assert first[0]["removedSources"] == ["2026-09-30-messages"]
+    assert updatequeue.run(root, "2026-10-01", "morgan-ellery")[
+        "projectsNeedingUpdate"] == []
+
+
+def test_a_damaged_log_warns_and_the_queue_continues(tmp_path):
+    root = vault_with_project_and_owner(
+        tmp_path, "acme-industries-rollout", "2026-09-29T19:00")
+    (root / "_messages").mkdir()
+    (root / "_messages" / "2026-09-30-messages.md").write_text(
+        "---\ntype: message-log\n---\nno data block\n", encoding="utf-8")
+    out = updatequeue.run(root, "2026-09-30", "morgan-ellery")
+    assert any("2026-09-30-messages.md" in w for w in out["warnings"])
+
+
+def test_people_get_message_counters(tmp_path):
+    from vaultlib import markdown, person
+    root = vault_with_project_and_owner(
+        tmp_path, "acme-industries-rollout", "2026-09-29T19:00")
+    person.ensure(root, "Sam Lee", "2026-09-01")
+    write_log(root, "2026-09-30", [g("a1", people=["sam-lee"]),
+                                   g("a2", people=["sam-lee"])],
+              "2026-09-30T18:52")
+    write_log(root, "2026-09-10", [g("b1", people=["sam-lee"])],
+              "2026-09-10T18:52")
+    updatequeue.run(root, "2026-09-30", "morgan-ellery")
+    fm, _ = markdown.split_frontmatter(
+        (root / "50-people" / "sam-lee.md").read_text(encoding="utf-8"))
+    assert (int(fm["messages-7d"]), int(fm["messages-30d"])) == (2, 3)
