@@ -84,11 +84,15 @@ def set_email_if_missing(root: Path, slug: str, email: str) -> bool:
     address = str(email or "").strip().casefold()
     if found is None or "@" not in address:
         return False
-    text = found.read_text(encoding="utf-8")
-    frontmatter, _ = markdown.split_frontmatter(text)
-    if frontmatter.get("email"):
+    try:
+        text = found.read_text(encoding="utf-8")
+        frontmatter, _ = markdown.split_frontmatter(text)
+        if frontmatter.get("email"):
+            return False
+        updated = markdown.upsert_scalar_field(
+            text, "email", markdown.emit_scalar(address, quoted=False))
+    except (ValueError, OSError):
         return False
-    updated = markdown.upsert_scalar_field(text, "email", markdown.emit_scalar(address, quoted=False))
     vault.atomic_write(found, updated)
     return True
 
