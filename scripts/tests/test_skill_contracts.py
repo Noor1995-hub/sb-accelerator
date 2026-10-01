@@ -2154,3 +2154,8 @@ def test_stage4_reads_logs_marks_their_items_and_captures_decisions():
     assert "(mail ·" in flat or "(chat ·" in flat
     assert "removedSources" in flat
     assert flat.index("messages for-project") < flat.index("log-decision")
+    assert "--logs" in flat and "source: <log stem>" in flat
+    assert "unless a meeting or a remaining group still supports it" in flat
+    assert "per the group's `kind`" in flat and "group's `log` field" in flat
+    ld = re.sub(r"\s+", " ", read_skill("log-decision"))
+    assert "message log (`_messages/<YYYY-MM-DD>-messages`)" in ld

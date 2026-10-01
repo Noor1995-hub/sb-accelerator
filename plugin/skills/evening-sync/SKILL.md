@@ -209,8 +209,9 @@ The instructions each subagent gets:
    `python3 "$VAULTLIB" messages for-project --vault "$VAULT" --slug <slug> --logs <comma-separated newLogs>`
    and read the returned groups as input next to the meetings. Every state item
    you take from one (a Hot potato, an Owe, an Awaiting, a closed action) ends
-   with its source marker, `(mail · <link>)` or `(chat · <link>)`, where
-   `<link>` is the group's `link` verbatim. The marker counts toward the item's
+   with its source marker, `(mail · <link>)` or `(chat · <link>)` (`mail` or
+   `chat` per the group's `kind`), where `<link>` is the group's `link`
+   verbatim. The marker counts toward the item's
    word cap (hot potatoes ≤ 30 words, owe and awaiting items ≤ 40), so write
    the item short enough to carry it. When the entry has `removedSources`, drop
    every current item whose marker links one of those logs unless a meeting or
@@ -261,7 +262,8 @@ python3 "$VAULTLIB" project state write --vault "$VAULT" --slug <slug> \
    harvest jottings AND the message log groups read in step 1, then follow
    `${CLAUDE_PLUGIN_ROOT}/skills/log-decision/SKILL.md` in **background mode**
    (`/log-decision <slug> --background`) with those candidates as the
-   source. A decision from a message log group carries `source: <log stem>`.
+   source. A decision from a message log group carries `source: <log stem>`, where `<log stem>` is the
+   group's `log` field.
    Its rules apply unchanged: the material-decision test (commits
    the engagement AND changes a stakeholder's behaviour), dedup against
    `existingDecisions`, supersession only on explicit conflict language,
