@@ -30,7 +30,32 @@ def load(root: Path) -> dict:
         return _empty()
     if not isinstance(state, dict) or state.get("version") != 1:
         return _empty()
-    return {**_empty(), **state}
+    state = {**_empty(), **state}
+    return state if _well_formed(state) else _empty()
+
+
+def _parses(text) -> bool:
+    try:
+        seenevents.parse_now(text)
+    except Exception:
+        return False
+    return True
+
+
+def _well_formed(state: dict) -> bool:
+    if state["cursor"] is not None and not (isinstance(state["cursor"], str) and _parses(state["cursor"])):
+        return False
+    for key in ("gaps", "requeue", "proposed", "closed_unread"):
+        if not isinstance(state[key], list):
+            return False
+    if not isinstance(state["next_gap"], int) or isinstance(state["next_gap"], bool):
+        return False
+    for gap in state["gaps"]:
+        if not isinstance(gap, dict) or any(k not in gap for k in ("id", "source", "from", "to")):
+            return False
+        if not (_parses(gap["from"]) and _parses(gap["to"])):
+            return False
+    return True
 
 
 def save(root: Path, state: dict) -> None:
@@ -44,10 +69,17 @@ def _parse(text: str) -> datetime:
 def cursor(root: Path, *, now: str, timezone, utc_offset, since: Optional[str] = None) -> dict:
     state = load(root)
     now_dt = _parse(now)
+    first_run = state["cursor"] is None and not since
+    dirty = False
     if since:
         start = _parse(since).strftime(_FMT)
     elif state["cursor"]:
         start = state["cursor"]
+        clamp = (now_dt - timedelta(days=GAP_HORIZON_DAYS)).strftime(_FMT)
+        if _parse(start) < _parse(clamp):
+            state["closed_unread"] = state["closed_unread"] + [{"source": "all", "from": start, "to": clamp}]
+            state["cursor"] = start = clamp
+            dirty = True
     else:
         local_now, _ = dates.utc_to_local(now_dt, timezone, utc_offset)
         midnight = datetime.combine(local_now.date() - timedelta(days=1), datetime.min.time())
@@ -60,8 +92,10 @@ def cursor(root: Path, *, now: str, timezone, utc_offset, since: Optional[str] =
     if closed:
         state["gaps"] = open_
         state["closed_unread"] = state["closed_unread"] + closed
+        dirty = True
+    if dirty:
         save(root, state)
-    return {"since": start, "first_run": state["cursor"] is None and not since,
+    return {"since": start, "first_run": first_run,
             "gaps": open_, "closed": closed}
 
 
