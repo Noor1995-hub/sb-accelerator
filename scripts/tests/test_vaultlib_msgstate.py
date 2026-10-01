@@ -83,3 +83,21 @@ def test_a_malformed_state_heals_to_empty(tmp_path):
         assert msgstate.load(root)["gaps"] == []
         out = msgstate.advance(root, newest="2026-09-30T18:40:00Z", new_gaps=[], filled=[], now="2026-09-30T18:50:00Z")
         assert out["cursor"] == "2026-09-30T18:40:00Z"
+
+
+def test_reset_starts_the_feed_afresh_but_keeps_proposals_and_pending_drops(tmp_path):
+    root = make_vault(tmp_path)
+    msgstate.advance(root, newest="2026-09-01T18:00:00Z", filled=[], now="2026-09-01T18:50:00Z",
+                     new_gaps=[{"source": "inbox", "from": "2026-08-30T00:00:00Z", "to": "2026-08-31T00:00:00Z"}])
+    msgstate.requeue_add(root, "acme-rollout", "2026-09-01-messages", at="2026-09-02T10:00")
+    state = msgstate.load(root)
+    state["closed_unread"] = [{"source": "all", "from": "2026-08-20T00:00:00Z", "to": "2026-08-25T00:00:00Z"}]
+    state["proposed"] = [{"keyword": "P-2317", "project": "acme-rollout", "date": "2026-09-01"}]
+    msgstate.save(root, state)
+    msgstate.reset(root)
+    after = msgstate.load(root)
+    assert after["cursor"] is None and after["last_run"] is None
+    assert after["gaps"] == [] and after["closed_unread"] == []
+    assert after["proposed"] == state["proposed"] and after["requeue"] == state["requeue"]
+    first = msgstate.cursor(root, now="2026-10-01T19:00:00Z", timezone="Europe/Brussels", utc_offset=None)
+    assert first["first_run"] is True and first["gaps"] == [] and first["closed"] == []

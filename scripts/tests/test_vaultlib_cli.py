@@ -2454,3 +2454,13 @@ def test_messages_status_takes_auth_error(capsys, tmp_path):
                                  "--auth-error"])
     assert code == 0 and payload["result"]["lines"] == [
         "I can't reach your mail and Teams \u2014 please reconnect Microsoft 365."]
+
+
+def test_messages_reset(capsys, tmp_path):
+    from vaultlib import msgstate
+    root = make_vault(tmp_path)
+    write_vault_config(root)
+    msgstate.advance(root, newest="2026-09-01T18:00:00Z", filled=[], now="2026-09-01T18:50:00Z", new_gaps=[])
+    code, payload = run(capsys, ["messages", "reset", "--vault", str(root)])
+    assert code == 0 and payload["result"] == {"reset": True}
+    assert msgstate.load(root)["cursor"] is None

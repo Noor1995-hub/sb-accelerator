@@ -831,6 +831,9 @@ def build_parser() -> argparse.ArgumentParser:
     _add_vault_argument(m_lines)
     m_lines.add_argument("--lines", required=True)
 
+    m_reset = messages_sub.add_parser("reset", help="start reading afresh (run when switching on)")
+    _add_vault_argument(m_reset)
+
     m_status = messages_sub.add_parser("status", help="plain status lines for the morning block")
     _add_vault_argument(m_status)
     m_status.add_argument("--now", required=True)
@@ -980,6 +983,9 @@ def _dispatch(args: argparse.Namespace) -> int:
             return _ok({"proposal": msglog.keywords_propose(root, today=vault.today_iso(args.today))})
         if args.action == "check-lines":
             return _ok(msglog.check_lines(root, args.lines))
+        if args.action == "reset":
+            msgstate.reset(root)
+            return _ok({"reset": True})
         if args.action == "status":
             return _ok({"lines": msglog.status(root, now=args.now, first_run_since=args.first_run_since,
                                                auth_error=args.auth_error)})

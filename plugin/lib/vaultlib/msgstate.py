@@ -112,6 +112,20 @@ def advance(root: Path, *, newest: Optional[str], new_gaps: List[dict], filled: 
     return {"cursor": state["cursor"], "gaps": state["gaps"]}
 
 
+def reset(root: Path) -> None:
+    """Start the feed afresh, as on the first evening after switching on.
+
+    Clears where reading stands (cursor, last run, open gaps, closed-unread
+    lines), so switching back on after a pause never backfills the pause or
+    reports it as missed mail. Keeps the keyword proposals already made and
+    the requeue: a pending requeue entry is a removal the project state has
+    not dropped yet (a forget before switching off), not reading progress.
+    """
+    state = load(root)
+    state.update({"cursor": None, "last_run": None, "gaps": [], "closed_unread": []})
+    save(root, state)
+
+
 def requeue_add(root: Path, slug: str, log: str, *, at: str) -> None:
     """Queue `slug` for a state update that drops what came from `log`.
 

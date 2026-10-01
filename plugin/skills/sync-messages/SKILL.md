@@ -47,9 +47,12 @@ theirs, and switch nothing on.
 2. On yes:
    ```bash
    python3 "$VAULTLIB" config write --vault "$VAULT" --field messages.enabled --value true
+   python3 "$VAULTLIB" messages reset --vault "$VAULT"
    python3 "$VAULTLIB" config write --vault "$VAULT" --field messages.consented-at --value "<now, YYYY-MM-DDTHH:MM local>"
    python3 "$VAULTLIB" config write --vault "$VAULT" --field messages.scope --value "teams-chats,inbox,sent-items"
    ```
+   `messages reset` makes tonight a first evening: switching back on after a
+   pause starts from today and never reports the pause as missed mail.
 3. Ask: *"Is there anyone or anything I should never read? For example HR
    matters or a private chat. You can also tell me later."* For each answer,
    resolve it and add it as under **What to skip** (below). No answer means

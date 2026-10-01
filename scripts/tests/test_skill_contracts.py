@@ -2214,3 +2214,10 @@ def test_messages_contract_closes_an_empty_gap_and_fails_an_empty_teams_feed():
             in text)
     assert "If the first page (`offset: 0`) comes back with no results at all" in text
     assert "treat Teams as failed (pass `--failed teams` to build)" in text
+
+
+def test_switching_on_resets_the_feed_right_after_enabling_it():
+    on = read_skill("sync-messages").split("## Switching on")[1].split("## Switching off")[0]
+    enabled = on.index("--field messages.enabled --value true")
+    reset = on.index('messages reset --vault "$VAULT"')
+    assert enabled < reset < on.index("--field messages.consented-at")
