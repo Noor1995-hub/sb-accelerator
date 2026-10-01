@@ -2106,6 +2106,7 @@ def test_sync_messages_never_writes_without_the_owner_on_removals():
     assert 'messages forget --vault "$VAULT" --exclusion <id> --apply <ref1>' in flat
     assert "messages forget --exclusion <id> --apply <ref1> --apply <ref2>" in flat
     assert "Shall I keep what I saved so far, or delete it?" in flat
+    assert not re.search(r"forget[^`]*--all[^`]*--apply|forget[^`]*--apply[^`]*--all", flat)
 
 
 def test_sync_messages_unattended_mode_never_asks():

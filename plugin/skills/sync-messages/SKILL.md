@@ -83,9 +83,10 @@ python3 "$VAULTLIB" messages unlink --vault "$VAULT" --log <stem> --gid <gid> --
 python3 "$VAULTLIB" messages cursor --vault "$VAULT" --now "<now UTC>" --timezone "<timezone>" --since "<start>"
 ```
 
-`forget` without `--apply` only finds. To remove, repeat the same target flag
-(`--text`, `--exclusion` or `--all`) and add `--apply <ref>` once per ref the
-owner confirmed. `--logs` stems are the file names in `_messages/` without
+`--text` and `--exclusion` only find without `--apply`. To remove, repeat the
+same target flag and add `--apply <ref>` once per ref the owner confirmed.
+`--all` deletes every saved note at once and is used only when switching off
+after the owner said delete; never combine it with `--apply`. `--logs` stems are the file names in `_messages/` without
 `.md`, most recent first.
 
 | They say | Do |
