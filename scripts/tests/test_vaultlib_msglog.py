@@ -1,7 +1,7 @@
 """Message log build, check, write. Made-up fixtures only."""
 import json
 import pytest
-from vaultlib import markdown, msglog, msgrows, msgstate
+from vaultlib import markdown, msglog, msgrows, msgstate, person
 from test_vaultlib_vault import make_vault
 from test_vaultlib_msgrows import chat, mail, page, teams
 
@@ -498,3 +498,21 @@ def test_one_reply_to_a_list_mail_creates_no_person_notes_end_to_end(tmp_path):
     result = msglog.build(root, str(scratch), consume=False, **KW)
     assert result["created"] == ["priya-nathan"]
     assert sorted(p.stem for p in (root / "50-people").glob("*.md")) == ["priya-nathan"]
+
+
+def test_a_group_chat_with_an_excluded_person_end_to_end(tmp_path):
+    """I1: build over a group chat holding an excluded person keeps none of them."""
+    root = make_vault(tmp_path)
+    person.ensure(root, "Jordan Reyes", "2026-09-01", email="jordan.reyes@acme.example")
+    scratch = tmp_path / "scratch"
+    scratch.mkdir()
+    page(scratch, "msg_chats.p1.payload.json", [chat("c2", "group", None, "sam.lee@acme.example",
+         "jordan.reyes@acme.example", "morgan.ellery@northwind.example")])
+    page(scratch, "msg_teams.p1.payload.json", [
+        teams("t1", "c2", "sam.lee@acme.example", "Lunch at 12?", at="2026-09-30T09:00:00Z"),
+        teams("t2", "c2", "jordan.reyes@acme.example", "private", at="2026-09-30T09:05:00Z")])
+    ex = [{"id": "x1", "kind": "person", "value": "jordan.reyes@acme.example", "label": None, "added": "d"}]
+    result = msglog.build(root, str(scratch), consume=False, **{**KW, "exclusions": ex})
+    payload = (scratch / msgrows.GROUPS_FILE).read_text(encoding="utf-8")
+    assert "jordan" not in payload.casefold()
+    assert result["counts"]["excluded"] == 1 and result["groups"] == 1

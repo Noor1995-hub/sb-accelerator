@@ -165,6 +165,17 @@ def _name(row_from: dict) -> Optional[str]:
     return None
 
 
+def _hidden(address: Optional[str], exclusions: List[dict]) -> bool:
+    """An address the owner excluded: it never shows as a member of a chat."""
+    if not address:
+        return False
+    for ex in exclusions:
+        value = str(ex.get("value") or "").casefold()
+        if ex.get("kind") == "person" and address == value:
+            return True
+    return False
+
+
 def group(loaded: Dict[str, dict], *, exclusions: List[dict], owner_addresses: Set[str],
           timezone, utc_offset) -> Tuple[List[dict], Dict[str, int]]:
     owners = {a.casefold() for a in owner_addresses}
@@ -212,7 +223,11 @@ def group(loaded: Dict[str, dict], *, exclusions: List[dict], owner_addresses: S
             counts["read"] += 1
             if source == "teams":
                 sender = _address(row.get("from"))
-                members = [m for m in (chat or {}).get("members") or []]
+                # An excluded member is removed before anything is built from
+                # the members: participants, names, the topic-less label and
+                # routing never see them.
+                members = [m for m in (chat or {}).get("members") or []
+                           if not _hidden(_address(m), exclusions)]
                 others = sorted({(_name(m) or _address(m)) for m in members
                                  if _address(m) and _address(m) not in owners})
                 chat_type = (chat or {}).get("chatType")

@@ -184,3 +184,21 @@ def test_two_mixed_case_owner_addresses_are_never_participants(scratch):
     for g in groups:
         assert g["participants"] == ["sam.lee@acme.example"]
     assert {g["key"]: g["owner_wrote"] for g in groups} == {"chat:c1": True, "mail:plan": False}
+
+
+JORDAN_OUT = [{"id": "x1", "kind": "person", "value": "jordan.reyes@acme.example", "label": None, "added": "d"}]
+
+
+def test_an_excluded_person_leaves_no_trace_in_a_group_chat(scratch):
+    page(scratch, "msg_chats.p1.payload.json", [chat("c2", "group", None, "sam.lee@acme.example",
+         "jordan.reyes@acme.example", "morgan.ellery@northwind.example")])
+    page(scratch, "msg_teams.p1.payload.json", [
+        teams("t1", "c2", "sam.lee@acme.example", "hi"),
+        teams("t2", "c2", "jordan.reyes@acme.example", "private")])
+    groups, counts = run_group(scratch, JORDAN_OUT)
+    assert len(groups) == 1
+    g = groups[0]
+    assert g["participants"] == ["sam.lee@acme.example"]
+    assert "jordan.reyes@acme.example" not in g["names"] and g["label"] == "Sam Lee"
+    assert [m["id"] for m in g["messages"]] == ["t1"]
+    assert counts["excluded"] == 1 and counts["read"] == 1
