@@ -202,3 +202,21 @@ def test_an_excluded_person_leaves_no_trace_in_a_group_chat(scratch):
     assert "jordan.reyes@acme.example" not in g["names"] and g["label"] == "Sam Lee"
     assert [m["id"] for m in g["messages"]] == ["t1"]
     assert counts["excluded"] == 1 and counts["read"] == 1
+
+
+def test_a_domain_exclusion_applies_to_teams_like_a_person(scratch):
+    ex = [{"id": "x1", "kind": "domain", "value": "hr.example", "label": None, "added": "d"}]
+    page(scratch, "msg_chats.p1.payload.json", [
+        chat("c1", "oneOnOne", None, "pat.quinn@hr.example", "morgan.ellery@northwind.example"),
+        chat("c2", "group", None, "sam.lee@acme.example", "pat.quinn@hr.example",
+             "morgan.ellery@northwind.example")])
+    page(scratch, "msg_teams.p1.payload.json", [
+        teams("t1", "c1", "morgan.ellery@northwind.example", "about my contract"),
+        teams("t2", "c2", "pat.quinn@hr.example", "private"),
+        teams("t3", "c2", "sam.lee@acme.example", "hi")])
+    groups, counts = run_group(scratch, ex)
+    assert [g["key"] for g in groups] == ["chat:c2"]
+    g = groups[0]
+    assert g["participants"] == ["sam.lee@acme.example"] and g["label"] == "Sam Lee"
+    assert [m["id"] for m in g["messages"]] == ["t3"]
+    assert counts["excluded"] == 2

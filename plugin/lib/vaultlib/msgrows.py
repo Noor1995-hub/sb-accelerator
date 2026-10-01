@@ -143,6 +143,11 @@ def is_excluded(source: str, row: dict, chat: Optional[dict], exclusions: List[d
                     return True
                 if _address(row.get("from")) == value:
                     return True
+            if kind == "domain":  # like a person, for everyone at that domain
+                if chat_type == "oneOnOne" and value in {_domain(a) for a in _members(chat)}:
+                    return True
+                if _domain(_address(row.get("from"))) == value:
+                    return True
             if kind == "word" and _word_in(value, str((chat or {}).get("topic") or "")):
                 return True
     return False
@@ -166,12 +171,14 @@ def _name(row_from: dict) -> Optional[str]:
 
 
 def _hidden(address: Optional[str], exclusions: List[dict]) -> bool:
-    """An address the owner excluded: it never shows as a member of a chat."""
+    """An address excluded as a person or by its domain: never a chat member."""
     if not address:
         return False
     for ex in exclusions:
         value = str(ex.get("value") or "").casefold()
         if ex.get("kind") == "person" and address == value:
+            return True
+        if ex.get("kind") == "domain" and _domain(address) == value:
             return True
     return False
 
