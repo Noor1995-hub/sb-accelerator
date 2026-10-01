@@ -540,3 +540,65 @@ def test_m365_home_domains_helper_never_raises_on_missing_config(tmp_path):
     domains, warning = config.m365_home_domains(root)
     assert domains is None
     assert warning
+
+
+def test_a_deployed_config_without_messages_reads_as_off(tmp_path):
+    root = make_vault(tmp_path)
+    write_config(root, valid_config())
+    assert config.read(root)["config"]["messages"] == {
+        "enabled": False, "consented-at": None, "scope": [], "exclusions": []}
+
+
+def test_switching_on_records_consent_and_scope(tmp_path):
+    root = make_vault(tmp_path)
+    write_config(root, valid_config())
+    config.write(root, "messages.enabled", True)
+    config.write(root, "messages.consented-at", "2026-09-30T20:14")
+    config.write(root, "messages.scope", ["teams-chats", "inbox", "sent-items"])
+    settings = config.messages_settings(root)
+    assert settings["enabled"] is True and settings["scope"] == ["teams-chats", "inbox", "sent-items"]
+
+
+def test_an_unknown_scope_is_refused(tmp_path):
+    root = make_vault(tmp_path)
+    write_config(root, valid_config())
+    with pytest.raises(config.ConfigError, match="scope"):
+        config.write(root, "messages.scope", ["teams-channels"])
+
+
+def test_exclusions_get_stable_ids_and_can_be_removed(tmp_path):
+    root = make_vault(tmp_path)
+    write_config(root, valid_config())
+    first = config.exclusion_add(root, kind="person", value="Jordan.Reyes@acme.example",
+                                 label="Jordan Reyes", today="2026-09-30")
+    second = config.exclusion_add(root, kind="word", value="Salaris", label=None, today="2026-09-30")
+    assert (first["id"], first["value"]) == ("x1", "jordan.reyes@acme.example")
+    assert (second["id"], second["value"]) == ("x2", "salaris")
+    config.exclusion_remove(root, "x1")
+    assert [e["id"] for e in config.messages_settings(root)["exclusions"]] == ["x2"]
+
+
+def test_an_exclusion_kind_outside_the_four_is_refused(tmp_path):
+    root = make_vault(tmp_path)
+    write_config(root, valid_config())
+    with pytest.raises(config.ConfigError, match="kind"):
+        config.exclusion_add(root, kind="channel", value="x", label=None, today="2026-09-30")
+
+
+def test_messages_settings_never_raises_on_a_broken_config(tmp_path):
+    root = make_vault(tmp_path)
+    (root / "99-workflow-config" / "config.json").write_text("{", encoding="utf-8")
+    settings = config.messages_settings(root)
+    assert settings["enabled"] is False and settings["warning"]
+
+
+def test_cli_coerces_messages_scope_to_a_list_and_consent_to_a_string(tmp_path, capsys):
+    from vaultlib import cli
+    root = make_vault(tmp_path)
+    write_config(root, valid_config())
+    base = ["config", "write", "--vault", str(root)]
+    cli.main(base + ["--field", "messages.scope", "--value", "Teams-Chats, inbox"])
+    cli.main(base + ["--field", "messages.consented-at", "--value", "2026-09-30T20:14"])
+    got = config.messages_settings(root)
+    assert got["scope"] == ["teams-chats", "inbox"]
+    assert got["consented-at"] == "2026-09-30T20:14"

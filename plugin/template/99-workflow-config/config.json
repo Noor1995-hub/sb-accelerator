@@ -26,7 +26,8 @@
     "from any other domain is hosted in another organisation's tenant, whose",
     "Teams transcripts this account can never read — sync-recordings lists",
     "those occurrences as external and never fetches them. Null disables the",
-    "filter (every listed occurrence is fetched)."
+    "filter (every listed occurrence is fetched).",
+    "messages: the nightly mail and Teams feed (the sync-messages skill). Off until the owner consents; consented-at, scope and exclusions are written by the CLI only."
   ],
   "config-version": 1,
   "timezone": null,
@@ -37,5 +38,6 @@
     "m365": {"enabled": false, "account_hint": null, "home_domains": null}
   },
   "feedback": {"repo": null},
-  "sync": {"start-date": null}
+  "sync": {"start-date": null},
+  "messages": {"enabled": false, "consented-at": null, "scope": [], "exclusions": []}
 }

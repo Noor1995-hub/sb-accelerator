@@ -123,6 +123,11 @@ def check_config(template: Path) -> list[str]:
         problems.append(
             'template config.json must ship sync as {"start-date": null} — '
             "provisioning writes the real date per deployment")
+    if cfg.get("messages") != {"enabled": False, "consented-at": None,
+                               "scope": [], "exclusions": []}:
+        problems.append(
+            "template config.json must ship messages off, with no consent, "
+            "no scope and no exclusions")
     return problems
 
 

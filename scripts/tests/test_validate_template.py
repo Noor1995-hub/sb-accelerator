@@ -61,6 +61,7 @@ def shipping_config() -> dict:
         },
         "feedback": {"repo": None},
         "sync": {"start-date": None},
+        "messages": {"enabled": False, "consented-at": None, "scope": [], "exclusions": []},
     }
 
 
@@ -208,3 +209,12 @@ def test_template_config_must_ship_null_feedback_repo(tmp_path):
     write_template_config(t, cfg)
     problems = main(tmp_path)
     assert any("feedback" in p for p in problems)
+
+
+def test_template_must_ship_messages_off(tmp_path):
+    t = make_populated_template(tmp_path)
+    cfg = shipping_config()
+    cfg["messages"] = {"enabled": True, "consented-at": None, "scope": [], "exclusions": []}
+    write_template_config(t, cfg)
+    problems = main(tmp_path)
+    assert any("messages" in p for p in problems)
