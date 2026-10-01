@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Every evening, read the owner's Outlook mail and Teams chats, condense them into one hidden digest per day in `_messages/`, and let that context flow into project state, decisions, person counters and a short *Mail and Teams* block in the daily note.
+**Goal:** Every evening, read the owner's Outlook mail and Teams chats, condense them into one hidden message log per day in `_messages/`, and let that context flow into project state, decisions, person counters and a short *Mail and Teams* block in the daily note.
 
-**Architecture:** A worker agent fetches connector pages into scratch and condenses; deterministic `vaultlib` modules filter, group, route, check, render and keep state; `/sync-messages` orchestrates and runs as stage 3b of `/evening-sync`. Downstream consumers (update queue, stage 4, recap, health) read digests through one module.
+**Architecture:** A worker agent fetches connector pages into scratch and condenses; deterministic `vaultlib` modules filter, group, route, check, render and keep state; `/sync-messages` orchestrates and runs as stage 3b of `/evening-sync`. Downstream consumers (update queue, stage 4, recap, health) read message logs through one module.
 
 **Tech Stack:** Python 3.11 stdlib (`plugin/lib/vaultlib/`), pytest, Markdown skills and agent definitions under `plugin/`, Obsidian template files.
 
@@ -18,7 +18,7 @@
 - Not read: Teams channels, full mails, attachments. At most 5 full-message reads per night. Mail is always folder-scoped; the Teams feed never gets a date filter (spec decision 5, §5.3).
 - Fixed safety limit: Teams feed 20 pages, mail 8 pages per folder, 5 full reads, at most 40 groups condensed per day (spec §9, §13 C5). Constants, never computed at run time.
 - Exclusions are applied before anything is condensed or stored (spec §6.1).
-- Digests: `_messages/YYYY-MM-DD-messages.md`, `type: digest`, hidden in the file list and search (spec §8.1, §13 C1).
+- Message logs: `_messages/YYYY-MM-DD-messages.md`, `type: message-log`, hidden in the file list and search (spec §8.1, §13 C1).
 - Clean room: tests use made-up fixtures only (`acme.example`, `jordan.reyes@acme.example`); never real mail.
 - Off by default; the template ships `messages.enabled: false`.
 - Each PR touching `plugin/` bumps `plugin/.claude-plugin/plugin.json`; client-visible PRs add a `CHANGELOG.md` line under `Unreleased` ending with the PR number.
@@ -30,7 +30,7 @@
 1. **Graph timestamps in every shape** (`...Z`, 7-digit fractions, no zone): parsed through `m365._parse_graph_dt`, never by hand. Pinned in Task A4.
 2. **A subject that normalises to nothing** (`RE: FW:`, empty): grouped as `(no subject)` per sender, never all into one group. Pinned in Task A4.
 3. **The owner's own addresses** (primary, UPN, alias): never a participant, never a new person note, never routed as a stranger. Pinned in Tasks A4 and A6.
-4. **A digest the owner edited by hand** (data block removed or broken): `messages write` refuses that one digest with a clear error and leaves it untouched; other dates still write. Pinned in Task A8.
+4. **A message log the owner edited by hand** (data block removed or broken): `messages write` refuses that one message log with a clear error and leaves it untouched; other dates still write. Pinned in Task A8.
 5. **Two runs on one night** (manual plus scheduled): message ids never duplicate, the cursor never moves backwards. Pinned in Tasks A7 and A8.
 
 ## Packaging
@@ -55,15 +55,15 @@ Each PR: tests first, then code, then the three CI commands, then `/code-review`
 | `plugin/lib/vaultlib/msgrows.py` (new) | page files in; noise, exclusions, grouping per local day, priority trimming out |
 | `plugin/lib/vaultlib/msgroute.py` (new) | people (address book, email enrichment, creation rule) and project routing (entity domains, names, keywords, stakeholders; strong/weak) |
 | `plugin/lib/vaultlib/msgstate.py` (new) | cursor, open gaps (7-day horizon), requeue list, keyword proposals shown |
-| `plugin/lib/vaultlib/msgdigest.py` (new) | token check, digest data and render, merge, forget, unlink, per-project view, keyword proposals, status lines |
+| `plugin/lib/vaultlib/msglog.py` (new) | token check, message log data and render, merge, forget, unlink, per-project view, keyword proposals, status lines |
 | `plugin/lib/vaultlib/discover.py` | gains public `unsupported_tokens` |
 | `plugin/lib/vaultlib/config.py` | `messages` block: validation, defaults, writable fields, exclusions |
 | `plugin/lib/vaultlib/person.py` | `ensure(..., email=None)`, `set_email_if_missing`, `address_book` |
 | `plugin/lib/vaultlib/project.py` | `keywords_add` / `keywords_remove` / `keywords_list` |
-| `plugin/lib/vaultlib/links.py`, `vault.py` | `digest` kind, `MESSAGES_DIR` |
-| `plugin/lib/vaultlib/decision.py` | `source` may name a digest |
+| `plugin/lib/vaultlib/links.py`, `vault.py` | `log` kind, `MESSAGES_DIR` |
+| `plugin/lib/vaultlib/decision.py` | `source` may name a message log |
 | `plugin/lib/vaultlib/cli.py` | `messages` group, `project keywords`, new config fields |
-| ontology, `schema.json` | Digest object; Person counters; Project `keywords` |
+| ontology, `schema.json` | Message log object; Person counters; Project `keywords` |
 | template + `plugin/migrations/003-structure-version-4/` | `_messages/`, hide settings, structure 4 |
 | `plugin/skills/sync-messages/` (new), `plugin/agents/sync-messages-worker.md` (new) | orchestration and the worker contract |
 | `evening-sync`, `setup-my-brain`, `health-check` SKILL.md | stage 3b/4/6, switch-on, the health number |
@@ -133,49 +133,49 @@ git add plugin/lib/vaultlib/discover.py scripts/tests/test_vaultlib_discover.py
 git commit -m "feat(discover): public unsupported_tokens for plain-string sources (#236)"
 ```
 
-### Task A2: Ontology, schema, links and decision source for digests
+### Task A2: Ontology, schema, links and decision source for message logs
 
 **Files:**
-- Modify: `plugin/template/99-workflow-config/reference/ontology.md` (new `### Digest` block after `### Daily note`, Person and Project blocks, Decision `source` prose, relationship graph, line 11 "Six object types")
+- Modify: `plugin/template/99-workflow-config/reference/ontology.md` (new `### Message log` block after `### Daily note`, Person and Project blocks, Decision `source` prose, relationship graph, line 11 "Six object types")
 - Regenerate: `plugin/lib/vaultlib/schema.json` via `python scripts/compile_ontology.py`
 - Modify: `plugin/lib/vaultlib/vault.py:27-34`, `plugin/lib/vaultlib/links.py:27-83`, `plugin/lib/vaultlib/decision.py:230-248`
 - Test: `scripts/tests/test_vaultlib_links.py`, `scripts/tests/test_vaultlib_decision.py`, `scripts/tests/test_compile_ontology.py` (existing, must stay green)
 
 **Interfaces:**
-- Produces: `vault.MESSAGES_DIR = "_messages"`; `links._classify` returns `("digest", None)` for `_messages/<stem>.md`; `links.resolve(root, "<YYYY-MM-DD>-messages")` resolves a digest; `schema.validate("digest", fm)`; `decision._resolve_source` accepts a digest stem.
+- Produces: `vault.MESSAGES_DIR = "_messages"`; `links._classify` returns `("message log", None)` for `_messages/<stem>.md`; `links.resolve(root, "<YYYY-MM-DD>-messages")` resolves a message log; `schema.validate("message-log", fm)`; `decision._resolve_source` accepts a message log stem.
 
 - [ ] **Step 1: Write the failing tests**
 
 In `scripts/tests/test_vaultlib_links.py`:
 
 ```python
-def test_a_digest_resolves_by_stem_and_by_path(tmp_path):
+def test_a_log_resolves_by_stem_and_by_path(tmp_path):
     root = make_vault(tmp_path)
     folder = root / "_messages"
     folder.mkdir()
-    (folder / "2026-09-30-messages.md").write_text("---\ntype: digest\n---\n", encoding="utf-8")
+    (folder / "2026-09-30-messages.md").write_text("---\ntype: message-log\n---\n", encoding="utf-8")
     kind, path, key = links.resolve(root, "2026-09-30-messages")
-    assert kind == "digest" and path.name == "2026-09-30-messages.md" and key is None
+    assert kind == "message log" and path.name == "2026-09-30-messages.md" and key is None
     kind, _, _ = links.resolve(root, "_messages/2026-09-30-messages")
-    assert kind == "digest"
+    assert kind == "message log"
 
 
-def test_a_daily_note_and_a_digest_never_share_a_stem(tmp_path):
+def test_a_daily_note_and_a_log_never_share_a_stem(tmp_path):
     root = make_vault(tmp_path)
     (root / "60-daily-notes" / "2026-09-30.md").write_text("---\n---\n", encoding="utf-8")
     (root / "_messages").mkdir()
-    (root / "_messages" / "2026-09-30-messages.md").write_text("---\ntype: digest\n---\n", encoding="utf-8")
+    (root / "_messages" / "2026-09-30-messages.md").write_text("---\ntype: message-log\n---\n", encoding="utf-8")
     assert links.resolve(root, "2026-09-30")[0] == "daily note"
-    assert links.resolve(root, "2026-09-30-messages")[0] == "digest"
+    assert links.resolve(root, "2026-09-30-messages")[0] == "message log"
 ```
 
 In `scripts/tests/test_vaultlib_decision.py` (reuse the file's existing project fixture helper; if it is named differently, use the one that creates `30-projects/<slug>/index.md`):
 
 ```python
-def test_source_may_name_a_digest(tmp_path):
+def test_source_may_name_a_log(tmp_path):
     root = vault_with_project(tmp_path, "acme-industries-operating-model")
     (root / "_messages").mkdir()
-    (root / "_messages" / "2026-09-30-messages.md").write_text("---\ntype: digest\n---\n", encoding="utf-8")
+    (root / "_messages" / "2026-09-30-messages.md").write_text("---\ntype: message-log\n---\n", encoding="utf-8")
     assert decision._resolve_source(root, "[[2026-09-30-messages]]") == "2026-09-30-messages"
 ```
 
@@ -184,11 +184,11 @@ In `scripts/tests/test_vaultlib_schema.py` (create if absent):
 ```python
 from vaultlib import schema
 
-def test_digest_schema_requires_its_core_fields():
-    errors = schema.validate("digest", {"type": "digest", "date": "2026-09-30"})
+def test_log_schema_requires_its_core_fields():
+    errors = schema.validate("message-log", {"type": "message-log", "date": "2026-09-30"})
     assert any("updated-at" in e for e in errors)
-    assert schema.validate("digest", {
-        "type": "digest", "date": "2026-09-30", "updated-at": "2026-09-30T18:52",
+    assert schema.validate("message-log", {
+        "type": "message-log", "date": "2026-09-30", "updated-at": "2026-09-30T18:52",
         "projects": [], "people": [], "messages-read": 0}) == []
 
 def test_person_and_project_carry_the_new_optional_fields():
@@ -199,7 +199,7 @@ def test_person_and_project_carry_the_new_optional_fields():
 - [ ] **Step 2: Run them to see them fail**
 
 Run: `python -m pytest scripts/tests/test_vaultlib_links.py scripts/tests/test_vaultlib_decision.py scripts/tests/test_vaultlib_schema.py -q`
-Expected: FAIL (`digest` unknown; `KeyError` in `schema.for_object("digest")`)
+Expected: FAIL (`log` unknown; `KeyError` in `schema.for_object("message-log")`)
 
 - [ ] **Step 3: Implement**
 
@@ -213,13 +213,13 @@ MESSAGES_DIR = "_messages"
 
 ```python
     if parts[0] == vault.MESSAGES_DIR and len(parts) == 2:
-        return "digest", None
+        return "message log", None
 ```
 
 `links.py` `resolve`, append to `candidates` after the daily-note row:
 
 ```python
-        ("digest", root / vault.MESSAGES_DIR / f"{target}.md", None),
+        ("message log", root / vault.MESSAGES_DIR / f"{target}.md", None),
 ```
 
 `decision.py` `_resolve_source`, replace the lookup:
@@ -232,7 +232,7 @@ MESSAGES_DIR = "_messages"
     if found is None:
         raise DecisionError(
             f"source {stem!r} matches no meeting note at {MEETINGS_DIR}/{stem}.md "
-            f"and no digest at {vault.MESSAGES_DIR}/{stem}.md — omit 'source' and "
+            f"and no log at {vault.MESSAGES_DIR}/{stem}.md — omit 'source' and "
             "put the provenance in the 'why' text"
         )
     return found.stem
@@ -241,22 +241,22 @@ MESSAGES_DIR = "_messages"
 (Import `vault` in `decision.py` if it is not imported yet.)
 
 `ontology.md`:
-- Line 11: `Seven object types: **Meeting · Project · Person · Decision · Entity · Daily note · Digest**.`
+- Line 11: `Seven object types: **Meeting · Project · Person · Decision · Entity · Daily note · Message log**.`
 - Project yaml `optional:` gains `keywords`; prose bullet: "`keywords` — optional list of strings (project codes, nicknames, client terms) the message feed routes on; added by `project keywords add`, never by hand."
-- Person yaml `optional:` gains `messages-7d, messages-30d`; prose: "auto-maintained by `sync update-queue` from digests, next to the meeting counters."
-- Decision `source` bullet: "`source` names a note in `20-meetings/` or a digest in `_messages/`."
+- Person yaml `optional:` gains `messages-7d, messages-30d`; prose: "auto-maintained by `sync update-queue` from message logs, next to the meeting counters."
+- Decision `source` bullet: "`source` names a note in `20-meetings/` or a message log in `_messages/`."
 - New block after Daily note:
 
 ````markdown
-### Digest — `_messages/{YYYY-MM-DD}-messages.md` · no Base
+### Message log — `_messages/{YYYY-MM-DD}-messages.md` · no Base
 
 ```yaml
-object: digest
+object: message-log
 required: [type, date, updated-at, projects, people, messages-read]
 optional: [projects-weak, entities, window-from, window-to, skipped,
            at-limit, gaps]
 enums:
-  type: [digest]
+  type: [message-log]
 ```
 
 - One per calendar day of mail and Teams chat, written only by
@@ -266,13 +266,13 @@ enums:
 - `projects[]` holds every linked project; `projects-weak[]` the subset that
   never queues a project-state update. `people[]` and `entities[]` follow the
   Meeting pattern.
-- The body is rendered from the `%% digest-data … %%` block at its end; never
+- The body is rendered from the `%% log-data … %%` block at its end; never
   edit either by hand.
-- **Update-queue exception:** a digest counts as project activity without a
+- **Update-queue exception:** a log counts as project activity without a
   review tick (strong links only), unlike meetings.
 ````
 
-- Relationship graph gains: `Digest —projects[]→ Project`, `Digest —people[]→ Person`, `Decision —source→ Digest`.
+- Relationship graph gains: `Message log —projects[]→ Project`, `Message log —people[]→ Person`, `Decision —source→ Message log`.
 
 Then: `python scripts/compile_ontology.py` (regenerates `schema.json`).
 
@@ -285,7 +285,7 @@ Expected: PASS
 
 ```bash
 git add plugin/template/99-workflow-config/reference/ontology.md plugin/lib/vaultlib/schema.json plugin/lib/vaultlib/vault.py plugin/lib/vaultlib/links.py plugin/lib/vaultlib/decision.py scripts/tests/
-git commit -m "feat(ontology): Digest object, person message counters, project keywords (#236)"
+git commit -m "feat(ontology): Message log object, person message counters, project keywords (#236)"
 ```
 
 ### Task A3: `messages` config block and exclusions
@@ -1409,7 +1409,7 @@ git commit -m "feat(messages): routing to people and projects, project keywords 
   - `load(root) -> dict` (never raises; empty state `{"version": 1, "cursor": None, "gaps": [], "requeue": [], "proposed": [], "last_run": None}`), `save(root, state)`
   - `cursor(root, *, now: str, timezone, utc_offset, since: Optional[str] = None) -> dict` — `{"since", "first_run", "gaps": [open gaps within horizon, each {"id", "source", "from", "to"}], "closed": [gaps dropped as too old]}`; `closed` gaps are removed from state and remembered in `state["closed_unread"]` for the status line
   - `advance(root, *, newest: Optional[str], new_gaps: List[dict], filled: List[str], now: str) -> dict` — monotonic cursor, appends gaps with fresh ids, removes filled ids, stamps `last_run`
-  - `requeue_add(root, slug, digest)`, `requeue_take(root) -> List[dict]` (returns and clears)
+  - `requeue_add(root, slug, log)`, `requeue_take(root) -> List[dict]` (returns and clears)
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1446,7 +1446,7 @@ def test_gaps_get_ids_are_filled_and_close_after_seven_days(tmp_path):
 def test_requeue_is_taken_once(tmp_path):
     root = make_vault(tmp_path)
     msgstate.requeue_add(root, "acme-industries-operating-model", "2026-09-30-messages")
-    assert msgstate.requeue_take(root) == [{"slug": "acme-industries-operating-model", "digest": "2026-09-30-messages"}]
+    assert msgstate.requeue_take(root) == [{"slug": "acme-industries-operating-model", "log": "2026-09-30-messages"}]
     assert msgstate.requeue_take(root) == []
 
 
@@ -1546,9 +1546,9 @@ def advance(root: Path, *, newest: Optional[str], new_gaps: List[dict], filled: 
     return {"cursor": state["cursor"], "gaps": state["gaps"]}
 
 
-def requeue_add(root: Path, slug: str, digest: str) -> None:
+def requeue_add(root: Path, slug: str, log: str) -> None:
     state = load(root)
-    entry = {"slug": slug, "digest": digest}
+    entry = {"slug": slug, "log": log}
     if entry not in state["requeue"]:
         state["requeue"].append(entry)
         save(root, state)
@@ -1576,20 +1576,20 @@ git add plugin/lib/vaultlib/msgstate.py scripts/tests/test_vaultlib_msgstate.py
 git commit -m "feat(messages): cursor, gaps with a 7-day horizon, requeue (#236)"
 ```
 
-### Task A8: `msgdigest` — build, check, write, merge
+### Task A8: `msglog` — build, check, write, merge
 
 **Files:**
-- Create: `plugin/lib/vaultlib/msgdigest.py`
-- Test: `scripts/tests/test_vaultlib_msgdigest.py`
+- Create: `plugin/lib/vaultlib/msglog.py`
+- Test: `scripts/tests/test_vaultlib_msglog.py`
 
 **Interfaces:**
 - Consumes: Tasks A1, A4, A6, A7.
 - Produces:
-  - `CONDENSED_FILE = "msg_condensed.payload.json"`, `CHECKED_FILE = "msg_checked.payload.json"`, `DATA_RE` (the `%% digest-data … %%` block)
+  - `CONDENSED_FILE = "msg_condensed.payload.json"`, `CHECKED_FILE = "msg_checked.payload.json"`, `DATA_RE` (the `%% log-data … %%` block)
   - `build(root, scratch_dir, *, timezone, utc_offset, owner_addresses, home_domains, exclusions, today, since, gap_ids: List[str], consume: bool) -> dict` — writes `GROUPS_FILE`; result `{"groups": n, "by_date": {date: n}, "counts", "skipped": {date: n}, "at_limit": bool, "created": [...], "emails_set": [...], "newest", "new_gaps", "filled", "consumed"}`
   - `check(scratch_dir) -> dict` — reads `GROUPS_FILE` + `CONDENSED_FILE`, writes `CHECKED_FILE`, returns `{"passed": n, "dropped": [{"gid", "text", "reasons"}]}`
   - `write(root, scratch_dir, *, now: str) -> dict` — per date merges into `_messages/<date>-messages.md`, advances the cursor; result `{"written": [stems], "refused": [{"stem", "error"}], "cursor"}`
-  - `load_digest(path) -> dict` — `{"frontmatter", "data"}`; raises `MessagesError` when the data block is missing or broken
+  - `load_log(path) -> dict` — `{"frontmatter", "data"}`; raises `MessagesError` when the data block is missing or broken
   - `render(root, data: dict) -> str`
 
 Condensed file format (written by the worker, Task C1):
@@ -1599,7 +1599,7 @@ Condensed file format (written by the worker, Task C1):
              "points": [{"text": "Jordan asks to move workshop 2 to 14 Oct; you agreed.", "cites": ["m1", "m2"]}]}]}
 ```
 
-Digest data block (inside `%% digest-data` … `%%`), one JSON object:
+Message log data block (inside `%% log-data` … `%%`), one JSON object:
 
 ```json
 {"schema": 1, "date": "2026-09-30", "ids": ["m1", "m2", "t7"],
@@ -1613,10 +1613,10 @@ Digest data block (inside `%% digest-data` … `%%`), one JSON object:
 - [ ] **Step 1: Write the failing tests**
 
 ```python
-"""Digest build, check, write. Made-up fixtures only."""
+"""Message log build, check, write. Made-up fixtures only."""
 import json
 import pytest
-from vaultlib import markdown, msgdigest, msgrows, msgstate
+from vaultlib import markdown, msglog, msgrows, msgstate
 from test_vaultlib_vault import make_vault
 from test_vaultlib_msgrows import chat, mail, page, teams
 
@@ -1642,12 +1642,12 @@ def env(tmp_path):
 def condense(scratch, points, needs_owner=False):
     groups = json.loads((scratch / msgrows.GROUPS_FILE).read_text(encoding="utf-8"))["groups"]
     payload = {"groups": [{"gid": groups[0]["gid"], "needs_owner": needs_owner, "points": points}]}
-    (scratch / msgdigest.CONDENSED_FILE).write_text(json.dumps(payload), encoding="utf-8")
+    (scratch / msglog.CONDENSED_FILE).write_text(json.dumps(payload), encoding="utf-8")
 
 
 def test_build_writes_groups_and_consumes_pages(env):
     root, scratch = env
-    result = msgdigest.build(root, str(scratch), consume=True, **KW)
+    result = msglog.build(root, str(scratch), consume=True, **KW)
     assert result["groups"] == 1 and result["by_date"] == {"2026-09-30": 1}
     assert result["newest"] == "2026-09-30T10:00:00Z"
     assert not list(scratch.glob("msg_inbox.p*"))
@@ -1656,50 +1656,50 @@ def test_build_writes_groups_and_consumes_pages(env):
 
 def test_check_drops_an_invented_point(env):
     root, scratch = env
-    msgdigest.build(root, str(scratch), consume=False, **KW)
+    msglog.build(root, str(scratch), consume=False, **KW)
     condense(scratch, [{"text": "Jordan asks to move workshop 2 to 14 Oct.", "cites": ["m1"]},
                        {"text": "Priya Nathan approved the budget.", "cites": ["m1"]}])
-    result = msgdigest.check(str(scratch))
+    result = msglog.check(str(scratch))
     assert result["passed"] == 1
     assert "Priya Nathan" in " ".join(result["dropped"][0]["reasons"])
 
 
 def test_write_renders_a_hidden_data_block_and_advances_the_cursor(env):
     root, scratch = env
-    msgdigest.build(root, str(scratch), consume=False, **KW)
+    msglog.build(root, str(scratch), consume=False, **KW)
     condense(scratch, [{"text": "Jordan asks to move workshop 2 to 14 Oct.", "cites": ["m1"]}])
-    msgdigest.check(str(scratch))
-    result = msgdigest.write(root, str(scratch), now="2026-09-30T18:52:00Z")
+    msglog.check(str(scratch))
+    result = msglog.write(root, str(scratch), now="2026-09-30T18:52:00Z")
     assert result["written"] == ["2026-09-30-messages"]
     text = (root / "_messages" / "2026-09-30-messages.md").read_text(encoding="utf-8")
     fm, body = markdown.split_frontmatter(text)
-    assert fm["type"] == "digest" and fm["date"] == "2026-09-30" and fm["messages-read"] == 2
-    assert "%% digest-data" in body and "Workshop 2 agenda" in body
+    assert fm["type"] == "message log" and fm["date"] == "2026-09-30" and fm["messages-read"] == 2
+    assert "%% log-data" in body and "Workshop 2 agenda" in body
     assert msgstate.load(root)["cursor"] == "2026-09-30T10:00:00Z"
 
 
 def test_a_second_run_never_duplicates_a_message(env):
     root, scratch = env
     for _ in range(2):
-        msgdigest.build(root, str(scratch), consume=False, **KW)
+        msglog.build(root, str(scratch), consume=False, **KW)
         condense(scratch, [{"text": "Jordan asks to move workshop 2 to 14 Oct.", "cites": ["m1"]}])
-        msgdigest.check(str(scratch))
-        msgdigest.write(root, str(scratch), now="2026-09-30T18:52:00Z")
-    data = msgdigest.load_digest(root / "_messages" / "2026-09-30-messages.md")["data"]
+        msglog.check(str(scratch))
+        msglog.write(root, str(scratch), now="2026-09-30T18:52:00Z")
+    data = msglog.load_log(root / "_messages" / "2026-09-30-messages.md")["data"]
     assert data["ids"] == ["m1", "m2"]
     assert len(data["groups"]) == 1 and len(data["groups"][0]["points"]) == 1
 
 
-def test_a_hand_edited_digest_is_refused_and_left_alone(env):
+def test_a_hand_edited_log_is_refused_and_left_alone(env):
     root, scratch = env
     folder = root / "_messages"
     folder.mkdir()
     edited = folder / "2026-09-30-messages.md"
-    edited.write_text("---\ntype: digest\n---\nmy own notes\n", encoding="utf-8")
-    msgdigest.build(root, str(scratch), consume=False, **KW)
+    edited.write_text("---\ntype: message-log\n---\nmy own notes\n", encoding="utf-8")
+    msglog.build(root, str(scratch), consume=False, **KW)
     condense(scratch, [{"text": "Jordan asks to move workshop 2 to 14 Oct.", "cites": ["m1"]}])
-    msgdigest.check(str(scratch))
-    result = msgdigest.write(root, str(scratch), now="2026-09-30T18:52:00Z")
+    msglog.check(str(scratch))
+    result = msglog.write(root, str(scratch), now="2026-09-30T18:52:00Z")
     assert result["written"] == [] and result["refused"][0]["stem"] == "2026-09-30-messages"
     assert edited.read_text(encoding="utf-8").endswith("my own notes\n")
 
@@ -1708,7 +1708,7 @@ def test_a_capped_source_inside_the_last_day_is_at_limit_not_a_gap(env):
     root, scratch = env
     page(scratch, "msg_inbox.p1.payload.json", [
         mail("m1", "Workshop 2 agenda", "jordan.reyes@acme.example", [], at="2026-09-30T09:00:00Z")], more=True)
-    result = msgdigest.build(root, str(scratch), consume=False, **{**KW, "since": "2026-09-30T00:00:00Z"})
+    result = msglog.build(root, str(scratch), consume=False, **{**KW, "since": "2026-09-30T00:00:00Z"})
     assert result["at_limit"] is True and result["new_gaps"] == []
 
 
@@ -1716,7 +1716,7 @@ def test_a_capped_source_over_a_missed_evening_records_the_older_part_as_a_gap(e
     root, scratch = env
     page(scratch, "msg_inbox.p1.payload.json", [
         mail("m1", "Workshop 2 agenda", "jordan.reyes@acme.example", [], at="2026-09-30T09:00:00Z")], more=True)
-    result = msgdigest.build(root, str(scratch), consume=False, **{**KW, "since": "2026-09-27T00:00:00Z"})
+    result = msglog.build(root, str(scratch), consume=False, **{**KW, "since": "2026-09-27T00:00:00Z"})
     assert result["new_gaps"] == [{"source": "inbox", "from": "2026-09-27T00:00:00Z", "to": "2026-09-29T09:00:00Z"}]
 ```
 
@@ -1724,16 +1724,16 @@ The last test's expected `to` is "24 hours before the oldest seen item in the ca
 
 - [ ] **Step 2: Run them to see them fail**
 
-Run: `python -m pytest scripts/tests/test_vaultlib_msgdigest.py -q`
+Run: `python -m pytest scripts/tests/test_vaultlib_msglog.py -q`
 Expected: FAIL (`ModuleNotFoundError`)
 
-- [ ] **Step 3: Implement `plugin/lib/vaultlib/msgdigest.py`**
+- [ ] **Step 3: Implement `plugin/lib/vaultlib/msglog.py`**
 
 ```python
-"""Digests: one hidden note per calendar day of mail and Teams chat.
+"""Message logs: one hidden note per calendar day of mail and Teams chat.
 
 The body is always rendered from the data block at its end, so merge, forget
-and unlink edit data and re-render; nothing parses prose. A digest whose data
+and unlink edit data and re-render; nothing parses prose. A log whose data
 block is missing or broken was edited by hand and is refused, never rewritten.
 """
 from __future__ import annotations
@@ -1748,12 +1748,12 @@ from . import discover, links, markdown, msgroute, msgrows, msgstate, schema, se
 
 CONDENSED_FILE = "msg_condensed.payload.json"
 CHECKED_FILE = "msg_checked.payload.json"
-DATA_RE = re.compile(r"%% digest-data\n(?P<json>.*?)\n%%\s*\Z", re.S)
+DATA_RE = re.compile(r"%% log-data\n(?P<json>.*?)\n%%\s*\Z", re.S)
 MessagesError = msgrows.MessagesError
 _FMT = "%Y-%m-%dT%H:%M:%SZ"
 
 
-def _digest_path(root: Path, day: str) -> Path:
+def _log_path(root: Path, day: str) -> Path:
     return root / vault.MESSAGES_DIR / f"{day}-messages.md"
 
 
@@ -1839,17 +1839,17 @@ def check(scratch_dir: str) -> dict:
     return {"passed": passed, "dropped": dropped}
 
 
-def load_digest(path: Path) -> dict:
+def load_log(path: Path) -> dict:
     text = path.read_text(encoding="utf-8")
     frontmatter, body = markdown.split_frontmatter(text)
     match = DATA_RE.search(body)
     if not match:
-        raise MessagesError(f"{path.name} has no digest-data block — it was edited by hand; "
+        raise MessagesError(f"{path.name} has no log-data block — it was edited by hand; "
                             "leave it, or move it out of _messages/ to let the feed write that day again")
     try:
         data = json.loads(match["json"])
     except ValueError as exc:
-        raise MessagesError(f"{path.name}: the digest-data block is not valid JSON ({exc})") from exc
+        raise MessagesError(f"{path.name}: the log-data block is not valid JSON ({exc})") from exc
     return {"frontmatter": frontmatter, "data": data}
 
 
@@ -1885,25 +1885,25 @@ def render(root: Path, data: dict, frontmatter: dict) -> str:
         parts.append(f"## {_project_heading(root, head)}\n" + "\n".join(sections[head]))
     if "" in sections:
         parts.append("## Not linked to a project\n" + "\n".join(sections[""]))
-    block = "%% digest-data\n" + json.dumps(data, ensure_ascii=False, sort_keys=True) + "\n%%"
+    block = "%% log-data\n" + json.dumps(data, ensure_ascii=False, sort_keys=True) + "\n%%"
     return markdown.emit_frontmatter(frontmatter) + "\n" + "\n\n".join(parts) + "\n\n" + block + "\n"
 
 
 def _frontmatter_for(data: dict, *, updated_at: str, read: int, skipped: int, at_limit: bool) -> dict:
     projects = sorted({p for g in data["groups"] for p in g["projects"]})
     strong = {p for g in data["groups"] for p in g["projects"] if p not in g["projects_weak"]}
-    return {"type": "digest", "date": data["date"], "updated-at": updated_at,
+    return {"type": "message-log", "date": data["date"], "updated-at": updated_at,
             "projects": projects, "projects-weak": sorted(set(projects) - strong),
             "people": sorted({p for g in data["groups"] for p in g["people"]}),
             "entities": sorted({e for g in data["groups"] for e in g.get("entities", [])}),
             "messages-read": read, "skipped": skipped, "at-limit": at_limit}
 
 
-def save_digest(root: Path, data: dict, frontmatter: dict) -> None:
-    errors = schema.validate("digest", frontmatter)
+def save_log(root: Path, data: dict, frontmatter: dict) -> None:
+    errors = schema.validate("message-log", frontmatter)
     if errors:
         raise MessagesError("; ".join(errors))
-    vault.atomic_write(_digest_path(root, data["date"]), render(root, data, frontmatter))
+    vault.atomic_write(_log_path(root, data["date"]), render(root, data, frontmatter))
 
 
 def write(root: Path, scratch_dir: str, *, now: str) -> dict:
@@ -1916,10 +1916,10 @@ def write(root: Path, scratch_dir: str, *, now: str) -> dict:
         days.setdefault(g["date"], []).append(g)
     written, refused = [], []
     for day, groups in sorted(days.items()):
-        path = _digest_path(root, day)
+        path = _log_path(root, day)
         if path.is_file():
             try:
-                existing = load_digest(path)
+                existing = load_log(path)
             except (MessagesError, ValueError) as exc:
                 refused.append({"stem": path.stem, "error": str(exc)})
                 continue
@@ -1953,7 +1953,7 @@ def write(root: Path, scratch_dir: str, *, now: str) -> dict:
         skipped = int(previous.get("skipped") or 0) + int(built["skipped"].get(day, 0))
         frontmatter = _frontmatter_for(data, updated_at=updated_at, read=read, skipped=skipped,
                                        at_limit=bool(previous.get("at-limit")) or bool(built["at_limit"]))
-        save_digest(root, data, frontmatter)
+        save_log(root, data, frontmatter)
         written.append(path.stem)
     state = msgstate.advance(root, newest=built["newest"], new_gaps=built["new_gaps"],
                              filled=built["filled"], now=now)
@@ -1964,89 +1964,89 @@ Note: `markdown.emit_frontmatter` renders lists inline and bools as `true`/`fals
 
 - [ ] **Step 4: Run the tests**
 
-Run: `python -m pytest scripts/tests/test_vaultlib_msgdigest.py scripts/tests/test_vaultlib_msgrows.py scripts/tests/test_vaultlib_msgstate.py -q`
+Run: `python -m pytest scripts/tests/test_vaultlib_msglog.py scripts/tests/test_vaultlib_msgrows.py scripts/tests/test_vaultlib_msgstate.py -q`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add plugin/lib/vaultlib/msgdigest.py scripts/tests/test_vaultlib_msgdigest.py
-git commit -m "feat(messages): build, check and write hidden day digests (#236)"
+git add plugin/lib/vaultlib/msglog.py scripts/tests/test_vaultlib_msglog.py
+git commit -m "feat(messages): build, check and write hidden day logs (#236)"
 ```
 
 ### Task A9: Forget, unlink, per-project view
 
 **Files:**
-- Modify: `plugin/lib/vaultlib/msgdigest.py`
-- Test: `scripts/tests/test_vaultlib_msgdigest.py`
+- Modify: `plugin/lib/vaultlib/msglog.py`
+- Test: `scripts/tests/test_vaultlib_msglog.py`
 
 **Interfaces:**
 - Produces:
-  - `forget_find(root, *, text: Optional[str] = None, exclusion: Optional[dict] = None) -> List[dict]` — matches `{"ref": "<stem>:<gid>:<i>", "digest", "label", "text"}`; `text` matches a point (casefold substring), an exclusion matches whole groups by participant address, domain, chat key or word in label
-  - `forget_apply(root, refs: List[str]) -> dict` — removes those points (a group left without points is removed), re-renders, requeues the group's strong projects; `forget_all(root) -> dict` deletes every digest and requeues every project they linked
-  - `unlink(root, *, digest: str, gid: str, project: str) -> dict` — removes one project link, re-renders, requeues the project
-  - `for_project(root, *, slug: str, digests: List[str]) -> List[dict]` — the strongly linked groups of those digests: `{"digest", "gid", "label", "kind", "people", "points", "link": "[[_messages/<stem>|<d Mon>]]"}`
+  - `forget_find(root, *, text: Optional[str] = None, exclusion: Optional[dict] = None) -> List[dict]` — matches `{"ref": "<stem>:<gid>:<i>", "log", "label", "text"}`; `text` matches a point (casefold substring), an exclusion matches whole groups by participant address, domain, chat key or word in label
+  - `forget_apply(root, refs: List[str]) -> dict` — removes those points (a group left without points is removed), re-renders, requeues the group's strong projects; `forget_all(root) -> dict` deletes every message log and requeues every project they linked
+  - `unlink(root, *, log: str, gid: str, project: str) -> dict` — removes one project link, re-renders, requeues the project
+  - `for_project(root, *, slug: str, logs: List[str]) -> List[dict]` — the strongly linked groups of those message logs: `{"log", "gid", "label", "kind", "people", "points", "link": "[[_messages/<stem>|<d Mon>]]"}`
 
 - [ ] **Step 1: Write the failing tests**
 
 ```python
-def written_digest(env):
+def written_log(env):
     root, scratch = env
-    msgdigest.build(root, str(scratch), consume=False, **KW)
+    msglog.build(root, str(scratch), consume=False, **KW)
     condense(scratch, [{"text": "Jordan asks to move workshop 2 to 14 Oct.", "cites": ["m1"]}])
-    msgdigest.check(str(scratch))
-    msgdigest.write(root, str(scratch), now="2026-09-30T18:52:00Z")
+    msglog.check(str(scratch))
+    msglog.write(root, str(scratch), now="2026-09-30T18:52:00Z")
     return root
 
 
 def test_forget_finds_then_removes_only_confirmed_points_and_requeues(env):
-    root = written_digest(env)
-    found = msgdigest.forget_find(root, text="workshop 2")
+    root = written_log(env)
+    found = msglog.forget_find(root, text="workshop 2")
     assert [f["ref"].split(":")[0] for f in found] == ["2026-09-30-messages"]
-    msgdigest.forget_apply(root, [found[0]["ref"]])
-    after = msgdigest.load_digest(root / "_messages" / "2026-09-30-messages.md")["data"]
+    msglog.forget_apply(root, [found[0]["ref"]])
+    after = msglog.load_log(root / "_messages" / "2026-09-30-messages.md")["data"]
     assert after["groups"] == []
     assert after["ids"] == ["m1", "m2"]  # ids stay, so the message is never fetched back in
 
 
 def test_forget_by_exclusion_matches_the_person(env):
-    root = written_digest(env)
-    found = msgdigest.forget_find(root, exclusion={"kind": "person", "value": "jordan.reyes@acme.example"})
+    root = written_log(env)
+    found = msglog.forget_find(root, exclusion={"kind": "person", "value": "jordan.reyes@acme.example"})
     assert len(found) == 1
 
 
 def test_unlink_removes_one_project_and_requeues_it(env, monkeypatch):
-    root = written_digest(env)
+    root = written_log(env)
     path = root / "_messages" / "2026-09-30-messages.md"
-    loaded = msgdigest.load_digest(path)
+    loaded = msglog.load_log(path)
     loaded["data"]["groups"][0]["projects"] = ["acme-industries-operating-model"]
-    msgdigest.save_digest(root, loaded["data"], {**loaded["frontmatter"], "projects": ["acme-industries-operating-model"]})
+    msglog.save_log(root, loaded["data"], {**loaded["frontmatter"], "projects": ["acme-industries-operating-model"]})
     gid = loaded["data"]["groups"][0]["gid"]
-    msgdigest.unlink(root, digest="2026-09-30-messages", gid=gid, project="acme-industries-operating-model")
-    assert msgdigest.load_digest(path)["data"]["groups"][0]["projects"] == []
-    assert msgstate.requeue_take(root) == [{"slug": "acme-industries-operating-model", "digest": "2026-09-30-messages"}]
+    msglog.unlink(root, log="2026-09-30-messages", gid=gid, project="acme-industries-operating-model")
+    assert msglog.load_log(path)["data"]["groups"][0]["projects"] == []
+    assert msgstate.requeue_take(root) == [{"slug": "acme-industries-operating-model", "log": "2026-09-30-messages"}]
 
 
 def test_for_project_returns_only_strong_groups(env):
-    root = written_digest(env)
+    root = written_log(env)
     path = root / "_messages" / "2026-09-30-messages.md"
-    loaded = msgdigest.load_digest(path)
+    loaded = msglog.load_log(path)
     loaded["data"]["groups"][0]["projects"] = ["p-strong", "p-weak"]
     loaded["data"]["groups"][0]["projects_weak"] = ["p-weak"]
-    msgdigest.save_digest(root, loaded["data"], loaded["frontmatter"])
-    assert len(msgdigest.for_project(root, slug="p-strong", digests=["2026-09-30-messages"])) == 1
-    assert msgdigest.for_project(root, slug="p-weak", digests=["2026-09-30-messages"]) == []
+    msglog.save_log(root, loaded["data"], loaded["frontmatter"])
+    assert len(msglog.for_project(root, slug="p-strong", logs=["2026-09-30-messages"])) == 1
+    assert msglog.for_project(root, slug="p-weak", logs=["2026-09-30-messages"]) == []
 ```
 
 - [ ] **Step 2: Run them to see them fail**
 
-Run: `python -m pytest scripts/tests/test_vaultlib_msgdigest.py -k "forget or unlink or for_project" -q`
+Run: `python -m pytest scripts/tests/test_vaultlib_msglog.py -k "forget or unlink or for_project" -q`
 Expected: FAIL (`AttributeError`)
 
-- [ ] **Step 3: Implement (append to `msgdigest.py`)**
+- [ ] **Step 3: Implement (append to `msglog.py`)**
 
 ```python
-def _digests(root: Path) -> List[Path]:
+def _logs(root: Path) -> List[Path]:
     folder = root / vault.MESSAGES_DIR
     return sorted(folder.glob("*-messages.md")) if folder.is_dir() else []
 
@@ -2056,7 +2056,7 @@ def _resave(root: Path, path: Path, data: dict, frontmatter: dict) -> None:
         data, updated_at=frontmatter.get("updated-at") or "", read=int(frontmatter.get("messages-read") or 0),
         skipped=int(frontmatter.get("skipped") or 0), at_limit=bool(frontmatter.get("at-limit"))).items()
         if k in ("projects", "projects-weak", "people", "entities")}}
-    save_digest(root, data, fm)
+    save_log(root, data, fm)
 
 
 def _matches(group: dict, exclusion: dict) -> bool:
@@ -2077,16 +2077,16 @@ def forget_find(root: Path, *, text: Optional[str] = None, exclusion: Optional[d
         raise MessagesError("forget needs --text or --exclusion")
     needle = str(text or "").casefold().strip()
     found = []
-    for path in _digests(root):
+    for path in _logs(root):
         try:
-            data = load_digest(path)["data"]
+            data = load_log(path)["data"]
         except MessagesError:
             continue
         for g in data["groups"]:
             whole = exclusion is not None and _matches(g, exclusion)
             for i, point in enumerate(g["points"]):
                 if whole or (needle and needle in point["text"].casefold()):
-                    found.append({"ref": f"{path.stem}:{g['gid']}:{i}", "digest": path.stem,
+                    found.append({"ref": f"{path.stem}:{g['gid']}:{i}", "log": path.stem,
                                   "label": g["label"], "text": point["text"]})
     return found
 
@@ -2099,7 +2099,7 @@ def forget_apply(root: Path, refs: List[str]) -> dict:
     removed = 0
     for stem, by_gid in wanted.items():
         path = root / vault.MESSAGES_DIR / f"{stem}.md"
-        loaded = load_digest(path)
+        loaded = load_log(path)
         data = loaded["data"]
         for g in data["groups"]:
             drop = by_gid.get(g["gid"], set())
@@ -2116,9 +2116,9 @@ def forget_apply(root: Path, refs: List[str]) -> dict:
 
 def forget_all(root: Path) -> dict:
     deleted = []
-    for path in _digests(root):
+    for path in _logs(root):
         try:
-            data = load_digest(path)["data"]
+            data = load_log(path)["data"]
             for g in data["groups"]:
                 for slug in set(g["projects"]) - set(g["projects_weak"]):
                     msgstate.requeue_add(root, slug, path.stem)
@@ -2129,30 +2129,30 @@ def forget_all(root: Path) -> dict:
     return {"deleted": deleted}
 
 
-def unlink(root: Path, *, digest: str, gid: str, project: str) -> dict:
-    path = root / vault.MESSAGES_DIR / f"{digest}.md"
-    loaded = load_digest(path)
+def unlink(root: Path, *, log: str, gid: str, project: str) -> dict:
+    path = root / vault.MESSAGES_DIR / f"{log}.md"
+    loaded = load_log(path)
     for g in loaded["data"]["groups"]:
         if g["gid"] == gid and project in g["projects"]:
             g["projects"] = [p for p in g["projects"] if p != project]
             g["projects_weak"] = [p for p in g["projects_weak"] if p != project]
             _resave(root, path, loaded["data"], loaded["frontmatter"])
-            msgstate.requeue_add(root, project, digest)
+            msgstate.requeue_add(root, project, log)
             return {"unlinked": True}
-    raise MessagesError(f"no group {gid!r} linked to {project!r} in {digest}")
+    raise MessagesError(f"no group {gid!r} linked to {project!r} in {log}")
 
 
-def for_project(root: Path, *, slug: str, digests: List[str]) -> List[dict]:
+def for_project(root: Path, *, slug: str, logs: List[str]) -> List[dict]:
     out = []
-    for stem in digests:
+    for stem in logs:
         path = root / vault.MESSAGES_DIR / f"{stem}.md"
         try:
-            data = load_digest(path)["data"]
+            data = load_log(path)["data"]
         except (MessagesError, OSError):
             continue
         for g in data["groups"]:
             if slug in g["projects"] and slug not in g["projects_weak"] and g["points"]:
-                out.append({"digest": stem, "gid": g["gid"], "label": g["label"], "kind": g["kind"],
+                out.append({"log": stem, "gid": g["gid"], "label": g["label"], "kind": g["kind"],
                             "people": g["people"], "points": [p["text"] for p in g["points"]],
                             "link": f"[[{vault.MESSAGES_DIR}/{stem}|{data['date']}]]"})
     return out
@@ -2162,25 +2162,25 @@ In `write`, keep `key` on stored groups (add `"key"` to the copied fields) so `_
 
 - [ ] **Step 4: Run the tests**
 
-Run: `python -m pytest scripts/tests/test_vaultlib_msgdigest.py -q`
+Run: `python -m pytest scripts/tests/test_vaultlib_msglog.py -q`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add plugin/lib/vaultlib/msgdigest.py scripts/tests/test_vaultlib_msgdigest.py
+git add plugin/lib/vaultlib/msglog.py scripts/tests/test_vaultlib_msglog.py
 git commit -m "feat(messages): forget, unlink and the per-project view (#236)"
 ```
 
 ### Task A10: Keyword proposals, morning-line check, status lines
 
 **Files:**
-- Modify: `plugin/lib/vaultlib/msgdigest.py`
-- Test: `scripts/tests/test_vaultlib_msgdigest.py`
+- Modify: `plugin/lib/vaultlib/msglog.py`
+- Test: `scripts/tests/test_vaultlib_msglog.py`
 
 **Interfaces:**
 - Produces:
-  - `keywords_propose(root, *, today: str) -> Optional[dict]` — `{"keyword", "project", "count"}` or None; at most one per 7 days (recorded in `msgstate` `proposed`); a word or code recurring in ≥3 unlinked groups' labels over the last 7 digests, co-occurring with exactly one active project's people or entity domain in ≥2 of them, not already a keyword or the name of that project
+  - `keywords_propose(root, *, today: str) -> Optional[dict]` — `{"keyword", "project", "count"}` or None; at most one per 7 days (recorded in `msgstate` `proposed`); a word or code recurring in ≥3 unlinked groups' labels over the last 7 message logs, co-occurring with exactly one active project's people or entity domain in ≥2 of them, not already a keyword or the name of that project
   - `check_lines(root, lines_path: str) -> dict` — input `{"lines": [{"kind": "needs-you"|"context", "text", "cites": ["<stem>#<gid>"]}]}`; checks each text against the cited groups' points, labels and names; returns `{"passed": [...], "dropped": [...]}`
   - `status(root, *, now: str, first_run_since: Optional[str]) -> List[str]` — CLI-made plain lines: first morning ("From today, this note also covers your mail and Teams."), behind ("I'm N days behind on your mail; I'll catch up tonight." when an open gap is older than 2 nights), closed ("I couldn't catch up on your mail from 3 to 5 October." once per closed gap, then cleared)
 
@@ -2191,34 +2191,34 @@ def test_status_says_behind_only_after_two_nights_and_closed_gaps_once(tmp_path)
     root = make_vault(tmp_path)
     msgstate.advance(root, newest="2026-09-30T18:00:00Z", filled=[], now="2026-09-30T18:50:00Z",
                      new_gaps=[{"source": "inbox", "from": "2026-09-27T00:00:00Z", "to": "2026-09-27T20:00:00Z"}])
-    assert msgdigest.status(root, now="2026-09-28T19:00:00Z", first_run_since=None) == []
-    lines = msgdigest.status(root, now="2026-09-30T19:00:00Z", first_run_since=None)
+    assert msglog.status(root, now="2026-09-28T19:00:00Z", first_run_since=None) == []
+    lines = msglog.status(root, now="2026-09-30T19:00:00Z", first_run_since=None)
     assert lines == ["I'm 3 days behind on your mail; I'll catch up tonight."]
     msgstate.cursor(root, now="2026-10-06T19:00:00Z", timezone="UTC", utc_offset=None)  # closes it
-    assert msgdigest.status(root, now="2026-10-06T19:00:00Z", first_run_since=None) == [
+    assert msglog.status(root, now="2026-10-06T19:00:00Z", first_run_since=None) == [
         "I couldn't catch up on your mail from 27 September to 27 September."]
-    assert msgdigest.status(root, now="2026-10-07T19:00:00Z", first_run_since=None) == []
+    assert msglog.status(root, now="2026-10-07T19:00:00Z", first_run_since=None) == []
 
 
 def test_status_first_morning_line(tmp_path):
     root = make_vault(tmp_path)
-    assert msgdigest.status(root, now="2026-09-30T19:00:00Z", first_run_since="2026-09-28T22:00:00Z") == [
+    assert msglog.status(root, now="2026-09-30T19:00:00Z", first_run_since="2026-09-28T22:00:00Z") == [
         "From today, this note also covers your mail and Teams."]
 
 
 def test_check_lines_drops_an_unsupported_line(env, tmp_path):
-    root = written_digest(env)
-    gid = msgdigest.load_digest(root / "_messages" / "2026-09-30-messages.md")["data"]["groups"][0]["gid"]
+    root = written_log(env)
+    gid = msglog.load_log(root / "_messages" / "2026-09-30-messages.md")["data"]["groups"][0]["gid"]
     lines = tmp_path / "lines.json"
     lines.write_text(json.dumps({"lines": [
         {"kind": "context", "text": "Jordan Reyes asks to move workshop 2 to 14 Oct.", "cites": [f"2026-09-30-messages#{gid}"]},
         {"kind": "needs-you", "text": "Priya Nathan waits on you.", "cites": [f"2026-09-30-messages#{gid}"]}]}), encoding="utf-8")
-    result = msgdigest.check_lines(root, str(lines))
+    result = msglog.check_lines(root, str(lines))
     assert [l["kind"] for l in result["passed"]] == ["context"]
     assert result["dropped"][0]["text"].startswith("Priya")
 ```
 
-Keyword proposal test (fixture builds three unlinked digests whose labels carry `P-2317` and whose people are stakeholders of one project):
+Keyword proposal test (fixture builds three unlinked message logs whose labels carry `P-2317` and whose people are stakeholders of one project):
 
 ```python
 def test_a_recurring_code_with_one_projects_people_is_proposed_once_a_week(tmp_path):
@@ -2233,19 +2233,19 @@ def test_a_recurring_code_with_one_projects_people_is_proposed_once_a_week(tmp_p
             "people": ["sam-lee"], "names": {}, "participants": ["sam.lee@acme.example"],
             "projects": [], "projects_weak": [], "entities": [], "needs_owner": False,
             "points": [{"text": "x", "cites": [day]}]}]}
-        msgdigest.save_digest(root, data, {"type": "digest", "date": day, "updated-at": f"{day}T18:00",
+        msglog.save_log(root, data, {"type": "message-log", "date": day, "updated-at": f"{day}T18:00",
                                            "projects": [], "people": ["sam-lee"], "messages-read": 1})
-    assert msgdigest.keywords_propose(root, today="2026-09-30") == {
+    assert msglog.keywords_propose(root, today="2026-09-30") == {
         "keyword": "P-2317", "project": "acme-industries-rollout", "count": 3}
-    assert msgdigest.keywords_propose(root, today="2026-10-02") is None
+    assert msglog.keywords_propose(root, today="2026-10-02") is None
 ```
 
 - [ ] **Step 2: Run them to see them fail**
 
-Run: `python -m pytest scripts/tests/test_vaultlib_msgdigest.py -k "status or check_lines or proposed" -q`
+Run: `python -m pytest scripts/tests/test_vaultlib_msglog.py -k "status or check_lines or proposed" -q`
 Expected: FAIL (`AttributeError`)
 
-- [ ] **Step 3: Implement (append to `msgdigest.py`)**
+- [ ] **Step 3: Implement (append to `msglog.py`)**
 
 ```python
 _CODE_RE = re.compile(r"\b(?:[A-Z]{1,5}-?\d{2,}|\d{2,}-[A-Z]{1,5})\b")
@@ -2286,17 +2286,17 @@ def check_lines(root: Path, lines_path: str) -> dict:
             stem, _, gid = str(cite).partition("#")
             if stem not in cache:
                 try:
-                    cache[stem] = load_digest(root / vault.MESSAGES_DIR / f"{stem}.md")["data"]
+                    cache[stem] = load_log(root / vault.MESSAGES_DIR / f"{stem}.md")["data"]
                 except (MessagesError, OSError):
                     cache[stem] = {"groups": []}
             for g in cache[stem]["groups"]:
                 if g["gid"] == gid:
                     sources += [p["text"] for p in g["points"]] + [g["label"]] + [n for n in g["names"].values() if n]
         if line.get("kind") not in ("needs-you", "context") or not sources:
-            dropped.append({**line, "reasons": ["cites no digest group"]})
+            dropped.append({**line, "reasons": ["cites no log group"]})
             continue
         missing = discover.unsupported_tokens(str(line.get("text") or ""), sources)
-        (dropped.append({**line, "reasons": [f"{t!r} is not in the cited digest" for t in missing]})
+        (dropped.append({**line, "reasons": [f"{t!r} is not in the cited log" for t in missing]})
          if missing else passed.append({"kind": line["kind"], "text": line["text"].strip()}))
     return {"passed": passed, "dropped": dropped}
 
@@ -2309,9 +2309,9 @@ def keywords_propose(root: Path, *, today: str) -> Optional[dict]:
     projects = msgroute.active_projects(root)
     taken = {(p["slug"], k.casefold()) for p in projects for k in p["keywords"] + [p["name"]]}
     counts: Dict[str, Dict[str, int]] = {}
-    for path in _digests(root)[-7:]:
+    for path in _logs(root)[-7:]:
         try:
-            data = load_digest(path)["data"]
+            data = load_log(path)["data"]
         except MessagesError:
             continue
         for g in data["groups"]:
@@ -2340,13 +2340,13 @@ def keywords_propose(root: Path, *, today: str) -> Optional[dict]:
 
 - [ ] **Step 4: Run the tests**
 
-Run: `python -m pytest scripts/tests/test_vaultlib_msgdigest.py -q`
+Run: `python -m pytest scripts/tests/test_vaultlib_msglog.py -q`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add plugin/lib/vaultlib/msgdigest.py scripts/tests/test_vaultlib_msgdigest.py
+git add plugin/lib/vaultlib/msglog.py scripts/tests/test_vaultlib_msglog.py
 git commit -m "feat(messages): status lines, morning-line check, keyword proposals (#236)"
 ```
 
@@ -2364,9 +2364,9 @@ git commit -m "feat(messages): status lines, morning-line check, keyword proposa
   - `messages check --dir`
   - `messages write --vault --dir --now`
   - `messages exclude add --vault --kind --value [--label] [--today]` / `remove --vault --id` / `list --vault`
-  - `messages forget --vault (--text T | --exclusion ID | --all) [--apply REF ...]` (without `--apply` it only finds; with `--apply` it removes those refs; `--all` deletes every digest)
-  - `messages unlink --vault --digest --gid --project`
-  - `messages for-project --vault --slug --digests a,b`
+  - `messages forget --vault (--text T | --exclusion ID | --all) [--apply REF ...]` (without `--apply` it only finds; with `--apply` it removes those refs; `--all` deletes every message log)
+  - `messages unlink --vault --log --gid --project`
+  - `messages for-project --vault --slug --logs a,b`
   - `messages keywords-propose --vault [--today]`
   - `messages check-lines --vault --lines FILE`
   - `messages status --vault --now [--first-run-since S]`
@@ -2420,7 +2420,7 @@ Expected: FAIL (argparse `invalid choice: 'messages'`, exit 2)
 
 - [ ] **Step 3: Implement**
 
-Add `msgdigest, msgrows, msgstate` to the `from vaultlib import ...` line. In `build_parser()`:
+Add `msglog, msgrows, msgstate` to the `from vaultlib import ...` line. In `build_parser()`:
 
 ```python
     messages_group = top.add_parser("messages", help="the nightly mail and Teams feed")
@@ -2478,13 +2478,13 @@ Add `msgdigest, msgrows, msgstate` to the `from vaultlib import ...` line. In `b
 
     m_unlink = messages_sub.add_parser("unlink", help="remove one project link from one group")
     _add_vault_argument(m_unlink)
-    for flag in ("--digest", "--gid", "--project"):
+    for flag in ("--log", "--gid", "--project"):
         m_unlink.add_argument(flag, required=True)
 
     m_for_project = messages_sub.add_parser("for-project", help="a project's strongly linked groups")
     _add_vault_argument(m_for_project)
     m_for_project.add_argument("--slug", required=True)
-    m_for_project.add_argument("--digests", required=True, help="comma-separated digest stems")
+    m_for_project.add_argument("--logs", required=True, help="comma-separated log stems")
 
     m_propose = messages_sub.add_parser("keywords-propose", help="at most one keyword proposal a week")
     _add_vault_argument(m_propose)
@@ -2510,15 +2510,15 @@ In `_dispatch`:
         if args.action == "build":
             settings = config.messages_settings(root)
             home_domains, _warning = config.m365_home_domains(root)
-            return _ok(msgdigest.build(
+            return _ok(msglog.build(
                 root, args.dir, timezone=args.timezone, utc_offset=args.utc_offset,
                 owner_addresses=args.owner_address, home_domains=home_domains or [],
                 exclusions=settings["exclusions"], today=args.now[:10], since=args.since,
                 gap_ids=args.gap, consume=args.consume))
         if args.action == "check":
-            return _ok(msgdigest.check(args.dir))
+            return _ok(msglog.check(args.dir))
         if args.action == "write":
-            return _ok(msgdigest.write(root, args.dir, now=args.now))
+            return _ok(msglog.write(root, args.dir, now=args.now))
         if args.action == "exclude":
             if args.exclude_action == "add":
                 return _ok(config.exclusion_add(root, kind=args.kind, value=args.value,
@@ -2528,27 +2528,27 @@ In `_dispatch`:
             return _ok({"exclusions": config.messages_settings(root)["exclusions"]})
         if args.action == "forget":
             if args.all:
-                return _ok(msgdigest.forget_all(root))
+                return _ok(msglog.forget_all(root))
             if args.apply:
-                return _ok(msgdigest.forget_apply(root, args.apply))
+                return _ok(msglog.forget_apply(root, args.apply))
             exclusion = None
             if args.exclusion:
                 matches = [e for e in config.messages_settings(root)["exclusions"] if e["id"] == args.exclusion]
                 if not matches:
                     return _fail(f"no exclusion {args.exclusion!r}", "List them with messages exclude list.")
                 exclusion = matches[0]
-            return _ok({"found": msgdigest.forget_find(root, text=args.text, exclusion=exclusion)})
+            return _ok({"found": msglog.forget_find(root, text=args.text, exclusion=exclusion)})
         if args.action == "unlink":
-            return _ok(msgdigest.unlink(root, digest=args.digest, gid=args.gid, project=args.project))
+            return _ok(msglog.unlink(root, log=args.log, gid=args.gid, project=args.project))
         if args.action == "for-project":
-            stems = [s.strip() for s in args.digests.split(",") if s.strip()]
-            return _ok({"groups": msgdigest.for_project(root, slug=args.slug, digests=stems)})
+            stems = [s.strip() for s in args.logs.split(",") if s.strip()]
+            return _ok({"groups": msglog.for_project(root, slug=args.slug, logs=stems)})
         if args.action == "keywords-propose":
-            return _ok({"proposal": msgdigest.keywords_propose(root, today=vault.today_iso(args.today))})
+            return _ok({"proposal": msglog.keywords_propose(root, today=vault.today_iso(args.today))})
         if args.action == "check-lines":
-            return _ok(msgdigest.check_lines(root, args.lines))
+            return _ok(msglog.check_lines(root, args.lines))
         if args.action == "status":
-            return _ok({"lines": msgdigest.status(root, now=args.now, first_run_since=args.first_run_since)})
+            return _ok({"lines": msglog.status(root, now=args.now, first_run_since=args.first_run_since)})
 ```
 
 In `main`, before the `ValueError` backstop:
@@ -2607,13 +2607,13 @@ Expected: FAIL (`KeyError: 'userIgnoreFilters'`)
 
 - `notebook-navigator/data.json`: `"hiddenFolders": ["_messages"]`.
 - `app.json`: `{"attachmentFolderPath": "70-resources/attachments", "alwaysUpdateLinks": true, "userIgnoreFilters": ["_messages/"]}`.
-- Template `CLAUDE.md` folder table, after the `_heavy-assets/` row: `` | `_messages/` | Mail and Teams digests — machine material for Claude, hidden; you never need to open them | ``. Object-model line: "Seven object types: **Meeting · Project · Person · Decision · Entity · Daily note · Digest**."
+- Template `CLAUDE.md` folder table, after the `_heavy-assets/` row: `` | `_messages/` | Mail and Teams message logs — machine material for Claude, hidden; you never need to open them | ``. Object-model line: "Seven object types: **Meeting · Project · Person · Decision · Entity · Daily note · Message log**."
 - `structure-version`: `4`. `validate_template.py`: `EXPECTED_STRUCTURE_VERSION = "4"`.
 
 - [ ] **Step 4: Run CI checks and `/visual-check`**
 
 Run: `python scripts/validate_template.py && python -m pytest scripts/tests -q`
-Expected: PASS. Then run `/visual-check` on a scratch vault built from the template: `_messages/` must not show in the file list or in search; a link to a digest must open.
+Expected: PASS. Then run `/visual-check` on a scratch vault built from the template: `_messages/` must not show in the file list or in search; a link to a message log must open.
 
 - [ ] **Step 5: Commit**
 
@@ -2699,7 +2699,7 @@ Expected: FAIL (file not found)
 - [ ] **Step 3: Implement `plugin/migrations/003-structure-version-4/migrate.py`**
 
 ```python
-"""Structure version 4: the hidden `_messages/` folder for mail and Teams digests.
+"""Structure version 4: the hidden `_messages/` folder for mail and Teams logs.
 
 Creates `_messages/` and hides it in the file list (Notebook Navigator's
 `hiddenFolders`) and in search, graph and quick switcher (Obsidian's
@@ -2954,14 +2954,14 @@ python3 "$VAULTLIB" messages check --dir "$SCRATCH"
 python3 "$VAULTLIB" messages write --vault "$VAULT" --dir "$SCRATCH" --now "$NOW"
 ```
 
-Never rewrite a dropped point to make it pass. A digest in `refused` was edited
+Never rewrite a dropped point to make it pass. A log in `refused` was edited
 by hand: leave it, and name it in your outcome line.
 
 ## 5. The outcome line (your entire reply)
 
 | Line | When |
 |---|---|
-| `written: <n> digests, <m> groups, <d> dropped points[, at-limit][, refused: <stems>][, failed: <sources>]` | `messages write` returned `ok` |
+| `written: <n> logs, <m> groups, <d> dropped points[, at-limit][, refused: <stems>][, failed: <sources>]` | `messages write` returned `ok` |
 | `nothing-new` | the build found no messages |
 | `fetch-error: <what>` | a step failed and nothing was written |
 | `auth-error` | the connector refused the account |
@@ -3025,7 +3025,7 @@ Expected: FAIL (skill missing)
 ````markdown
 ---
 name: sync-messages
-description: Read the owner's Outlook mail and Teams chats into hidden day digests, and handle switching the feed on or off, exclusions, forgetting and corrections. Triggers when /evening-sync runs its stage 3b, when the user invokes /sync-messages, or asks to start or stop reading their mail and Teams, to skip or forget someone or something, to link a code to a project, or to catch up on mail.
+description: Read the owner's Outlook mail and Teams chats into hidden day logs, and handle switching the feed on or off, exclusions, forgetting and corrections. Triggers when /evening-sync runs its stage 3b, when the user invokes /sync-messages, or asks to start or stop reading their mail and Teams, to skip or forget someone or something, to link a code to a project, or to catch up on mail.
 user_invocable: true
 origin: net-new
 ---
@@ -3034,7 +3034,7 @@ origin: net-new
 
 Keeps the second brain aware of what happens in mail and Teams chat, so a
 session already knows. The owner reads mail in Outlook and chat in Teams; they
-meet the result, not the digests (`_messages/`, hidden).
+meet the result, not the logs (`_messages/`, hidden).
 
 ## Requirements
 
@@ -3050,7 +3050,7 @@ Read `ok` on every call; on failure surface `error` and `hint`.
 ## Speaking to the owner
 
 Plain words, no internal terms: "your mail and Teams", "what I saved", never
-"digest", "group", "cursor" or "exclusion". Read back every change in one
+"log", "group", "cursor" or "exclusion". Read back every change in one
 sentence.
 
 ## Switching on
@@ -3096,7 +3096,7 @@ Read back what happened.
 | "don't read X anymore" | `messages exclude add --kind person\|domain\|chat\|word --value … --label …`; read back what is skipped (a person: their mail and your 1:1 chat; in group chats only their own messages). Then `messages forget --exclusion <id>` and offer what it found: *"I found N older notes about X. Shall I remove those lines?"* Only on yes: `messages forget --apply <ref> …` |
 | "forget what you saved about X" | `messages forget --text "X"`; show the found lines in plain words; on yes `--apply` exactly those refs |
 | "link P-2317 to <project>", or yes to the weekly proposal | `project keywords add --slug <slug> --keyword "P-2317"`; read back |
-| "that mail isn't about <project>" | find the group with `messages for-project --slug <slug> --digests <recent stems>`; `messages unlink --digest … --gid … --project <slug>`; read back that tonight's update drops it |
+| "that mail isn't about <project>" | find the group with `messages for-project --slug <slug> --logs <recent stems>`; `messages unlink --log … --gid … --project <slug>`; read back that tonight's update drops it |
 | "catch up on my mail from last week" | run the workflow below with `--since <start>` on `messages cursor` |
 | about mail from before switching on, or from someone excluded | say plainly you have not read it and why; offer a live search in Outlook |
 | "what don't you read?" | `messages exclude list`, plus the fixed scope: channels and attachments are never read |
@@ -3167,7 +3167,7 @@ def test_evening_sync_runs_messages_between_sync_and_project_updates():
     marker = text.index("### Stage 3b — Mail and Teams")
     assert stage3 < marker < stage4
     assert text.index("skills/sync-messages/SKILL.md") > stage3
-    assert text.index("sync update-queue") > marker, "the queue must see tonight's digests"
+    assert text.index("sync update-queue") > marker, "the queue must see tonight's logs"
 ```
 
 - [ ] **Step 2: Run it to see it fail**
@@ -3186,7 +3186,7 @@ When `messages.enabled` is true in `config read`: run the `/sync-messages`
 workflow (follow `${CLAUDE_PLUGIN_ROOT}/skills/sync-messages/SKILL.md`),
 unattended when this run is unattended. Record its outcome line for the
 summary, and `since` when it reports a first run (stage 6 needs it). It runs
-before the refresh below so tonight's update queue sees tonight's digests. A
+before the refresh below so tonight's update queue sees tonight's logs. A
 failed stage 3b is recorded and the evening continues. Off, or no M365: skip
 with one line in the summary.
 ```
@@ -3269,25 +3269,25 @@ git commit -m "feat(setup-my-brain): offer the mail and Teams feed after the acc
 
 ## PR D — `feat/messages-downstream`
 
-### Task D1: Update queue — digests as activity, requeue, person counters
+### Task D1: Update queue — message logs as activity, requeue, person counters
 
 **Files:**
-- Modify: `plugin/lib/vaultlib/updatequeue.py` (`run`, ~:234-381; new `_index_digests`)
+- Modify: `plugin/lib/vaultlib/updatequeue.py` (`run`, ~:234-381; new `_index_logs`)
 - Test: `scripts/tests/test_vaultlib_updatequeue.py`
 
 **Interfaces:**
-- Consumes: `msgdigest.load_digest`, `msgstate.requeue_take`.
-- Produces: queue entries gain `newDigests: [stems]` and `removedSources: [stems]`; a project with only digest activity is queued; `newCount` counts meetings plus digests; people gain `messages-7d` / `messages-30d` (groups the person is linked in, digests dated after d7 / d30).
+- Consumes: `msglog.load_log`, `msgstate.requeue_take`.
+- Produces: queue entries gain `newLogs: [stems]` and `removedSources: [stems]`; a project with only message log activity is queued; `newCount` counts meetings plus message logs; people gain `messages-7d` / `messages-30d` (groups the person is linked in, message logs dated after d7 / d30).
 
 - [ ] **Step 1: Write the failing tests**
 
 ```python
-def digest(root, day, groups, updated_at):
-    from vaultlib import msgdigest
+def write_log(root, day, groups, updated_at):
+    from vaultlib import msglog
     data = {"schema": 1, "date": day, "ids": [g["gid"] for g in groups], "groups": groups}
     projects = sorted({p for g in groups for p in g["projects"]})
     weak = sorted({p for g in groups for p in g["projects_weak"]})
-    msgdigest.save_digest(root, data, {"type": "digest", "date": day, "updated-at": updated_at,
+    msglog.save_log(root, data, {"type": "message-log", "date": day, "updated-at": updated_at,
         "projects": projects, "projects-weak": weak,
         "people": sorted({p for g in groups for p in g["people"]}), "messages-read": len(groups)})
 
@@ -3299,16 +3299,16 @@ def g(gid, projects=(), weak=(), people=()):
             "points": [{"text": "x", "cites": [gid]}]}
 
 
-def test_a_strong_digest_after_state_updated_queues_the_project(tmp_path):
+def test_a_strong_log_after_state_updated_queues_the_project(tmp_path):
     root = vault_with_project_and_owner(tmp_path, slug="acme-industries-rollout", state_updated="2026-09-29T19:00")
-    digest(root, "2026-09-30", [g("a1", projects=["acme-industries-rollout"])], "2026-09-30T18:52")
+    write_log(root, "2026-09-30", [g("a1", projects=["acme-industries-rollout"])], "2026-09-30T18:52")
     queue = updatequeue.run(root, "2026-09-30", "morgan-ellery")["projectsNeedingUpdate"]
-    assert queue[0]["slug"] == "acme-industries-rollout" and queue[0]["newDigests"] == ["2026-09-30-messages"]
+    assert queue[0]["slug"] == "acme-industries-rollout" and queue[0]["newLogs"] == ["2026-09-30-messages"]
 
 
-def test_a_weak_digest_never_queues(tmp_path):
+def test_a_weak_log_never_queues(tmp_path):
     root = vault_with_project_and_owner(tmp_path, slug="acme-industries-rollout", state_updated="2026-09-29T19:00")
-    digest(root, "2026-09-30", [g("a1", projects=["acme-industries-rollout"], weak=["acme-industries-rollout"])], "2026-09-30T18:52")
+    write_log(root, "2026-09-30", [g("a1", projects=["acme-industries-rollout"], weak=["acme-industries-rollout"])], "2026-09-30T18:52")
     assert updatequeue.run(root, "2026-09-30", "morgan-ellery")["projectsNeedingUpdate"] == []
 
 
@@ -3324,8 +3324,8 @@ def test_a_requeued_project_carries_the_removed_source_once(tmp_path):
 def test_people_get_message_counters(tmp_path):
     root = vault_with_project_and_owner(tmp_path, slug="acme-industries-rollout", state_updated="2026-09-29T19:00")
     person.ensure(root, "Sam Lee", "2026-09-01")
-    digest(root, "2026-09-30", [g("a1", people=["sam-lee"]), g("a2", people=["sam-lee"])], "2026-09-30T18:52")
-    digest(root, "2026-09-10", [g("b1", people=["sam-lee"])], "2026-09-10T18:52")
+    write_log(root, "2026-09-30", [g("a1", people=["sam-lee"]), g("a2", people=["sam-lee"])], "2026-09-30T18:52")
+    write_log(root, "2026-09-10", [g("b1", people=["sam-lee"])], "2026-09-10T18:52")
     updatequeue.run(root, "2026-09-30", "morgan-ellery")
     fm, _ = markdown.split_frontmatter((root / "50-people" / "sam-lee.md").read_text(encoding="utf-8"))
     assert (fm["messages-7d"], fm["messages-30d"]) == (2, 3)
@@ -3335,24 +3335,24 @@ def test_people_get_message_counters(tmp_path):
 
 - [ ] **Step 2: Run them to see them fail**
 
-Run: `python -m pytest scripts/tests/test_vaultlib_updatequeue.py -k "digest or requeue or message_counters" -q`
-Expected: FAIL (`KeyError: 'newDigests'`)
+Run: `python -m pytest scripts/tests/test_vaultlib_updatequeue.py -k "log or requeue or message_counters" -q`
+Expected: FAIL (`KeyError: 'newLogs'`)
 
 - [ ] **Step 3: Implement**
 
 Add to `updatequeue.py`:
 
 ```python
-from . import msgdigest, msgstate
+from . import msglog, msgstate
 
 
-def _index_digests(root: Path) -> Tuple[List[dict], List[str]]:
+def _index_logs(root: Path) -> Tuple[List[dict], List[str]]:
     out, warnings = [], []
     folder = root / vault.MESSAGES_DIR
     for path in sorted(folder.glob("*-messages.md")) if folder.is_dir() else []:
         try:
-            loaded = msgdigest.load_digest(path)
-        except (msgdigest.MessagesError, ValueError, OSError) as exc:
+            loaded = msglog.load_log(path)
+        except (msglog.MessagesError, ValueError, OSError) as exc:
             warnings.append(f"{vault.MESSAGES_DIR}/{path.name}: {exc}")
             continue
         fm, data = loaded["frontmatter"], loaded["data"]
@@ -3367,26 +3367,26 @@ def _index_digests(root: Path) -> Tuple[List[dict], List[str]]:
 In `run`, after `meetings, warnings = _index_meetings(root)`:
 
 ```python
-    digests, digest_warnings = _index_digests(root)
-    warnings.extend(digest_warnings)
+    logs, log_warnings = _index_logs(root)
+    warnings.extend(log_warnings)
     requeued: Dict[str, List[str]] = {}
     for entry in msgstate.requeue_take(root):
-        requeued.setdefault(entry["slug"], []).append(entry["digest"])
+        requeued.setdefault(entry["slug"], []).append(entry["log"])
 ```
 
 In the per-project loop, replace the `new_meetings` / append block with:
 
 ```python
         new_meetings = [m for m in for_project if _activity(m) >= threshold]
-        new_digests = [d["stem"] for d in digests
+        new_logs = [d["stem"] for d in logs
                        if slug in d["strong"] and d["updated"] is not None and d["updated"] >= threshold]
         removed = requeued.get(slug, [])
-        if new_meetings or new_digests or removed:
+        if new_meetings or new_logs or removed:
             queue.append({
                 ...existing keys...,
-                "newCount": len(new_meetings) + len(new_digests),
+                "newCount": len(new_meetings) + len(new_logs),
                 "newFiles": [m["file"] for m in new_meetings],
-                "newDigests": new_digests,
+                "newLogs": new_logs,
                 "removedSources": removed,
             })
 ```
@@ -3394,8 +3394,8 @@ In the per-project loop, replace the `new_meetings` / append block with:
 In the people loop, add:
 
 ```python
-        msg7 = sum(d["people_groups"].count(slug) for d in digests if d["date"] and d["date"] > d7)
-        msg30 = sum(d["people_groups"].count(slug) for d in digests if d["date"] and d["date"] > d30)
+        msg7 = sum(d["people_groups"].count(slug) for d in logs if d["date"] and d["date"] > d7)
+        msg30 = sum(d["people_groups"].count(slug) for d in logs if d["date"] and d["date"] > d30)
         updated = _upsert_all(text, {"meetings-7d": str(m7), "meetings-30d": str(m30),
                                      "messages-7d": str(msg7), "messages-30d": str(msg30)})
 ```
@@ -3411,10 +3411,10 @@ Expected: PASS (re-run once if the known Windows `PermissionError` flake appears
 
 ```bash
 git add plugin/lib/vaultlib/updatequeue.py scripts/tests/test_vaultlib_updatequeue.py
-git commit -m "feat(update-queue): strong digests queue projects; person message counters (#236)"
+git commit -m "feat(update-queue): strong logs queue projects; person message counters (#236)"
 ```
 
-### Task D2: Stage 4 reads digests and captures their decisions
+### Task D2: Stage 4 reads message logs and captures their decisions
 
 **Files:**
 - Modify: `plugin/skills/evening-sync/SKILL.md` (Stage 4 instructions, ~:192-246)
@@ -3423,10 +3423,10 @@ git commit -m "feat(update-queue): strong digests queue projects; person message
 - [ ] **Step 1: Write the failing test**
 
 ```python
-def test_stage4_reads_digests_marks_their_items_and_captures_decisions():
+def test_stage4_reads_logs_marks_their_items_and_captures_decisions():
     stage4 = read_skill("evening-sync").split("## Stage 4")[1].split("## Stage 5")[0]
     flat = re.sub(r"\s+", " ", stage4)
-    assert "messages for-project" in flat and "newDigests" in flat
+    assert "messages for-project" in flat and "newLogs" in flat
     assert "(mail ·" in flat or "(chat ·" in flat
     assert "removedSources" in flat
     assert flat.index("messages for-project") < flat.index("log-decision")
@@ -3434,7 +3434,7 @@ def test_stage4_reads_digests_marks_their_items_and_captures_decisions():
 
 - [ ] **Step 2: Run it to see it fail**
 
-Run: `python -m pytest scripts/tests/test_skill_contracts.py -k stage4_reads_digests -q`
+Run: `python -m pytest scripts/tests/test_skill_contracts.py -k stage4_reads_logs -q`
 Expected: FAIL
 
 - [ ] **Step 3: Edit the Stage 4 instructions**
@@ -3442,17 +3442,17 @@ Expected: FAIL
 Step 1 of the subagent instructions gains:
 
 ```markdown
-   When the entry has `newDigests`, also run
-   `python3 "$VAULTLIB" messages for-project --vault "$VAULT" --slug <slug> --digests <comma-separated newDigests>`
+   When the entry has `newLogs`, also run
+   `python3 "$VAULTLIB" messages for-project --vault "$VAULT" --slug <slug> --logs <comma-separated newLogs>`
    and read the returned groups as input next to the meetings. Every state item
    you take from one (a Hot potato, an Owe, an Awaiting, a closed action) ends
    with its source marker, `(mail · <link>)` or `(chat · <link>)`, where
    `<link>` is the group's `link` verbatim. When the entry has
    `removedSources`, drop every current item whose marker links one of those
-   digests unless a meeting or a remaining group still supports it.
+   logs unless a meeting or a remaining group still supports it.
 ```
 
-Step 4 (decision capture) becomes: "extract candidates from the new meetings, the harvest jottings AND the digest groups read in step 1, then follow `…/log-decision/SKILL.md` in **background mode** … A decision from a digest group carries `source: <digest stem>`." The rest of step 4 is unchanged.
+Step 4 (decision capture) becomes: "extract candidates from the new meetings, the harvest jottings AND the message log groups read in step 1, then follow `…/log-decision/SKILL.md` in **background mode** … A decision from a message log group carries `source: <log stem>`." The rest of step 4 is unchanged.
 
 - [ ] **Step 4: Run the tests**
 
@@ -3463,7 +3463,7 @@ Expected: PASS
 
 ```bash
 git add plugin/skills/evening-sync/SKILL.md scripts/tests/test_skill_contracts.py
-git commit -m "feat(evening-sync): stage 4 reads digests, marks sources, captures decisions (#236)"
+git commit -m "feat(evening-sync): stage 4 reads logs, marks sources, captures decisions (#236)"
 ```
 
 ### Task D3: The *Mail and Teams* block in the daily note
@@ -3515,17 +3515,17 @@ def test_no_messages_field_renders_no_block(tmp_path):
 In `test_vaultlib_dailynote.py`:
 
 ```python
-def test_a_digest_in_the_window_feeds_the_fingerprint(tmp_path):
+def test_a_log_in_the_window_feeds_the_fingerprint(tmp_path):
     root = make_vault(tmp_path)
     (root / "_messages").mkdir()
-    (root / "_messages" / "2026-09-30-messages.md").write_text("---\ntype: digest\n---\n", encoding="utf-8")
+    (root / "_messages" / "2026-09-30-messages.md").write_text("---\ntype: message-log\n---\n", encoding="utf-8")
     names = [n for n, _ in dailynote._fingerprint_inputs(root, date(2026, 9, 30), date(2026, 9, 30))]
     assert "_messages/2026-09-30-messages.md" in names
 ```
 
 - [ ] **Step 2: Run them to see them fail**
 
-Run: `python -m pytest scripts/tests/test_vaultlib_recap.py scripts/tests/test_vaultlib_dailynote.py -k "messages or digest" -q`
+Run: `python -m pytest scripts/tests/test_vaultlib_recap.py scripts/tests/test_vaultlib_dailynote.py -k "messages or log" -q`
 Expected: FAIL (`recap: unknown key(s) ['messages']`)
 
 - [ ] **Step 3: Implement**
@@ -3591,8 +3591,8 @@ Add `"messages": messages` to `clean`. In `render`, right after the glance part:
 `dailynote._fingerprint_inputs`, before `return found`:
 
 ```python
-    digests = root / vault.MESSAGES_DIR
-    for path in sorted(digests.glob("*-messages.md")) if digests.is_dir() else []:
+    logs = root / vault.MESSAGES_DIR
+    for path in sorted(logs.glob("*-messages.md")) if logs.is_dir() else []:
         noted = _iso_prefix_date(path.stem)
         if noted is not None and start <= noted <= end:
             found.append((f"{vault.MESSAGES_DIR}/{path.name}", path))
@@ -3604,8 +3604,8 @@ Stage 6 prose (field list), add:
 - `messages` — only when stage 3b ran. Build it in this order:
   1. `python3 "$VAULTLIB" messages status --vault "$VAULT" --now <now UTC> [--first-run-since <since from stage 3b>]` → `status` (use the lines verbatim).
   2. `python3 "$VAULTLIB" messages keywords-propose --vault "$VAULT" --today <today>` → `keyword_proposal` (the result's `proposal` without `count`, or null).
-  3. `decisions_to_confirm` — the number of decisions stage 4 wrote with a digest `source`.
-  4. `items` — at most 5 lines from tonight's digests: first what needs the owner (groups with **Needs you**), each with one concrete action; then one context line per project. Write them to `$SCRATCH/msg_lines.payload.json` as `{"lines": [{"kind", "text", "cites": ["<digest stem>#<gid>"]}]}`, run `python3 "$VAULTLIB" messages check-lines --vault "$VAULT" --lines "$SCRATCH/msg_lines.payload.json"`, and use only `passed`. No counts, no internal terms.
+  3. `decisions_to_confirm` — the number of decisions stage 4 wrote with a log `source`.
+  4. `items` — at most 5 lines from tonight's logs: first what needs the owner (groups with **Needs you**), each with one concrete action; then one context line per project. Write them to `$SCRATCH/msg_lines.payload.json` as `{"lines": [{"kind", "text", "cites": ["<log stem>#<gid>"]}]}`, run `python3 "$VAULTLIB" messages check-lines --vault "$VAULT" --lines "$SCRATCH/msg_lines.payload.json"`, and use only `passed`. No counts, no internal terms.
 ```
 
 and add the field to the payload example.
@@ -3632,15 +3632,15 @@ git commit -m "feat(daily-note): the Mail and Teams block (#236)"
 - [ ] **Step 1: Write the failing test**
 
 ```python
-def test_health_counts_digests_and_days_at_the_limit(tmp_path):
+def test_health_counts_logs_and_days_at_the_limit(tmp_path):
     root = make_vault(tmp_path)
     folder = root / "_messages"
     folder.mkdir()
     for day, limit in (("2026-09-29", "false"), ("2026-09-30", "true"), ("2026-08-01", "true")):
         (folder / f"{day}-messages.md").write_text(
-            f"---\ntype: digest\ndate: {day}\nat-limit: {limit}\n---\n", encoding="utf-8")
+            f"---\ntype: message-log\ndate: {day}\nat-limit: {limit}\n---\n", encoding="utf-8")
     block = health.report(root, "2026-09-30", window=28)["messages"]
-    assert block["digests_in_window"] == 2 and block["days_at_limit"] == 1
+    assert block["logs_in_window"] == 2 and block["days_at_limit"] == 1
     assert "days at the limit" in health.render(health.report(root, "2026-09-30", window=28))
 ```
 
@@ -3666,10 +3666,10 @@ def _messages_block(root: Path, start: date, end: date, unparsed) -> dict:
         if start <= day <= end:
             in_window += 1
             at_limit += 1 if fm.get("at-limit") is True else 0
-    return {"enabled": enabled, "digests_in_window": in_window, "days_at_limit": at_limit}
+    return {"enabled": enabled, "logs_in_window": in_window, "days_at_limit": at_limit}
 ```
 
-Add `"messages": _messages_block(root, window_start, today_date, unparsed)` to `result` (use the module's existing `_Counter` method name for `unparsed`; if it is not `add()`, call the one the other blocks use). In `render`, a section `## Mail and Teams` with rows `("feed on", …)`, `("digests in window", …)`, `("days at the limit", …)`. Health-check SKILL §2: read out "days at the limit" when the feed is on; one line: "Days at the limit means a day had more mail and chat than the safety limit; a few are fine, many mean the limit should be raised."
+Add `"messages": _messages_block(root, window_start, today_date, unparsed)` to `result` (use the module's existing `_Counter` method name for `unparsed`; if it is not `add()`, call the one the other blocks use). In `render`, a section `## Mail and Teams` with rows `("feed on", …)`, `("logs in window", …)`, `("days at the limit", …)`. Health-check SKILL §2: read out "days at the limit" when the feed is on; one line: "Days at the limit means a day had more mail and chat than the safety limit; a few are fine, many mean the limit should be raised."
 
 `plugin.json`: main+4. `CHANGELOG.md` under `Unreleased`: "Your daily note now has a short *Mail and Teams* block when the feed is on: what needs you first, then what moved per project. (#PR)"
 
@@ -3696,8 +3696,8 @@ git commit -m "feat(health): days the mail and Teams feed hit its limit (#236)"
 - [ ] **Step 3:** Check, by looking only at the vault, never at message content in chat:
   - `_messages/<today>-messages.md` exists and is hidden in the file list and in search;
   - the daily note has the *Mail and Teams* block, at most 5 lines, no counts;
-  - any project with a strong link has "from mail" or "from chat" markers that open the digest;
+  - any project with a strong link has "from mail" or "from chat" markers that open the message log;
   - excluded subjects appear nowhere in `_messages/`;
   - `/health-check` shows the feed's numbers.
 - [ ] **Step 4:** Export the session (`mcp__ccd_session_mgmt__export_transcript`) and run `python scripts/cost_report.py <export.zip>`; record tokens and list price for stage 3b in issue #236.
-- [ ] **Step 5:** Run a second `/evening-sync` the same evening; confirm no duplicates in the digest and the cursor did not move backwards.
+- [ ] **Step 5:** Run a second `/evening-sync` the same evening; confirm no duplicates in the message log and the cursor did not move backwards.

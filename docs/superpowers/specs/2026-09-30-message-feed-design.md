@@ -24,7 +24,7 @@ welcome side effects.
   scheduled evening run.
 - **Separate from setup.** `/setup-my-brain` only switches it on (§4.1); the
   feature itself runs with the evening sync.
-- **Nothing invented.** Every fact in a digest traces to a message that was read.
+- **Nothing invented.** Every fact in a message log traces to a message that was read.
 - **End users are not technical.** They never edit config or JSON, and the
   vault stays readable to them (#235).
 
@@ -45,9 +45,9 @@ welcome side effects.
 | # | Decision |
 |---|---|
 | 1 | Purpose is ambient context for later sessions (§1) |
-| 2 | **One digest per day** with all of that day's mail and chat, linked to projects, people and decisions. No note per thread, no copy per message. Follows the colleague's `m365-daily-capture` |
+| 2 | **One message log per day** with all of that day's mail and chat, linked to projects, people and decisions. No note per thread, no copy per message. Follows the colleague's `m365-daily-capture` |
 | 3 | Why not per thread: the mail search carries no `conversationId` (verified 2026-09-30; only a single-mail read returns it, with the full HTML body), and a Teams chat is not a thread. Multi-day topics are followed through the project and person links |
-| 4 | **Review:** the digest and its links flow in without review. **Decisions** from mail and chat are treated exactly like decisions from meetings: the stage-4 project update applies the same material-decision test (`/log-decision`: commits the engagement *and* changes a stakeholder's behaviour; writing nothing is valid), writes `reviewed: false`, and they are triaged in Decisions.base's Needs review. The daily note only points there (revised 2026-10-01) |
+| 4 | **Review:** the message log and its links flow in without review. **Decisions** from mail and chat are treated exactly like decisions from meetings: the stage-4 project update applies the same material-decision test (`/log-decision`: commits the engagement *and* changes a stakeholder's behaviour; writing nothing is valid), writes `reviewed: false`, and they are triaged in Decisions.base's Needs review. The daily note only points there (revised 2026-10-01) |
 | 5 | **Read:** Teams 1:1, group and meeting chats (message text from the feed); Inbox and Sent Items (the ~250-character summary). **Not read:** Teams channels, full mails, attachments. At most 5 long chat messages per night are opened in full |
 | 6 | **Exclusions** are in the first version: person, domain, chat, word (§6) |
 | 7 | A **person** exclusion drops their mails and the 1:1 chat; in group chats only their own messages are dropped (option A). A **chat** exclusion drops a whole group chat |
@@ -55,12 +55,12 @@ welcome side effects.
 | 9 | **Cost:** page caps per night plus a measured baseline before release; no fixed amount |
 | 10 | **Off by default.** Switched on in `/setup-my-brain` after M365 is connected, or by asking in any session, with an explicit consent question. Switched off the same way |
 | 11 | **No automatic backfill.** The first run starts at yesterday 00:00; "catch up on last week" runs only on request |
-| 12 | Digests are **machine material, not reading material**: the owner reads mail in Outlook and chat in Teams, and sees the digests' effect, not the digests. They live in **`_messages/`** (the underscore convention of `_heavy-assets/`), hidden from the file list, search and graph. No Base, no project-note section. A new object type and a structure-version bump |
-| 13 | Digests are **kept** like meeting notes. Removal only on request, after the owner confirms: when an exclusion is added, with "forget what you saved about X" at any time, and when switching off ("keep or delete what I saved?") (revised 2026-10-01) |
+| 12 | Message logs are **machine material, not reading material**: the owner reads mail in Outlook and chat in Teams, and sees the message logs' effect, not the message logs. They live in **`_messages/`** (the underscore convention of `_heavy-assets/`), hidden from the file list, search and graph. No Base, no project-note section. A new object type and a structure-version bump |
+| 13 | Message logs are **kept** like meeting notes. Removal only on request, after the owner confirms: when an exclusion is added, with "forget what you saved about X" at any time, and when switching off ("keep or delete what I saved?") (revised 2026-10-01) |
 | 14 | **New person notes** only for real working relationships: 1:1 chat partners, and direct recipients (To, not CC) of the owner's sent mail with at most 5 recipients. Everyone else is linked only when a note already exists, so People.base's Uncurated view does not flood |
-| 15 | **Digests feed project-state updates without review**, with three guards: only **strong** links queue a project (organisation domain matching exactly one project, project name or keyword in subject or topic); everything stage 4 takes from a digest is marked as coming from mail or chat, with a link to the digest; and "that's not about this project" in a session removes the link and the item (revised 2026-10-01) |
+| 15 | **Message logs feed project-state updates without review**, with three guards: only **strong** links queue a project (organisation domain matching exactly one project, project name or keyword in subject or topic); everything stage 4 takes from a message log is marked as coming from mail or chat, with a link to the message log; and "that's not about this project" in a session removes the link and the item (revised 2026-10-01) |
 | 16 | **Person notes:** backlinks, plus auto-maintained `messages-7d` / `messages-30d` counters next to the meeting counters. No body writes. A written per-person summary belongs with #184 |
-| 17 | A run crossing midnight adds late items to the previous day's digest, never duplicating one |
+| 17 | A run crossing midnight adds late items to the previous day's message log, never duplicating one |
 | 18 | **The routing learns keywords:** a project carries optional `keywords` (codes, nicknames, client terms). Claude **proposes** them, at most once a week, from words that recur in unlinked messages; the owner only says yes. Adding one by asking still works. The colleague's learning loop, without a table to maintain (revised 2026-10-01) |
 | 19 | **Honest consent** that names what is read, that short notes are **kept** in the vault, and that they hold other people's words; and that the owner can skip, stop and delete at any time (§4.1) |
 | 20 | **The cap is a safety limit, not the normal coverage.** One fixed limit, set generously above a busy executive's day (Teams 20 pages, mail 8 pages per folder; checked in real use through `/health-check`, not measured up front), so a normal day is read in full and only an extreme day hits it. A day that hits it is read **most important first** and the rest of that day is skipped, not owed: no backlog. Catching up happens only after a missed evening or a failing source, for at most 7 days back; anything older is closed with one plain line in the daily note (revised 2026-10-01, replacing "gaps fill themselves") |
@@ -74,7 +74,7 @@ welcome side effects.
   code routes and writes*; the **cursor from data, not the clock**; the noise
   list; the verified tool behaviour (#236 comment). Not kept: the hand-kept
   routing table (replaced by the vault's own projects and people, §7); writing
-  into `10-inbox/` (the digest needs no triage, decision 4); hardcoded paths.
+  into `10-inbox/` (the message log needs no triage, decision 4); hardcoded paths.
 - **Setup discovery (#229).** Kept: page files in scratch, the CLI builds and
   deletes them, the worker keeps raw content out of the main conversation;
   counts from files, not typed by the model; the proposal check against
@@ -119,8 +119,8 @@ Nothing to do in the evening. `/evening-sync` runs `/sync-messages` as a stage
   each with one concrete action; lines that are only context follow, one per
   project. No counts, no "linked", no internal terms.
 - **Needs you** is used only when a message asks the owner for something or
-  waits on them; a quiet day has none. Every line cites its digest group and
-  passes the same check as the digest itself (§5.3 step 5).
+  waits on them; a quiet day has none. Every line cites its message log group and
+  passes the same check as the message log itself (§5.3 step 5).
 - Decisions are triaged in the Base, never in the note: the note only points
   there, and only when one is waiting (decision 4).
 - Once a week at most, a keyword proposal (decision 18): *"Mails about
@@ -136,20 +136,20 @@ Elsewhere, without the owner opening anything:
 
 - A project's **Where it stands** reflects what happened in mail and chat, each
   such item marked as coming from mail or chat with a link to its source. That
-  link is the only way the owner meets a digest, and only when they want the
+  link is the only way the owner meets a message log, and only when they want the
   source.
 - A session asked about a project or a person already knows what was said.
-- The digest itself (`_messages/2026-09-30-messages.md`) is out of sight.
+- The message log itself (`_messages/2026-09-30-messages.md`) is out of sight.
 
 ### 4.3 On request
 
 | The owner says | What happens |
 |---|---|
-| "catch up on my mail from last week" | One run over that window, one digest per calendar day, within the cap, most important first; at most 7 days back (decision 20) |
+| "catch up on my mail from last week" | One run over that window, one message log per calendar day, within the cap, most important first; at most 7 days back (decision 20) |
 | "don't read my chats with Jordan anymore" | Exclusion added; read back: *"From tonight, mails to or from jordan@… and your 1:1 chat with Jordan are skipped. In group chats, only Jordan's own messages are skipped."* Then: *"I found 4 older notes that mention Jordan. Shall I remove those lines?"* Nothing changes without a yes |
-| "forget what you saved about the reorganisation" | The lines in digests that match are shown in plain words; only the confirmed ones are removed (decision 13) |
-| "link P-2317 to Operating model", or yes to a proposal | Keyword added to that project; read back: *"From tonight, mails and chats with 'P-2317' in the subject or chat name are linked to Operating model."* Earlier digests are not re-linked |
-| "that mail isn't about Operating model" | The link is removed from that digest group, and the project is queued so tonight's update drops the item (decision 15) |
+| "forget what you saved about the reorganisation" | The lines in message logs that match are shown in plain words; only the confirmed ones are removed (decision 13) |
+| "link P-2317 to Operating model", or yes to a proposal | Keyword added to that project; read back: *"From tonight, mails and chats with 'P-2317' in the subject or chat name are linked to Operating model."* Earlier message logs are not re-linked |
+| "that mail isn't about Operating model" | The link is removed from that message log group, and the project is queued so tonight's update drops the item (decision 15) |
 | "what did Jordan mail me in August?" (before switching on, or excluded) | *"I haven't read that, because [it was before you switched this on / you asked me to skip Jordan]. Shall I search Outlook for it now?"* (decision 23) |
 | "what don't you read?" | The scope and every exclusion, in plain words |
 | "stop reading my mail and Teams" | *"Shall I keep what I saved so far, or delete it?"* Then switched off; read back (decision 13) |
@@ -172,13 +172,13 @@ is off, M365 is not connected or the account proof fails.
 | `plugin/skills/sync-messages/SKILL.md` | new skill | orchestrates one run; interactive mode for on-request runs, unattended under `/evening-sync` |
 | `plugin/skills/sync-messages/references/messages-contract.md` | new reference | the worker's calls, paging, caps, kept keys, outcome line |
 | `plugin/agents/sync-messages-worker.md` | new agent | fetches, condenses, writes through the CLI; replies with counts only |
-| `plugin/lib/vaultlib/messages.py` | new module | cursor, window, noise and exclusion filters, grouping, routing, digest render, scrub |
+| `plugin/lib/vaultlib/messages.py` | new module | cursor, window, noise and exclusion filters, grouping, routing, message log render, scrub |
 | `plugin/lib/vaultlib/cli.py` | changed | `messages cursor`, `messages build`, `messages check`, `messages write`, `messages exclude add/remove/list`, `messages scrub`, `messages unlink`, `messages forget`, `messages keywords-propose` |
-| `plugin/skills/evening-sync/SKILL.md` | changed | stage 3b; stage 4 reads digest sections and applies the decision test to them; stage 6 writes the *Mail and Teams* block |
-| `plugin/lib/vaultlib/dailynote.py` | changed | renders the *Mail and Teams* block (§4.2) from a payload whose lines cite digest groups |
+| `plugin/skills/evening-sync/SKILL.md` | changed | stage 3b; stage 4 reads message log sections and applies the decision test to them; stage 6 writes the *Mail and Teams* block |
+| `plugin/lib/vaultlib/dailynote.py` | changed | renders the *Mail and Teams* block (§4.2) from a payload whose lines cite message log groups |
 | `plugin/skills/setup-my-brain/SKILL.md` | changed | the switch-on step (§4.1) |
 | `plugin/lib/vaultlib/health.py`, `/health-check` | changed | one content-free number: days that hit the limit (§9) |
-| `plugin/lib/vaultlib/updatequeue.py` | changed | strong digest links count as project activity; `messages-7d/30d` person counters (§7.2) |
+| `plugin/lib/vaultlib/updatequeue.py` | changed | strong message log links count as project activity; `messages-7d/30d` person counters (§7.2) |
 | `plugin/lib/vaultlib/project.py`, `cli.py` | changed | `project keywords add/remove/list`, writing the optional `keywords` field (decision 18) |
 | template (`_messages/`, hide settings), ontology, migration 003 | changed/new | §8 |
 
@@ -209,7 +209,7 @@ is off, M365 is not connected or the account proof fails.
 5. **Check** (CLI). `messages check` applies the `discover check` token rule:
    every name, number, address, domain and quoted title in a point must occur
    in the cited messages. A failing point is dropped, never rewritten.
-6. **Write** (CLI). `messages write` renders the digest (§5.5), records any
+6. **Write** (CLI). `messages write` renders the message log (§5.5), records any
    gap, and advances the cursor to the newest item seen.
 7. **Report.** The worker replies with one outcome line of counts; the skill
    sweeps scratch and hands the summary line to `/evening-sync`.
@@ -222,7 +222,7 @@ is off, M365 is not connected or the account proof fails.
 | Chat list | `id`, `chatType`, `topic`, `members` (`displayName`, `email`) |
 | Mail | `id`, `subject`, `sender`, `recipients`, `receivedDateTime`, `summary` |
 
-### 5.5 The digest
+### 5.5 The message log
 
 `_messages/YYYY-MM-DD-messages.md`, one per calendar day of messages. Its readers are
 Claude sessions and the stage-4 project update; its properties are how a
@@ -231,7 +231,7 @@ evidence every mail- or chat-derived line elsewhere traces back to:
 
 ```markdown
 ---
-object: digest
+object: message-log
 date: 2026-09-30
 window-from: 2026-09-29T18:47Z
 window-to: 2026-09-30T18:47Z
@@ -257,9 +257,9 @@ gaps: []
   update queue ignores (decision 15).
 - Sections per project, then *Not linked to a project*. The owner's own
   messages are included; "you" means the owner.
-- A run's window can cross midnight; items go to the digest of their own date.
-  Appending to an existing digest is a CLI merge that never duplicates an item
-  (the item ids are recorded in the digest's `ids` block, hidden from reading
+- A run's window can cross midnight; items go to the message log of their own date.
+  Appending to an existing message log is a CLI merge that never duplicates an item
+  (the item ids are recorded in the message log's `ids` block, hidden from reading
   view). Decision 17.
 - `gaps` names a missed interval still to catch up (after a missed evening or a
   failing source); the CLI keeps open gaps in vault state, at most 7 days
@@ -282,12 +282,12 @@ items in the raw pages (the feed and the search return everything); they are
 never condensed, never written to the vault, never shown in the main
 conversation, and their page files are deleted by the build.
 
-`messages scrub --exclusion <id>` lists the lines in existing digests that
+`messages scrub --exclusion <id>` lists the lines in existing message logs that
 match the new exclusion (by address, chat name or word) for the owner to
 confirm; only confirmed lines are removed. `messages forget --text "<what>"`
 does the same for anything the owner names, at any time, and
 `messages forget --all` backs "delete everything" when switching off. Removing
-a digest line also queues the projects it was linked to, so their next state
+a message log line also queues the projects it was linked to, so their next state
 update drops what came from it.
 
 ### 6.2 Noise, dropped before routing
@@ -330,37 +330,37 @@ of a hand-kept table:
    unlinked groups and co-occur with one project's people or domain. The top
    candidate, if any, becomes the weekly proposal in §4.2. Deterministic; the
    owner's yes is the only write.
-5. **Corrections (decision 15):** `messages unlink --digest <d> --group <g>
+5. **Corrections (decision 15):** `messages unlink --message log <d> --group <g>
    --project <slug>` removes one link and queues the project. Learning from
    corrections is left to #183.
 
-### 7.2 What the rest of the vault does with a digest
+### 7.2 What the rest of the vault does with a message log
 
 - **Project notes:** no new section (decision 12). Mail and chat reach a
   project note only through its state update, below.
 - **Project-state updates (decision 15):** the update queue today counts
-  **confirmed meetings only** ("triage is the quality gate"). Digests count
+  **confirmed meetings only** ("triage is the quality gate"). Message logs count
   **without** confirmation, a deliberate exception recorded in the ontology,
   with two guards:
-  - only a **strong** link queues: a digest whose `projects[]` minus
+  - only a **strong** link queues: a message log whose `projects[]` minus
     `projects-weak[]` names a project, dated after its `state-updated`;
-  - stage 4 gets that project's digest section as input next to its meetings,
+  - stage 4 gets that project's message log section as input next to its meetings,
     and every item it takes from it (a Hot potato, an Owe, an Awaiting, a
-    closed action) is marked as coming from mail or chat and links the digest,
+    closed action) is marked as coming from mail or chat and links the message log,
     so the owner always sees the source.
-- **Person notes (decision 16):** no body writes; the digest shows in the
+- **Person notes (decision 16):** no body writes; the message log shows in the
   person's backlinks (backlinks work into a hidden folder). `messages-7d` and `messages-30d` are auto-maintained next
   to `meetings-7d` / `meetings-30d` by the same metrics pass, counting the
-  digest groups the person is linked in, so People.base can sort by who the
+  message log groups the person is linked in, so People.base can sort by who the
   owner actually talks to. A written per-person summary is left to #184.
 - **Decisions (decision 4):** the stage-4 agent of a queued project already runs
   decision capture over its new meetings via `/log-decision --background`. It
-  now gives that the project's digest sections too, with the rules unchanged:
+  now gives that the project's message log sections too, with the rules unchanged:
   the material-decision test (commits the engagement *and* changes a
   stakeholder's behaviour; tasks, opinions, scheduling and preferences are not
   decisions), dedup against `existingDecisions`, supersession only on explicit
   conflict language, never delete, writing nothing is valid. Decisions land with
-  `reviewed: false` in Needs review and `source` naming the digest (ontology
+  `reviewed: false` in Needs review and `source` naming the message log (ontology
   change, §8.1). A wrong one is `withdrawn`, as today. Stage 6 adds the pointer
   line to the daily note when one was written.
 - **Organisation dossiers:** not written; #184 stays its own issue.
@@ -378,9 +378,9 @@ of a hand-kept table:
 
   Wikilinks and backlinks into the folder keep working, and Claude reads it
   like any other folder. No Base.
-- Ontology: a **Digest** object (`object: digest`, required `date`,
+- Ontology: a **Message log** object (`object: message-log`, required `date`,
   `projects`, `people`, `counts`; optional `projects-weak`, `entities`, `gaps`,
-  `window-from`, `window-to`); Decision's `source` may name a digest; Person
+  `window-from`, `window-to`); Decision's `source` may name a message log; Person
   gains optional `messages-7d`, `messages-30d`; the update-queue exception of
   §7.2; Project gains optional `keywords` (a list of strings; absent means
   none, so existing projects need no migration).
@@ -419,12 +419,12 @@ cursor lives in vault state beside `lastsync`, not in config.
   pages per folder** (200 mails a day each for Inbox and Sent Items), **5
   full-message reads**. No measurement before release: real use tells whether
   they are high enough (below). They do not move at run time.
-- **Learning from real use.** The digest counts what a capped day skipped, and
+- **Learning from real use.** The message log counts what a capped day skipped, and
   `/health-check` gains one content-free number, *days that hit the limit*,
   shared with delaware the way its other numbers are. If it shows up on real
   accounts, the limit is raised in a release.
 - **A day that hits the cap** is read most important first, and what is left
-  is skipped for good, counted in the digest's `counts` as `skipped`; it is
+  is skipped for good, counted in the message log's `counts` as `skipped`; it is
   never owed to a later night, so no backlog can build up. The order:
   1. Sent Items;
   2. 1:1 chats, and group chats the owner wrote in;
@@ -475,7 +475,7 @@ cursor lives in vault state beside `lastsync`, not in config.
    advance and non-advance; a capped day read in priority order with the rest
    counted as skipped and never owed; catch-up after a missed evening (mail
    exact, Teams within the offset limit, at most 7 days, older closed once); a domain matching several
-   projects is weak; digest render and merge without duplicates; `--consume`
+   projects is weak; message log render and merge without duplicates; `--consume`
    deletes exactly the pages read; scrub, forget and unlink each queue the
    affected projects; keyword proposals; the *Mail and Teams* block (at most 5
    lines, Needs-you first, no counts, the decision pointer only when one was
@@ -502,7 +502,7 @@ cursor lives in vault state beside `lastsync`, not in config.
 - **Two machines running the evening sync on one synced vault:** relies on the
   evening sync's existing guard against a second run; verify the cursor and
   gap state survive it.
-- **Language of the digest:** follows the owner's configured note language.
+- **Language of the message log:** follows the owner's configured note language.
 - **Routing quality is unmeasured.** Check in the Cowork run how many groups
   land in *Not linked to a project* and how many strong links are wrong; tune
   the rules from that.
@@ -513,12 +513,12 @@ Found while mapping the spec onto the code; each keeps the spec's intent.
 
 | # | Found | Resolution |
 |---|---|---|
-| C1 | Digest stems `YYYY-MM-DD` would collide with daily-note stems: Obsidian resolves links by file name, and a decision's `source` is a bare stem | Digests are named `YYYY-MM-DD-messages.md` |
+| C1 | Message log stems `YYYY-MM-DD` would collide with daily-note stems: Obsidian resolves links by file name, and a decision's `source` is a bare stem | Message logs are named `YYYY-MM-DD-messages.md` |
 | C2 | Entities store no email domains, so rule §7.1 (a) had nothing to match | The CLI derives an entity's domains from the `attendee-emails` of meetings linked to it (directly or through its projects), outside `home_domains`, seen in at least 2 meetings. No schema change, nothing for the owner to fill |
 | C3 | Person notes are created from names and never carry an email, so matching by address would find no one | Each run fills a missing `email` on an existing person note from Teams chat members (display name and address arrive together), never overwriting one. New person notes from the feed are created with their address |
 | C4 | The mail search returns one flat `recipients` list, no To/CC split (verified 2026-09-30) | "Direct" means at most 5 recipients, in decision 14 and in the priority order of §9 |
 | C5 | The page caps bound fetching; what costs is condensing | The fixed safety limit has two parts: the page caps (fetch) and at most 40 message groups condensed per day (cost). The priority order of §9 decides which groups are condensed when a day has more; the rest are counted as skipped |
-| C6 | Project-state items refuse links to unknown note kinds | `links` learns the `digest` kind, so a "from mail" marker can link its digest |
-| C7 | The daily note has no slot for a new block | The *Mail and Teams* block is a new optional `messages` field of the v2 recap, rendered right after *At a glance*; digests join the recap's fingerprint inputs. Status lines (behind, first morning) and the keyword proposal are produced by the CLI, never composed |
+| C6 | Project-state items refuse links to unknown note kinds | `links` learns the `log` kind, so a "from mail" marker can link its message log |
+| C7 | The daily note has no slot for a new block | The *Mail and Teams* block is a new optional `messages` field of the v2 recap, rendered right after *At a glance*; message logs join the recap's fingerprint inputs. Status lines (behind, first morning) and the keyword proposal are produced by the CLI, never composed |
 | C8 | `/setup-my-brain`'s hard rule "chat text and the Inbox are never read" | Scoped to setup's own 5-minute read; the nightly feed has its own consent |
-| C9 | A digest's body must survive merge, forget and unlink | The body is rendered from a structured block kept at the end of the note as an Obsidian comment (`%% … %%`, hidden in reading view); every change edits the data and re-renders |
+| C9 | A message log's body must survive merge, forget and unlink | The body is rendered from a structured block kept at the end of the note as an Obsidian comment (`%% … %%`, hidden in reading view); every change edits the data and re-renders |
