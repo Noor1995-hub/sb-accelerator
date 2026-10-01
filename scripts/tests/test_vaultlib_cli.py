@@ -2412,3 +2412,36 @@ def test_messages_exclude_add_list_remove(capsys, tmp_path):
     assert code == 0 and payload["result"]["id"] == "x1"
     assert run(capsys, ["messages", "exclude", "list", "--vault", str(root)])[1]["result"]["exclusions"][0]["value"] == "salaris"
     assert run(capsys, ["messages", "exclude", "remove", "--vault", str(root), "--id", "x1"])[0] == 0
+
+
+def _strong_log(root):
+    from vaultlib import msglog
+    group = {"gid": "a1", "key": "mail:a1", "kind": "mail", "label": "Plan", "chat_type": None,
+             "people": [], "names": {}, "participants": [], "projects": ["acme-rollout"],
+             "projects_weak": [], "entities": [], "needs_owner": False,
+             "points": [{"text": "A point.", "cites": ["m1"]}]}
+    msglog.save_log(root, {"schema": 1, "date": "2026-09-30", "ids": ["m1"], "groups": [group]},
+                    {"type": "message-log", "date": "2026-09-30", "updated-at": "2026-09-30T20:52",
+                     "projects": ["acme-rollout"], "projects-weak": [], "people": [],
+                     "messages-read": 1})
+
+
+def test_messages_unlink_and_forget_stamp_the_requeue_in_local_time(capsys, tmp_path):
+    from vaultlib import msgstate
+    root = make_vault(tmp_path)
+    write_vault_config(root)
+    _strong_log(root)
+    base = ["messages", "unlink", "--vault", str(root), "--log", "2026-09-30-messages",
+            "--gid", "a1", "--project", "acme-rollout", "--now", "2026-09-30T19:05:00Z"]
+    code, payload = run(capsys, base)
+    assert code == 1 and payload["ok"] is False and "--timezone" in payload["error"]
+    assert msgstate.load(root)["requeue"] == []
+    code, payload = run(capsys, base + ["--timezone", "Europe/Brussels"])
+    assert code == 0 and payload["result"]["unlinked"] is True
+    assert msgstate.load(root)["requeue"] == [
+        {"slug": "acme-rollout", "log": "2026-09-30-messages", "at": "2026-09-30T21:05"}]
+    _strong_log(root)
+    code, payload = run(capsys, ["messages", "forget", "--vault", str(root), "--all",
+                                 "--now", "2026-09-30T20:10:00Z", "--utc-offset", "+02:00"])
+    assert code == 0 and payload["result"]["deleted"] == ["2026-09-30-messages"]
+    assert msgstate.load(root)["requeue"][0]["at"] == "2026-09-30T22:10"

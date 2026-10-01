@@ -29,11 +29,16 @@ def test_gaps_get_ids_are_filled_and_close_after_seven_days(tmp_path):
     assert msgstate.cursor(root, now="2026-10-01T19:00:00Z", timezone="UTC", utc_offset=None)["gaps"] == []
 
 
-def test_requeue_is_taken_once(tmp_path):
+def test_requeue_entries_carry_their_moment_and_stay_until_pruned(tmp_path):
     root = make_vault(tmp_path)
-    msgstate.requeue_add(root, "acme-industries-operating-model", "2026-09-30-messages")
-    assert msgstate.requeue_take(root) == [{"slug": "acme-industries-operating-model", "log": "2026-09-30-messages"}]
-    assert msgstate.requeue_take(root) == []
+    msgstate.requeue_add(root, "acme-industries-operating-model", "2026-09-30-messages", at="2026-09-30T21:05")
+    entry = {"slug": "acme-industries-operating-model", "log": "2026-09-30-messages", "at": "2026-09-30T21:05"}
+    assert msgstate.requeue_list(root) == [entry]
+    assert msgstate.requeue_list(root) == [entry]  # reading never clears
+    msgstate.requeue_add(root, "acme-industries-operating-model", "2026-09-30-messages", at="2026-10-01T09:00")
+    assert msgstate.requeue_list(root) == [{**entry, "at": "2026-10-01T09:00"}]  # the later moment wins
+    msgstate.requeue_prune(root, msgstate.requeue_list(root))
+    assert msgstate.requeue_list(root) == []
 
 
 def test_a_broken_state_file_loads_as_empty(tmp_path):

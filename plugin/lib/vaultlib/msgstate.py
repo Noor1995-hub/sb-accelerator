@@ -112,17 +112,36 @@ def advance(root: Path, *, newest: Optional[str], new_gaps: List[dict], filled: 
     return {"cursor": state["cursor"], "gaps": state["gaps"]}
 
 
-def requeue_add(root: Path, slug: str, log: str) -> None:
+def requeue_add(root: Path, slug: str, log: str, *, at: str) -> None:
+    """Queue `slug` for a state update that drops what came from `log`.
+
+    `at` is the moment of the removal in the owner's local wall clock,
+    YYYY-MM-DDTHH:MM — the same form as a project's `state-updated`, so the
+    update queue compares the two directly. Re-adding the same pair moves its
+    moment forward: a later removal needs a later state update.
+    """
     state = load(root)
-    entry = {"slug": slug, "log": log}
-    if entry not in state["requeue"]:
-        state["requeue"].append(entry)
-        save(root, state)
+    for entry in state["requeue"]:
+        if isinstance(entry, dict) and entry.get("slug") == slug and entry.get("log") == log:
+            if str(entry.get("at") or "") < at:
+                entry["at"] = at
+                save(root, state)
+            return
+    state["requeue"].append({"slug": slug, "log": log, "at": at})
+    save(root, state)
 
 
-def requeue_take(root: Path) -> List[dict]:
+def requeue_list(root: Path) -> list:
+    """The requeue entries as stored; reading never clears them."""
+    return list(load(root)["requeue"])
+
+
+def requeue_prune(root: Path, drop: list) -> None:
+    """Remove exactly these entries (the update queue decides which)."""
+    if not drop:
+        return
     state = load(root)
-    taken, state["requeue"] = state["requeue"], []
-    if taken:
+    kept = [e for e in state["requeue"] if e not in drop]
+    if len(kept) != len(state["requeue"]):
+        state["requeue"] = kept
         save(root, state)
-    return taken

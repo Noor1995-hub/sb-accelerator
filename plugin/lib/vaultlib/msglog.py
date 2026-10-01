@@ -348,7 +348,7 @@ def forget_find(root: Path, *, text: Optional[str] = None, exclusion: Optional[d
     return found
 
 
-def forget_apply(root: Path, refs: List[str]) -> dict:
+def forget_apply(root: Path, refs: List[str], *, at: str) -> dict:
     wanted: Dict[str, Dict[str, set]] = {}
     for ref in refs:
         parts = str(ref).rsplit(":", 2)
@@ -371,17 +371,17 @@ def forget_apply(root: Path, refs: List[str]) -> dict:
         if removed > before:
             _resave(root, path, data, loaded["frontmatter"])
             for slug in sorted(touched):
-                msgstate.requeue_add(root, slug, stem)
+                msgstate.requeue_add(root, slug, stem, at=at)
     return {"removed": removed}
 
 
-def forget_all(root: Path) -> dict:
+def forget_all(root: Path, *, at: str) -> dict:
     deleted = []
     for path in _logs(root):
         try:
             for g in load_log(path)["data"]["groups"]:
                 for slug in _strong(g):
-                    msgstate.requeue_add(root, slug, path.stem)
+                    msgstate.requeue_add(root, slug, path.stem, at=at)
         except (MessagesError, OSError, KeyError, TypeError):
             pass
         path.unlink()
@@ -389,7 +389,7 @@ def forget_all(root: Path) -> dict:
     return {"deleted": deleted}
 
 
-def unlink(root: Path, *, log: str, gid: str, project: str) -> dict:
+def unlink(root: Path, *, log: str, gid: str, project: str, at: str) -> dict:
     path = root / vault.MESSAGES_DIR / f"{log}.md"
     loaded = load_log(path)
     for g in loaded["data"]["groups"]:
@@ -397,7 +397,7 @@ def unlink(root: Path, *, log: str, gid: str, project: str) -> dict:
             g["projects"] = [p for p in g["projects"] if p != project]
             g["projects_weak"] = [p for p in g.get("projects_weak", []) if p != project]
             _resave(root, path, loaded["data"], loaded["frontmatter"])
-            msgstate.requeue_add(root, project, log)
+            msgstate.requeue_add(root, project, log, at=at)
             return {"unlinked": True}
     raise MessagesError(f"no group {gid!r} linked to {project!r} in {log}")
 

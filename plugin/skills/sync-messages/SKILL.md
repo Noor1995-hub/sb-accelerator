@@ -64,7 +64,7 @@ Ask: *"Shall I keep what I saved so far, or delete it?"* Then:
 
 ```bash
 python3 "$VAULTLIB" config write --vault "$VAULT" --field messages.enabled --value false
-python3 "$VAULTLIB" messages forget --vault "$VAULT" --all   # only if they said delete
+python3 "$VAULTLIB" messages forget --vault "$VAULT" --all --timezone "<timezone>"   # only if they said delete
 ```
 
 Read back what happened.
@@ -77,15 +77,19 @@ the table abbreviates it to `<group> <action> …`. Full examples:
 ```bash
 python3 "$VAULTLIB" messages exclude add --vault "$VAULT" --kind person --value "jo@example.com" --label "Jo"
 python3 "$VAULTLIB" messages forget --vault "$VAULT" --text "X"                       # find only
-python3 "$VAULTLIB" messages forget --vault "$VAULT" --text "X" --apply <ref1> --apply <ref2>
-python3 "$VAULTLIB" messages forget --vault "$VAULT" --exclusion <id> --apply <ref1>
+python3 "$VAULTLIB" messages forget --vault "$VAULT" --text "X" --apply <ref1> --apply <ref2> --timezone "<timezone>"
+python3 "$VAULTLIB" messages forget --vault "$VAULT" --exclusion <id> --apply <ref1> --timezone "<timezone>"
 python3 "$VAULTLIB" project keywords add --vault "$VAULT" --slug <slug> --keyword "P-2317"
 python3 "$VAULTLIB" messages for-project --vault "$VAULT" --slug <slug> --logs <stem1>,<stem2>
-python3 "$VAULTLIB" messages unlink --vault "$VAULT" --log <stem> --gid <gid> --project <slug>
+python3 "$VAULTLIB" messages unlink --vault "$VAULT" --log <stem> --gid <gid> --project <slug> --timezone "<timezone>"
 python3 "$VAULTLIB" messages cursor --vault "$VAULT" --now "<now UTC>" --timezone "<timezone>" --since "<start>"
 ```
 
-`--text` and `--exclusion` only find without `--apply`. To remove, repeat the
+Every call that removes something (`--apply`, `--all`, `unlink`) takes
+`--timezone` with the `timezone` from `config read`: it stamps when the
+change was made, so the evening update keeps dropping it until the project
+has been updated after that moment. `--text` and `--exclusion` only find
+without `--apply`. To remove, repeat the
 same target flag and add `--apply <ref>` once per ref the owner confirmed.
 `--all` deletes every saved note at once and is used only when switching off
 after the owner said delete; never combine it with `--apply`. `--logs` stems are the file names in `_messages/` without

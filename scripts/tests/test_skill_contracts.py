@@ -2188,3 +2188,12 @@ def test_sync_messages_resolves_what_to_skip_before_adding_it():
 def test_messages_contract_passes_the_timezone_to_write():
     text = re.sub(r"\s+", " ", read_contract())
     assert 'messages write --vault "$VAULT" --dir "$SCRATCH" --now "$NOW" --timezone "$TIMEZONE"' in text
+
+
+def test_sync_messages_passes_the_timezone_on_every_removal():
+    skill = read_skill("sync-messages")
+    for line in skill.splitlines():
+        if re.search(r"messages (forget|unlink) --vault", line) and (
+                "--apply" in line or "--all" in line or "unlink" in line):
+            assert '--timezone "<timezone>"' in line, line
+    assert "takes\n`--timezone` with the `timezone` from `config read`" in skill

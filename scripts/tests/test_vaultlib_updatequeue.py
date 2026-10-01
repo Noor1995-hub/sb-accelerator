@@ -9,6 +9,7 @@ import json
 import subprocess
 import sys
 from datetime import date, datetime
+import re
 from pathlib import Path
 
 import pytest
@@ -635,16 +636,29 @@ def test_a_weak_log_never_queues(tmp_path):
         "projectsNeedingUpdate"] == []
 
 
-def test_a_requeued_project_carries_the_removed_source_once(tmp_path):
+def _set_state_updated(root, slug, stamp):
+    index = root / "30-projects" / slug / "index.md"
+    text = index.read_text(encoding="utf-8")
+    index.write_text(re.sub(r"state-updated: .*", f"state-updated: {stamp}", text),
+                     encoding="utf-8")
+
+
+def test_a_requeued_source_stays_queued_until_a_later_state_update(tmp_path):
     from vaultlib import msgstate
-    root = vault_with_project_and_owner(
-        tmp_path, "acme-industries-rollout", "2026-10-01T19:00")
-    msgstate.requeue_add(root, "acme-industries-rollout", "2026-09-30-messages")
-    first = updatequeue.run(root, "2026-10-01", "morgan-ellery")[
-        "projectsNeedingUpdate"]
-    assert first[0]["removedSources"] == ["2026-09-30-messages"]
+    slug = "acme-industries-rollout"
+    root = vault_with_project_and_owner(tmp_path, slug, "2026-10-01T19:00")
+    msgstate.requeue_add(root, slug, "2026-09-30-messages", at="2026-10-01T19:30")
+    for _ in range(2):  # a re-run before stage 4 wrote the state loses nothing
+        queue = updatequeue.run(root, "2026-10-01", "morgan-ellery")[
+            "projectsNeedingUpdate"]
+        assert queue[0]["removedSources"] == ["2026-09-30-messages"]
+    _set_state_updated(root, slug, "2026-10-01T19:30")  # same minute: kept
+    assert updatequeue.run(root, "2026-10-01", "morgan-ellery")[
+        "projectsNeedingUpdate"][0]["removedSources"] == ["2026-09-30-messages"]
+    _set_state_updated(root, slug, "2026-10-01T20:45")  # stage 4 ran after it
     assert updatequeue.run(root, "2026-10-01", "morgan-ellery")[
         "projectsNeedingUpdate"] == []
+    assert msgstate.requeue_list(root) == []
 
 
 def test_a_damaged_log_warns_and_the_queue_continues(tmp_path):
@@ -700,10 +714,12 @@ def test_malformed_requeue_entries_warn_and_never_abort(tmp_path):
     state = msgstate.load(root)
     state["requeue"] = [{}, "junk", {"slug": 3, "log": "l"},
                         {"slug": "acme-industries-rollout",
-                         "log": "2026-09-30-messages"}]
+                         "log": "2026-09-29-messages"},
+                        {"slug": "acme-industries-rollout",
+                         "log": "2026-09-30-messages", "at": "2026-10-01T19:30"}]
     msgstate.save(root, state)
     out = updatequeue.run(root, "2026-10-01", "morgan-ellery")
-    assert len([w for w in out["warnings"] if "malformed requeue" in w]) == 3
+    assert len([w for w in out["warnings"] if "malformed requeue" in w]) == 4
     assert out["projectsNeedingUpdate"][0]["removedSources"] == [
         "2026-09-30-messages"]
 
@@ -712,7 +728,8 @@ def test_a_requeued_slug_with_no_active_project_warns(tmp_path):
     from vaultlib import msgstate
     root = vault_with_project_and_owner(
         tmp_path, "acme-industries-rollout", "2026-10-01T19:00")
-    msgstate.requeue_add(root, "ghost-project", "2026-09-30-messages")
+    msgstate.requeue_add(root, "ghost-project", "2026-09-30-messages",
+                         at="2026-10-01T09:00")
     out = updatequeue.run(root, "2026-10-01", "morgan-ellery")
     assert any("ghost-project" in w and "no active project" in w
                for w in out["warnings"])

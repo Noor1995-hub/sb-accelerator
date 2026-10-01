@@ -808,11 +808,15 @@ def build_parser() -> argparse.ArgumentParser:
     m_forget_target.add_argument("--exclusion", help="an exclusion id")
     m_forget_target.add_argument("--all", action="store_true")
     m_forget.add_argument("--apply", action="append", default=[], help="a ref from the find step")
+    m_forget.add_argument("--now", help="UTC ISO; defaults to the clock (stamps the requeue)")
+    _tz(m_forget)
 
     m_unlink = messages_sub.add_parser("unlink", help="remove one project link from one group")
     _add_vault_argument(m_unlink)
     for flag in ("--log", "--gid", "--project"):
         m_unlink.add_argument(flag, required=True)
+    m_unlink.add_argument("--now", help="UTC ISO; defaults to the clock (stamps the requeue)")
+    _tz(m_unlink)
 
     m_for_project = messages_sub.add_parser("for-project", help="a project's strongly linked groups")
     _add_vault_argument(m_for_project)
@@ -950,10 +954,13 @@ def _dispatch(args: argparse.Namespace) -> int:
                 return _ok(config.exclusion_remove(root, args.id))
             return _ok({"exclusions": config.messages_settings(root)["exclusions"]})
         if args.action == "forget":
-            if args.all:
-                return _ok(msglog.forget_all(root))
-            if args.apply:
-                return _ok(msglog.forget_apply(root, args.apply))
+            if args.all or args.apply:
+                # The requeue moment is stamped before anything changes, so a
+                # missing --timezone refuses the whole call.
+                at = msglog.local_stamp(args.now, args.timezone, args.utc_offset)
+                if args.all:
+                    return _ok(msglog.forget_all(root, at=at))
+                return _ok(msglog.forget_apply(root, args.apply, at=at))
             exclusion = None
             if args.exclusion:
                 matches = [e for e in config.messages_settings(root)["exclusions"] if e["id"] == args.exclusion]
@@ -962,7 +969,8 @@ def _dispatch(args: argparse.Namespace) -> int:
                 exclusion = matches[0]
             return _ok({"found": msglog.forget_find(root, text=args.text, exclusion=exclusion)})
         if args.action == "unlink":
-            return _ok(msglog.unlink(root, log=args.log, gid=args.gid, project=args.project))
+            at = msglog.local_stamp(args.now, args.timezone, args.utc_offset)
+            return _ok(msglog.unlink(root, log=args.log, gid=args.gid, project=args.project, at=at))
         if args.action == "for-project":
             stems = [s.strip() for s in args.logs.split(",") if s.strip()]
             return _ok({"groups": msglog.for_project(root, slug=args.slug, logs=stems)})

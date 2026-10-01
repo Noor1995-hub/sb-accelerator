@@ -293,14 +293,26 @@ def run(root: Path, today: str, owner: str) -> dict:
     meetings, warnings = _index_meetings(root)
     logs, log_warnings = _index_logs(root)
     warnings.extend(log_warnings)
-    requeued: Dict[str, List[str]] = {}
-    for entry in msgstate.requeue_take(root):
+    # Requeue entries are read, never taken: an entry stays until the
+    # project's `state-updated` is strictly later than the entry's `at`. Both
+    # are the owner's local wall clock (YYYY-MM-DDTHH:MM), so they compare
+    # directly; the same minute keeps the entry (one extra cycle rather than
+    # a removal stage 4 never saw). A malformed entry, or one for a slug that
+    # names no active project, is warned about once and pruned.
+    requeued: Dict[str, List[Tuple[str, datetime, dict]]] = {}
+    prune: List = []
+    for entry in msgstate.requeue_list(root):
+        at = (_parse_iso_datetime(entry.get("at"))
+              if isinstance(entry, dict) and isinstance(entry.get("at"), str)
+              else None)
         if (isinstance(entry, dict) and isinstance(entry.get("slug"), str)
-                and isinstance(entry.get("log"), str)):
-            requeued.setdefault(entry["slug"], []).append(entry["log"])
+                and isinstance(entry.get("log"), str) and at is not None):
+            requeued.setdefault(entry["slug"], []).append(
+                (entry["log"], at, entry))
         else:
             warnings.append(f"messages state: skipped malformed requeue "
                             f"entry {entry!r}")
+            prune.append(entry)
     active_slugs: Set[str] = set()
     confirmed = [m for m in meetings
                  if m["review_status"] == "confirmed" and m["date"]]
@@ -380,7 +392,12 @@ def run(root: Path, today: str, owner: str) -> dict:
         new_logs = [d["stem"] for d in logs
                     if slug in d["strong"] and d["updated"] is not None
                     and d["updated"] >= threshold]
-        removed = requeued.get(slug, [])
+        removed: List[str] = []
+        for log, at, entry in requeued.get(slug, []):
+            if state_updated is not None and state_updated > at:
+                prune.append(entry)
+            elif log not in removed:
+                removed.append(log)
         if new_meetings or new_logs or removed:
             queue.append({
                 "slug": slug,
@@ -400,7 +417,9 @@ def run(root: Path, today: str, owner: str) -> dict:
     for slug in sorted(set(requeued) - active_slugs):
         warnings.append(f"requeued project '{slug}' matches no active "
                         f"project — its removed sources "
-                        f"{requeued[slug]} were dropped")
+                        f"{[log for log, _, _ in requeued[slug]]} were dropped")
+        prune.extend(entry for _, _, entry in requeued[slug])
+    msgstate.requeue_prune(root, prune)
 
     people_written = 0
     people_dir = root / PEOPLE_DIR
