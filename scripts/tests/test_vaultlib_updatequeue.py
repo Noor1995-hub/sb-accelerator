@@ -671,3 +671,59 @@ def test_people_get_message_counters(tmp_path):
     fm, _ = markdown.split_frontmatter(
         (root / "50-people" / "sam-lee.md").read_text(encoding="utf-8"))
     assert (int(fm["messages-7d"]), int(fm["messages-30d"])) == (2, 3)
+
+
+def test_a_group_without_people_warns_and_the_queue_continues(tmp_path):
+    import re
+    from vaultlib import msglog
+    root = vault_with_project_and_owner(
+        tmp_path, "acme-industries-rollout", "2026-09-29T19:00")
+    group = g("x")
+    msglog.save_log(root, {"schema": 1, "date": "2026-09-30", "ids": ["x"],
+                           "groups": [group]},
+                    {"type": "message-log", "date": "2026-09-30",
+                     "updated-at": "2026-09-30T18:52", "projects": [],
+                     "people": [], "messages-read": 1})
+    log = root / "_messages" / "2026-09-30-messages.md"
+    text = log.read_text(encoding="utf-8")
+    stripped = re.sub(r'\s*"people": \[\],?', "", text, count=1)
+    assert stripped != text
+    log.write_text(stripped, encoding="utf-8")
+    out = updatequeue.run(root, "2026-09-30", "morgan-ellery")
+    assert any("group 'x'" in w for w in out["warnings"])
+
+
+def test_malformed_requeue_entries_warn_and_never_abort(tmp_path):
+    from vaultlib import msgstate
+    root = vault_with_project_and_owner(
+        tmp_path, "acme-industries-rollout", "2026-10-01T19:00")
+    state = msgstate.load(root)
+    state["requeue"] = [{}, "junk", {"slug": 3, "log": "l"},
+                        {"slug": "acme-industries-rollout",
+                         "log": "2026-09-30-messages"}]
+    msgstate.save(root, state)
+    out = updatequeue.run(root, "2026-10-01", "morgan-ellery")
+    assert len([w for w in out["warnings"] if "malformed requeue" in w]) == 3
+    assert out["projectsNeedingUpdate"][0]["removedSources"] == [
+        "2026-09-30-messages"]
+
+
+def test_a_requeued_slug_with_no_active_project_warns(tmp_path):
+    from vaultlib import msgstate
+    root = vault_with_project_and_owner(
+        tmp_path, "acme-industries-rollout", "2026-10-01T19:00")
+    msgstate.requeue_add(root, "ghost-project", "2026-09-30-messages")
+    out = updatequeue.run(root, "2026-10-01", "morgan-ellery")
+    assert any("ghost-project" in w and "no active project" in w
+               for w in out["warnings"])
+    assert out["projectsNeedingUpdate"] == []
+
+
+def test_a_strong_log_older_than_state_updated_does_not_queue(tmp_path):
+    root = vault_with_project_and_owner(
+        tmp_path, "acme-industries-rollout", "2026-09-30T19:00")
+    write_log(root, "2026-09-30",
+              [g("a1", projects=["acme-industries-rollout"])],
+              "2026-09-30T18:52")
+    assert updatequeue.run(root, "2026-09-30", "morgan-ellery")[
+        "projectsNeedingUpdate"] == []

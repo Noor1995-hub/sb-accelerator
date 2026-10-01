@@ -172,12 +172,22 @@ def _index_logs(root: Path) -> Tuple[List[dict], List[str]]:
                               warnings))
         strong = [p for p in _slug_list(fm.get("projects"), "projects", rel,
                                         warnings) if p not in weak]
+        people_groups: List[str] = []
+        for group in data["groups"]:
+            people = group.get("people")
+            if (isinstance(people, list)
+                    and all(isinstance(p, str) for p in people)):
+                people_groups.extend(people)
+            else:
+                warnings.append(
+                    f"{rel}: group {group.get('gid')!r} has no usable "
+                    "people list — its people are not counted")
         out.append({
             "stem": path.stem,
             "date": _parse_first_iso_date(fm.get("date")),
             "updated": _parse_iso_datetime(fm.get("updated-at")),
             "strong": strong,
-            "people_groups": [p for g in data["groups"] for p in g["people"]],
+            "people_groups": people_groups,
         })
     return out, warnings
 
@@ -285,7 +295,13 @@ def run(root: Path, today: str, owner: str) -> dict:
     warnings.extend(log_warnings)
     requeued: Dict[str, List[str]] = {}
     for entry in msgstate.requeue_take(root):
-        requeued.setdefault(entry["slug"], []).append(entry["log"])
+        if (isinstance(entry, dict) and isinstance(entry.get("slug"), str)
+                and isinstance(entry.get("log"), str)):
+            requeued.setdefault(entry["slug"], []).append(entry["log"])
+        else:
+            warnings.append(f"messages state: skipped malformed requeue "
+                            f"entry {entry!r}")
+    active_slugs: Set[str] = set()
     confirmed = [m for m in meetings
                  if m["review_status"] == "confirmed" and m["date"]]
     # confirmed drives the queue and the self-check; countable drives every
@@ -309,6 +325,7 @@ def run(root: Path, today: str, owner: str) -> dict:
         if data.get("status") != "active" or not slug:
             continue
         slug = str(slug)
+        active_slugs.add(slug)
 
         for_project = [m for m in confirmed if slug in m["projects"]]
         countable_for_project = [m for m in countable
@@ -380,6 +397,10 @@ def run(root: Path, today: str, owner: str) -> dict:
                     decision.list_decisions(root, slug)["decisions"],
             })
     queue.sort(key=lambda entry: (-entry["newCount"], entry["slug"]))
+    for slug in sorted(set(requeued) - active_slugs):
+        warnings.append(f"requeued project '{slug}' matches no active "
+                        f"project — its removed sources "
+                        f"{requeued[slug]} were dropped")
 
     people_written = 0
     people_dir = root / PEOPLE_DIR
