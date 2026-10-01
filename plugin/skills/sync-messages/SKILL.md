@@ -52,9 +52,11 @@ theirs, and switch nothing on.
    ```
 3. Ask: *"Is there anyone or anything I should never read? For example HR
    matters or a private chat. You can also tell me later."* For each answer,
-   add an exclusion (below). No answer means none.
+   resolve it and add it as under **What to skip** (below). No answer means
+   none.
 4. Read back: *"From tonight I'll read your mail and Teams, starting with
-   today's messages."* plus one sentence per exclusion.
+   today's messages."* plus the read-back of each exclusion from **What to
+   skip**.
 
 ## Switching off
 
@@ -91,7 +93,7 @@ after the owner said delete; never combine it with `--apply`. `--logs` stems are
 
 | They say | Do |
 |---|---|
-| "don't read X anymore" | `messages exclude add --kind person\|domain\|chat\|word --value … --label …`; read back what is skipped (a person: their mail and your 1:1 chat; in group chats only their own messages). Then find with `messages forget --exclusion <id>` and offer what it found: *"I found N older notes about X. Shall I remove those lines?"* Only on yes, repeat `messages forget --exclusion <id> --apply <ref1> --apply <ref2>`, one `--apply` per confirmed ref |
+| "don't read X anymore" | Resolve X to an exact value first (**What to skip**, below); if it cannot be resolved, say so and add nothing. Then `messages exclude add --kind person\|domain\|chat\|word --value <resolved value> --label "<X in their words>"` and read back exactly what is skipped, in the words below. Then find with `messages forget --exclusion <id>` and offer what it found: *"I found N older notes about X. Shall I remove those lines?"* Only on yes, repeat `messages forget --exclusion <id> --apply <ref1> --apply <ref2>`, one `--apply` per confirmed ref |
 | "read X again" | `messages exclude list` to find it, then `messages exclude remove --id <id>`; read back |
 | "forget what you saved about X" | find with `messages forget --text "X"`; show the found lines in plain words; on yes repeat `messages forget --text "X" --apply <ref1> --apply <ref2>` with exactly the confirmed refs |
 | "link P-2317 to <project>", or yes to the weekly proposal | `project keywords add --slug <slug> --keyword "P-2317"`; read back |
@@ -99,6 +101,23 @@ after the owner said delete; never combine it with `--apply`. `--logs` stems are
 | "catch up on my mail from last week" | run the workflow below with `--since <start>` on `messages cursor` |
 | about mail from before switching on, or from someone excluded | say plainly you have not read it and why; offer a live search in Outlook |
 | "what don't you read?" | `messages exclude list`, plus the fixed scope: channels and attachments are never read |
+
+### What to skip
+
+The feed skips exact values only, so turn the owner's words into one before
+adding anything. The CLI refuses a value of the wrong shape (a name where an
+address belongs, a chat name where its id belongs); on that refusal, resolve
+again, never retry with a guess.
+
+| They name | Kind and value | Read back |
+|---|---|---|
+| a person | `person`: the `email` of their note in `50-people/`, when it is set; otherwise ask the owner for the address | *"I won't read mail with <name> or your 1:1 chat with them, and in group chats I skip what they write and leave them out."* |
+| a chat | `chat`: call `teams_list_chats` and look only at chat names and members, never message text; match by topic or by members, confirm by name (*"The chat 'Rollout' with Sam Lee and Jordan Reyes?"*), then use that chat's `id` | *"I won't read the chat <name>."* |
+| a company | `domain`: its email domain, like `acme.example`; ask when it is unclear | *"I won't read mail with anyone at <domain> or your 1:1 chats with them, and in group chats I skip what they write and leave them out."* |
+| a topic | `word`: one word or code | *"I won't read mail whose subject, or chats whose name, holds '<word>'."* |
+
+If X cannot be resolved (no address, no matching chat, an unclear company),
+say so in one plain sentence and add nothing.
 
 ## Workflow (one run)
 

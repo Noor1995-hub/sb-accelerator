@@ -2171,3 +2171,15 @@ def test_evening_sync_stage_6_builds_the_messages_field_with_the_real_cli():
         assert needle in stage6, f"stage 6 must carry {needle}"
     assert ("Run steps 1 and 2 exactly once per evening and reuse their results "
             "on any retry of the daily-note payload") in stage6
+
+
+def test_sync_messages_resolves_what_to_skip_before_adding_it():
+    skill = read_skill("sync-messages")
+    section = re.sub(r"\s+", " ", skill.split("### What to skip")[1].split("## Workflow")[0])
+    assert "the `email` of their note in `50-people/`" in section and "ask the owner for the address" in section
+    assert "call `teams_list_chats`" in section and "never message text" in section
+    assert "confirm by name" in section and "that chat's `id`" in section
+    assert "its email domain" in section
+    assert "add nothing" in section and "never retry with a guess" in section
+    flat = re.sub(r"\s+", " ", skill)
+    assert "Resolve X to an exact value first (**What to skip**, below)" in flat

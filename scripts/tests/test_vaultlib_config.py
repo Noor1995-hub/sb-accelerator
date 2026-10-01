@@ -602,3 +602,32 @@ def test_cli_coerces_messages_scope_to_a_list_and_consent_to_a_string(tmp_path, 
     got = config.messages_settings(root)
     assert got["scope"] == ["teams-chats", "inbox"]
     assert got["consented-at"] == "2026-09-30T20:14"
+
+
+@pytest.mark.parametrize("kind,value,hint", [
+    ("person", "Jordan Reyes", "email address"),
+    ("person", "jordan@localhost", "email address"),
+    ("domain", "jordan@acme.example", "without"),
+    ("domain", "acme", "domain"),
+    ("chat", "Rollout team", "chat id"),
+    ("word", "   ", "non-empty"),
+])
+def test_an_exclusion_of_the_wrong_shape_is_refused_with_a_hint(tmp_path, kind, value, hint):
+    root = make_vault(tmp_path)
+    write_config(root, valid_config())
+    with pytest.raises(config.ConfigError, match=hint):
+        config.exclusion_add(root, kind=kind, value=value, label=None, today="2026-09-30")
+    assert config.messages_settings(root)["exclusions"] == []
+
+
+@pytest.mark.parametrize("kind,value", [
+    ("person", "jordan.reyes@acme.example"),
+    ("domain", "hr.acme.example"),
+    ("chat", "19:abc123@thread.v2"),
+    ("chat", "19:a1b2_c3d4@unq.gbl.spaces"),
+    ("word", "salaris"),
+])
+def test_an_exclusion_of_the_right_shape_is_kept(tmp_path, kind, value):
+    root = make_vault(tmp_path)
+    write_config(root, valid_config())
+    assert config.exclusion_add(root, kind=kind, value=value, label=None, today="2026-09-30")["value"] == value

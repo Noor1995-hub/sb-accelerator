@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from pathlib import Path
+from typing import Optional
 
 import json
 import re
@@ -407,6 +408,29 @@ def _edit_exclusions(root: Path, change) -> dict:
     return result
 
 
+_EMAIL_SHAPE = re.compile(r"\A[^@\s]+@[^@\s]+\.[^@\s]+\Z")
+_DOMAIN_SHAPE = re.compile(r"\A[^@\s]+\.[^@\s]+\Z")
+
+
+def _exclusion_shape_error(kind: str, value: str) -> Optional[str]:
+    """Why a value cannot match anything the feed reads, or None.
+
+    The feed matches exclusions on exact values (an address, a domain, a Teams
+    chat id), so a name or a chat title would be stored and silently skip
+    nothing. Refusing the wrong shape here is what makes "don't read X" real.
+    """
+    if kind == "person" and not _EMAIL_SHAPE.match(value):
+        return (f"a person exclusion needs their email address, not {value!r} — "
+                "look up the address on their person note or ask the owner for it")
+    if kind == "domain" and not _DOMAIN_SHAPE.match(value):
+        return (f"a domain exclusion needs a bare domain like acme.example, without '@', not {value!r}")
+    if kind == "chat" and not ("@thread" in value or "@unq.gbl.spaces" in value
+                               or value.startswith("19:")):
+        return (f"a chat exclusion needs the Teams chat id (from teams_list_chats), not {value!r} — "
+                "a chat name matches nothing")
+    return None
+
+
 def exclusion_add(root: Path, *, kind: str, value: str, label, today: str) -> dict:
     if kind not in EXCLUSION_KINDS:
         raise ConfigError(f"exclusion kind {kind!r} must be one of {list(EXCLUSION_KINDS)}")
@@ -415,6 +439,9 @@ def exclusion_add(root: Path, *, kind: str, value: str, label, today: str) -> di
         clean = clean.casefold()
     if not clean:
         raise ConfigError("an exclusion needs a non-empty value")
+    shape = _exclusion_shape_error(kind, clean)
+    if shape:
+        raise ConfigError(shape)
 
     def add(entries):
         numbers = [int(e["id"][1:]) for e in entries if str(e.get("id", "")).startswith("x")
