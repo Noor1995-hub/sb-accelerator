@@ -449,6 +449,26 @@ cursor lives in vault state beside `lastsync`, not in config.
   account, costed with `scripts/cost_report.py`, reported as tokens and list
   price (subscription users feel it as usage, not dollars).
 
+### 9.1 Measured in Cowork (2026-10-01, Matthias's account)
+
+A read-only test fetched up to the full safety limit with one Sonnet worker,
+writing each page to scratch exactly as the contract does:
+
+| Source | Pages | Rows | Seconds | s/page | Bytes written |
+|---|---|---|---|---|---|
+| Teams feed | 20 | 380 | 509 | 25 | 126 KB |
+| Chat list | 4 | 100 | 208 | 52 | 57 KB |
+| Inbox | 8 | 200 | 388 | 49 | 144 KB |
+| Sent Items | 8 | 200 | 266 | 33 | 106 KB |
+| Condense (3 pages) | 1 | 17 conversations | 48 | 48 | 10 KB |
+
+- Total 24 minutes, 410k tokens, 86 tool calls; no errors, no throttling.
+- Teams pages always hold 19 rows, whatever `limit` is asked.
+- Most of each page's time is the worker writing the page, not the call.
+- Estimated normal day (not measured): 10 to 14 pages, about 6 to 10
+  minutes and 120k to 170k tokens; the chat list usually needs 1 to 2 pages,
+  since the contract stops once every chat seen is resolved.
+
 ## 10. Failure handling
 
 | Case | Behaviour |
@@ -502,6 +522,13 @@ cursor lives in vault state beside `lastsync`, not in config.
 - **Two machines running the evening sync on one synced vault:** relies on the
   evening sync's existing guard against a second run; verify the cursor and
   gap state survive it.
+- **Cowork run time limit.** Unknown whether Cowork caps how long a scheduled
+  task may run. A worst-case evening adds about 25 minutes to the existing
+  sync. Check before relying on it for executives.
+- **How often an executive hits the limit.** Watch `/health-check`'s *days at
+  the limit* during the internal pilot.
+- **Validation:** after the build, an internal pilot on our own vaults and
+  colleagues' (Cowork), to see what breaks and what works, before any client.
 - **Language of the message log:** follows the owner's configured note language.
 - **Routing quality is unmeasured.** Check in the Cowork run how many groups
   land in *Not linked to a project* and how many strong links are wrong; tune
