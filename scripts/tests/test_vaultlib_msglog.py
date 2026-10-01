@@ -316,3 +316,74 @@ def test_for_project_returns_only_strong_groups(env):
     got = msglog.for_project(root, slug="p-strong", logs=["2026-09-30-messages"])
     assert len(got) == 1 and got[0]["link"] == "[[_messages/2026-09-30-messages|30 Sep]]"
     assert msglog.for_project(root, slug="p-weak", logs=["2026-09-30-messages"]) == []
+
+
+def test_status_says_behind_only_after_two_nights_and_closed_gaps_once(tmp_path):
+    root = make_vault(tmp_path)
+    msgstate.advance(root, newest="2026-09-30T18:00:00Z", filled=[], now="2026-09-30T18:50:00Z",
+                     new_gaps=[{"source": "inbox", "from": "2026-09-27T00:00:00Z", "to": "2026-09-27T20:00:00Z"}])
+    assert msglog.status(root, now="2026-09-28T19:00:00Z", first_run_since=None) == []
+    lines = msglog.status(root, now="2026-09-30T19:00:00Z", first_run_since=None)
+    assert lines == ["I'm 3 days behind on your mail; I'll catch up tonight."]
+    msgstate.cursor(root, now="2026-10-06T19:00:00Z", timezone="UTC", utc_offset=None)  # closes it
+    assert msglog.status(root, now="2026-10-06T19:00:00Z", first_run_since=None) == [
+        "I couldn't catch up on your mail from 27 September to 27 September."]
+    assert msglog.status(root, now="2026-10-07T19:00:00Z", first_run_since=None) == []
+
+
+def test_status_reports_a_clamped_cursor_once(tmp_path):
+    root = make_vault(tmp_path)
+    msgstate.advance(root, newest="2026-09-20T18:00:00Z", filled=[], now="2026-09-20T18:50:00Z", new_gaps=[])
+    msgstate.cursor(root, now="2026-10-01T19:00:00Z", timezone="UTC", utc_offset=None)
+    assert msglog.status(root, now="2026-10-01T19:00:00Z", first_run_since=None) == [
+        "I couldn't catch up on your mail from 20 September to 24 September."]
+    assert msglog.status(root, now="2026-10-01T19:00:00Z", first_run_since=None) == []
+
+
+def test_status_first_morning_line(tmp_path):
+    root = make_vault(tmp_path)
+    assert msglog.status(root, now="2026-09-30T19:00:00Z", first_run_since="2026-09-28T22:00:00Z") == [
+        "From today, this note also covers your mail and Teams."]
+
+
+def test_check_lines_drops_an_unsupported_line(env, tmp_path):
+    root = written_log(env)
+    gid = msglog.load_log(root / "_messages" / "2026-09-30-messages.md")["data"]["groups"][0]["gid"]
+    lines = tmp_path / "lines.json"
+    lines.write_text(json.dumps({"lines": [
+        {"kind": "context", "text": "Jordan asks to move workshop 2 to 14 Oct.", "cites": [f"2026-09-30-messages#{gid}"]},
+        {"kind": "needs-you", "text": "Priya Nathan waits on you.", "cites": [f"2026-09-30-messages#{gid}"]}]}), encoding="utf-8")
+    result = msglog.check_lines(root, str(lines))
+    assert [l["kind"] for l in result["passed"]] == ["context"]
+    assert result["dropped"][0]["text"].startswith("Priya")
+
+
+def test_check_lines_drops_a_line_citing_nothing_resolvable(env, tmp_path):
+    root = written_log(env)
+    lines = tmp_path / "lines.json"
+    lines.write_text(json.dumps({"lines": [
+        {"kind": "context", "text": "Workshop 2 moves.", "cites": ["2026-09-30-messages#nope"]},
+        {"kind": "context", "text": "Workshop 2 moves.", "cites": ["2020-01-01-messages#a"]},
+        {"kind": "context", "text": "Workshop 2 moves.", "cites": []}]}), encoding="utf-8")
+    result = msglog.check_lines(root, str(lines))
+    assert result["passed"] == [] and len(result["dropped"]) == 3
+    assert all(d["reasons"] for d in result["dropped"])
+
+
+def test_a_recurring_code_with_one_projects_people_is_proposed_once_a_week(tmp_path):
+    root = make_vault(tmp_path)
+    from test_vaultlib_msgroute import add_project
+    from vaultlib import person
+    person.ensure(root, "Sam Lee", "2026-09-01", email="sam.lee@acme.example")
+    add_project(root, "acme-industries-rollout", "Rollout", "acme-industries", stakeholders=["sam-lee"])
+    for day in ("2026-09-28", "2026-09-29", "2026-09-30"):
+        data = {"schema": 1, "date": day, "ids": [day], "groups": [{
+            "gid": day[-2:], "key": "mail:x", "kind": "mail", "label": f"Status P-2317 {day}", "chat_type": None,
+            "people": ["sam-lee"], "names": {}, "participants": ["sam.lee@acme.example"],
+            "projects": [], "projects_weak": [], "entities": [], "needs_owner": False,
+            "points": [{"text": "x", "cites": [day]}]}]}
+        msglog.save_log(root, data, {"type": "message-log", "date": day, "updated-at": f"{day}T18:00",
+                                     "projects": [], "people": ["sam-lee"], "messages-read": 1})
+    assert msglog.keywords_propose(root, today="2026-09-30") == {
+        "keyword": "P-2317", "project": "acme-industries-rollout", "count": 3}
+    assert msglog.keywords_propose(root, today="2026-10-02") is None

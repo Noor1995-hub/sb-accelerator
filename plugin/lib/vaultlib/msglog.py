@@ -395,3 +395,109 @@ def for_project(root: Path, *, slug: str, logs: List[str]) -> List[dict]:
                             "people": g["people"], "points": [p["text"] for p in g["points"]],
                             "link": f"[[{vault.MESSAGES_DIR}/{stem}|{_short_date(data['date'])}]]"})
     return out
+
+
+_CODE_RE = re.compile(r"\b(?:[A-Z]{1,5}-?\d{2,}|\d{2,}-[A-Z]{1,5})\b")
+_MONTHS = ("January", "February", "March", "April", "May", "June", "July",
+           "August", "September", "October", "November", "December")
+PROPOSAL_INTERVAL_DAYS = 7
+
+
+def _day_label(text: str) -> str:
+    dt = seenevents.parse_now(text)
+    return f"{dt.day} {_MONTHS[dt.month - 1]}"
+
+
+def status(root: Path, *, now: str, first_run_since: Optional[str]) -> List[str]:
+    state = msgstate.load(root)
+    now_dt = seenevents.parse_now(now)
+    lines = []
+    if first_run_since:
+        lines.append("From today, this note also covers your mail and Teams.")
+    ages = [(now_dt - seenevents.parse_now(g["from"])).days for g in state["gaps"]]
+    if any(age > 2 for age in ages):
+        lines.append(f"I'm {max(ages)} days behind on your mail; I'll catch up tonight.")
+    for gap in state["closed_unread"]:
+        lines.append(f"I couldn't catch up on your mail from {_day_label(gap['from'])} "
+                     f"to {_day_label(gap['to'])}.")
+    if state["closed_unread"]:
+        state["closed_unread"] = []
+        msgstate.save(root, state)
+    return lines
+
+
+def check_lines(root: Path, lines_path: str) -> dict:
+    payload = _read_json(Path(lines_path), "lines file")
+    items = payload.get("lines") if isinstance(payload, dict) else None
+    cache: Dict[str, dict] = {}
+    passed, dropped = [], []
+    for line in items if isinstance(items, list) else []:
+        if not isinstance(line, dict):
+            dropped.append({"text": None, "reasons": ["line is not an object"]})
+            continue
+        sources = []
+        cites = line.get("cites") if isinstance(line.get("cites"), list) else []
+        for cite in cites:
+            stem, _, gid = str(cite).partition("#")
+            if stem not in cache:
+                try:
+                    cache[stem] = load_log(root / vault.MESSAGES_DIR / f"{stem}.md")["data"]
+                except (MessagesError, OSError):
+                    cache[stem] = {"groups": []}
+            for g in cache[stem]["groups"]:
+                if g.get("gid") == gid:
+                    sources += [p.get("text", "") for p in g["points"] if isinstance(p, dict)]
+                    sources += [str(g.get("label") or "")] + [n for n in (g.get("names") or {}).values() if n]
+        text = line.get("text")
+        if line.get("kind") not in ("needs-you", "context"):
+            dropped.append({**line, "reasons": ["kind is not needs-you or context"]})
+        elif not isinstance(text, str) or not text.strip():
+            dropped.append({**line, "reasons": ["text is empty or not a string"]})
+        elif not sources:
+            dropped.append({**line, "reasons": ["cites no log group"]})
+        else:
+            missing = discover.unsupported_tokens(text, sources)
+            if missing:
+                dropped.append({**line, "reasons": [f"{t!r} is not in the cited log" for t in missing]})
+            else:
+                passed.append({"kind": line["kind"], "text": " ".join(text.split())})
+    return {"passed": passed, "dropped": dropped}
+
+
+def keywords_propose(root: Path, *, today: str) -> Optional[dict]:
+    state = msgstate.load(root)
+    today_dt = seenevents.parse_now(f"{today}T00:00:00Z")
+    for p in state["proposed"]:
+        try:
+            if (today_dt - seenevents.parse_now(f"{p['date']}T00:00:00Z")).days < PROPOSAL_INTERVAL_DAYS:
+                return None
+        except (KeyError, TypeError, ValueError):
+            continue
+    projects = msgroute.active_projects(root)
+    taken = {(p["slug"], k.casefold()) for p in projects for k in p["keywords"] + [p["name"]]}
+    counts: Dict[str, Dict[str, int]] = {}
+    for path in _logs(root)[-7:]:
+        try:
+            data = load_log(path)["data"]
+        except (MessagesError, OSError):
+            continue
+        for g in data["groups"]:
+            if g.get("projects"):
+                continue
+            holders = [p["slug"] for p in projects if set(p["people"]) & set(g.get("people", []))]
+            for code in set(_CODE_RE.findall(str(g.get("label") or ""))):
+                bucket = counts.setdefault(code, {"_total": 0})
+                bucket["_total"] += 1
+                if len(holders) == 1:
+                    bucket[holders[0]] = bucket.get(holders[0], 0) + 1
+    best = None
+    for code, bucket in counts.items():
+        total = bucket.pop("_total")
+        for slug, hits in bucket.items():
+            if total >= 3 and hits >= 2 and (slug, code.casefold()) not in taken:
+                if best is None or total > best["count"]:
+                    best = {"keyword": code, "project": slug, "count": total}
+    if best:
+        state["proposed"].append({"keyword": best["keyword"], "project": best["project"], "date": today})
+        msgstate.save(root, state)
+    return best
