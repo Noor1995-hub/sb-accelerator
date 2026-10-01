@@ -130,7 +130,9 @@ def test_snippet_collapses_properties_by_default():
 
 # --- recap callout accents ---------------------------------------------------
 
-RECAP_CALLOUTS = ("glance", "theme", "hot", "sync")
+# The daily note's own callout types: the four the recap writes, and the
+# review queues at the top of the note (#238).
+RECAP_CALLOUTS = ("glance", "theme", "hot", "sync", "review")
 
 
 def _callout_declarations(prop: str) -> dict:
@@ -366,3 +368,36 @@ def test_base_groupby_uses_the_object_form():
             assert isinstance(group, dict), f"{where}: groupBy must be a mapping, got {group!r}"
             assert "property" in group and "direction" in group, (
                 f"{where}: groupBy needs both property and direction, got {sorted(group)}")
+
+
+def test_vault_opens_on_todays_daily_note():
+    """#238: Navigator's homepage is the daily note, found through Obsidian's
+    own Daily notes settings (the folder and name the evening run writes).
+    Never created when missing — an empty note would lack the recap and
+    prep markers, and the catch-up run refuses to write into it."""
+    data = json.loads(NN_DATA.read_text(encoding="utf-8"))
+    assert data["homepage"] == {"source": "daily-note", "file": None,
+                                "createMissingPeriodicNote": False}
+    assert data["calendarIntegrationMode"] == "daily-notes"
+    daily = json.loads((TEMPLATE / ".obsidian" / "daily-notes.json").read_text(encoding="utf-8"))
+    assert daily["folder"] == "60-daily-notes"
+
+
+def test_review_callout_collapses_when_empty_and_spans_the_pane():
+    css = (TEMPLATE / ".obsidian" / "snippets" / "sb-accelerator.css").read_text(encoding="utf-8")
+    # keyed on the body's height for the result count, not on drawn rows:
+    # Bases draws only on-screen rows, so a table below the fold has none
+    assert '.bases-embed:has(.bases-tbody[style*="height: 0px"])' in css
+    assert '.callout[data-callout="review"]:not(:has(.bases-tbody:not([style*="height: 0px"])))' in css
+    assert ".bases-tbody .bases-tr" not in css
+    # collapsed, never display:none — Bases stops re-rendering a hidden view
+    rule = css.split('.callout[data-callout="review"]:not(:has(.bases-tbody:not([style*="height: 0px"]))) {')[1].split("}")[0]
+    assert "height: 0" in rule and "display" not in rule
+    assert '.cm-embed-block:has(.callout[data-callout="review"])' in css
+
+
+def test_triage_rows_are_tall_enough_for_three_attendees():
+    import yaml
+    base = yaml.safe_load((TEMPLATE / "20-meetings" / "Meetings.base").read_text(encoding="utf-8"))
+    triage = next(v for v in base["views"] if v["name"] == "Triage")
+    assert triage["rowHeight"] == "tall"

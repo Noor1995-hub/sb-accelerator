@@ -97,6 +97,11 @@ type: daily-note
 
 # 2026-06-15 · Monday
 
+> [!review] Waiting for you
+> ![[20-meetings/Meetings.base#Triage]]
+>
+> ![[30-projects/Decisions.base#To review]]
+
 ## Recap
 <!-- evening-sync:recap:begin -->
 > [!info] At a glance
@@ -627,7 +632,8 @@ def test_fresh_fixture_is_exactly_what_daily_note_write_renders(tmp_path):
     # The three headings the renderer hands to the vault owner with an empty
     # affordance under them and never writes into again. Everything else in
     # the note is machine-generated and must match byte-for-byte.
-    jot_headings = {"#### notes", "#### actions", "## end of day"}
+    jot_headings = {"#### notes", "#### actions", "#### your notes",
+                    "#### your actions", "## end of day"}
 
     def strip_hand_jottings(text: str) -> str:
         """Blank the vault owner's bullets, keeping every other byte.
@@ -1271,6 +1277,11 @@ type: daily-note
 
 # 2026-06-15 · Monday
 
+> [!review] Waiting for you
+> ![[20-meetings/Meetings.base#Triage]]
+>
+> ![[30-projects/Decisions.base#To review]]
+
 ## Recap
 <!-- evening-sync:recap:begin inputs={digest} -->
 > [!glance] At a glance
@@ -1282,11 +1293,11 @@ type: daily-note
 
 **Project pulse**
 
+🔴 needs your hand · 🟠 watch · 🟢 moving · ⚪ quiet
+
 | | Project | What moved |
 |:-:|---|---|
 | 🟢 | [[30-projects/yard-automation/index\\|Yard Automation Program]] · [[40-entities/acme-industries/dossier\\|Acme]] | Shortlist approved. |
-
-🔴 needs your hand · 🟠 watch · 🟢 moving · ⚪ quiet
 
 **Decisions logged**
 - [[2026-06-12-phase-1-deferred|Phase 1 site nomination deferred]] · Yard Automation Program
@@ -1308,10 +1319,10 @@ type: daily-note
 **Context** — [[30-projects/yard-automation/index|Yard Automation Program]] · vendor selection target 2026-08-30
 <!-- evening-sync:prep:end -->
 
-#### Notes
+#### Your notes
 - 
 
-#### Actions
+#### Your actions
 - [ ] 
 
 ### 14:00 — Deep dive — vendor scoring
@@ -1322,10 +1333,10 @@ type: daily-note
 **Context** — first session
 <!-- evening-sync:prep:end -->
 
-#### Notes
+#### Your notes
 - 
 
-#### Actions
+#### Your actions
 - [ ] 
 
 ## End of day
@@ -1406,7 +1417,7 @@ def test_v2_payload_merges_into_a_v1_note(tmp_path):
     assert "- my jotting" in merged
     assert "### 09:00 — Weekly Status · [[acme-industries]]" in merged   # heading is the user's now
     assert "**Attendees** — Sam Okafor, Taylor Brooks" in merged
-    assert "#### Notes" not in merged   # sub-headings are never retro-fitted
+    assert "#### Your notes" not in merged   # sub-headings are never retro-fitted
 
 
 def test_read_splits_notes_and_actions_under_a_v2_meeting(tmp_path):
@@ -1414,9 +1425,11 @@ def test_read_splits_notes_and_actions_under_a_v2_meeting(tmp_path):
     dailynote.write(root, v2_payload())
     note = root / "60-daily-notes" / "2026-06-15.md"
     text = note.read_text(encoding="utf-8")
-    text = text.replace("#### Notes\n- \n\n#### Actions\n- [ ] \n\n### 14:00",
-                        "#### Notes\n- shortlist looks final\n- Sam wants a demo\n\n"
-                        "#### Actions\n- [ ] send the scoring sheet\n- [x] book the demo\n\n### 14:00")
+    filled = text.replace("#### Your notes\n- \n\n#### Your actions\n- [ ] \n\n### 14:00",
+                          "#### Your notes\n- shortlist looks final\n- Sam wants a demo\n\n"
+                          "#### Your actions\n- [ ] send the scoring sheet\n- [x] book the demo\n\n### 14:00")
+    assert filled != text
+    text = filled
     note.write_text(text, encoding="utf-8")
     data = dailynote.read(root, "2026-06-15")
     first = data["meetings"][0]
@@ -1460,3 +1473,28 @@ def test_meetings_in_window_counts_meeting_notes_only(tmp_path):
     root = make_windowed_vault(tmp_path)
     assert dailynote.meetings_in_window(root, date(2026, 6, 12), date(2026, 6, 12)) == 1
     assert dailynote.meetings_in_window(root, date(2026, 6, 13), date(2026, 6, 14)) == 0
+
+
+def test_review_block_is_not_read_as_the_owners_words(tmp_path):
+    # #238: the embedded queues sit above the recap, where any other line
+    # would land in other_lines and be fed back to the evening run.
+    root = v2_vault(tmp_path)
+    dailynote.write(root, v2_payload())
+    data = dailynote.read(root, "2026-06-15")
+    assert data["other_lines"] == []
+    text = (root / "60-daily-notes" / "2026-06-15.md").read_text(encoding="utf-8")
+    assert text.index(dailynote.REVIEW_BLOCK) < text.index("## Recap")
+
+
+def test_old_notes_headings_still_read_as_notes_and_actions(tmp_path):
+    # Notes written before #238 say "#### Notes"/"#### Actions"; the reader
+    # goes by position under the meeting, so they read the same.
+    root = v2_vault(tmp_path)
+    dailynote.write(root, v2_payload())
+    note = root / "60-daily-notes" / "2026-06-15.md"
+    text = note.read_text(encoding="utf-8").replace("#### Your notes\n- \n\n#### Your actions\n- [ ] \n\n### 14:00",
+                                                    "#### Notes\n- old style\n\n#### Actions\n- [ ] old task\n\n### 14:00")
+    note.write_text(text, encoding="utf-8")
+    first = dailynote.read(root, "2026-06-15")["meetings"][0]
+    assert first["notes"] == ["old style"]
+    assert first["actions"] == [{"text": "old task", "done": False}]

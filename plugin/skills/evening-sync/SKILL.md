@@ -119,10 +119,10 @@ python3 "$VAULTLIB" daily-note read --vault "$VAULT" --date <recap_from>
 ```
 
 `exists: false` is a normal first-run state — note it and move on. Otherwise
-collect, per meeting, `notes` (the owner's bullets under `#### Notes`, or
-bullets directly under the heading on a note written before v2) and
-`actions` (`{text, done}` from the `- [ ]` / `- [x]` list under
-`#### Actions`), plus the `end_of_day` bullets. All of it is context for the
+collect, per meeting, `notes` (the owner's bullets under `#### Your notes`
+— `#### Notes` on notes written before 0.12.11 — or bullets directly under
+the heading on a note written before v2) and `actions` (`{text, done}` from
+the `- [ ]` / `- [x]` list under `#### Your actions`), plus the `end_of_day` bullets. All of it is context for the
 recap (stage 6) and decision candidates (stage 4); an action is a jotting
 the owner marked as a task, nothing routes it anywhere yet. The note itself
 is the archive of the day — **never modify it**.
@@ -354,7 +354,9 @@ project with a one-line what-happened, or `none on file`), and `context`
 (one line from the entity dossier and the project's *Where it stands* card,
 or, with no confident match, one line from the event alone and `No tracked
 project.`). Each field is one line; the CLI renders them under `#### Prep`
-and adds empty `#### Notes` and `#### Actions` lists for the owner.
+and adds empty `#### Your notes` and `#### Your actions` lists for the owner.
+It also opens every new note with the `> [!review] Waiting for you` block —
+the live Meetings and Decisions review queues; nothing to pass for it.
 The lookups: match attendee email domains and subject keywords against
 `40-entities/*/` and active projects in `30-projects/*/index.md` (same
 signals, same order, as `/sync-recordings` step 3); read the matched dossier

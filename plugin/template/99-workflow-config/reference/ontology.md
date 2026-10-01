@@ -454,6 +454,10 @@ body_sections: [Recap, Meetings, End of day]
   `daily-note write` regenerates marked regions wholesale on any re-run and
   is forbidden from touching a byte outside them. One writer class per
   region.
+- **Review block**: a fresh note opens with `> [!review] Waiting for you`,
+  above `## Recap` — the embedded Meetings `Triage` and Decisions
+  `To review` views, written once at creation, collapsed by the CSS snippet
+  when both are empty. It is not a region and holds no state.
 - **Everything outside the markers is human territory**: jotting bullets
   under each meeting heading, `## End of day`, anything else. The evening
   harvest reads jottings as input; nothing ever edits or routes them in v1.
@@ -468,8 +472,9 @@ body_sections: [Recap, Meetings, End of day]
   CLI's; one supplied in a payload is stripped.
 - **Meeting blocks v2**: `### {HH:MM} — {Subject}[ · [[40-entities/{slug}/dossier|{Entity name}]]]`,
   then `#### Prep` holding the prep region (three lines: **Attendees**,
-  **Last meeting**, **Context**), then `#### Notes` (`- `) and `#### Actions`
-  (`- [ ] `). Notes and Actions are written once at creation and never
+  **Last meeting**, **Context**), then `#### Your notes` (`- `) and
+  `#### Your actions` (`- [ ] `) — `#### Notes`/`#### Actions` on notes
+  written before 0.12.11. Notes and Actions are written once at creation and never
   regenerated; the harvest returns them separately, actions with done state.
 - **Identity links are path links.** Entities and projects are folders, and
   Obsidian resolves `[[name]]` by file name only, so writers emit

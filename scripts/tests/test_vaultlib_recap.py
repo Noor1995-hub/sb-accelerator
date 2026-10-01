@@ -58,11 +58,11 @@ EXPECTED = """> [!glance] At a glance
 
 **Project pulse**
 
+🔴 needs your hand · 🟠 watch · 🟢 moving · ⚪ quiet
+
 | | Project | What moved |
 |:-:|---|---|
 | 🟢 | [[30-projects/yard-automation/index\\|Yard Automation Program]] · [[40-entities/acme-industries/dossier\\|Acme]] | Yard 2 re-scope agreed; schedule owed to Leo. |
-
-🔴 needs your hand · 🟠 watch · 🟢 moving · ⚪ quiet
 
 **Decisions logged**
 - [[2026-06-12-phase-1-deferred|Phase 1 site nomination deferred to Nordbridge]] · Yard Automation Program
@@ -93,7 +93,7 @@ def test_empty_lists_render_their_none_phrasing(tmp_path):
     assert "**Touched:**" not in text
     assert "**Themes** — none this window." in text
     assert "**Project pulse** — no project touched this window." in text
-    assert "**Decisions logged** — none this run." in text
+    assert "**No new decisions.**" in text and "none this run" not in text
     assert "> [!hot] Watch\n> - nothing needs your hand this window" in text
     assert "Carried forward" not in text and "Sync notes" not in text
 

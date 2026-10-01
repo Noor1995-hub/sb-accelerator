@@ -58,7 +58,7 @@ views:
     sort:
       - property: date
         direction: DESC
-    rowHeight: medium
+    rowHeight: tall
     columnSize:
       note.date: 150
       note.calendar-subject: 170

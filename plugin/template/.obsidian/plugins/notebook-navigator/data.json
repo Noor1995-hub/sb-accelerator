@@ -106,5 +106,11 @@
     "90-archive",
     "95-private",
     "_heavy-assets"
-  ]
+  ],
+  "homepage": {
+    "source": "daily-note",
+    "file": null,
+    "createMissingPeriodicNote": false
+  },
+  "calendarIntegrationMode": "daily-notes"
 }
