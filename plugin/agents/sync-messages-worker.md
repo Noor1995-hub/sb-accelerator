@@ -1,6 +1,6 @@
 ---
 name: sync-messages-worker
-description: Nightly mail and Teams worker, dispatched by sync-messages with a full briefing. Not for direct invocation — without a briefing it has nothing to act on.
+description: Nightly mail and Teams worker, dispatched by /sync-messages with a full briefing. Not for direct invocation — without a briefing it has nothing to act on.
 model: sonnet
 color: cyan
 disallowedTools: Agent, Workflow, WebFetch, WebSearch, NotebookEdit, Skill, SlashCommand, TodoWrite, Artifact, ListAgents, ReportFindings, ShareOnboardingGuide, Monitor, SendMessage, PushNotification, RemoteTrigger, TaskStop, CronCreate, CronDelete, CronList

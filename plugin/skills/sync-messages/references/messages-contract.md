@@ -1,6 +1,6 @@
 # Messages contract
 
-You are dispatched by the sync-messages skill for one night. Inputs in your briefing:
+You are dispatched by the /sync-messages skill for one night. Inputs in your briefing:
 `$VAULT`, `$SCRATCH`, `$VAULTLIB`, `TIMEZONE` (IANA name), `OWNER_ADDRESSES`
 (one or more), `SINCE` (UTC ISO), `NOW` (UTC ISO), `GAPS` (a list of
 `{id, source, from, to}`, possibly empty).

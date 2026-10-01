@@ -53,7 +53,7 @@ def known_subcommands() -> set:
 
 
 NET_NEW = {"report-feedback", "health-check", "upgrade-vault", "setup-my-brain",
-           "schedule-daily-loop", "provision-vault"}
+           "schedule-daily-loop", "provision-vault", "sync-messages"}
 
 
 def test_expected_skills_exist():
@@ -63,7 +63,8 @@ def test_expected_skills_exist():
     assert {"new-project", "update-entity", "log-decision",
             "sync-recordings", "evening-sync", "report-feedback",
             "health-check", "upgrade-vault", "setup-my-brain",
-            "schedule-daily-loop", "provision-vault"} <= names
+            "schedule-daily-loop", "provision-vault",
+            "sync-messages"} <= names
 
 
 @pytest.mark.parametrize("path", SKILL_FILES, ids=lambda p: p.parent.name)
@@ -2083,3 +2084,28 @@ def test_messages_worker_agent_definition():
     disallowed = re.search(r"disallowedTools: (.*)", front).group(1)
     assert {t.strip() for t in disallowed.split(",")} == M365_WORKER_DISALLOWED_TOOLS_SET
     assert "messages contract" in text and "outcome line" in text
+
+
+def test_sync_messages_asks_consent_with_the_honest_text():
+    text = re.sub(r"\s+", " ", read_skill("sync-messages"))
+    assert "save short notes on what was said" in text
+    assert "they include what other people wrote to you" in text
+    assert "stop and delete everything" in text
+
+
+def test_sync_messages_checks_everything_before_dispatch():
+    text = read_skill("sync-messages")
+    dispatch = text.index("second-brain:sync-messages-worker")
+    assert text.index("config verify-account --adapter m365") < dispatch
+    assert text.index("messages cursor") < dispatch
+
+
+def test_sync_messages_never_writes_without_the_owner_on_removals():
+    flat = re.sub(r"\s+", " ", read_skill("sync-messages"))
+    assert "messages forget" in flat and "--apply" in flat
+    assert "Shall I keep what I saved so far, or delete it?" in flat
+
+
+def test_sync_messages_unattended_mode_never_asks():
+    unattended = read_skill("sync-messages").split("## Unattended mode")[1]
+    assert "never ask" in unattended.lower()
