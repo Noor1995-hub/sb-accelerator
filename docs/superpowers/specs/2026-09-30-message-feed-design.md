@@ -139,7 +139,7 @@ Elsewhere, without the owner opening anything:
   link is the only way the owner meets a digest, and only when they want the
   source.
 - A session asked about a project or a person already knows what was said.
-- The digest itself (`_messages/2026-09-30.md`) is out of sight.
+- The digest itself (`_messages/2026-09-30-messages.md`) is out of sight.
 
 ### 4.3 On request
 
@@ -224,7 +224,7 @@ is off, M365 is not connected or the account proof fails.
 
 ### 5.5 The digest
 
-`_messages/YYYY-MM-DD.md`, one per calendar day of messages. Its readers are
+`_messages/YYYY-MM-DD-messages.md`, one per calendar day of messages. Its readers are
 Claude sessions and the stage-4 project update; its properties are how a
 session finds what was said about a project or a person, and it is the
 evidence every mail- or chat-derived line elsewhere traces back to:
@@ -506,3 +506,19 @@ cursor lives in vault state beside `lastsync`, not in config.
 - **Routing quality is unmeasured.** Check in the Cowork run how many groups
   land in *Not linked to a project* and how many strong links are wrong; tune
   the rules from that.
+
+## 13. Clarifications from planning (2026-10-01)
+
+Found while mapping the spec onto the code; each keeps the spec's intent.
+
+| # | Found | Resolution |
+|---|---|---|
+| C1 | Digest stems `YYYY-MM-DD` would collide with daily-note stems: Obsidian resolves links by file name, and a decision's `source` is a bare stem | Digests are named `YYYY-MM-DD-messages.md` |
+| C2 | Entities store no email domains, so rule §7.1 (a) had nothing to match | The CLI derives an entity's domains from the `attendee-emails` of meetings linked to it (directly or through its projects), outside `home_domains`, seen in at least 2 meetings. No schema change, nothing for the owner to fill |
+| C3 | Person notes are created from names and never carry an email, so matching by address would find no one | Each run fills a missing `email` on an existing person note from Teams chat members (display name and address arrive together), never overwriting one. New person notes from the feed are created with their address |
+| C4 | The mail search returns one flat `recipients` list, no To/CC split (verified 2026-09-30) | "Direct" means at most 5 recipients, in decision 14 and in the priority order of §9 |
+| C5 | The page caps bound fetching; what costs is condensing | The fixed safety limit has two parts: the page caps (fetch) and at most 40 message groups condensed per day (cost). The priority order of §9 decides which groups are condensed when a day has more; the rest are counted as skipped |
+| C6 | Project-state items refuse links to unknown note kinds | `links` learns the `digest` kind, so a "from mail" marker can link its digest |
+| C7 | The daily note has no slot for a new block | The *Mail and Teams* block is a new optional `messages` field of the v2 recap, rendered right after *At a glance*; digests join the recap's fingerprint inputs. Status lines (behind, first morning) and the keyword proposal are produced by the CLI, never composed |
+| C8 | `/setup-my-brain`'s hard rule "chat text and the Inbox are never read" | Scoped to setup's own 5-minute read; the nightly feed has its own consent |
+| C9 | A digest's body must survive merge, forget and unlink | The body is rendered from a structured block kept at the end of the note as an Obsidian comment (`%% … %%`, hidden in reading view); every change edits the data and re-renders |
