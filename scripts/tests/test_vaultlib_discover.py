@@ -742,3 +742,20 @@ def test_calendar_rows_without_times_still_build(tmp_path):
     [meeting] = entries_of(result, "recurring-meeting")
     assert meeting["text"] == 'Recurring meeting "Weekly exco": 3 times in the window'
     assert by_label(result, "person")["Sam Okafor"]["detail"] == "3 meetings"
+
+
+def test_unsupported_tokens_passes_what_the_sources_hold():
+    sources = ['Jordan Reyes: can we move workshop 2 to 14 Oct?', 'ok for me']
+    assert discover.unsupported_tokens("Jordan Reyes asks to move workshop 2 to 14 Oct.", sources) == []
+
+
+def test_unsupported_tokens_names_an_invented_name_and_number():
+    sources = ["Jordan Reyes: can we move workshop 2?"]
+    missing = discover.unsupported_tokens("Jordan Reyes and Priya Nathan moved workshop 3.", sources)
+    assert "Priya Nathan" in missing
+    assert "3" in missing
+    assert "Jordan Reyes" not in missing
+
+
+def test_unsupported_tokens_with_no_sources_flags_every_token():
+    assert discover.unsupported_tokens("Mail from jordan@acme.example", []) == ["jordan@acme.example"]
