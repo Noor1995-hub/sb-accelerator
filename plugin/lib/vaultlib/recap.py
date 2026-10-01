@@ -18,7 +18,7 @@ LABELS = ("Needs your hand", "Moved", "New", "Decided", "Quiet")
 LEGEND = "🔴 needs your hand · 🟠 watch · 🟢 moving · ⚪ quiet"
 
 _ALLOWED = ("glance", "themes", "pulse", "decisions", "watch",
-            "carried_forward", "sync_notes")
+            "carried_forward", "sync_notes", "messages")
 _GLANCE_ALLOWED = ("entities", "headlines")
 _LINE_WORDS = 40
 
@@ -202,8 +202,47 @@ def validate(root: Path, raw) -> Tuple[dict, List[str], List[str]]:
         lists[key] = [_norm(root, line, f"recap.{key}[{i}]", offenders, warnings)
                       for i, line in enumerate(_lines(raw.get(key), f"recap.{key}"))]
 
+    messages_raw = raw.get("messages")
+    messages = None
+    if messages_raw is not None:
+        if not isinstance(messages_raw, dict) or set(messages_raw) != {
+                "items", "status", "decisions_to_confirm", "keyword_proposal"}:
+            raise RecapError("recap.messages needs exactly items, status, "
+                             "decisions_to_confirm, keyword_proposal")
+        items = messages_raw["items"]
+        if not isinstance(items, list) or len(items) > 5:
+            raise RecapError("recap.messages.items: at most 5")
+        clean_items = []
+        for i, item in enumerate(items):
+            if (not isinstance(item, dict) or set(item) != {"kind", "text"}
+                    or item["kind"] not in ("needs-you", "context")):
+                raise RecapError(
+                    f"recap.messages.items[{i}] needs kind (needs-you|context) and text")
+            text = _one_line(item["text"], f"recap.messages.items[{i}].text", 30)
+            clean_items.append({"kind": item["kind"],
+                                "text": _norm(root, text, f"recap.messages.items[{i}]",
+                                              offenders, warnings)})
+        status_lines = _lines(messages_raw["status"], "recap.messages.status")
+        if len(status_lines) > 3:
+            raise RecapError("recap.messages.status: at most 3")
+        count = messages_raw["decisions_to_confirm"]
+        if not isinstance(count, int) or isinstance(count, bool) or count < 0:
+            raise RecapError("recap.messages.decisions_to_confirm must be a non-negative integer")
+        proposal = messages_raw["keyword_proposal"]
+        if proposal is not None:
+            if not isinstance(proposal, dict) or set(proposal) != {"keyword", "project"}:
+                raise RecapError("recap.messages.keyword_proposal needs keyword and project")
+            link = _identity_link(root, "project", str(proposal["project"]),
+                                  "recap.messages.keyword_proposal", offenders, warnings)
+            proposal = {"keyword": _one_line(proposal["keyword"],
+                                             "recap.messages.keyword_proposal.keyword", 3),
+                        "project": link}
+        clean_items.sort(key=lambda it: it["kind"] != "needs-you")
+        messages = {"items": clean_items, "status": status_lines,
+                    "decisions_to_confirm": count, "keyword_proposal": proposal}
+
     clean = {"headlines": clean_headlines, "entities": entity_links,
-             "themes": themes, "pulse": pulse, "decisions": decisions, **lists}
+             "themes": themes, "pulse": pulse, "decisions": decisions, "messages": messages, **lists}
     return clean, offenders, warnings
 
 
@@ -224,6 +263,21 @@ def render(root: Path, clean: dict, *, meetings: int, window_label: str) -> str:
     if clean["entities"]:
         glance.append("> - **Touched:** " + " · ".join(clean["entities"]))
     parts.append("\n".join(glance))
+
+    m = clean.get("messages")
+    if m and (m["items"] or m["status"] or m["decisions_to_confirm"] or m["keyword_proposal"]):
+        lines = ["> [!info] Mail and Teams"]
+        lines += [f"> - **Needs you:** {it['text']}" if it["kind"] == "needs-you"
+                  else f"> - {it['text']}" for it in m["items"]]
+        if m["decisions_to_confirm"]:
+            noun = _plural(m["decisions_to_confirm"], "decision")
+            lines.append(f"> - **{noun} from mail to confirm** → Decisions, Needs review")
+        if m["keyword_proposal"] and m["keyword_proposal"]["project"]:
+            p = m["keyword_proposal"]
+            lines.append(f"> - Mails about '{p['keyword']}' seem to be about {p['project']}. "
+                         f"Say 'link {p['keyword']}' to me and I'll link them from now on.")
+        lines += [f"> - {line}" for line in m["status"]]
+        parts.append("\n".join(lines))
 
     if clean["themes"]:
         parts.append("**Themes**")

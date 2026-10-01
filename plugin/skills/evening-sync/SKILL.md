@@ -441,6 +441,25 @@ names the field, so one retry always suffices.
   `sync_notes`, which renders folded, and never in `watch`.
 - `carried_forward` — jottings worth carrying, one line each.
 - `sync_notes` — the mechanics, one line each; also in the run summary.
+- `messages` — only when stage 3b ran; omit the field otherwise. The CLI
+  renders it as the *Mail and Teams* block right after *At a glance*. Build
+  it in this order:
+  1. `python3 "$VAULTLIB" messages status --vault "$VAULT" --now <now UTC> [--first-run-since <since from stage 3b, first run only>]`
+     gives `{"lines": [...]}`; use those lines verbatim as `status` (at most 3).
+  2. `python3 "$VAULTLIB" messages keywords-propose --vault "$VAULT" --today <today>`
+     gives `{"proposal": {"keyword", "project", "count"} | null}`;
+     `keyword_proposal` is the proposal's `keyword` and `project` without
+     `count`, or `null`.
+  3. `decisions_to_confirm` — the number of decisions stage 4 wrote with a log
+     `source`.
+  4. `items` — at most 5 lines (≤ 30 words each) from tonight's logs: first
+     what needs the owner (groups with **Needs you**), each with one concrete
+     action (`kind: "needs-you"`); then one context line per project
+     (`kind: "context"`). Write them to `$SCRATCH/msg_lines.payload.json` as
+     `{"lines": [{"kind", "text", "cites": ["<YYYY-MM-DD>-messages#<gid>"]}]}`,
+     run `python3 "$VAULTLIB" messages check-lines --vault "$VAULT" --lines "$SCRATCH/msg_lines.payload.json"`,
+     and use only the `passed` lines (`{kind, text}`) as `items`. No counts,
+     no internal terms.
 
 The catch-up banner is the CLI's: `dates plan`'s `is_catchup` becomes the
 callout on write, and a banner you put in a payload is stripped with a
@@ -480,7 +499,14 @@ cat > "$SCRATCH/daily-note.payload.json" <<'JSON'
     "decisions": ["<decision-stem>"],
     "watch": ["<content risk, one line>"],
     "carried_forward": ["<jotting worth carrying>"],
-    "sync_notes": ["<mechanical item, one line>"]
+    "sync_notes": ["<mechanical item, one line>"],
+    "messages": {
+      "items": [{"kind": "needs-you", "text": "<≤ 30 words, one concrete action>"},
+                {"kind": "context", "text": "<≤ 30 words>"}],
+      "status": ["<line from messages status, verbatim>"],
+      "decisions_to_confirm": 0,
+      "keyword_proposal": {"keyword": "<keyword>", "project": "<project-slug>"}
+    }
   },
   "meetings": [
     {"time": "09:00", "subject": "Weekly Status", "entity": "<entity-slug>",

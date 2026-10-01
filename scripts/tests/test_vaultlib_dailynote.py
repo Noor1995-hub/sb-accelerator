@@ -1460,3 +1460,15 @@ def test_meetings_in_window_counts_meeting_notes_only(tmp_path):
     root = make_windowed_vault(tmp_path)
     assert dailynote.meetings_in_window(root, date(2026, 6, 12), date(2026, 6, 12)) == 1
     assert dailynote.meetings_in_window(root, date(2026, 6, 13), date(2026, 6, 14)) == 0
+
+
+def test_a_log_in_the_window_feeds_the_fingerprint(tmp_path):
+    root = make_vault(tmp_path)
+    (root / "_messages").mkdir()
+    (root / "_messages" / "2026-09-30-messages.md").write_text(
+        "---\ntype: message-log\n---\n", encoding="utf-8")
+    (root / "_messages" / "2026-09-01-messages.md").write_text(
+        "---\ntype: message-log\n---\n", encoding="utf-8")
+    names = [n for n, _ in dailynote._fingerprint_inputs(root, date(2026, 9, 30), date(2026, 9, 30))]
+    assert "_messages/2026-09-30-messages.md" in names
+    assert "_messages/2026-09-01-messages.md" not in names

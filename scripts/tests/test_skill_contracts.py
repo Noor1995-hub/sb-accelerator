@@ -2159,3 +2159,13 @@ def test_stage4_reads_logs_marks_their_items_and_captures_decisions():
     assert "per the group's `kind`" in flat and "group's `log` field" in flat
     ld = re.sub(r"\s+", " ", read_skill("log-decision"))
     assert "message log (`_messages/<YYYY-MM-DD>-messages`)" in ld
+
+
+def test_evening_sync_stage_6_builds_the_messages_field_with_the_real_cli():
+    text = _normalized(_evening_sync())
+    stage6 = text[text.index("## Stage 6"):]
+    for needle in ('"messages"', "messages status --vault", "--first-run-since",
+                   "messages keywords-propose --vault", "messages check-lines --vault",
+                   "msg_lines.payload.json", "decisions_to_confirm",
+                   "keyword_proposal", "<YYYY-MM-DD>-messages#<gid>"):
+        assert needle in stage6, f"stage 6 must carry {needle}"
