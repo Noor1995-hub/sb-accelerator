@@ -475,3 +475,26 @@ def test_check_lines_refuses_a_cite_that_is_not_a_log_stem(env, tmp_path):
     result = msglog.check_lines(root, str(lines))
     assert result["passed"] == []
     assert "'../x#a' is not a message-log cite" in result["dropped"][0]["reasons"]
+
+
+def test_one_reply_to_a_list_mail_creates_no_person_notes_end_to_end(tmp_path):
+    """C2: build -> route over a mixed Inbox/Sent thread with a list mail."""
+    root = make_vault(tmp_path)
+    scratch = tmp_path / "scratch"
+    scratch.mkdir()
+    crowd = [f"{first}.{last}@acme.example" for first, last in (
+        ("ann", "baker"), ("bob", "carter"), ("cy", "dunn"), ("di", "evans"), ("ed", "fox"),
+        ("flo", "grant"), ("gus", "hale"), ("hal", "irwin"), ("ida", "jones"), ("jo", "kent"))]
+    page(scratch, "msg_inbox.p1.payload.json", [
+        mail("m1", "Q4 planning", "jordan.reyes@acme.example", ["morgan.ellery@northwind.example"],
+             at="2026-09-30T08:00:00Z"),
+        mail("m2", "Q4 planning", "info@acme.example", crowd + ["morgan.ellery@northwind.example"],
+             at="2026-09-30T09:00:00Z")])
+    page(scratch, "msg_sent.p1.payload.json", [
+        mail("m3", "RE: Q4 planning", "morgan.ellery@northwind.example", crowd + ["jordan.reyes@acme.example"],
+             at="2026-09-30T10:00:00Z"),
+        mail("m4", "Contract draft", "morgan.ellery@northwind.example", ["priya.nathan@contoso.example"],
+             at="2026-09-30T11:00:00Z")])
+    result = msglog.build(root, str(scratch), consume=False, **KW)
+    assert result["created"] == ["priya-nathan"]
+    assert sorted(p.stem for p in (root / "50-people").glob("*.md")) == ["priya-nathan"]

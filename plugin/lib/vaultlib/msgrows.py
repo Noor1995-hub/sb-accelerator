@@ -183,7 +183,8 @@ def group(loaded: Dict[str, dict], *, exclusions: List[dict], owner_addresses: S
         if (key, day) not in groups:
             groups[(key, day)] = {"gid": _gid(key, day), "key": key, "date": day,
                                   "participants": [], "names": {}, "messages": [],
-                                  "owner_wrote": False, "direct": False, "sources": [], **init}
+                                  "owner_wrote": False, "direct": False, "direct_to": [],
+                                  "sources": [], **init}
         return groups[(key, day)]
 
     for source in ("teams", "inbox", "sent"):
@@ -241,6 +242,15 @@ def group(loaded: Dict[str, dict], *, exclusions: List[dict], owner_addresses: S
                 if len(addresses) <= DIRECT_LIMIT + 1 and (
                         source == "sent" or owners & set(addresses)):
                     g["direct"] = True
+                # Only the recipients of a mail the owner sent to at most
+                # DIRECT_LIMIT people may get a new person note (decision 14);
+                # a reply-all to a list mail joins the list's group but never
+                # its recipients to this set.
+                recipients = [a for a in (_address(r) for r in row.get("recipients") or []) if a]
+                if source == "sent" and len(recipients) <= DIRECT_LIMIT:
+                    for address in recipients:
+                        if address not in owners and address not in g["direct_to"]:
+                            g["direct_to"].append(address)
                 text = str(row.get("summary") or "").strip()
             if source not in g["sources"]:
                 g["sources"].append(source)
@@ -254,6 +264,7 @@ def group(loaded: Dict[str, dict], *, exclusions: List[dict], owner_addresses: S
     for g in groups.values():
         g["messages"].sort(key=lambda m: m["at"])
         g["participants"].sort()
+        g["direct_to"].sort()
         out.append(g)
     out.sort(key=lambda g: (g["date"], g["key"]))
     return out, counts

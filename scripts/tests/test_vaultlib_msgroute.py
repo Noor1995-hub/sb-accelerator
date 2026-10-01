@@ -22,11 +22,12 @@ def add_meeting(root, stem, entities, emails):
     (root / "20-meetings" / f"{stem}.md").write_text(markdown.emit_frontmatter(fm), encoding="utf-8")
 
 
-def grp(label, participants, kind="mail", chat_type=None, texts=("hello",), names=None, sources=("inbox",), direct=False):
+def grp(label, participants, kind="mail", chat_type=None, texts=("hello",), names=None, sources=("inbox",),
+        direct=False, direct_to=()):
     return {"gid": label[:8], "key": f"{kind}:{label}", "date": "2026-09-30", "kind": kind,
             "chat_type": chat_type, "label": label, "participants": list(participants),
             "names": names or {}, "messages": [{"id": t, "at": "", "from": None, "text": t} for t in texts],
-            "owner_wrote": False, "direct": direct, "sources": list(sources)}
+            "owner_wrote": False, "direct": direct, "direct_to": list(direct_to), "sources": list(sources)}
 
 
 def test_entity_domains_need_two_meetings_and_skip_home_domains(tmp_path):
@@ -68,7 +69,8 @@ def test_people_creation_rule_and_enrichment(tmp_path):
     person.ensure(root, "Sam Lee", "2026-09-01")
     one = grp("Sam Lee", ["sam.lee@acme.example"], kind="chat", chat_type="oneOnOne",
               names={"sam.lee@acme.example": "Sam Lee"}, sources=("teams",), direct=True)
-    sent = grp("Proposal", ["priya.nathan@contoso.example"], sources=("sent",), direct=True)
+    sent = grp("Proposal", ["priya.nathan@contoso.example"], sources=("sent",), direct=True,
+               direct_to=["priya.nathan@contoso.example"])
     cc = grp("Newsletter", [f"p{i}@acme.example" for i in range(9)])
     result = msgroute.route(root, [one, sent, cc], home_domains=[], owner_addresses=OWNER, today="2026-09-30")
     assert result["emails_set"] == ["sam-lee"]
@@ -90,3 +92,21 @@ def test_a_stakeholder_link_is_weak_and_only_for_exactly_one_project(tmp_path):
     g = grp("Lunch", ["sam.lee@acme.example"])
     msgroute.route(root, [g], home_domains=[], owner_addresses=OWNER, today="2026-09-30")
     assert g["projects_weak"] == ["acme-industries-rollout"]
+
+
+def test_only_direct_recipients_of_a_small_sent_mail_get_a_new_note(tmp_path):
+    root = make_vault(tmp_path)
+    crowd = [f"member.{n}@acme.example" for n in ("alpha", "bravo", "charlie", "delta", "echo", "foxtrot")]
+    g = grp("Q4 planning", crowd + ["priya.nathan@contoso.example"], sources=("inbox", "sent"), direct=True,
+            direct_to=["priya.nathan@contoso.example"])
+    result = msgroute.route(root, [g], home_domains=[], owner_addresses=OWNER, today="2026-09-30")
+    assert result["created"] == ["priya-nathan"]
+
+
+def test_role_and_long_local_parts_never_become_a_person():
+    for address in ("no-reply@acme.example", "do.not.reply@acme.example", "noreply.team@acme.example",
+                    "info.benelux@acme.example", "hr.team@acme.example", "sales.desk@acme.example",
+                    "notifications.bot@acme.example", "anna.maria.de.vries@acme.example"):
+        assert msgroute._name_from_address(address) is None, address
+    assert msgroute._name_from_address("priya.nathan@contoso.example") == "Priya Nathan"
+    assert msgroute._name_from_address("jan.de.vries@contoso.example") == "Jan De Vries"

@@ -66,10 +66,22 @@ def _has_word(word: str, text: str) -> bool:
     return bool(re.search(r"(?<!\w)" + re.escape(word.casefold()) + r"(?!\w)", text.casefold()))
 
 
+# Local parts that name a mailbox role, not a person: an address whose local
+# part is one of these (separators ignored: `no-reply`, `do.not.reply`) or
+# holds one as a part (`hr.team`) never becomes a person note.
+ROLE_WORDS = frozenset(("noreply", "donotreply", "info", "support", "admin", "office", "contact",
+                        "sales", "billing", "hr", "team", "notifications"))
+MAX_NAME_PARTS = 3
+
+
 def _name_from_address(address: str):
-    local = address.split("@", 1)[0]
+    local = address.split("@", 1)[0].casefold()
     parts = [p for p in re.split(r"[._-]", local) if p.isalpha()]
-    return " ".join(p.capitalize() for p in parts) if len(parts) >= 2 else None
+    if re.sub(r"[._-]", "", local) in ROLE_WORDS or any(p in ROLE_WORDS for p in parts):
+        return None
+    if not 2 <= len(parts) <= MAX_NAME_PARTS:
+        return None
+    return " ".join(p.capitalize() for p in parts)
 
 
 def route(root: Path, groups: List[dict], *, home_domains, owner_addresses, today: str) -> dict:
@@ -98,8 +110,8 @@ def route(root: Path, groups: List[dict], *, home_domains, owner_addresses, toda
         create = []
         if g["kind"] == "chat" and g["chat_type"] == "oneOnOne":
             create = [(a, g["names"].get(a)) for a in g["participants"]]
-        elif g["kind"] == "mail" and "sent" in g["sources"] and g["direct"]:
-            create = [(a, _name_from_address(a)) for a in g["participants"]]
+        elif g["kind"] == "mail":
+            create = [(a, _name_from_address(a)) for a in g.get("direct_to", [])]
         for address, name in create:
             if address in owners or address in book or not name:
                 continue
