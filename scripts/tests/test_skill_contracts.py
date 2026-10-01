@@ -35,6 +35,7 @@ M365_WORKER_DISALLOWED_TOOLS = [
     "ShareOnboardingGuide", "Monitor", "SendMessage", "PushNotification",
     "RemoteTrigger", "TaskStop", "CronCreate", "CronDelete", "CronList",
 ]
+M365_WORKER_DISALLOWED_TOOLS_SET = set(M365_WORKER_DISALLOWED_TOOLS)
 
 
 def known_subcommands() -> set:
@@ -2046,3 +2047,35 @@ def test_setup_my_brain_keeps_approvals_and_heads_ups_on_screen():
     assert "no command in between" in text
     note = text[text.index("## Step 9"):text.index("## Step 10")]
     assert "typing a line in the chat" in note
+
+
+def read_contract():
+    return (REPO_ROOT / "plugin/skills/sync-messages/references/messages-contract.md").read_text(encoding="utf-8")
+
+
+def test_messages_contract_pins_the_tool_rules():
+    text = re.sub(r"\s+", " ", read_contract())
+    assert 'chat_message_search' in text and 'query: "*"' in text
+    assert "Never pass a date filter to `chat_message_search`" in text
+    assert '`folderName` `"Inbox"`' in text and '`folderName` `"Sent Items"`' in text
+    assert "Never search mail without `folderName`" in text
+    assert "Never call `read_resource` on a mail" in text
+    assert "Never write a page file with no rows" in text
+    assert "at most 5" in text
+    assert "20 pages" in text and "8 pages" in text
+    assert "25 rows" not in text
+
+
+def test_messages_contract_orders_build_check_write():
+    text = read_contract()
+    assert text.index("messages build") < text.index("messages check") < text.index("messages write")
+
+
+def test_messages_worker_agent_definition():
+    text = (REPO_ROOT / "plugin/agents/sync-messages-worker.md").read_text(encoding="utf-8")
+    front = text.split("---")[1]
+    assert "name: sync-messages-worker" in front and "model: sonnet" in front
+    assert "tools:" not in front
+    disallowed = re.search(r"disallowedTools: (.*)", front).group(1)
+    assert {t.strip() for t in disallowed.split(",")} == M365_WORKER_DISALLOWED_TOOLS_SET
+    assert "messages contract" in text and "outcome line" in text
