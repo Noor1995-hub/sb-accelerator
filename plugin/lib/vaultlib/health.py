@@ -363,8 +363,10 @@ def _messages_block(root: Path, start: date, end: date,
             unparsed.bump()
             continue
         # Same strict-name rule as the daily-note fingerprint: the file name
-        # must agree with the date it claims.
+        # must agree with the date it claims. A mismatch is a damaged log,
+        # so it is counted as unparsed rather than skipped silently.
         if path.stem != f"{day.isoformat()}-messages":
+            unparsed.bump()
             continue
         if start <= day <= end:
             in_window += 1
@@ -409,6 +411,10 @@ def report(root: Path, today: str, window: int = DEFAULT_WINDOW_DAYS) -> dict:
                  if m["date"] is not None
                  and window_start <= m["date"] <= today_date]
 
+    # Before `result` is built: its "unparsed" value is read at that moment,
+    # and the feed's damaged logs must be in it.
+    messages = _messages_block(root, window_start, today_date, unparsed)
+
     result = {
         "generated": today_date.isoformat(),
         "window_days": window_days,
@@ -432,7 +438,7 @@ def report(root: Path, today: str, window: int = DEFAULT_WINDOW_DAYS) -> dict:
         "provenance": _provenance_block(root),
         "claude_link": provenance.claude_link_state(root),
         "template": _template_block(root),
-        "messages": _messages_block(root, window_start, today_date, unparsed),
+        "messages": messages,
     }
     return result
 
