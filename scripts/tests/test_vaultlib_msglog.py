@@ -516,3 +516,13 @@ def test_a_group_chat_with_an_excluded_person_end_to_end(tmp_path):
     payload = (scratch / msgrows.GROUPS_FILE).read_text(encoding="utf-8")
     assert "jordan" not in payload.casefold()
     assert result["counts"]["excluded"] == 1 and result["groups"] == 1
+
+
+def test_check_drops_a_group_whose_gid_is_not_a_string(env):
+    root, scratch = env
+    msglog.build(root, str(scratch), consume=False, **KW)
+    payload = {"groups": [{"gid": ["a"], "points": []}, {"gid": {"x": 1}, "points": []}]}
+    (scratch / msglog.CONDENSED_FILE).write_text(json.dumps(payload), encoding="utf-8")
+    result = msglog.check(str(scratch))
+    assert result["passed"] == 0
+    assert [d["reasons"] for d in result["dropped"]] == [["gid is not a string"]] * 2

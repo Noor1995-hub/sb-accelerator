@@ -100,7 +100,10 @@ def check(scratch_dir: str) -> dict:
         if not isinstance(item, dict):
             dropped.append({"gid": None, "text": None, "reasons": ["group is not an object"]})
             continue
-        g = groups.get(item.get("gid"))
+        if not isinstance(item.get("gid"), str):
+            dropped.append({"gid": None, "text": None, "reasons": ["gid is not a string"]})
+            continue
+        g = groups.get(item["gid"])
         if g is None:
             dropped.append({"gid": item.get("gid"), "text": None, "reasons": ["unknown group"]})
             continue
