@@ -15,6 +15,7 @@ delivers them.
 
 ## Unreleased
 
+- Your daily note now has a short *Mail and Teams* block when the feed is on: what needs you first, then what moved per project. (#236)
 - Your second brain can now keep up with your mail and Teams chats. Switch it on during setup or by asking ("start reading my mail and Teams"): each evening it saves short notes on what was said, so your projects and your second brain already know what was said. Channels and attachments are never read, you can tell it to skip anyone or anything, and you can stop and delete everything at any time. (#236)
 
 ## v0.12.6 — 2026-09-29

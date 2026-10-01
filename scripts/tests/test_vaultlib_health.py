@@ -477,3 +477,16 @@ def test_entity_staleness_boundary_is_inclusive_at_exactly_30_days(tmp_path):
                     projects=[], entities=["edge-case-entity"])
     data = health.report(root, TODAY)
     assert data["entities"]["no_meeting_30d"] == 1
+
+
+def test_health_counts_logs_and_days_at_the_limit(tmp_path):
+    root = make_vault(tmp_path)
+    (root / "structure-version").write_text("2\n", encoding="utf-8")
+    folder = root / "_messages"
+    folder.mkdir()
+    for day, limit in (("2026-09-29", "false"), ("2026-09-30", "true"), ("2026-08-01", "true")):
+        (folder / f"{day}-messages.md").write_text(
+            f"---\ntype: message-log\ndate: {day}\nat-limit: {limit}\n---\n", encoding="utf-8")
+    block = health.report(root, "2026-09-30", window=28)["messages"]
+    assert block["logs_in_window"] == 2 and block["days_at_limit"] == 1
+    assert "days at the limit" in health.render(health.report(root, "2026-09-30", window=28))

@@ -31,7 +31,7 @@ from datetime import date, timedelta
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-from . import markdown, provenance, schema, syncjob, template, vault
+from . import config, markdown, provenance, schema, syncjob, template, vault
 
 MEETINGS_DIR = vault.MEETINGS_DIR
 PROJECTS_DIR = vault.PROJECTS_DIR
@@ -347,6 +347,32 @@ def _template_block(root: Path) -> dict:
     }
 
 
+def _messages_block(root: Path, start: date, end: date,
+                    unparsed: _Counter) -> dict:
+    """Mail and Teams feed folded to counts: whether it is on, how many
+    day files fall in the window, and how many of those hit the limit."""
+    enabled = bool(config.messages_settings(root).get("enabled"))
+    in_window = 0
+    at_limit = 0
+    folder = root / vault.MESSAGES_DIR
+    for path in sorted(folder.glob("*-messages.md")) if folder.is_dir() else []:
+        try:
+            data, _ = markdown.split_frontmatter(path.read_text(encoding="utf-8"))
+            day = date.fromisoformat(str(data.get("date")))
+        except (ValueError, OSError):
+            unparsed.bump()
+            continue
+        # Same strict-name rule as the daily-note fingerprint: the file name
+        # must agree with the date it claims.
+        if path.stem != f"{day.isoformat()}-messages":
+            continue
+        if start <= day <= end:
+            in_window += 1
+            at_limit += 1 if data.get("at-limit") is True else 0
+    return {"enabled": enabled, "logs_in_window": in_window,
+            "days_at_limit": at_limit}
+
+
 def _resolve_window(window) -> int:
     try:
         window_days = int(window)
@@ -406,6 +432,7 @@ def report(root: Path, today: str, window: int = DEFAULT_WINDOW_DAYS) -> dict:
         "provenance": _provenance_block(root),
         "claude_link": provenance.claude_link_state(root),
         "template": _template_block(root),
+        "messages": _messages_block(root, window_start, today_date, unparsed),
     }
     return result
 
@@ -488,6 +515,12 @@ def render(data: dict) -> str:
         ("missing", data["template"]["missing"]),
         ("blocked", data["template"]["blocked"]),
         ("baseline", data["template"]["baseline"]),
+    ])
+    lines += ["", "## Mail and Teams"]
+    lines += _table([
+        ("feed on", data["messages"]["enabled"]),
+        ("logs in window", data["messages"]["logs_in_window"]),
+        ("days at the limit", data["messages"]["days_at_limit"]),
     ])
     lines.append("")
     return "\n".join(lines) + "\n"
