@@ -5,7 +5,7 @@
       "name": "Default",
       "fileVisibility": "all",
       "propertyKeys": [],
-      "hiddenFolders": [],
+      "hiddenFolders": ["_messages"],
       "descendantExcludedFolders": [],
       "hiddenTags": [],
       "hiddenFileNames": [],

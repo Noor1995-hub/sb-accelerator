@@ -1,4 +1,5 @@
 {
   "attachmentFolderPath": "70-resources/attachments",
-  "alwaysUpdateLinks": true
+  "alwaysUpdateLinks": true,
+  "userIgnoreFilters": ["_messages/"]
 }

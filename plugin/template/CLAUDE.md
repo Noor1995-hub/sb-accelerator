@@ -36,10 +36,11 @@ questions, and browses.
 | `99-workflow-config/` | Context portfolio, object model reference, lessons log |
 | `claude/` | Vault-local Claude Code home — `.claude` symlinks here so skills stay visible in Obsidian |
 | `_heavy-assets/` | Generated binaries (.pptx/.xlsx/.pdf/…) |
+| `_messages/` | Mail and Teams message logs — machine material for Claude, hidden; you never need to open them |
 
 ## Object Model
 
-Six object types: **Meeting · Project · Person · Decision · Entity · Daily note**.
+Seven object types: **Meeting · Project · Person · Decision · Entity · Daily note · Message log**.
 Relationships live in YAML frontmatter (wikilinks and slug joins), not folder
 hierarchy; curation happens in the `.base` views, not by browsing folders.
 The authoritative schemas, enums, and join keys are in

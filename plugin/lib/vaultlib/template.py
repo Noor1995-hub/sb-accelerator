@@ -34,7 +34,7 @@ them (`test_every_shipped_file_is_classified_exactly_once` is the pin):
 `MANAGED` (this module's status()/refresh() surface) is `MANAGED_SILENT |
 MANAGED_CONSENT_ALWAYS` — 19 files. `ALL_TIERED` (used only to pin that
 every shipped file is classified exactly once) is `MANAGED | SEEDED_ONCE |
-IGNORED` — all 34.
+IGNORED` — all 35.
 """
 from __future__ import annotations
 
@@ -98,6 +98,7 @@ IGNORED = frozenset({
     "80-thoughts-ideas/.gitkeep",
     "95-private/.gitkeep",
     "_heavy-assets/.gitkeep",
+    "_messages/.gitkeep",
     "claude/skills/.gitkeep",
     "structure-version",
 })
