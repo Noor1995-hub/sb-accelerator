@@ -90,8 +90,8 @@ def build(root: Path, scratch_dir: str, *, timezone, utc_offset, owner_addresses
                 (Path(scratch_dir) / name).unlink()
                 consumed.append(name)
     return {"groups": len(groups), "by_date": by_date, "counts": counts, "skipped": skipped,
-            "at_limit": at_limit, "at_limit_days": sorted(at_limit_days), "newest": newest, "new_gaps": new_gaps, "filled": filled,
-            "consumed": sorted(consumed), **routed}
+            "at_limit": at_limit, "at_limit_days": sorted(at_limit_days), "newest": newest,
+            "new_gaps": new_gaps, "filled": filled, "consumed": sorted(consumed), **routed}
 
 
 def check(scratch_dir: str) -> dict:
