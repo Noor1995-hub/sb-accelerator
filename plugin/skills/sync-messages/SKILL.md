@@ -36,6 +36,16 @@ write the raw JSON to `$SCRATCH/m365.whoami.json` and pass it as `--identity`).
 On `match: false`, tell the owner plainly that the connected account is not
 theirs, and switch nothing on.
 
+Only on a vault that is up to date: the update is what hides the saved notes
+from the file list, search and graph.
+
+```bash
+python3 "$VAULTLIB" migrate status --vault "$VAULT"
+```
+
+If `pending` is non-empty, switch nothing on and say in plain words that the
+vault needs its update first, which a consultant does with `/upgrade-vault`.
+
 1. Ask, verbatim: *"Each evening I can look through your inbox, your sent mail
    and your Teams chats (not Teams channels, not attachments). I read the
    opening lines of each mail and your chat messages, and save short notes on
@@ -129,7 +139,10 @@ say so in one plain sentence and add nothing.
 ## Workflow (one run)
 
 1. **Preflight.** `config read`: stop with one line if `messages.enabled` is
-   false, M365 is disabled, or `timezone`/`owner` are missing. Call `get_me`,
+   false, M365 is disabled, or `timezone`/`owner` are missing. Run
+   `python3 "$VAULTLIB" migrate status --vault "$VAULT"`: while `pending` is
+   non-empty, skip the run with one line (the vault needs its update first)
+   and read nothing. Call `get_me`,
    write the raw JSON to scratch and run:
    ```bash
    python3 "$VAULTLIB" config verify-account --vault "$VAULT" --adapter m365 --identity "$SCRATCH/m365.whoami.json"

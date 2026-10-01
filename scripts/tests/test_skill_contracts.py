@@ -2221,3 +2221,14 @@ def test_switching_on_resets_the_feed_right_after_enabling_it():
     enabled = on.index("--field messages.enabled --value true")
     reset = on.index('messages reset --vault "$VAULT"')
     assert enabled < reset < on.index("--field messages.consented-at")
+
+
+def test_sync_messages_never_runs_on_a_vault_awaiting_its_update():
+    skill = read_skill("sync-messages")
+    on = skill.split("## Switching on")[1].split("## Switching off")[0]
+    assert on.index('migrate status --vault "$VAULT"') < on.index("--field messages.enabled --value true")
+    assert "/upgrade-vault" in on and "switch nothing on" in on
+    workflow = skill.split("## Workflow")[1]
+    assert (workflow.index('migrate status --vault "$VAULT"')
+            < workflow.index("second-brain:sync-messages-worker"))
+    assert "skip the run with one line" in re.sub(r"\s+", " ", workflow)
