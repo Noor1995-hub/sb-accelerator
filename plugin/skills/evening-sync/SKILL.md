@@ -158,6 +158,10 @@ It runs before the refresh below so tonight's update queue sees tonight's
 logs. A failed stage 3b is recorded and the evening continues. Off, or no
 M365: skip with one line in the summary.
 
+### Stage 3c — Refresh (every evening)
+
+Runs every evening, whatever stage 3b did — off, skipped or failed.
+
 **Refresh:**
 
 ```bash
@@ -521,7 +525,7 @@ reported "Processed: 0" after writing a meeting correctly):
 **Synced:** {N} recordings → `20-meetings/` ({stems})
 **Meetings you ticked Keep on:** {N} now confirmed
 **Possible duplicates:** {N} ({list the stems}) — kept as separate notes; each would have overwritten a meeting you already confirmed
-**Mail and Teams:** {outcome line, or "off"}
+**Mail and Teams:** {outcome line | off | skipped: no M365 | failed: …}
 **Metrics refreshed:** {P} projects · {Q} people
 **Projects updated:** {N} ({slugs}) — {M} decisions captured for review, {K} candidates skipped
 **Next note:** `60-daily-notes/{date}.md` ({DayName}, {tomorrow | today — for-today catch-up}) — {N} meetings prepped | calendar unavailable | calendar REFUSED — signed in as a different account (account-mismatch) | calendar REFUSED — no account bound to this vault yet (no-account-hint) | m365 disabled

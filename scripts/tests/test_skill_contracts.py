@@ -1246,6 +1246,10 @@ def test_evening_sync_runs_messages_between_sync_and_project_updates():
     refresh = text.index('"$VAULTLIB" sync update-queue')
     assert refresh > marker, "the queue must see tonight's logs"
     assert refresh < stage4
+    heading = text.index("### Stage 3c — Refresh (every evening)")
+    assert marker < heading < refresh < stage4, "refresh has its own heading after 3b"
+    assert "Runs every evening, whatever stage 3b did" in text[heading:refresh]
+    assert "update-queue" not in text[marker:heading], "refresh is not inside 3b"
 
 
 def test_evening_sync_states_the_no_back_fill_rule():
