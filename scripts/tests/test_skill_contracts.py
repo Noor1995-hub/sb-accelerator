@@ -2094,15 +2094,17 @@ def test_sync_messages_asks_consent_with_the_honest_text():
 
 
 def test_sync_messages_checks_everything_before_dispatch():
-    text = read_skill("sync-messages")
-    dispatch = text.index("second-brain:sync-messages-worker")
-    assert text.index("config verify-account --adapter m365") < dispatch
-    assert text.index("messages cursor") < dispatch
+    workflow = read_skill("sync-messages").split("## Workflow")[1]
+    dispatch = workflow.index("second-brain:sync-messages-worker")
+    assert workflow.index("config verify-account --vault") < dispatch
+    assert workflow.index("messages cursor --vault") < dispatch
 
 
 def test_sync_messages_never_writes_without_the_owner_on_removals():
     flat = re.sub(r"\s+", " ", read_skill("sync-messages"))
-    assert "messages forget" in flat and "--apply" in flat
+    assert 'messages forget --vault "$VAULT" --text "X" --apply <ref1> --apply <ref2>' in flat
+    assert 'messages forget --vault "$VAULT" --exclusion <id> --apply <ref1>' in flat
+    assert "messages forget --exclusion <id> --apply <ref1> --apply <ref2>" in flat
     assert "Shall I keep what I saved so far, or delete it?" in flat
 
 
