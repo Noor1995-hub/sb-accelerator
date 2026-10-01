@@ -131,3 +131,110 @@ def test_a_broken_data_block_is_refused_byte_identical(env):
     result = msglog.write(root, str(scratch), now="2026-09-30T18:52:00Z")
     assert result["written"] == [] and len(result["refused"]) == 1
     assert edited.read_bytes() == raw.encode("utf-8")
+
+
+def _run(root, scratch, points, now="2026-09-30T18:52:00Z", **over):
+    msglog.build(root, str(scratch), consume=False, **{**KW, **over})
+    condense(scratch, points)
+    msglog.check(str(scratch))
+    return msglog.write(root, str(scratch), now=now)
+
+
+def test_one_refused_day_does_not_block_another(env):
+    root, scratch = env
+    page(scratch, "msg_inbox.p1.payload.json", [
+        mail("m1", "Workshop 2 agenda", "jordan.reyes@acme.example", ["morgan.ellery@northwind.example"],
+             summary="Can we move workshop 2 to 14 Oct?"),
+        mail("m9", "Older thread", "jordan.reyes@acme.example", [], at="2026-09-29T09:00:00Z")])
+    folder = root / "_messages"
+    folder.mkdir()
+    edited = folder / "2026-09-29-messages.md"
+    edited.write_text("---\ntype: message-log\n---\nmine\n", encoding="utf-8")
+    msglog.build(root, str(scratch), consume=False, **KW)
+    groups = json.loads((scratch / msgrows.GROUPS_FILE).read_text(encoding="utf-8"))["groups"]
+    payload = {"groups": [{"gid": g["gid"], "needs_owner": False, "points": [
+        {"text": "Jordan asks to move workshop 2 to 14 Oct.", "cites": ["m1"]}]} for g in groups]}
+    (scratch / msglog.CONDENSED_FILE).write_text(json.dumps(payload), encoding="utf-8")
+    msglog.check(str(scratch))
+    result = msglog.write(root, str(scratch), now="2026-09-30T18:52:00Z")
+    assert result["written"] == ["2026-09-30-messages"]
+    assert [r["stem"] for r in result["refused"]] == ["2026-09-29-messages"]
+    assert edited.read_text(encoding="utf-8").endswith("mine\n")
+    assert msgstate.load(root)["cursor"] is not None
+
+
+def test_a_damaged_but_valid_json_block_is_refused(env):
+    root, scratch = env
+    folder = root / "_messages"
+    folder.mkdir()
+    raw = "---\ntype: message-log\n---\n# x\n\n%% log-data\n{\"schema\": 1, \"ids\": 5}\n%%\n"
+    (folder / "2026-09-30-messages.md").write_bytes(raw.encode("utf-8"))
+    result = _run(root, scratch, [{"text": "Jordan asks to move workshop 2 to 14 Oct.", "cites": ["m1"]}])
+    assert result["written"] == [] and len(result["refused"]) == 1
+    assert (folder / "2026-09-30-messages.md").read_bytes() == raw.encode("utf-8")
+
+
+def test_the_cursor_never_decreases(env):
+    root, scratch = env
+    pts = [{"text": "Jordan asks to move workshop 2 to 14 Oct.", "cites": ["m1"]}]
+    first = _run(root, scratch, pts)["cursor"]
+    for f in list(scratch.glob("msg_inbox.p*")) + list(scratch.glob("msg_sent.p*")):
+        f.unlink()
+    page(scratch, "msg_inbox.p1.payload.json", [
+        mail("m0", "Workshop 2 agenda", "jordan.reyes@acme.example", [], at="2026-09-30T08:00:00Z")])
+    second = _run(root, scratch, pts)["cursor"]
+    assert second == first
+
+
+def test_a_new_message_joins_an_existing_group(env):
+    root, scratch = env
+    _run(root, scratch, [{"text": "Jordan asks to move workshop 2 to 14 Oct.", "cites": ["m1"]}])
+    page(scratch, "msg_inbox.p1.payload.json", [
+        mail("m1", "Workshop 2 agenda", "jordan.reyes@acme.example", ["morgan.ellery@northwind.example"],
+             summary="Can we move workshop 2 to 14 Oct?"),
+        mail("m3", "Workshop 2 agenda", "jordan.reyes@acme.example", ["morgan.ellery@northwind.example"],
+             at="2026-09-30T11:00:00Z", summary="Please confirm the room.")])
+    msglog.build(root, str(scratch), consume=False, **KW)
+    condense(scratch, [{"text": "Jordan asks to confirm the room.", "cites": ["m3"]}], needs_owner=True)
+    msglog.check(str(scratch))
+    msglog.write(root, str(scratch), now="2026-09-30T19:00:00Z")
+    loaded = msglog.load_log(root / "_messages" / "2026-09-30-messages.md")
+    data = loaded["data"]
+    assert data["ids"] == ["m1", "m2", "m3"]
+    assert len(data["groups"]) == 1 and len(data["groups"][0]["points"]) == 2
+    assert data["groups"][0]["needs_owner"] is True
+    assert loaded["frontmatter"]["messages-read"] == 3
+
+
+def test_a_gap_with_no_pages_is_not_filled(env):
+    root, scratch = env
+    result = msglog.build(root, str(scratch), consume=False, **{**KW, "gap_ids": ["7"]})
+    assert result["filled"] == []
+    page(scratch, "msg_inbox.gap7.p1.payload.json", [mail("g1", "Old", "a@acme.example", [])])
+    result = msglog.build(root, str(scratch), consume=False, **{**KW, "gap_ids": ["7"]})
+    assert result["filled"] == ["7"]
+
+
+def test_check_drops_malformed_points_and_collapses_whitespace(env):
+    root, scratch = env
+    msglog.build(root, str(scratch), consume=False, **KW)
+    gid = json.loads((scratch / msgrows.GROUPS_FILE).read_text(encoding="utf-8"))["groups"][0]["gid"]
+    points = ["junk", {"text": "", "cites": ["m1"]}, {"text": 5, "cites": ["m1"]},
+              {"text": "Jordan asks", "cites": "m1"},
+              {"text": "Jordan  asks\nto move workshop 2 to 14 Oct.", "cites": ["m1"]}]
+    payload = {"groups": ["bad", {"gid": gid, "points": points}, {"gid": gid, "points": "nope"}]}
+    (scratch / msglog.CONDENSED_FILE).write_text(json.dumps(payload), encoding="utf-8")
+    result = msglog.check(str(scratch))
+    assert result["passed"] == 1 and len(result["dropped"]) == 6
+    checked = json.loads((scratch / msglog.CHECKED_FILE).read_text(encoding="utf-8"))
+    assert checked["groups"][0]["points"][0]["text"] == "Jordan asks to move workshop 2 to 14 Oct."
+    (scratch / msglog.CONDENSED_FILE).write_text(json.dumps({"groups": "x"}), encoding="utf-8")
+    assert msglog.check(str(scratch))["passed"] == 0
+
+
+def test_build_removes_stale_condensed_and_checked_files(env):
+    root, scratch = env
+    (scratch / msglog.CHECKED_FILE).write_text("{}", encoding="utf-8")
+    (scratch / msglog.CONDENSED_FILE).write_text("{}", encoding="utf-8")
+    msglog.build(root, str(scratch), consume=False, **KW)
+    assert not (scratch / msglog.CHECKED_FILE).exists() and not (scratch / msglog.CONDENSED_FILE).exists()

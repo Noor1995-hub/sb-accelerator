@@ -55,14 +55,19 @@ def build(root: Path, scratch_dir: str, *, timezone, utc_offset, owner_addresses
         if owed_until > since_dt:
             new_gaps.append({"source": source, "from": since_dt.strftime(_FMT),
                              "to": owed_until.strftime(_FMT)})
-    filled = [gid for gid in gap_ids
-              if not any(loaded[s]["gap_pages"].get(gid, {}).get("capped") for s in ("teams", "inbox", "sent"))]
+    filled = []
+    for gid in gap_ids:
+        pages = [loaded[s]["gap_pages"][gid] for s in ("teams", "inbox", "sent") if gid in loaded[s]["gap_pages"]]
+        if pages and not any(p["capped"] for p in pages):
+            filled.append(gid)
     newest = max((m["at"] for g in groups for m in g["messages"]), default=None)
     by_date: Dict[str, int] = {}
     for g in groups:
         by_date[g["date"]] = by_date.get(g["date"], 0) + 1
     payload = {"groups": groups, "skipped": skipped, "at_limit": at_limit,
                "counts": counts, "newest": newest, "new_gaps": new_gaps, "filled": filled}
+    for stale in (CONDENSED_FILE, CHECKED_FILE):
+        (Path(scratch_dir) / stale).unlink(missing_ok=True)
     (Path(scratch_dir) / msgrows.GROUPS_FILE).write_text(
         json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=False), encoding="utf-8")
     consumed = []
@@ -81,25 +86,46 @@ def check(scratch_dir: str) -> dict:
     groups = {g["gid"]: g for g in _read_json(scratch / msgrows.GROUPS_FILE, msgrows.GROUPS_FILE)["groups"]}
     condensed = _read_json(scratch / CONDENSED_FILE, CONDENSED_FILE)
     checked, dropped, passed = [], [], 0
-    for item in condensed.get("groups", []):
+    items = condensed.get("groups") if isinstance(condensed, dict) else None
+    if not isinstance(items, list):
+        dropped.append({"gid": None, "text": None, "reasons": ["`groups` is not a list"]})
+        items = []
+    for item in items:
+        if not isinstance(item, dict):
+            dropped.append({"gid": None, "text": None, "reasons": ["group is not an object"]})
+            continue
         g = groups.get(item.get("gid"))
         if g is None:
             dropped.append({"gid": item.get("gid"), "text": None, "reasons": ["unknown group"]})
             continue
         by_id = {m["id"]: m for m in g["messages"]}
         keep = []
-        for point in item.get("points", []):
-            cites = [c for c in point.get("cites", []) if c in by_id]
+        points = item.get("points")
+        if not isinstance(points, list):
+            dropped.append({"gid": g["gid"], "text": None, "reasons": ["`points` is not a list"]})
+            points = []
+        for point in points:
+            if not isinstance(point, dict):
+                dropped.append({"gid": g["gid"], "text": None, "reasons": ["point is not an object"]})
+                continue
+            text = point.get("text")
+            if not isinstance(text, str) or not text.strip():
+                dropped.append({"gid": g["gid"], "text": None, "reasons": ["point text is empty or not a string"]})
+                continue
+            if not isinstance(point.get("cites"), list):
+                dropped.append({"gid": g["gid"], "text": text, "reasons": ["cites is not a list"]})
+                continue
+            cites = [c for c in point["cites"] if isinstance(c, str) and c in by_id]
             if not cites:
-                dropped.append({"gid": g["gid"], "text": point.get("text"), "reasons": ["cites no message of this group"]})
+                dropped.append({"gid": g["gid"], "text": text, "reasons": ["cites no message of this group"]})
                 continue
             sources = [by_id[c]["text"] for c in cites] + [g["label"]] + [n for n in g["names"].values() if n]
-            missing = discover.unsupported_tokens(str(point.get("text") or ""), sources)
+            missing = discover.unsupported_tokens(text, sources)
             if missing:
-                dropped.append({"gid": g["gid"], "text": point.get("text"),
+                dropped.append({"gid": g["gid"], "text": text,
                                 "reasons": [f"{t!r} is not in the cited messages" for t in missing]})
                 continue
-            keep.append({"text": point["text"].strip(), "cites": cites})
+            keep.append({"text": " ".join(text.split()), "cites": cites})
             passed += 1
         if keep:
             checked.append({"gid": g["gid"], "needs_owner": bool(item.get("needs_owner")), "points": keep})
@@ -118,6 +144,12 @@ def load_log(path: Path) -> dict:
         data = json.loads(match["json"])
     except ValueError as exc:
         raise MessagesError(f"{path.name}: the log-data block is not valid JSON ({exc})") from exc
+    ok = (isinstance(data, dict) and data.get("schema") == 1 and isinstance(data.get("date"), str)
+          and isinstance(data.get("ids"), list) and isinstance(data.get("groups"), list)
+          and all(isinstance(g, dict) and isinstance(g.get("points"), list) for g in data["groups"]))
+    if not ok:
+        raise MessagesError(f"{path.name}: the log-data block is damaged (unexpected shape) — "
+                            "it was edited by hand; leave it, or move it out of _messages/")
     return {"frontmatter": frontmatter, "data": data}
 
 
@@ -176,6 +208,48 @@ def save_log(root: Path, data: dict, frontmatter: dict) -> None:
     vault.atomic_write(_log_path(root, data["date"]), render(root, data, frontmatter))
 
 
+def _count(value) -> int:
+    return value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else 0
+
+
+def _merge_day(root: Path, path: Path, day: str, groups: List[dict], built: dict, checked: dict,
+               updated_at: str) -> bool:
+    if path.is_file():
+        existing = load_log(path)
+        data, previous = existing["data"], existing["frontmatter"]
+    else:
+        data, previous = {"schema": 1, "date": day, "ids": [], "groups": []}, {}
+    known_ids = set(data["ids"])
+    by_gid = {g["gid"]: g for g in data["groups"]}
+    new_messages = 0
+    for g in groups:
+        fresh = [m["id"] for m in g["messages"] if m["id"] not in known_ids]
+        if not fresh:
+            continue
+        new_messages += len(fresh)
+        data["ids"].extend(fresh)
+        known_ids.update(fresh)
+        points = [p for p in checked.get(g["gid"], {}).get("points", [])
+                  if any(c in fresh for c in p["cites"])]
+        target = by_gid.get(g["gid"])
+        if target is None:
+            target = {k: g[k] for k in ("gid", "kind", "label", "chat_type", "people", "names",
+                                        "participants", "projects", "projects_weak", "entities", "key")}
+            target.update({"needs_owner": False, "points": []})
+            data["groups"].append(target)
+            by_gid[g["gid"]] = target
+        target["points"].extend(points)
+        target["needs_owner"] = bool(target.get("needs_owner")) or bool(checked.get(g["gid"], {}).get("needs_owner"))
+    if new_messages == 0 and path.is_file():
+        return False
+    read = _count(previous.get("messages-read")) + new_messages
+    skipped = _count(previous.get("skipped")) + _count(built["skipped"].get(day, 0))
+    frontmatter = _frontmatter_for(data, updated_at=updated_at, read=read, skipped=skipped,
+                                   at_limit=bool(previous.get("at-limit")) or bool(built["at_limit"]))
+    save_log(root, data, frontmatter)
+    return True
+
+
 def write(root: Path, scratch_dir: str, *, now: str) -> dict:
     scratch = Path(scratch_dir)
     built = _read_json(scratch / msgrows.GROUPS_FILE, msgrows.GROUPS_FILE)
@@ -187,44 +261,11 @@ def write(root: Path, scratch_dir: str, *, now: str) -> dict:
     written, refused = [], []
     for day, groups in sorted(days.items()):
         path = _log_path(root, day)
-        if path.is_file():
-            try:
-                existing = load_log(path)
-            except (MessagesError, ValueError) as exc:
-                refused.append({"stem": path.stem, "error": str(exc)})
-                continue
-            data, previous = existing["data"], existing["frontmatter"]
-        else:
-            data, previous = {"schema": 1, "date": day, "ids": [], "groups": []}, {}
-        known_ids = set(data["ids"])
-        by_gid = {g["gid"]: g for g in data["groups"]}
-        new_messages = 0
-        for g in groups:
-            fresh = [m["id"] for m in g["messages"] if m["id"] not in known_ids]
-            if not fresh:
-                continue
-            new_messages += len(fresh)
-            data["ids"].extend(fresh)
-            known_ids.update(fresh)
-            points = [p for p in checked.get(g["gid"], {}).get("points", [])
-                      if any(c in fresh for c in p["cites"])]
-            target = by_gid.get(g["gid"])
-            if target is None:
-                target = {k: g[k] for k in ("gid", "kind", "label", "chat_type", "people", "names",
-                                            "participants", "projects", "projects_weak", "entities", "key")}
-                target.update({"needs_owner": False, "points": []})
-                data["groups"].append(target)
-                by_gid[g["gid"]] = target
-            target["points"].extend(points)
-            target["needs_owner"] = target["needs_owner"] or bool(checked.get(g["gid"], {}).get("needs_owner"))
-        if new_messages == 0 and path.is_file():
-            continue
-        read = int(previous.get("messages-read") or 0) + new_messages
-        skipped = int(previous.get("skipped") or 0) + int(built["skipped"].get(day, 0))
-        frontmatter = _frontmatter_for(data, updated_at=updated_at, read=read, skipped=skipped,
-                                       at_limit=bool(previous.get("at-limit")) or bool(built["at_limit"]))
-        save_log(root, data, frontmatter)
-        written.append(path.stem)
+        try:
+            if _merge_day(root, path, day, groups, built, checked, updated_at):
+                written.append(path.stem)
+        except (MessagesError, ValueError, KeyError, TypeError, OSError) as exc:
+            refused.append({"stem": path.stem, "error": str(exc) or type(exc).__name__})
     state = msgstate.advance(root, newest=built["newest"], new_gaps=built["new_gaps"],
                              filled=built["filled"], now=now)
     return {"written": written, "refused": refused, "cursor": state["cursor"]}
