@@ -100,7 +100,7 @@ Write `$SCRATCH/msg_condensed.payload.json`:
 
 ```bash
 python3 "$VAULTLIB" messages check --dir "$SCRATCH"
-python3 "$VAULTLIB" messages write --vault "$VAULT" --dir "$SCRATCH" --now "$NOW"
+python3 "$VAULTLIB" messages write --vault "$VAULT" --dir "$SCRATCH" --now "$NOW" --timezone "$TIMEZONE"
 ```
 
 Never rewrite a dropped point to make it pass. A log in `refused` was edited

@@ -12,7 +12,7 @@ from datetime import date, timedelta
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from . import discover, links, markdown, msgroute, msgrows, msgstate, schema, seenevents, vault
+from . import dates, discover, links, markdown, msgroute, msgrows, msgstate, schema, seenevents, vault
 
 CONDENSED_FILE = "msg_condensed.payload.json"
 CHECKED_FILE = "msg_checked.payload.json"
@@ -267,11 +267,18 @@ def _merge_day(root: Path, path: Path, day: str, groups: List[dict], built: dict
     return True
 
 
-def write(root: Path, scratch_dir: str, *, now: str) -> dict:
+def local_stamp(now: str, timezone, utc_offset) -> str:
+    """`now` (UTC) as the owner's local wall clock, YYYY-MM-DDTHH:MM — the
+    form of a project's `state-updated`, so the two compare directly."""
+    local, _ = dates.utc_to_local(seenevents.parse_now(now), timezone, utc_offset)
+    return local.strftime("%Y-%m-%dT%H:%M")
+
+
+def write(root: Path, scratch_dir: str, *, now: str, timezone, utc_offset) -> dict:
+    updated_at = local_stamp(now, timezone, utc_offset)
     scratch = Path(scratch_dir)
     built = _read_json(scratch / msgrows.GROUPS_FILE, msgrows.GROUPS_FILE)
     checked = {g["gid"]: g for g in _read_json(scratch / CHECKED_FILE, CHECKED_FILE)["groups"]}
-    updated_at = seenevents.parse_now(now).strftime("%Y-%m-%dT%H:%M")
     days: Dict[str, List[dict]] = {}
     for g in built["groups"]:
         days.setdefault(g["date"], []).append(g)

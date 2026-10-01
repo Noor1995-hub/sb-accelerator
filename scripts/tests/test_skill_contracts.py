@@ -2183,3 +2183,8 @@ def test_sync_messages_resolves_what_to_skip_before_adding_it():
     assert "add nothing" in section and "never retry with a guess" in section
     flat = re.sub(r"\s+", " ", skill)
     assert "Resolve X to an exact value first (**What to skip**, below)" in flat
+
+
+def test_messages_contract_passes_the_timezone_to_write():
+    text = re.sub(r"\s+", " ", read_contract())
+    assert 'messages write --vault "$VAULT" --dir "$SCRATCH" --now "$NOW" --timezone "$TIMEZONE"' in text

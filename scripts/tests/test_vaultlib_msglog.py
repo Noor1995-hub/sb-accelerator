@@ -6,6 +6,7 @@ from test_vaultlib_vault import make_vault
 from test_vaultlib_msgrows import chat, mail, page, teams
 
 OWNER = {"morgan.ellery@northwind.example"}
+TZ = dict(timezone="Europe/Brussels", utc_offset=None)
 KW = dict(timezone="Europe/Brussels", utc_offset=None, owner_addresses=OWNER, home_domains=[],
           exclusions=[], today="2026-09-30", since="2026-09-29T22:00:00Z", gap_ids=[])
 
@@ -54,7 +55,7 @@ def test_write_renders_a_hidden_data_block_and_advances_the_cursor(env):
     msglog.build(root, str(scratch), consume=False, **KW)
     condense(scratch, [{"text": "Jordan asks to move workshop 2 to 14 Oct.", "cites": ["m1"]}])
     msglog.check(str(scratch))
-    result = msglog.write(root, str(scratch), now="2026-09-30T18:52:00Z")
+    result = msglog.write(root, str(scratch), now="2026-09-30T18:52:00Z", **TZ)
     assert result["written"] == ["2026-09-30-messages"]
     text = (root / "_messages" / "2026-09-30-messages.md").read_text(encoding="utf-8")
     fm, body = markdown.split_frontmatter(text)
@@ -69,7 +70,7 @@ def test_a_second_run_never_duplicates_a_message(env):
         msglog.build(root, str(scratch), consume=False, **KW)
         condense(scratch, [{"text": "Jordan asks to move workshop 2 to 14 Oct.", "cites": ["m1"]}])
         msglog.check(str(scratch))
-        msglog.write(root, str(scratch), now="2026-09-30T18:52:00Z")
+        msglog.write(root, str(scratch), now="2026-09-30T18:52:00Z", **TZ)
     data = msglog.load_log(root / "_messages" / "2026-09-30-messages.md")["data"]
     assert data["ids"] == ["m1", "m2"]
     assert len(data["groups"]) == 1 and len(data["groups"][0]["points"]) == 1
@@ -84,7 +85,7 @@ def test_a_hand_edited_log_is_refused_and_left_alone(env):
     msglog.build(root, str(scratch), consume=False, **KW)
     condense(scratch, [{"text": "Jordan asks to move workshop 2 to 14 Oct.", "cites": ["m1"]}])
     msglog.check(str(scratch))
-    result = msglog.write(root, str(scratch), now="2026-09-30T18:52:00Z")
+    result = msglog.write(root, str(scratch), now="2026-09-30T18:52:00Z", **TZ)
     assert result["written"] == [] and result["refused"][0]["stem"] == "2026-09-30-messages"
     assert edited.read_text(encoding="utf-8").endswith("my own notes\n")
 
@@ -131,7 +132,7 @@ def test_an_empty_night_checks_and_writes_with_empty_groups(tmp_path):
     assert result["groups"] == 0
     (scratch / msglog.CONDENSED_FILE).write_text(json.dumps({"groups": []}), encoding="utf-8")
     msglog.check(str(scratch))
-    written = msglog.write(root, str(scratch), now="2026-09-30T18:52:00Z")
+    written = msglog.write(root, str(scratch), now="2026-09-30T18:52:00Z", **TZ)
     assert written["written"] == []
 
 
@@ -140,7 +141,7 @@ def test_frontmatter_round_trips_ints_and_lists(env):
     msglog.build(root, str(scratch), consume=False, **KW)
     condense(scratch, [{"text": "Jordan asks to move workshop 2 to 14 Oct.", "cites": ["m1"]}])
     msglog.check(str(scratch))
-    msglog.write(root, str(scratch), now="2026-09-30T18:52:00Z")
+    msglog.write(root, str(scratch), now="2026-09-30T18:52:00Z", **TZ)
     fm = msglog.load_log(root / "_messages" / "2026-09-30-messages.md")["frontmatter"]
     assert fm["messages-read"] == 2 and isinstance(fm["projects"], list) and isinstance(fm["people"], list)
     assert fm["at-limit"] is False and fm["projects-weak"] == []
@@ -158,7 +159,7 @@ def test_a_broken_data_block_is_refused_byte_identical(env):
     msglog.build(root, str(scratch), consume=False, **KW)
     condense(scratch, [{"text": "Jordan asks to move workshop 2 to 14 Oct.", "cites": ["m1"]}])
     msglog.check(str(scratch))
-    result = msglog.write(root, str(scratch), now="2026-09-30T18:52:00Z")
+    result = msglog.write(root, str(scratch), now="2026-09-30T18:52:00Z", **TZ)
     assert result["written"] == [] and len(result["refused"]) == 1
     assert edited.read_bytes() == raw.encode("utf-8")
 
@@ -167,7 +168,7 @@ def _run(root, scratch, points, now="2026-09-30T18:52:00Z", **over):
     msglog.build(root, str(scratch), consume=False, **{**KW, **over})
     condense(scratch, points)
     msglog.check(str(scratch))
-    return msglog.write(root, str(scratch), now=now)
+    return msglog.write(root, str(scratch), now=now, **TZ)
 
 
 def test_one_refused_day_does_not_block_another(env):
@@ -186,7 +187,7 @@ def test_one_refused_day_does_not_block_another(env):
         {"text": "Jordan asks to move workshop 2 to 14 Oct.", "cites": ["m1"]}]} for g in groups]}
     (scratch / msglog.CONDENSED_FILE).write_text(json.dumps(payload), encoding="utf-8")
     msglog.check(str(scratch))
-    result = msglog.write(root, str(scratch), now="2026-09-30T18:52:00Z")
+    result = msglog.write(root, str(scratch), now="2026-09-30T18:52:00Z", **TZ)
     assert result["written"] == ["2026-09-30-messages"]
     assert [r["stem"] for r in result["refused"]] == ["2026-09-29-messages"]
     assert edited.read_text(encoding="utf-8").endswith("mine\n")
@@ -227,7 +228,7 @@ def test_a_new_message_joins_an_existing_group(env):
     msglog.build(root, str(scratch), consume=False, **KW)
     condense(scratch, [{"text": "Jordan asks to confirm the room.", "cites": ["m3"]}], needs_owner=True)
     msglog.check(str(scratch))
-    msglog.write(root, str(scratch), now="2026-09-30T19:00:00Z")
+    msglog.write(root, str(scratch), now="2026-09-30T19:00:00Z", **TZ)
     loaded = msglog.load_log(root / "_messages" / "2026-09-30-messages.md")
     data = loaded["data"]
     assert data["ids"] == ["m1", "m2", "m3"]
@@ -275,7 +276,7 @@ def written_log(env):
     msglog.build(root, str(scratch), consume=False, **KW)
     condense(scratch, [{"text": "Jordan asks to move workshop 2 to 14 Oct.", "cites": ["m1"]}])
     msglog.check(str(scratch))
-    msglog.write(root, str(scratch), now="2026-09-30T18:52:00Z")
+    msglog.write(root, str(scratch), now="2026-09-30T18:52:00Z", **TZ)
     return root
 
 
@@ -544,7 +545,7 @@ def _write_all(root, scratch, now="2026-09-30T18:52:00Z"):
                            "points": [{"text": "A note.", "cites": [g["messages"][0]["id"]]}]} for g in groups]}
     (scratch / msglog.CONDENSED_FILE).write_text(json.dumps(payload), encoding="utf-8")
     msglog.check(str(scratch))
-    return msglog.write(root, str(scratch), now=now)
+    return msglog.write(root, str(scratch), now=now, **TZ)
 
 
 def _at_limit(root, day):
@@ -579,3 +580,34 @@ def test_a_day_with_skipped_groups_is_at_limit(env, monkeypatch):
     assert result["skipped"] == {"2026-09-30": 1} and result["at_limit_days"] == ["2026-09-30"]
     _write_all(root, scratch)
     assert _at_limit(root, "2026-09-30") is True and _at_limit(root, "2026-09-29") is False
+
+
+def test_write_stamps_updated_at_in_local_wall_time(env):
+    root, scratch = env
+    msglog.build(root, str(scratch), consume=False, **KW)
+    condense(scratch, [{"text": "Jordan asks to move workshop 2 to 14 Oct.", "cites": ["m1"]}])
+    msglog.check(str(scratch))
+    msglog.write(root, str(scratch), now="2026-09-30T18:52:00Z", **TZ)
+    fm, _ = markdown.split_frontmatter((root / "_messages" / "2026-09-30-messages.md").read_text(encoding="utf-8"))
+    assert fm["updated-at"] == "2026-09-30T20:52"
+
+
+def test_a_log_written_after_the_state_update_queues_across_utc_plus_two(env):
+    """I10: state-updated is local wall time; updated-at must be too."""
+    from vaultlib import updatequeue
+    root, scratch = env
+    person.ensure(root, "Morgan Ellery", "2026-09-01")
+    folder = root / "30-projects" / "acme-workshops"
+    folder.mkdir(parents=True)
+    (folder / "index.md").write_text(markdown.emit_frontmatter({
+        "type": "project", "project-name": "Workshop 2", "slug": "acme-workshops", "status": "active",
+        "project-type": "initiative", "entity": "acme-industries", "owner": "morgan-ellery",
+        "stakeholders": [], "key-people": [], "created": "2026-09-01", "last-updated": "2026-09-30",
+        "state-updated": "2026-09-30T20:00"}), encoding="utf-8")
+    msglog.build(root, str(scratch), consume=False, **KW)
+    condense(scratch, [{"text": "Jordan asks to move workshop 2 to 14 Oct.", "cites": ["m1"]}])
+    msglog.check(str(scratch))
+    msglog.write(root, str(scratch), now="2026-09-30T18:52:00Z", **TZ)  # 20:52 in Brussels
+    queue = updatequeue.run(root, "2026-09-30", "morgan-ellery")["projectsNeedingUpdate"]
+    assert [q["slug"] for q in queue] == ["acme-workshops"]
+    assert queue[0]["newLogs"] == ["2026-09-30-messages"]

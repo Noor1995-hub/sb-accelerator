@@ -2373,7 +2373,12 @@ def test_messages_round_trip_through_the_cli(capsys, tmp_path):
     assert run(capsys, ["messages", "check", "--dir", str(scratch)])[1]["result"]["passed"] == 1
     code, payload = run(capsys, ["messages", "write", "--vault", str(root), "--dir", str(scratch),
                                  "--now", "2026-09-30T18:52:00Z"])
+    assert code == 1 and payload["ok"] is False and "--timezone" in payload["error"]
+    code, payload = run(capsys, ["messages", "write", "--vault", str(root), "--dir", str(scratch),
+                                 "--now", "2026-09-30T18:52:00Z", "--timezone", "Europe/Brussels"])
     assert code == 0 and payload["result"]["written"] == ["2026-09-30-messages"]
+    text = (root / "_messages" / "2026-09-30-messages.md").read_text(encoding="utf-8")
+    assert "updated-at: 2026-09-30T20:52" in text or 'updated-at: "2026-09-30T20:52"' in text
 
 
 def test_messages_build_accepts_failed_sources(capsys, tmp_path):

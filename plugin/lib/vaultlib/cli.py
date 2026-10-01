@@ -785,6 +785,7 @@ def build_parser() -> argparse.ArgumentParser:
     _add_vault_argument(m_write)
     m_write.add_argument("--dir", required=True)
     m_write.add_argument("--now", required=True)
+    _tz(m_write)
 
     m_exclude = messages_sub.add_parser("exclude", help="what the feed never reads")
     m_exclude_sub = m_exclude.add_subparsers(dest="exclude_action", required=True)
@@ -939,7 +940,8 @@ def _dispatch(args: argparse.Namespace) -> int:
         if args.action == "check":
             return _ok(msglog.check(args.dir))
         if args.action == "write":
-            return _ok(msglog.write(root, args.dir, now=args.now))
+            return _ok(msglog.write(root, args.dir, now=args.now, timezone=args.timezone,
+                                    utc_offset=args.utc_offset))
         if args.action == "exclude":
             if args.exclude_action == "add":
                 return _ok(config.exclusion_add(root, kind=args.kind, value=args.value,
