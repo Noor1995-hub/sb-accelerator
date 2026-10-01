@@ -1976,12 +1976,19 @@ def test_setup_my_brain_asks_the_company_rules_question_before_reading():
         'discover build --vault "$VAULT"')
 
 
-def test_setup_offers_the_feed_after_the_account_proof_and_scopes_rule_9():
+def test_setup_offers_the_feed_in_step_10_after_the_company_rules_gate():
     text = read_skill("setup-my-brain")
-    proof = text.index("config verify-account --vault \"$VAULT\" --adapter m365")
+    step10 = text.index("## Step 10")
+    step11 = text.index("## Step 11")
     offer = text.index("### Mail and Teams every evening")
-    assert proof < offer < text.index("## Step 2")
-    assert "skills/sync-messages/SKILL.md" in text[offer:text.index("## Step 2")]
+    assert step10 < offer < step11
+    assert text.index("Does your company have rules") < offer
+    section = re.sub(r"\s+", " ", text[offer:step11])
+    assert "skills/sync-messages/SKILL.md" in section
+    assert "rules out reading" in section
+    assert "`messages.enabled` is already true" in section
+    assert "not connected" in section
+    assert "do not run `verify-account` again" in section
     rules = text.split("## Hard rules")[1]
     assert "During the step-3 read" in re.sub(r"\s+", " ", rules)
 
