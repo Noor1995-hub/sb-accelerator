@@ -238,3 +238,81 @@ def test_build_removes_stale_condensed_and_checked_files(env):
     (scratch / msglog.CONDENSED_FILE).write_text("{}", encoding="utf-8")
     msglog.build(root, str(scratch), consume=False, **KW)
     assert not (scratch / msglog.CHECKED_FILE).exists() and not (scratch / msglog.CONDENSED_FILE).exists()
+
+
+def written_log(env):
+    root, scratch = env
+    msglog.build(root, str(scratch), consume=False, **KW)
+    condense(scratch, [{"text": "Jordan asks to move workshop 2 to 14 Oct.", "cites": ["m1"]}])
+    msglog.check(str(scratch))
+    msglog.write(root, str(scratch), now="2026-09-30T18:52:00Z")
+    return root
+
+
+def _link(root, projects, weak=()):
+    path = root / "_messages" / "2026-09-30-messages.md"
+    loaded = msglog.load_log(path)
+    loaded["data"]["groups"][0]["projects"] = list(projects)
+    loaded["data"]["groups"][0]["projects_weak"] = list(weak)
+    msglog._resave(root, path, loaded["data"], loaded["frontmatter"])
+    return path, loaded["data"]["groups"][0]["gid"]
+
+
+def test_forget_finds_then_removes_only_confirmed_points_and_requeues(env):
+    root = written_log(env)
+    found = msglog.forget_find(root, text="workshop 2")
+    assert [f["ref"].split(":")[0] for f in found] == ["2026-09-30-messages"]
+    msglog.forget_apply(root, [found[0]["ref"]])
+    after = msglog.load_log(root / "_messages" / "2026-09-30-messages.md")["data"]
+    assert after["groups"] == []
+    assert after["ids"] == ["m1", "m2"]  # ids stay, so the message is never fetched back in
+
+
+def test_forget_apply_removes_only_the_refs_passed_and_requeues_strong_projects(env):
+    root = written_log(env)
+    path, gid = _link(root, ["p-strong", "p-weak"], weak=["p-weak"])
+    loaded = msglog.load_log(path)
+    loaded["data"]["groups"][0]["points"].append({"text": "Second point.", "cites": ["m2"]})
+    msglog._resave(root, path, loaded["data"], loaded["frontmatter"])
+    found = msglog.forget_find(root, text="workshop 2")
+    assert len(found) == 1
+    msglog.forget_apply(root, [found[0]["ref"]])
+    kept = msglog.load_log(path)["data"]["groups"][0]["points"]
+    assert [p["text"] for p in kept] == ["Second point."]
+    assert msgstate.requeue_take(root) == [{"slug": "p-strong", "log": "2026-09-30-messages"}]
+
+
+def test_forget_by_exclusion_matches_the_person(env):
+    root = written_log(env)
+    found = msglog.forget_find(root, exclusion={"kind": "person", "value": "jordan.reyes@acme.example"})
+    assert len(found) == 1
+
+
+def test_forget_all_deletes_logs_and_requeues_linked_projects(env):
+    root = written_log(env)
+    path, _ = _link(root, ["p-strong"])
+    msglog.forget_all(root)
+    assert not path.exists()
+    assert msgstate.requeue_take(root) == [{"slug": "p-strong", "log": "2026-09-30-messages"}]
+
+
+def test_forget_apply_refuses_a_malformed_ref(env):
+    root = written_log(env)
+    with pytest.raises(msglog.MessagesError):
+        msglog.forget_apply(root, ["../evil:x:0"])
+
+
+def test_unlink_removes_one_project_and_requeues_it(env):
+    root = written_log(env)
+    path, gid = _link(root, ["acme-industries-operating-model"])
+    msglog.unlink(root, log="2026-09-30-messages", gid=gid, project="acme-industries-operating-model")
+    assert msglog.load_log(path)["data"]["groups"][0]["projects"] == []
+    assert msgstate.requeue_take(root) == [{"slug": "acme-industries-operating-model", "log": "2026-09-30-messages"}]
+
+
+def test_for_project_returns_only_strong_groups(env):
+    root = written_log(env)
+    _link(root, ["p-strong", "p-weak"], weak=["p-weak"])
+    got = msglog.for_project(root, slug="p-strong", logs=["2026-09-30-messages"])
+    assert len(got) == 1 and got[0]["link"] == "[[_messages/2026-09-30-messages|30 Sep]]"
+    assert msglog.for_project(root, slug="p-weak", logs=["2026-09-30-messages"]) == []

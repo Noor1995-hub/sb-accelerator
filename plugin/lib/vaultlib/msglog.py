@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import timedelta
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -269,3 +269,129 @@ def write(root: Path, scratch_dir: str, *, now: str) -> dict:
     state = msgstate.advance(root, newest=built["newest"], new_gaps=built["new_gaps"],
                              filled=built["filled"], now=now)
     return {"written": written, "refused": refused, "cursor": state["cursor"]}
+
+
+def _logs(root: Path) -> List[Path]:
+    folder = root / vault.MESSAGES_DIR
+    return sorted(folder.glob("*-messages.md")) if folder.is_dir() else []
+
+
+def _resave(root: Path, path: Path, data: dict, frontmatter: dict) -> None:
+    fresh = _frontmatter_for(data, updated_at=str(frontmatter.get("updated-at") or ""),
+                             read=_count(frontmatter.get("messages-read")),
+                             skipped=_count(frontmatter.get("skipped")),
+                             at_limit=bool(frontmatter.get("at-limit")))
+    keys = ("projects", "projects-weak", "people", "entities")
+    save_log(root, data, {**frontmatter, **{k: fresh[k] for k in keys}})
+
+
+def _strong(group: dict) -> List[str]:
+    return [p for p in group["projects"] if p not in group.get("projects_weak", [])]
+
+
+def _matches(group: dict, exclusion: dict) -> bool:
+    kind, value = exclusion.get("kind"), str(exclusion.get("value") or "").casefold()
+    if not value:
+        return False
+    people = [a.casefold() for a in group.get("participants", [])]
+    if kind == "person":
+        return value in people
+    if kind == "domain":
+        return any(a.endswith("@" + value) for a in people)
+    if kind == "chat":
+        return str(group.get("key") or "").casefold() == f"chat:{value}" or group["gid"].casefold() == value
+    if kind == "word":
+        return bool(re.search(r"(?<!\w)" + re.escape(value) + r"(?!\w)", group["label"].casefold()))
+    return False
+
+
+def forget_find(root: Path, *, text: Optional[str] = None, exclusion: Optional[dict] = None) -> List[dict]:
+    if not text and not exclusion:
+        raise MessagesError("forget needs text or an exclusion")
+    needle = str(text or "").casefold().strip()
+    found = []
+    for path in _logs(root):
+        try:
+            data = load_log(path)["data"]
+        except (MessagesError, OSError):
+            continue
+        for g in data["groups"]:
+            whole = exclusion is not None and _matches(g, exclusion)
+            for i, point in enumerate(g["points"]):
+                if whole or (needle and needle in point["text"].casefold()):
+                    found.append({"ref": f"{path.stem}:{g['gid']}:{i}", "log": path.stem,
+                                  "label": g["label"], "text": point["text"]})
+    return found
+
+
+def forget_apply(root: Path, refs: List[str]) -> dict:
+    wanted: Dict[str, Dict[str, set]] = {}
+    for ref in refs:
+        parts = str(ref).rsplit(":", 2)
+        if len(parts) != 3 or not re.fullmatch(r"[\w-]+-messages", parts[0]) or not parts[2].isdigit():
+            raise MessagesError(f"not a forget reference: {ref!r}")
+        wanted.setdefault(parts[0], {}).setdefault(parts[1], set()).add(int(parts[2]))
+    removed = 0
+    for stem, by_gid in sorted(wanted.items()):
+        path = root / vault.MESSAGES_DIR / f"{stem}.md"
+        loaded = load_log(path)
+        data = loaded["data"]
+        touched, before = set(), removed
+        for g in data["groups"]:
+            hit = {i for i in by_gid.get(g["gid"], set()) if i < len(g["points"])}
+            if hit:
+                touched.update(_strong(g))
+                g["points"] = [p for i, p in enumerate(g["points"]) if i not in hit]
+                removed += len(hit)
+        data["groups"] = [g for g in data["groups"] if g["points"]]
+        if removed > before:
+            _resave(root, path, data, loaded["frontmatter"])
+            for slug in sorted(touched):
+                msgstate.requeue_add(root, slug, stem)
+    return {"removed": removed}
+
+
+def forget_all(root: Path) -> dict:
+    deleted = []
+    for path in _logs(root):
+        try:
+            for g in load_log(path)["data"]["groups"]:
+                for slug in _strong(g):
+                    msgstate.requeue_add(root, slug, path.stem)
+        except (MessagesError, OSError, KeyError, TypeError):
+            pass
+        path.unlink()
+        deleted.append(path.stem)
+    return {"deleted": deleted}
+
+
+def unlink(root: Path, *, log: str, gid: str, project: str) -> dict:
+    path = root / vault.MESSAGES_DIR / f"{log}.md"
+    loaded = load_log(path)
+    for g in loaded["data"]["groups"]:
+        if g["gid"] == gid and project in g["projects"]:
+            g["projects"] = [p for p in g["projects"] if p != project]
+            g["projects_weak"] = [p for p in g.get("projects_weak", []) if p != project]
+            _resave(root, path, loaded["data"], loaded["frontmatter"])
+            msgstate.requeue_add(root, project, log)
+            return {"unlinked": True}
+    raise MessagesError(f"no group {gid!r} linked to {project!r} in {log}")
+
+
+def _short_date(day: str) -> str:
+    return date.fromisoformat(day).strftime("%d %b").lstrip("0")
+
+
+def for_project(root: Path, *, slug: str, logs: List[str]) -> List[dict]:
+    out = []
+    for stem in logs:
+        try:
+            data = load_log(root / vault.MESSAGES_DIR / f"{stem}.md")["data"]
+        except (MessagesError, OSError):
+            continue
+        for g in data["groups"]:
+            if slug in _strong(g) and g["points"]:
+                out.append({"log": stem, "gid": g["gid"], "label": g["label"], "kind": g["kind"],
+                            "people": g["people"], "points": [p["text"] for p in g["points"]],
+                            "link": f"[[{vault.MESSAGES_DIR}/{stem}|{_short_date(data['date'])}]]"})
+    return out
