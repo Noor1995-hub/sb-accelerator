@@ -15,6 +15,8 @@ delivers them.
 
 ## Unreleased
 
+- Your second brain can now keep up with your mail and Teams chats. Switch it on during setup or by asking ("start reading my mail and Teams"): each evening it saves short notes on what was said, so your projects and sessions already know. Channels and attachments are never read, you can tell it to skip anyone or anything, and you can stop and delete everything at any time. (#236)
+
 ## v0.12.6 — 2026-09-29
 
 - Teams meetings now sync, and tomorrow's meetings are prepped in the daily note, for a mailbox set to its own time zone. Outlook answers such a mailbox's calendar in local time ("Romance Standard Time" for Brussels) instead of UTC, and the plugin used to refuse every event it could not read as UTC, so the M365 sync and calendar prep never ran. It now converts Windows and IANA time zone names; a zone it cannot identify is still refused rather than guessed. (#233)

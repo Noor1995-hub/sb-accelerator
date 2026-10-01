@@ -1976,8 +1976,19 @@ def test_setup_my_brain_asks_the_company_rules_question_before_reading():
         'discover build --vault "$VAULT"')
 
 
+def test_setup_offers_the_feed_after_the_account_proof_and_scopes_rule_9():
+    text = read_skill("setup-my-brain")
+    proof = text.index("config verify-account --vault \"$VAULT\" --adapter m365")
+    offer = text.index("### Mail and Teams every evening")
+    assert proof < offer < text.index("## Step 2")
+    assert "skills/sync-messages/SKILL.md" in text[offer:text.index("## Step 2")]
+    rules = text.split("## Hard rules")[1]
+    assert "During the step-3 read" in re.sub(r"\s+", " ", rules)
+
+
 def test_setup_my_brain_never_reads_chat_text():
-    assert "Chat message text is never read" in read_skill("setup-my-brain")
+    text = re.sub(r"\s+", " ", read_skill("setup-my-brain"))
+    assert "chat message text is never read" in text
 
 
 def test_setup_my_brain_dispatches_the_worker_and_consumes_raw_reads():

@@ -243,6 +243,13 @@ whole list). An unresolved mismatch unwinds exactly like Plaud's, with
 python3 "$VAULTLIB" scratch sweep --dir "$SCRATCH"
 ```
 
+### Mail and Teams every evening
+
+Only when Microsoft 365 is connected and proven. Follow **Switching on** in
+`${CLAUDE_PLUGIN_ROOT}/skills/sync-messages/SKILL.md` exactly: its consent
+question, its one exclusions question, its read-back. This is separate from the
+5-minute read of step 3, which has its own consent. A no changes nothing here.
+
 ## Step 2 — what only they know
 
 Everything here is asked; nothing here is read from their accounts. Record
@@ -627,8 +634,10 @@ later picks the connection step up where this session left it.
 7. **Organisations may be proposed from calendar and mail; only the owner
    confirms.**
 8. **Nothing is shown to the owner that `discover check` did not pass.**
-9. **Chat message text is never read, and neither is the Inbox.** Chats are
-   read as a list: who is in them and what they are called.
+9. **During the step-3 read, chat message text is never read, and neither is
+   the Inbox.** Chats are read as a list: who is in them and what they are
+   called. The nightly mail and Teams feed is a separate feature with its own
+   consent (step 1).
 10. **Every block is read back and approved before it is written.**
 11. **Every write goes through the CLI.**
 12. **Prefer fewer, confirmed objects to more, inferred ones.**
