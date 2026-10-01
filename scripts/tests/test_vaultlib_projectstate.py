@@ -39,7 +39,8 @@ def state():
         "hot_potatoes": [{"signal": "red", "text": "Renee owns the integration work and was not in the room."}],
         "insights": ["The six-week slip is schedule, not scope."],
         "defining_decision": "2026-05-20-single-vendor-strategy-adopted",
-        "coming_up": [{"when": "Tue 1 Sept", "what": "Vendor contract signature", "date": "2026-09-01"},
+        "coming_up": [{"when": "Tue 1 Sept", "what": "Vendor contract signature", "date": "2026-09-01",
+                       "milestone": True},
                       {"when": "Mon 22 June", "what": "Commissioning schedule to Leo", "date": "2026-06-22"}],
         "owe": [{"owner": "Priya Nathan", "items": ["Revised commissioning schedule to Leo Marchetti."]}],
         "awaiting": ["Consolidated integration estimate from the yard-1 vendor."],
@@ -47,7 +48,6 @@ def state():
         "pending": ["Single-vendor contract signature, target 1 Sept."],
         "watch": ["Roughly six weeks of slip against the phased plan."],
         "context": {"contacts": "Leo Marchetti (COO)", "source": "Follow-on from Phase 0"},
-        "next_milestone": {"text": "Vendor contract signature", "date": "2026-09-01"},
     }
 
 
@@ -58,7 +58,9 @@ def test_write_renders_the_v2_body_and_touches_frontmatter(tmp_path):
     text = (root / "30-projects" / slug / "index.md").read_text(encoding="utf-8")
     fm, body = md.split_frontmatter(text)
     assert fm["last-updated"] == "2026-06-15" and fm["state-updated"] == "2026-06-15T20:30"
+    # the milestone is the flagged row, not merely the next event (22 June)
     assert fm["next-milestone"] == "Vendor contract signature"
+    assert str(fm["next-milestone-date"]) == "2026-09-01"
     assert body.startswith("\n# Yard Automation Program\n\n> [!summary] Where it stands — 15 June\n")
     assert "> - **Stage** — Yard 1 commissioned" in body
     assert "> - **Hot potato** — 🔴 Renee owns" in body
@@ -110,7 +112,8 @@ def test_write_is_idempotent(tmp_path):
     (lambda s: s["owe"][0]["items"].append("a; b; c; d; e; f; g; h"), "one item per bullet"),
     (lambda s: s["awaiting"].append(" ".join(["w"] * 41)), "≤ 40 words"),
     (lambda s: s.__setitem__("defining_decision", "not-a-decision"), "defining_decision"),
-    (lambda s: s.__setitem__("next_milestone", {"text": "x"}), "next_milestone"),
+    (lambda s: s.__setitem__("next_milestone", {"text": "x", "date": "2026-09-01"}),
+     "derived from coming_up"),
     (lambda s: s.__setitem__("bogus", 1), "unknown"),
 ])
 def test_caps_are_refused_by_field(tmp_path, mutate, message):
@@ -185,13 +188,72 @@ def test_coming_up_link_pipe_is_escaped_and_row_stays_two_cells(tmp_path):
     assert "\\|" in cells[2]
 
 
-def test_bad_milestone_date_refused_and_file_untouched(tmp_path):
+def milestone(root, slug):
+    fm, _ = md.split_frontmatter(
+        (root / "30-projects" / slug / "index.md").read_text(encoding="utf-8"))
+    date = fm.get("next-milestone-date")
+    return fm.get("next-milestone"), (str(date) if date else None)
+
+
+def test_a_past_milestone_with_no_new_event_leaves_no_milestone(tmp_path):
+    # Issue #241: the evening run omitted the milestone when nothing was
+    # scheduled, and the old pair stayed — a past date in the Projects table
+    # beside "none scheduled" on the page.
+    root, slug = scaffolded(tmp_path)
+    projectstate.write(root, slug=slug, payload=state(), today="2026-06-15")
+    assert milestone(root, slug) == ("Vendor contract signature", "2026-09-01")
+    payload = state()
+    payload["as_of"] = "2026-09-28"
+    payload["coming_up"] = []
+    projectstate.write(root, slug=slug, payload=payload, today="2026-09-28")
+    assert milestone(root, slug) == (None, None)
+    body = (root / "30-projects" / slug / "index.md").read_text(encoding="utf-8")
+    assert "## Coming up\n\n_none scheduled_" in body
+
+
+def test_milestone_is_the_first_upcoming_flagged_row(tmp_path):
+    root, slug = scaffolded(tmp_path)
+    payload = state()
+    payload["coming_up"] = [
+        {"when": "Mon 8 June", "what": "Kick-off, already held", "date": "2026-06-08",
+         "milestone": True},
+        {"when": "Tue 16 June", "what": "Weekly sync", "date": "2026-06-16"},
+        {"when": "Fri 3 July", "what": "Yard 2 go-live", "date": "2026-07-03", "milestone": True},
+        {"when": "Tue 1 Sept", "what": "Yard 3 go-live", "date": "2026-09-01", "milestone": True},
+    ]
+    projectstate.write(root, slug=slug, payload=payload, today="2026-06-15")
+    assert milestone(root, slug) == ("Yard 2 go-live", "2026-07-03")
+    # once it passes, the next flagged row takes over
+    projectstate.write(root, slug=slug, payload=payload, today="2026-07-04")
+    assert milestone(root, slug) == ("Yard 3 go-live", "2026-09-01")
+    # unflagged events never become the milestone
+    payload["coming_up"] = payload["coming_up"][:2]
+    projectstate.write(root, slug=slug, payload=payload, today="2026-06-15")
+    assert milestone(root, slug) == (None, None)
+
+
+@pytest.mark.parametrize("row, message", [
+    ({"when": "Later this year", "what": "Yard 3 go-live", "milestone": True}, "without a date"),
+    ({"when": "Tue 1 Sept", "what": "x", "date": "2026-09-01", "milestone": "yes"}, "true or false"),
+    ({"when": "Mon 30 Feb", "what": "x", "date": "2026-02-30", "milestone": True}, "not a calendar date"),
+])
+def test_a_bad_milestone_flag_is_refused(tmp_path, row, message):
+    root, slug = scaffolded(tmp_path)
+    payload = state()
+    payload["coming_up"] = [row]
+    with pytest.raises(projectstate.ProjectStateError, match=message):
+        projectstate.write(root, slug=slug, payload=payload, today="2026-06-15")
+
+
+def test_an_explicit_milestone_is_refused_and_file_untouched(tmp_path):
+    # Sending the milestone separately is how the table and the page came to
+    # disagree; the payload no longer has a field for it.
     root, slug = scaffolded(tmp_path)
     index_path = root / "30-projects" / slug / "index.md"
     before = index_path.read_bytes()
     payload = state()
-    payload["next_milestone"]["date"] = "not-a-date"
-    with pytest.raises(projectstate.ProjectStateError, match="next_milestone.date"):
+    payload["next_milestone"] = {"text": "Vendor contract signature", "date": "2026-09-01"}
+    with pytest.raises(projectstate.ProjectStateError, match="derived from coming_up"):
         projectstate.write(root, slug=slug, payload=payload, today="2026-06-15")
     assert index_path.read_bytes() == before
 

@@ -321,6 +321,42 @@ def test_touch_milestone_fields_travel_together(tmp_path):
                       next_milestone="Half a milestone")
 
 
+def test_touch_clears_the_milestone_pair(tmp_path):
+    root = make_touch_vault(tmp_path)
+    project.touch(root, slug="alpha", date_iso="2026-06-12",
+                  next_milestone="Vendor contract signature",
+                  next_milestone_date="2026-09-01")
+    result = project.touch(root, slug="alpha", date_iso="2026-06-12",
+                           clear_milestone=True)
+    text = (root / "30-projects" / "alpha" / "index.md").read_text(encoding="utf-8")
+    data, _ = md.split_frontmatter(text)
+    assert data["next-milestone"] is None and data["next-milestone-date"] is None
+    # the empty form scaffold writes, so a clear on a fresh project is a no-op
+    assert "\nnext-milestone:\nnext-milestone-date:\n" in text
+    assert result["next-milestone"] is None and result["next-milestone-date"] is None
+    again = project.touch(root, slug="alpha", date_iso="2026-06-12",
+                          timestamp=result["state-updated"], clear_milestone=True)
+    assert again["changed"] is False
+
+
+def test_touch_without_milestone_arguments_leaves_the_pair(tmp_path):
+    root = make_touch_vault(tmp_path)
+    project.touch(root, slug="alpha", date_iso="2026-06-12",
+                  next_milestone="Vendor contract signature",
+                  next_milestone_date="2026-09-01")
+    project.touch(root, slug="alpha", date_iso="2026-06-13")
+    text = (root / "30-projects" / "alpha" / "index.md").read_text(encoding="utf-8")
+    assert 'next-milestone: "Vendor contract signature"' in text
+
+
+def test_touch_refuses_a_milestone_and_a_clear_together(tmp_path):
+    root = make_touch_vault(tmp_path)
+    with pytest.raises(project.ProjectError, match="clear"):
+        project.touch(root, slug="alpha", date_iso="2026-06-12",
+                      next_milestone="X", next_milestone_date="2026-09-01",
+                      clear_milestone=True)
+
+
 def test_touch_is_idempotent(tmp_path):
     root = make_touch_vault(tmp_path)
     project.touch(root, slug="alpha", date_iso="2026-06-12",

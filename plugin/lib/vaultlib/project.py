@@ -280,7 +280,8 @@ def _require_iso_datetime(value, label: str) -> str:
 
 
 def touch(root, *, slug: str, date_iso: str, timestamp: Optional[str] = None,
-          next_milestone=None, next_milestone_date=None) -> dict:
+          next_milestone=None, next_milestone_date=None,
+          clear_milestone: bool = False) -> dict:
     """Bump the auto-maintained frontmatter of a project-state update.
 
     Stage-4 subagents send the project state as JSON and `project state
@@ -288,6 +289,10 @@ def touch(root, *, slug: str, date_iso: str, timestamp: Optional[str] = None,
     write calls touch itself). Only last-updated, state-updated (and,
     together, the milestone pair) can change; every other byte of index.md
     stays put.
+
+    Omitting the milestone leaves the pair alone; `clear_milestone` empties
+    it. State write always sends one or the other, because a pair it left
+    alone outlived its date (issue #241).
 
     `last-updated` stays the human-facing day. `state-updated` records the
     minute the state was actually synthesized, and that is what the evening
@@ -315,6 +320,8 @@ def touch(root, *, slug: str, date_iso: str, timestamp: Optional[str] = None,
             "next-milestone and next-milestone-date travel together — "
             "pass both or neither"
         )
+    if clear_milestone and next_milestone is not None:
+        raise ProjectError("pass a next milestone or clear it, not both")
     text = index_path.read_text(encoding="utf-8")
     updated = markdown.upsert_scalar_field(text, "last-updated", stamped)
     updated = markdown.upsert_scalar_field(updated, "state-updated", state_stamp)
@@ -334,6 +341,9 @@ def touch(root, *, slug: str, date_iso: str, timestamp: Optional[str] = None,
         updated = markdown.upsert_scalar_field(updated, "next-milestone", quoted)
         updated = markdown.upsert_scalar_field(updated, "next-milestone-date",
                                                milestone_date)
+    elif clear_milestone:
+        updated = markdown.upsert_scalar_field(updated, "next-milestone", "")
+        updated = markdown.upsert_scalar_field(updated, "next-milestone-date", "")
     changed = updated != text
     if changed:
         vault.atomic_write(index_path, updated)

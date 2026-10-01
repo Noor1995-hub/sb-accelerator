@@ -219,16 +219,19 @@ def _replace_field_node(text: str, field: str, value: str,
     if not match:
         raise ValueError("file has no YAML frontmatter")
     lines = match.group(1).split("\n")
+    # An empty value is written `field:`, the same null emit_frontmatter
+    # writes, so clearing a never-set field changes no bytes.
+    entry = f"{field}: {value}" if value != "" else f"{field}:"
     for index, line in enumerate(lines):
         if not line.startswith(f"{field}:"):
             continue
-        replaced = lines[:index] + [f"{field}: {value}"]
+        replaced = lines[:index] + [entry]
         replaced += lines[_node_end(lines, index):]
         block = "\n".join(replaced)
         return normalized[: match.start(1)] + block + normalized[match.end(1):]
     if not insert_if_missing:
         raise ValueError(f"field {field!r} is not present in frontmatter")
-    block = "\n".join(lines) + f"\n{field}: {value}"
+    block = "\n".join(lines) + f"\n{entry}"
     return normalized[: match.start(1)] + block + normalized[match.end(1):]
 
 

@@ -15,6 +15,8 @@ delivers them.
 
 ## Unreleased
 
+- A project's next milestone no longer goes stale. When the evening run found nothing to replace it, the old milestone stayed in the Projects table after its date had passed, while the project page said "none scheduled". The milestone is still the next significant event, not just the next meeting, but it is now taken from the events marked as milestones in the page's *Coming up* list, and it is cleared when none of them is still ahead, so the table, the page and the daily note agree. Each project picks this up the next time the evening run updates it. (#243)
+
 ## v0.12.6 — 2026-09-29
 
 - Teams meetings now sync, and tomorrow's meetings are prepped in the daily note, for a mailbox set to its own time zone. Outlook answers such a mailbox's calendar in local time ("Romance Standard Time" for Brussels) instead of UTC, and the plugin used to refuse every event it could not read as UTC, so the M365 sync and calendar prep never ran. It now converts Windows and IANA time zone names; a zone it cannot identify is still refused rather than guessed. (#233)
