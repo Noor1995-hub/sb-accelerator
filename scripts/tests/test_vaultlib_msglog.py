@@ -526,3 +526,56 @@ def test_check_drops_a_group_whose_gid_is_not_a_string(env):
     result = msglog.check(str(scratch))
     assert result["passed"] == 0
     assert [d["reasons"] for d in result["dropped"]] == [["gid is not a string"]] * 2
+
+
+def test_one_bad_timestamp_in_a_capped_source_never_aborts_the_build(env):
+    root, scratch = env
+    page(scratch, "msg_inbox.p1.payload.json", [
+        mail("m1", "Workshop 2 agenda", "jordan.reyes@acme.example", [], at="2026-09-30T09:00:00Z"),
+        mail("m9", "Broken", "jordan.reyes@acme.example", [], at="not a date")], more=True)
+    result = msglog.build(root, str(scratch), consume=False, **{**KW, "since": "2026-09-27T00:00:00Z"})
+    assert result["counts"]["unparsed"] == 1
+    assert result["new_gaps"] == [{"source": "inbox", "from": "2026-09-27T00:00:00Z", "to": "2026-09-29T09:00:00Z"}]
+
+
+def _write_all(root, scratch, now="2026-09-30T18:52:00Z"):
+    groups = json.loads((scratch / msgrows.GROUPS_FILE).read_text(encoding="utf-8"))["groups"]
+    payload = {"groups": [{"gid": g["gid"], "needs_owner": False,
+                           "points": [{"text": "A note.", "cites": [g["messages"][0]["id"]]}]} for g in groups]}
+    (scratch / msglog.CONDENSED_FILE).write_text(json.dumps(payload), encoding="utf-8")
+    msglog.check(str(scratch))
+    return msglog.write(root, str(scratch), now=now)
+
+
+def _at_limit(root, day):
+    fm, _ = markdown.split_frontmatter((root / "_messages" / f"{day}-messages.md").read_text(encoding="utf-8"))
+    return fm["at-limit"]
+
+
+def test_at_limit_is_stamped_only_on_the_day_the_cap_cut(env):
+    root, scratch = env
+    page(scratch, "msg_inbox.p1.payload.json", [
+        mail("m1", "Workshop 2 agenda", "jordan.reyes@acme.example", [], at="2026-09-30T09:00:00Z"),
+        mail("m3", "Budget", "jordan.reyes@acme.example", [], at="2026-09-29T09:00:00Z")], more=True)
+    page(scratch, "msg_sent.p1.payload.json", [
+        mail("m2", "Older thread", "morgan.ellery@northwind.example", ["sam.lee@acme.example"],
+             at="2026-09-28T09:00:00Z")])
+    result = msglog.build(root, str(scratch), consume=False, **{**KW, "since": "2026-09-28T00:00:00Z"})
+    assert result["at_limit"] is True and result["at_limit_days"] == ["2026-09-29"]
+    _write_all(root, scratch)
+    assert _at_limit(root, "2026-09-29") is True
+    assert _at_limit(root, "2026-09-30") is False and _at_limit(root, "2026-09-28") is False
+
+
+def test_a_day_with_skipped_groups_is_at_limit(env, monkeypatch):
+    root, scratch = env
+    page(scratch, "msg_inbox.p1.payload.json", [
+        mail("m1", "Workshop 2 agenda", "jordan.reyes@acme.example", [], at="2026-09-30T09:00:00Z"),
+        mail("m3", "Budget", "jordan.reyes@acme.example", [], at="2026-09-30T09:30:00Z"),
+        mail("m4", "Other", "jordan.reyes@acme.example", [], at="2026-09-29T09:30:00Z")])
+    real_trim = msgrows.trim
+    monkeypatch.setattr(msgrows, "trim", lambda groups: real_trim(groups, limit=1))
+    result = msglog.build(root, str(scratch), consume=False, **KW)
+    assert result["skipped"] == {"2026-09-30": 1} and result["at_limit_days"] == ["2026-09-30"]
+    _write_all(root, scratch)
+    assert _at_limit(root, "2026-09-30") is True and _at_limit(root, "2026-09-29") is False

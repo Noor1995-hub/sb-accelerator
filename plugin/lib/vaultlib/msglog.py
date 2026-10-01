@@ -44,15 +44,21 @@ def build(root: Path, scratch_dir: str, *, timezone, utc_offset, owner_addresses
     routed = msgroute.route(root, groups, home_domains=home_domains,
                             owner_addresses=set(owner_addresses), today=today)
     since_dt = seenevents.parse_now(since)
-    new_gaps, at_limit = [], bool(skipped)
+    # A day is at its limit when trim skipped groups on it, or when it holds
+    # the oldest row of a source the page cap cut off: that is the day whose
+    # older part went unread. Every other day the run touches was read whole.
+    new_gaps, at_limit, at_limit_days = [], bool(skipped), set(skipped)
     for source in ("teams", "inbox", "sent"):
         entry = loaded[source]
         if not entry["capped"] or not entry["rows"]:
             continue
-        stamps = [r.get("createdDateTime") or r.get("receivedDateTime") for r in entry["rows"]]
-        oldest = min(seenevents.parse_now(s) for s in stamps if s)
-        owed_until = oldest - timedelta(hours=24)
         at_limit = True
+        found = msgrows.oldest(entry["rows"], timezone, utc_offset)
+        if found is None:
+            continue
+        oldest, oldest_day = found
+        at_limit_days.add(oldest_day)
+        owed_until = oldest - timedelta(hours=24)
         if owed_until > since_dt:
             new_gaps.append({"source": source, "from": since_dt.strftime(_FMT),
                              "to": owed_until.strftime(_FMT)})
@@ -71,6 +77,7 @@ def build(root: Path, scratch_dir: str, *, timezone, utc_offset, owner_addresses
     for g in groups:
         by_date[g["date"]] = by_date.get(g["date"], 0) + 1
     payload = {"groups": groups, "skipped": skipped, "at_limit": at_limit,
+               "at_limit_days": sorted(at_limit_days),
                "counts": counts, "newest": newest, "new_gaps": new_gaps, "filled": filled}
     for stale in (CONDENSED_FILE, CHECKED_FILE):
         (Path(scratch_dir) / stale).unlink(missing_ok=True)
@@ -83,7 +90,7 @@ def build(root: Path, scratch_dir: str, *, timezone, utc_offset, owner_addresses
                 (Path(scratch_dir) / name).unlink()
                 consumed.append(name)
     return {"groups": len(groups), "by_date": by_date, "counts": counts, "skipped": skipped,
-            "at_limit": at_limit, "newest": newest, "new_gaps": new_gaps, "filled": filled,
+            "at_limit": at_limit, "at_limit_days": sorted(at_limit_days), "newest": newest, "new_gaps": new_gaps, "filled": filled,
             "consumed": sorted(consumed), **routed}
 
 
@@ -254,7 +261,8 @@ def _merge_day(root: Path, path: Path, day: str, groups: List[dict], built: dict
     read = _count(previous.get("messages-read")) + new_messages
     skipped = _count(previous.get("skipped")) + _count(built["skipped"].get(day, 0))
     frontmatter = _frontmatter_for(data, updated_at=updated_at, read=read, skipped=skipped,
-                                   at_limit=bool(previous.get("at-limit")) or bool(built["at_limit"]))
+                                   at_limit=bool(previous.get("at-limit"))
+                                   or day in built.get("at_limit_days", []))
     save_log(root, data, frontmatter)
     return True
 

@@ -12,6 +12,7 @@ from __future__ import annotations
 import hashlib
 import re
 from collections import defaultdict
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple
 
@@ -161,6 +162,22 @@ def _local_day(raw: str, label: str, timezone, utc_offset) -> Tuple[str, str]:
     utc = m365._parse_graph_dt(raw, label)
     local, _ = dates.utc_to_local(utc, timezone, utc_offset)
     return local.date().isoformat(), utc.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def oldest(rows: List[dict], timezone, utc_offset) -> Optional[Tuple[datetime, str]]:
+    """The oldest row's UTC moment and local day, read with the same parser as
+    grouping; a row whose timestamp does not parse is passed over, never fatal."""
+    found = None
+    for row in rows:
+        field = "createdDateTime" if "createdDateTime" in row else "receivedDateTime"
+        try:
+            utc = m365._parse_graph_dt(row.get(field), field)
+            local, _ = dates.utc_to_local(utc, timezone, utc_offset)
+        except (m365.M365Error, ValueError, TypeError, OverflowError):
+            continue
+        if found is None or utc < found[0]:
+            found = (utc, local.date().isoformat())
+    return found
 
 
 def _name(row_from: dict) -> Optional[str]:
