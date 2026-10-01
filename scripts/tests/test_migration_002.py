@@ -475,13 +475,14 @@ def test_apply_flags_an_unparseable_index_and_leaves_it(tmp_path):
 
 
 def test_run_through_the_framework_bumps_to_3(tmp_path):
-    root = vault_with_v1_index(tmp_path)   # structure-version 2, so only 002 is pending
+    # structure-version 2, so 002 applies first — then 003 (#239) carries the
+    # chain on to 4; this test is about 002's step
+    root = vault_with_v1_index(tmp_path)
     result = migrate.run(root, "2026-06-15", stamp="2026-06-15-120000")
-    assert (root / "structure-version").read_text(encoding="utf-8").strip() == "3"
-    assert [a["slug"] for a in result["applied"]] == ["structure-version-3"]
+    assert [a["slug"] for a in result["applied"]][:1] == ["structure-version-3"]
     assert result["applied"][0]["target_version"] == 3
     assert result["applied"][0]["apply"]["reshaped"] == ["meridian-yard-automation-program"]
-    assert result["structure_version"] == 3
+    assert result["structure_version"] == 4
 
 
 # --- real bullet shapes found on the first real vault ------------------

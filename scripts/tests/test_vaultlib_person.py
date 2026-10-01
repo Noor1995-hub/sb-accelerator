@@ -102,3 +102,43 @@ def test_ensure_uses_lf_endings(tmp_path):
     person.ensure(root, "Morgan Ellery", "2026-08-23")
     raw = (root / "50-people" / "morgan-ellery.md").read_bytes()
     assert b"\r\n" not in raw
+
+
+# --- #242: the M365 attendee address is kept ---
+
+def test_ensure_stores_the_email_on_creation(tmp_path):
+    root = make_vault(tmp_path)
+    result = person.ensure(root, "Ana Fields", "2026-06-12", email="ana.fields@client.example")
+    data, _ = md.split_frontmatter((root / result["path"]).read_text(encoding="utf-8"))
+    assert data["email"] == "ana.fields@client.example"
+    assert not schema.validate("person", data)
+
+
+def test_ensure_fills_an_empty_email_on_an_existing_note(tmp_path):
+    root = make_vault(tmp_path)
+    created = person.ensure(root, "Ana Fields", "2026-06-12")
+    path = root / created["path"]
+    result = person.ensure(root, "Ana Fields", "2026-06-13", email="ana@client.example")
+    assert result["created"] is False and result["updated"] == ["email"]
+    data, _ = md.split_frontmatter(path.read_text(encoding="utf-8"))
+    assert data["email"] == "ana@client.example"
+    assert data["last-updated"] is not None and str(data["created"]) == "2026-06-12"
+
+
+def test_ensure_never_overwrites_a_set_email(tmp_path):
+    root = make_vault(tmp_path)
+    person.ensure(root, "Ana Fields", "2026-06-12", email="ana@client.example")
+    path = root / "50-people" / "ana-fields.md"
+    before = path.read_bytes()
+    result = person.ensure(root, "Ana Fields", "2026-06-13", email="other@client.example")
+    assert path.read_bytes() == before
+    assert "email" in result.get("ignored", [])
+    assert "updated" not in result
+
+
+@pytest.mark.parametrize("bad", ["not-an-address", "a b@c.example", "a@b.example\nx: y"])
+def test_ensure_refuses_a_malformed_email(tmp_path, bad):
+    root = make_vault(tmp_path)
+    with pytest.raises(ValueError, match="email"):
+        person.ensure(root, "Ana Fields", "2026-06-12", email=bad)
+    assert not (root / "50-people" / "ana-fields.md").exists()

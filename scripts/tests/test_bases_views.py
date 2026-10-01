@@ -96,6 +96,9 @@ EXPECTED = [
     }),
 
     ("50-people/People.base", "All", ALL_PEOPLE),
+    # Everyone with a confirmed meeting behind them (#242). dana-whitfield's
+    # only meeting is the unconfirmed intro call, so she has no last-met.
+    ("50-people/People.base", "Recently met", ALL_PEOPLE - {PEOPLE.format("dana-whitfield")}),
     # jamie-ellwood is the only fixture person with `relationship` empty.
     ("50-people/People.base", "Uncurated", {PEOPLE.format("jamie-ellwood")}),
     # The two fixture people curated as `relationship: direct-report`.
@@ -169,6 +172,8 @@ def test_template_only_vault_has_no_object_rows(tmp_path):
 DEFAULT_VIEWS = [
     ("30-projects/Decisions.base", "To review"),
     ("20-meetings/Meetings.base", "Triage"),
+    # People opens A–Z (#242), not on a review queue.
+    ("50-people/People.base", "All"),
 ]
 
 

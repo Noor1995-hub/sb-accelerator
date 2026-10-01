@@ -92,6 +92,12 @@ touched yet at this point (`migrate status` is read-only).
 
 ## 4. Run it
 
+**Ask the consultant to close Obsidian on this vault first, and wait until
+they say it is closed.** Some migrations merge settings into `.obsidian/`
+(structure-version 4 edits the sidebar and the ribbon), and Obsidian
+rewrites `workspace.json` and the plugins' settings when it quits — an open
+vault silently undoes the change.
+
 ```bash
 python3 "$VAULTLIB" migrate run --vault "$VAULT"
 ```

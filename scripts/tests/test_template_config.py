@@ -14,18 +14,16 @@ SNIPPET = TEMPLATE / ".obsidian" / "snippets" / "sb-accelerator.css"
 WORKSPACE = TEMPLATE / ".obsidian" / "workspace.json"
 CONFIG = TEMPLATE / "99-workflow-config" / "config.json"
 
+# The sidebar's one menu (#239), each entry with the label it shows. Start
+# here is no longer a shortcut — the vault opens on it, and it sits at the
+# root of the file list.
 EXPECTED_SHORTCUTS = [
-    # The orientation note pins first: a fresh vault otherwise opens to an empty
-    # "New tab" with nothing telling the vault owner how any of it works (#60 item 6).
-    ("note", "Start here.md"),
-    ("note", "20-meetings/Meetings.base"),
-    ("note", "30-projects/Projects.base"),
-    # Decisions sit under Projects: they are project objects, and the two
-    # tables are read together at a tune-up.
-    ("note", "30-projects/Decisions.base"),
-    ("note", "40-entities/Entities.base"),
-    ("note", "50-people/People.base"),
-    ("folder", "60-daily-notes"),
+    ("folder", "60-daily-notes", "Daily notes"),
+    ("note", "20-meetings/Meetings.base", "Meetings"),
+    ("note", "30-projects/Projects.base", "Projects"),
+    ("note", "50-people/People.base", "People"),
+    ("note", "40-entities/Entities.base", "Organisations"),
+    ("note", "30-projects/Decisions.base", "Decisions"),
 ]
 
 
@@ -43,9 +41,9 @@ def test_nn_data_json_parses_and_profile_selected():
 
 def test_nn_shortcuts_exact_order_and_paths_exist():
     profile = load_profile()
-    got = [(s["type"], s["path"]) for s in profile["shortcuts"]]
+    got = [(s["type"], s["path"], s.get("alias")) for s in profile["shortcuts"]]
     assert got == EXPECTED_SHORTCUTS, f"shortcut list drifted: {got}"
-    for kind, path in got:
+    for kind, path, _ in got:
         target = TEMPLATE / path
         if kind == "folder":
             assert target.is_dir(), f"shortcut folder missing in template: {path}"
@@ -279,14 +277,43 @@ def test_workspace_references_no_files_outside_the_template():
         assert (TEMPLATE / path).exists(), f"workspace.json references {path!r}, absent from plugin/template/"
 
 
-def test_workspace_sidebar_is_wide_enough_for_the_navigator():
-    """Notebook Navigator collapses to a single pane at Obsidian's default 300px
-    sidebar and shows the *file list*, hiding the Shortcuts entirely — so a
-    fresh vault opened on the configured shortcuts without showing them. It goes
-    dual-pane by 360px; verified live against Obsidian 1.13."""
-    layout = json.loads(WORKSPACE.read_text(encoding="utf-8"))
-    assert layout["left"]["width"] >= 360, (
-        f"sidebar is {layout['left']['width']}px — the navigator will hide its Shortcuts")
+def test_navigator_keeps_one_pane_layout_in_a_narrow_sidebar():
+    """Notebook Navigator used to collapse to a single pane in a narrow
+    sidebar and show the *file list*, hiding the Shortcuts — and it flipped
+    between the two as the sidebar width changed (#239). Its default
+    `narrowSidebarLayout: singlePane` did that. Shipping `none` with the panes
+    stacked (menu above, list below) keeps one layout at any width, which is
+    what lets the sidebar narrow to give pages room. The two layout keys are
+    per-device in Navigator unless `syncModes` marks them synced, so without
+    that the vault's value is ignored; verified live against Obsidian 1.13."""
+    data = json.loads(NN_DATA.read_text(encoding="utf-8"))
+    assert data["narrowSidebarLayout"] == "none"
+    assert data["dualPane"] is True and data["dualPaneOrientation"] == "vertical"
+    assert data["syncModes"]["dualPane"] == data["syncModes"]["dualPaneOrientation"] == "synced"
+
+
+def test_sidebar_shows_one_menu_and_no_plumbing():
+    data = json.loads(NN_DATA.read_text(encoding="utf-8"))
+    assert data["shortcutBadgeDisplay"] == "none"
+    assert data["showRecentNotes"] is False
+    assert data["showTags"] is False and data["showProperties"] is False
+    assert data["checkForUpdatesOnStart"] is False, "the update notice pushes an unpinned version"
+    profile = load_profile()
+    assert set(profile["hiddenFolders"]) == {"claude", "99-workflow-config"}
+    assert profile["hiddenFileNames"] == ["CLAUDE.md"]
+    order = data["rootFolderOrder"]
+    assert order[-3:] == ["90-archive", "95-private", "_heavy-assets"]
+    roots = {p.name for p in TEMPLATE.iterdir() if p.is_dir() and not p.name.startswith(".")}
+    assert set(order) | set(profile["hiddenFolders"]) == roots, (
+        "every root folder is either ordered or hidden")
+
+
+def test_ribbon_keeps_today_and_the_quick_switcher_only():
+    hidden = json.loads(WORKSPACE.read_text(encoding="utf-8"))["left-ribbon"]["hiddenItems"]
+    shown = sorted(k for k, v in hidden.items() if v is False)
+    assert shown == ["daily-notes:Open today's daily note", "switcher:Open quick switcher"]
+    css = (TEMPLATE / ".obsidian" / "snippets" / "sb-accelerator.css").read_text(encoding="utf-8")
+    assert '.side-dock-ribbon-action[aria-label="Notebook Navigator"]' in css
 
 
 def test_orientation_note_has_no_duplicate_h1():

@@ -89,3 +89,14 @@
 .callout[data-callout="theme"]  { --callout-color: #a855f7; --callout-icon: lucide-git-merge; }
 .callout[data-callout="hot"]    { --callout-color: #ef4444; --callout-icon: lucide-flame; }
 .callout[data-callout="sync"]   { --callout-color: #94a3b8; --callout-icon: lucide-wrench; opacity: 0.85; }
+
+/* No Notebook Navigator ribbon icon (#239).
+   The ribbon keeps two icons: today's daily note and the quick switcher. The
+   rest are hidden through workspace.json's `left-ribbon.hiddenItems`, which
+   the owner can undo with a right-click — but Obsidian resets a plugin's
+   entry to visible when the plugin first loads after "Trust author", so the
+   Navigator icon came back on every fresh vault. Its sidebar is always open,
+   so the icon does nothing a click on the sidebar does not. */
+.side-dock-ribbon-action[aria-label="Notebook Navigator"] {
+  display: none;
+}

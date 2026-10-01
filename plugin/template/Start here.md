@@ -23,11 +23,11 @@ Each is a live view, not a document — they update themselves as notes change.
 |---|---|
 | **Meetings** | Every meeting, and notes captured from email or voice memo — newest first. The *Triage* view is your queue. |
 | **Projects** | What's in flight, with the next milestone. |
-| **Entities** | Organisations you deal with — one dossier each. |
+| **Organisations** | Organisations you deal with — one dossier each. |
 | **People** | Individuals, their role, and when you last spoke. |
 | **Decisions** | What was decided, when, and what it replaced. *To review* lists decisions the evening run captured that you have not read yet — tick **Keep** once you have. |
 
-They're pinned at the top of the sidebar.
+They're the menu at the top of the sidebar, under **Daily notes**. The calendar icon at the far left always brings you back to today's note.
 
 ## Reviewing
 

@@ -179,7 +179,8 @@
         "created",
         "last-updated",
         "meetings-7d",
-        "meetings-30d"
+        "meetings-30d",
+        "last-met"
       ],
       "required": [
         "person-name",

@@ -216,7 +216,7 @@ object: person
 required: [person-name, slug]
 keys_present: [relationship]
 optional: [email, company, role, projects, created, last-updated,
-           meetings-7d, meetings-30d]
+           meetings-7d, meetings-30d, last-met]
 enums:
   relationship: [colleague, direct-report, external, null]
 ```
@@ -232,6 +232,17 @@ enums:
   section with `### Feedback History` (a dated table) and `### Growth Areas`.
   Nothing in the plugin reads or writes it; it is a place, not a pipeline.
 - Auto-created from meeting attendees; enriched manually via People Base.
+- **Auto-maintained** by the evening run's metrics step, from confirmed
+  meetings only (never a `type: note` capture): `meetings-7d`,
+  `meetings-30d`, `last-met` (ISO date of the latest such meeting the person
+  attended; emptied when there is none) and `projects` — **add-only**: a
+  project from a confirmed meeting is appended, a hand-entered one is never
+  removed.
+- `email` is stored when the M365 sync creates the person, and filled into
+  an existing note whose `email` is empty; a set email is never overwritten.
+- `relationship`, `company` and `role` stay hand-curated — nothing writes
+  them. `last-updated` is the creation day and is not a recency signal; sort
+  on `last-met` for that.
 - Example: `50-people/jordan-reyes.md`
 
 ### Decision — `30-projects/{slug}/decisions/YYYY-MM-DD-{title}.md` · Base: `Decisions.base`

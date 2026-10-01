@@ -656,6 +656,10 @@ each attendee's note exists:
 python3 "$VAULTLIB" person ensure --vault "$VAULT" --name "<Full Name>"
 ```
 
+When the calendar match gives that attendee's address alongside the name,
+add `--email "<address>"` — it fills an empty email and never overwrites one.
+Never pair a name with an address by guessing.
+
 Use the returned slugs. The vault owner attends their own meetings — include
 them. Names only guessed from transcript audio are unreliable: leave them
 out of `attendees` and mention them in the debrief instead.
