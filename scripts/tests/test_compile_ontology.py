@@ -63,7 +63,7 @@ def test_objects_without_body_schema_omit_the_key(object_name):
 
 def test_decision_carries_reviewed_and_no_tags_vocabulary():
     decision = co.compile_schema()["objects"]["decision"]
-    assert decision["optional"] == ["supersedes", "source"]
+    assert decision["optional"] == ["supersedes", "source", "archived"]
     assert decision["keys_present"] == ["reviewed"]
     assert "tags" not in decision, (
         "decision tags were dropped in P1a decision 6 — a compiled key nothing "

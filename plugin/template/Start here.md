@@ -13,7 +13,7 @@ Everything runs off your daily note in `60-daily-notes`, and one thing drives it
 
 It runs by itself each working evening, as long as this machine is awake with Claude open. If it was shut at the time, the run happens the next time Claude opens and the note says so. To write tomorrow's note right now instead, run **`/evening-sync`**.
 
-When something needs your eye, the note opens with **Waiting for you**: the meetings and decisions still to review, live — tick **Keep** (or **Dismiss** a meeting that is noise) right there and the row goes. On a day with nothing waiting it isn't there at all. Then three parts. **Recap** is written for you. **Meetings** is one heading per meeting, with **Prep** written for you and **Your notes** and **Your actions** left for you — tick an action when it is done. **End of day** is yours. Jot whatever you like under any of them — free text is fine, nothing needs a format, and the next evening run reads what you wrote.
+When something needs your eye, the note opens with **Waiting for you**: the meetings and decisions still to review, live — tick **Keep**, or **Dismiss** what is noise, right there and the row goes. On a day with nothing waiting it isn't there at all. Then three parts. **Recap** is written for you. **Meetings** is one heading per meeting, with **Prep** written for you and **Your notes** and **Your actions** left for you — tick an action when it is done. **End of day** is yours. Jot whatever you like under any of them — free text is fine, nothing needs a format, and the next evening run reads what you wrote.
 
 ## The five tables
 
@@ -25,7 +25,7 @@ Each is a live view, not a document — they update themselves as notes change.
 | **Projects** | What's in flight, with the next milestone. |
 | **Organisations** | Organisations you deal with — one dossier each. |
 | **People** | Individuals, their role, and when you last spoke. |
-| **Decisions** | What was decided, when, and what it replaced. *To review* lists decisions the evening run captured that you have not read yet — tick **Keep** once you have. |
+| **Decisions** | What was decided, when, and what it replaced. *To review* lists decisions the evening run captured that you have not read yet — tick **Keep** once you have, or **Dismiss** if it was not really a decision. |
 
 They're the menu at the top of the sidebar, under **Daily notes**. The calendar icon at the far left always brings you back to today's note.
 

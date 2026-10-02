@@ -78,9 +78,14 @@ python3 "$VAULTLIB" decision list --vault "$VAULT" --project <slug>
 ```
 
 You get every decision on the project, newest first: `stem`, `date`, `status`,
-`summary`, `supersedes`, `source`, `reviewed`. **Read this before extracting.**
-It is what lets you recognise a restatement, and it is where any supersession
-candidate comes from.
+`summary`, `supersedes`, `source`, `reviewed`, `dismissed`. **Read this before
+extracting.** It is what lets you recognise a restatement, and it is where any
+supersession candidate comes from.
+
+An entry with `dismissed: true` is a capture the owner ticked **Dismiss** on:
+not a real decision. It still counts for dedup — a candidate that restates it
+is skipped, never written again — but it is never cited and never
+superseded.
 
 `supersedes` and `source` come back as **bare stems**
 (`2026-03-10-phased-rollout-adopted`), which is exactly the form `decision
@@ -134,8 +139,8 @@ When you are unsure, write the new note **without** `supersedes` and say in your
 summary that the two look inconsistent. Two active decisions a human resolves
 beats a wrong edge, because the flip is a write on somebody else's note.
 
-Only an `active` decision can be superseded, and only one in the same project.
-The CLI enforces both.
+Only an `active` decision can be superseded, only one in the same project,
+and never a dismissed one. The CLI enforces all three.
 
 ### 6. Confirm, then write
 

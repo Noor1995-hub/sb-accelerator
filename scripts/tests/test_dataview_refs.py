@@ -229,3 +229,11 @@ def test_a_vault_root_from_folder_exists(root, note):
                 f"{note.relative_to(root).as_posix()} block {index}: "
                 f"FROM \"{from_path}\" is not a vault folder"
             )
+
+
+def test_boolean_and_null_literals_are_not_properties():
+    refs = dqlrefs.extract_refs('TABLE WITHOUT ID summary AS "Decision"\nFROM "30-projects"\n'
+                                'WHERE archived != true AND reviewed != false AND x != null')
+    for literal in ("true", "false", "null"):
+        assert literal not in refs.properties
+    assert {"archived", "reviewed", "x"} <= set(refs.properties)

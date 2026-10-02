@@ -51,6 +51,7 @@ TABLE WITHOUT ID
   summary AS "Decision",
   status AS "Status"
 FROM "30-projects/meridian-yard-automation-program/decisions"
+WHERE archived != true
 SORT date DESC
 LIMIT 10
 ```

@@ -250,7 +250,7 @@ enums:
 ```yaml
 object: decision
 required: [type, project, date, status, summary]
-optional: [supersedes, source]
+optional: [supersedes, source, archived]
 keys_present: [reviewed]
 enums:
   type: [decision]
@@ -259,6 +259,14 @@ enums:
 
 - **Edges:** `supersedes` (`[[decision]]` / null) · `source` (`[[meeting]]`).
 - Never deleted — status flips only. Supersession is a wikilink edge.
+- `archived: true` is the owner's **Dismiss** tick (#247): the capture was
+  not a real decision. Same field and meaning as on a meeting; the file
+  stays. A dismissed decision leaves `Decisions.base`'s *To review* and
+  *Active* views and the project page's Recent decisions, shows as
+  *Dismissed* in *All*, is never a project's defining decision and is never
+  superseded. `decision list` still returns it, flagged `dismissed`, so the
+  evening run's dedup does not capture it again. It is not `withdrawn`: a
+  withdrawn decision was real and later reversed.
 - `date` is the date the decision was **made**, not the date it was written
   down. It is what orders the decision log.
 - `summary` is one full sentence — it is the Decision column in

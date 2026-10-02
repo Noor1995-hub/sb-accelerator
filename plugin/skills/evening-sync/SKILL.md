@@ -244,7 +244,8 @@ python3 "$VAULTLIB" project state write --vault "$VAULT" --slug <slug> \
    (`/log-decision <slug> --background`) with those candidates as the
    source. Its rules apply unchanged: the material-decision test (commits
    the engagement AND changes a stakeholder's behaviour), dedup against
-   `existingDecisions`, supersession only on explicit conflict language,
+   `existingDecisions` (a `dismissed` one included — the owner rejected it,
+   so it is never captured again), supersession only on explicit conflict language,
    never delete, status flips only. Writing nothing is a valid outcome.
 5. Return a fenced JSON block: `{"slug", "stateWritten": bool,
    "decisionsWritten": [stems], "decisionsSkipped": N, "notes"}`. A subagent

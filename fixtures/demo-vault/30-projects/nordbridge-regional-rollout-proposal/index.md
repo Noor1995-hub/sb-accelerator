@@ -50,6 +50,7 @@ TABLE WITHOUT ID
   summary AS "Decision",
   status AS "Status"
 FROM "30-projects/nordbridge-regional-rollout-proposal/decisions"
+WHERE archived != true
 SORT date DESC
 LIMIT 10
 ```

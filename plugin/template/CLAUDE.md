@@ -69,7 +69,9 @@ by hand leaves a half-edge.
 
 `reviewed` says whether a human validated the note (`true`) or it was captured
 unattended overnight (`false`). Decisions.base's **To review** view is the
-queue; tick the checkbox there once you have read one.
+queue; tick **Keep** there once you have read one, or **Dismiss** when the
+capture was not a real decision (`archived: true`; the file stays, and it is
+never captured again).
 
 ### Heavy Assets
 

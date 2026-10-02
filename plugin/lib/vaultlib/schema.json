@@ -34,7 +34,8 @@
       ],
       "optional": [
         "supersedes",
-        "source"
+        "source",
+        "archived"
       ],
       "required": [
         "type",

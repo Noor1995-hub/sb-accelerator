@@ -210,3 +210,22 @@ def test_view_exposes_the_column(vault, base_path, view, prop):
         f"{base_path} view {view!r} omits {prop!r} from order: — the property "
         f"is not shown, so it cannot be edited"
     )
+
+
+def test_a_dismissed_decision_leaves_to_review_and_active_but_stays_in_all(tmp_path):
+    """#247: Dismiss on a decision is `archived: true`. The demo vault has no
+    dismissed decision, so one is added here to exercise the filters."""
+    target = tmp_path / "vault"
+    build_vault(target, REPO_ROOT, fresh=False)
+    stem = "2026-06-14-noise-captured-as-a-decision"
+    (target / "30-projects" / "commercial-ops-crm-modernization" / "decisions" / f"{stem}.md").write_text(
+        "---\ntype: decision\nproject: commercial-ops-crm-modernization\ndate: 2026-06-14\n"
+        'status: active\nsummary: "Not really a decision."\nsupersedes:\nreviewed: false\n'
+        "archived: true\n---\n\n**Decision** — d.\n\n**Why** — w.\n\n**Implications** — i.\n",
+        encoding="utf-8")
+    corpus = basesim.load_corpus(target)
+    base = basesim.load_base(target / "30-projects" / "Decisions.base")
+    dismissed = CRM_DECISIONS.format(stem)
+    assert dismissed not in basesim.view_rows(base, corpus, "To review")
+    assert dismissed not in basesim.view_rows(base, corpus, "Active")
+    assert dismissed in basesim.view_rows(base, corpus, "All")
