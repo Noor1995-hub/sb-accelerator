@@ -62,6 +62,12 @@ Fetch the `transcript_url` `m365 ids` returned, **exactly as given**, one
 - `NOT_FOUND` with `transcripts_empty` → reply `still-no-transcript`.
 - Transcript content → reply
   `transcript-found: <recording_id> (event at $SCRATCH/m365_probe_<n>.event.json, transcript-url: <verbatim transcript_url>)`.
+- **Oversized** — an error notice that the result `exceeds maximum allowed
+  tokens` and `has been saved to` a file → reply `transcript-found` exactly
+  as above. Only a transcript is ever that large (an empty or refused read
+  is a few hundred characters), so the notice itself answers your one
+  question. Do not open, read, grep, or retry it — the worker captures it
+  with `m365 capture`. This is never a `fetch-error`.
 - **403/Forbidden** — classify by the body: Graph code 3003 / "does not
   have access to lookup meeting" → reply `no-access`. An unreadable body, or
   a 403 with no readable Graph error code at all, also replies `no-access` —
@@ -78,8 +84,9 @@ Fetch the `transcript_url` `m365 ids` returned, **exactly as given**, one
   tenant owns it, permanently).
 - **401** → reply `auth-error` — re-authentication is interactive and
   belongs to the user; never retry auth in a loop.
-- A transport error, or a result too large for the tool result, after 3
-  retries → reply `fetch-error: <one clause why>`.
+- A transport error, after 3 retries → reply
+  `fetch-error: <one clause why>`. (A result too large for the tool result
+  is the oversized case above, not this one.)
 
 **Explicit rule-8 carve-out.** SKILL.md's rule 8 requires every scratch
 transcript write to be verbatim — never condensed, summarized, or
@@ -118,8 +125,8 @@ every other scratch read this contract or the worker's makes.
 | Line | When |
 |---|---|
 | `still-no-transcript` | `m365 ids` returned `skipped: no-transcript-url`, or the transcript read answered `transcripts_empty` |
-| `transcript-found: <recording_id> (event at <path>, transcript-url: <verbatim url>)` | the transcript read returned content |
+| `transcript-found: <recording_id> (event at <path>, transcript-url: <verbatim url>)` | the transcript read returned content, or the host's oversized-result notice (saved to a file) |
 | `no-access` | 403 on the transcript read, body carries Graph code 3003 / "does not have access to lookup meeting" — or the body is unreadable / carries no readable Graph error code at all (safer default); the transcript is not reachable from this account, either because the organizer's domain is missing from `adapters.m365.home_domains` (or the list is unset) or because the tenant's Microsoft Graph transcript-access setting is off; permanent |
 | `forbidden` | a 403 on the transcript read whose body positively names a different cause — another tenant, permanent |
-| `fetch-error: <one clause why>` | transport failure or oversized result after 3 retries, or `m365 ids` itself refused the event (unresolvable `end.timeZone`, missing `start.dateTime`, or another required key absent) — reply with the CLI's own error verbatim; append `(recording-id: <ns:id>)` when your own `m365 ids` call has already given you one — never before it |
+| `fetch-error: <one clause why>` | transport failure after 3 retries (never an oversized result — that is `transcript-found`), or `m365 ids` itself refused the event (unresolvable `end.timeZone`, missing `start.dateTime`, or another required key absent) — reply with the CLI's own error verbatim; append `(recording-id: <ns:id>)` when your own `m365 ids` call has already given you one — never before it |
 | `auth-error` | connector wants re-authentication — stop |

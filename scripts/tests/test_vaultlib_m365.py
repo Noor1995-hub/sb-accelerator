@@ -648,3 +648,155 @@ def test_agenda_counts_paging_markers_as_not_events():
 def test_load_listing_refuses_garbage():
     with pytest.raises(m365.M365Error, match="calendar listing"):
         m365.load_listing("not json at all")
+
+
+# --- capture: an oversized transcript read the host spilled to a file -------
+#
+# A transcript read over the host's tool-result cap comes back as an error
+# notice naming a tool-results file (live reproduction 2026-10-01: a
+# 104,221-character, 72-minute transcript). The file holds the connector's
+# JSON byte for byte. Cowork names it by its Windows host path, which the
+# sandbox's Bash only sees under /sessions/<name>/mnt/.claude/projects/...
+
+
+def spill(root, transcript, *, rel="session/abc123/tool-results",
+          name="mcp-x-read_resource-1790841626196.txt", bom=False):
+    d = root / rel
+    d.mkdir(parents=True)
+    p = d / name
+    data = json.dumps(transcript).encode("utf-8")
+    p.write_bytes((b"\xef\xbb\xbf" if bom else b"") + data)
+    return p
+
+
+def test_capture_copies_a_spilled_transcript_verbatim(tmp_path):
+    src = spill(tmp_path / "projects", TRANSCRIPT)
+    out = tmp_path / "scratch" / "m365_event_1.transcript.json"
+
+    result = m365.capture(str(src), str(out), roots=[tmp_path / "projects"])
+
+    assert out.read_bytes() == src.read_bytes()
+    assert result["transcript_path"] == str(out)
+    assert result["transcripts"] == 1
+    assert result["cues"] == 4
+    assert result["last_cue"] == "00:46:30"
+    assert result["bytes"] == len(src.read_bytes())
+    assert "warnings" not in result
+
+
+def test_capture_resolves_a_host_path_the_sandbox_cannot_see(tmp_path):
+    """Cowork reports the Windows host path; the same file sits under the
+    sandbox mount one session-id level below projects/."""
+    root = tmp_path / "sessions" / "name" / "mnt" / ".claude" / "projects"
+    src = spill(root, TRANSCRIPT)
+    host = (r"C:\Users\u\AppData\Roaming\Claude\local-agent-mode-sessions"
+            r"\9b\72\x.claude\projects\session\abc123\tool-results"
+            r"\mcp-x-read_resource-1790841626196.txt")
+    out = tmp_path / "out.json"
+
+    result = m365.capture(host, str(out), roots=[root])
+
+    assert result["source_path"] == str(src)
+    assert out.read_bytes() == src.read_bytes()
+
+
+def test_capture_finds_the_file_by_name_when_the_suffix_differs(tmp_path):
+    root = tmp_path / "projects"
+    src = spill(root, TRANSCRIPT, rel="proj/sess/subagents/tool-results")
+    out = tmp_path / "out.json"
+
+    result = m365.capture(
+        "/elsewhere/projects/other/tool-results/mcp-x-read_resource-1790841626196.txt",
+        str(out), roots=[root])
+
+    assert result["source_path"] == str(src)
+
+
+def test_capture_strips_only_a_leading_bom(tmp_path):
+    src = spill(tmp_path / "projects", TRANSCRIPT, bom=True)
+    out = tmp_path / "out.json"
+
+    m365.capture(str(src), str(out), roots=[tmp_path / "projects"])
+
+    assert out.read_bytes() == src.read_bytes()[3:]
+
+
+def test_capture_refuses_an_unreachable_file(tmp_path):
+    with pytest.raises(m365.M365Error, match="not reachable"):
+        m365.capture(r"C:\nowhere\tool-results\mcp-gone-read_resource-1.txt",
+                     str(tmp_path / "out.json"), roots=[tmp_path / "projects"])
+
+
+def test_capture_refuses_a_file_outside_tool_results(tmp_path):
+    p = tmp_path / "notes.txt"
+    p.write_text(json.dumps(TRANSCRIPT), encoding="utf-8")
+    with pytest.raises(m365.M365Error, match="tool-results"):
+        m365.capture(str(p), str(tmp_path / "out.json"), roots=[tmp_path])
+
+
+def test_capture_refuses_a_cut_off_read(tmp_path):
+    root = tmp_path / "projects"
+    src = spill(root, TRANSCRIPT)
+    src.write_bytes(src.read_bytes()[:-40])
+    out = tmp_path / "out.json"
+    with pytest.raises(m365.M365Error, match="not a complete transcript read"):
+        m365.capture(str(src), str(out), roots=[root])
+    assert not out.exists()
+
+
+def test_capture_refuses_a_spill_that_is_not_a_transcript_read(tmp_path):
+    root = tmp_path / "projects"
+    src = spill(root, {"meeting": {}, "transcripts": []})
+    with pytest.raises(m365.M365Error, match="no transcripts"):
+        m365.capture(str(src), str(tmp_path / "out.json"), roots=[root])
+
+
+def test_capture_warns_when_cues_cover_under_half_the_event(tmp_path):
+    root = tmp_path / "projects"
+    src = spill(root, TRANSCRIPT)
+    long_event = dict(EVENT, end={"dateTime": "2026-08-25T17:00:00.0000000",
+                                  "timeZone": "UTC"})
+    event = write_json(tmp_path, "event.json", long_event)
+
+    result = m365.capture(str(src), str(tmp_path / "out.json"),
+                          event_path=event, roots=[root])
+
+    assert result["warnings"] == [
+        "transcript cues end at 00:46:30 of a 180-minute event — "
+        "check the transcript is complete"]
+
+
+def test_capture_does_not_warn_for_a_meeting_that_ended_early(tmp_path):
+    root = tmp_path / "projects"
+    src = spill(root, TRANSCRIPT)
+    event = write_json(tmp_path, "event.json", EVENT)  # 60 min, cues to 46:30
+
+    result = m365.capture(str(src), str(tmp_path / "out.json"),
+                          event_path=event, roots=[root])
+
+    assert "warnings" not in result
+
+
+def test_reassemble_accepts_a_captured_transcript_with_bom_stripped(tmp_path):
+    root = tmp_path / "projects"
+    src = spill(root, TRANSCRIPT, bom=True)
+    out = tmp_path / "scratch" / "t.json"
+    m365.capture(str(src), str(out), roots=[root])
+    event = write_json(tmp_path, "event.json", EVENT)
+
+    result = m365.reassemble(event, str(out), str(tmp_path / "scratch"),
+                             utc_offset="+02:00")
+
+    assert result["blob_lines"] > 0
+
+
+def test_reassemble_reports_blob_size_for_paged_reading(tmp_path):
+    event = write_json(tmp_path, "event.json", EVENT)
+    transcript = write_json(tmp_path, "t.json", TRANSCRIPT)
+
+    result = m365.reassemble(event, transcript, str(tmp_path / "out"),
+                             utc_offset="+02:00")
+
+    blob = open(result["blob_path"], encoding="utf-8").read()
+    assert result["blob_lines"] == blob.count("\n")
+    assert result["blob_chars"] == len(blob)
