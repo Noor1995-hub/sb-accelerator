@@ -98,7 +98,7 @@ def test_grouping_per_local_day_threads_inbox_and_sent_and_drops_the_owner(scrat
     page(scratch, "msg_inbox.p1.payload.json", [mail("m1", "Workshop 2 agenda", "jordan.reyes@acme.example", ["morgan.ellery@northwind.example"])])
     page(scratch, "msg_sent.p1.payload.json", [mail("m2", "RE: Workshop 2 agenda", "morgan.ellery@northwind.example", ["jordan.reyes@acme.example"])])
     groups, counts = msgrows.group(msgrows.load(str(scratch)), exclusions=[], owner_addresses=OWNER,
-                                   timezone="Europe/Brussels", utc_offset=None)
+                                   timezone=None, utc_offset="+02:00")
     by_key = {(g["key"], g["date"]): g for g in groups}
     assert ("chat:c1", "2026-09-30") in by_key and ("chat:c1", "2026-10-01") in by_key
     thread = by_key[("mail:workshop 2 agenda", "2026-09-30")]
@@ -111,7 +111,7 @@ def test_an_empty_subject_groups_per_sender(scratch):
     page(scratch, "msg_inbox.p1.payload.json", [
         mail("m1", "RE: FW:", "a@acme.example", []), mail("m2", "", "b@acme.example", [])])
     groups, _ = msgrows.group(msgrows.load(str(scratch)), exclusions=[], owner_addresses=OWNER,
-                              timezone="Europe/Brussels", utc_offset=None)
+                              timezone=None, utc_offset="+02:00")
     assert sorted(g["key"] for g in groups) == ["mail:(no subject)|a@acme.example", "mail:(no subject)|b@acme.example"]
     assert all(g["label"] == "(no subject)" for g in groups)
 
@@ -120,7 +120,7 @@ def test_a_group_chat_without_topic_is_labelled_by_its_members(scratch):
     page(scratch, "msg_chats.p1.payload.json", [chat("c2", "group", None, "sam.lee@acme.example", "jordan.reyes@acme.example", "morgan.ellery@northwind.example")])
     page(scratch, "msg_teams.p1.payload.json", [teams("t1", "c2", "sam.lee@acme.example", "hi")])
     groups, _ = msgrows.group(msgrows.load(str(scratch)), exclusions=[], owner_addresses=OWNER,
-                              timezone="Europe/Brussels", utc_offset=None)
+                              timezone=None, utc_offset="+02:00")
     assert groups[0]["label"] == "Jordan Reyes, Sam Lee"
 
 
@@ -141,7 +141,7 @@ def test_priority_order_and_trim_counts_what_was_skipped():
 
 def run_group(scratch, exclusions=(), owners=OWNER):
     return msgrows.group(msgrows.load(str(scratch)), exclusions=list(exclusions), owner_addresses=owners,
-                         timezone="Europe/Brussels", utc_offset=None)
+                         timezone=None, utc_offset="+02:00")
 
 
 def test_teams_rows_of_an_unlisted_chat_fail_closed(scratch):

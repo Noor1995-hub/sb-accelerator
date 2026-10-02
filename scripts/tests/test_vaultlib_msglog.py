@@ -6,8 +6,8 @@ from test_vaultlib_vault import make_vault
 from test_vaultlib_msgrows import chat, mail, page, teams
 
 OWNER = {"morgan.ellery@northwind.example"}
-TZ = dict(timezone="Europe/Brussels", utc_offset=None)
-KW = dict(timezone="Europe/Brussels", utc_offset=None, owner_addresses=OWNER, home_domains=[],
+TZ = dict(timezone=None, utc_offset="+02:00")
+KW = dict(timezone=None, utc_offset="+02:00", owner_addresses=OWNER, home_domains=[],
           exclusions=[], today="2026-09-30", since="2026-09-29T22:00:00Z", gap_ids=[])
 
 
@@ -360,7 +360,7 @@ def test_status_says_behind_only_after_two_nights_and_closed_gaps_once(tmp_path)
     assert msglog.status(root, now="2026-09-28T19:00:00Z", first_run_since=None) == []
     lines = msglog.status(root, now="2026-09-30T19:00:00Z", first_run_since=None)
     assert lines == ["I'm 3 days behind on your mail; I'll catch up tonight."]
-    msgstate.cursor(root, now="2026-10-06T19:00:00Z", timezone="UTC", utc_offset=None)  # closes it
+    msgstate.cursor(root, now="2026-10-06T19:00:00Z", timezone=None, utc_offset="+00:00")  # closes it
     assert msglog.status(root, now="2026-10-06T19:00:00Z", first_run_since=None) == [
         "I'm 6 days behind on your mail and Teams; I'll catch up tonight.",  # the cursor never moved
         "I couldn't catch up on your mail from 27 September to 27 September."]
@@ -371,7 +371,7 @@ def test_status_says_behind_only_after_two_nights_and_closed_gaps_once(tmp_path)
 def test_status_reports_a_clamped_cursor_once(tmp_path):
     root = make_vault(tmp_path)
     msgstate.advance(root, newest="2026-09-20T18:00:00Z", filled=[], now="2026-09-20T18:50:00Z", new_gaps=[])
-    msgstate.cursor(root, now="2026-10-01T19:00:00Z", timezone="UTC", utc_offset=None)
+    msgstate.cursor(root, now="2026-10-01T19:00:00Z", timezone=None, utc_offset="+00:00")
     assert msglog.status(root, now="2026-10-01T19:00:00Z", first_run_since=None) == [
         "I'm 7 days behind on your mail and Teams; I'll catch up tonight.",
         "I couldn't catch up on your mail and Teams from 20 September to 24 September."]

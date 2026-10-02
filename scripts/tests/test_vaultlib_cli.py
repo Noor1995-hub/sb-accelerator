@@ -2355,7 +2355,7 @@ def test_project_keywords_through_the_cli(capsys, tmp_path):
 
 def test_messages_round_trip_through_the_cli(capsys, tmp_path):
     root = make_vault(tmp_path)
-    write_vault_config(root, {"timezone": "Europe/Brussels"})
+    write_vault_config(root)
     scratch = tmp_path / "scratch"
     scratch.mkdir()
     (scratch / "msg_inbox.p1.payload.json").write_text(json.dumps({
@@ -2363,7 +2363,7 @@ def test_messages_round_trip_through_the_cli(capsys, tmp_path):
         "recipients": ["morgan.ellery@northwind.example"], "receivedDateTime": "2026-09-30T09:00:00Z",
         "summary": "Can we move workshop 2 to 14 Oct?"}), encoding="utf-8")
     code, payload = run(capsys, ["messages", "build", "--vault", str(root), "--dir", str(scratch),
-                                 "--now", "2026-09-30T18:47:00Z", "--timezone", "Europe/Brussels",
+                                 "--now", "2026-09-30T18:47:00Z", "--utc-offset", "+02:00",
                                  "--owner-address", "morgan.ellery@northwind.example",
                                  "--since", "2026-09-29T22:00:00Z", "--consume"])
     assert code == 0 and payload["result"]["groups"] == 1
@@ -2375,7 +2375,7 @@ def test_messages_round_trip_through_the_cli(capsys, tmp_path):
                                  "--now", "2026-09-30T18:52:00Z"])
     assert code == 1 and payload["ok"] is False and "--timezone" in payload["error"]
     code, payload = run(capsys, ["messages", "write", "--vault", str(root), "--dir", str(scratch),
-                                 "--now", "2026-09-30T18:52:00Z", "--timezone", "Europe/Brussels"])
+                                 "--now", "2026-09-30T18:52:00Z", "--utc-offset", "+02:00"])
     assert code == 0 and payload["result"]["written"] == ["2026-09-30-messages"]
     text = (root / "_messages" / "2026-09-30-messages.md").read_text(encoding="utf-8")
     assert "updated-at: 2026-09-30T20:52" in text or 'updated-at: "2026-09-30T20:52"' in text
@@ -2383,7 +2383,7 @@ def test_messages_round_trip_through_the_cli(capsys, tmp_path):
 
 def test_messages_build_accepts_failed_sources(capsys, tmp_path):
     root = make_vault(tmp_path)
-    write_vault_config(root, {"timezone": "Europe/Brussels"})
+    write_vault_config(root)
     scratch = tmp_path / "scratch"
     scratch.mkdir()
     (scratch / "msg_inbox.p1.payload.json").write_text(json.dumps({
@@ -2391,7 +2391,7 @@ def test_messages_build_accepts_failed_sources(capsys, tmp_path):
         "recipients": ["morgan.ellery@northwind.example"], "receivedDateTime": "2026-09-30T09:00:00Z",
         "summary": "Can we move workshop 2 to 14 Oct?"}), encoding="utf-8")
     code, payload = run(capsys, ["messages", "build", "--vault", str(root), "--dir", str(scratch),
-                                 "--now", "2026-09-30T18:47:00Z", "--timezone", "Europe/Brussels",
+                                 "--now", "2026-09-30T18:47:00Z", "--utc-offset", "+02:00",
                                  "--owner-address", "morgan.ellery@northwind.example",
                                  "--since", "2026-09-29T22:00:00Z", "--failed", "teams"])
     assert code == 0 and payload["result"]["new_gaps"] == [
@@ -2436,7 +2436,7 @@ def test_messages_unlink_and_forget_stamp_the_requeue_in_local_time(capsys, tmp_
     code, payload = run(capsys, base)
     assert code == 1 and payload["ok"] is False and "--timezone" in payload["error"]
     assert msgstate.load(root)["requeue"] == []
-    code, payload = run(capsys, base + ["--timezone", "Europe/Brussels"])
+    code, payload = run(capsys, base + ["--utc-offset", "+02:00"])
     assert code == 0 and payload["result"]["unlinked"] is True
     assert msgstate.load(root)["requeue"] == [
         {"slug": "acme-rollout", "log": "2026-09-30-messages", "at": "2026-09-30T21:05"}]
