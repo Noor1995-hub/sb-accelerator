@@ -401,3 +401,17 @@ def test_triage_rows_are_tall_enough_for_three_attendees():
     base = yaml.safe_load((TEMPLATE / "20-meetings" / "Meetings.base").read_text(encoding="utf-8"))
     triage = next(v for v in base["views"] if v["name"] == "Triage")
     assert triage["rowHeight"] == "tall"
+
+
+def test_entities_table_groups_teams_under_their_parent():
+    """#253: an entity with `parent` is a team; All and Active group by the
+    parent's *name* (looked up from its dossier, never the slug) with the
+    parent first, and show Part of."""
+    import yaml
+    base = yaml.safe_load((TEMPLATE / "40-entities" / "Entities.base").read_text(encoding="utf-8"))
+    assert 'file("40-entities/" + parent + "/dossier.md").properties["entity-name"]' in base["formulas"]["group"]
+    for name in ("All", "Active"):
+        view = next(v for v in base["views"] if v["name"] == name)
+        assert view["groupBy"] == {"property": "formula.group", "direction": "ASC"}
+        assert view["sort"][0] == {"property": "formula.team-order", "direction": "ASC"}
+        assert "formula.part-of" in view["order"]

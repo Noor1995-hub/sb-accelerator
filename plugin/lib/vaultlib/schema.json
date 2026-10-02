@@ -75,6 +75,7 @@
         "entity-type",
         "industry",
         "owner",
+        "parent",
         "created",
         "last-updated"
       ],

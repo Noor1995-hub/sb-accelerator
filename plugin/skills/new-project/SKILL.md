@@ -74,6 +74,10 @@ Ask only for what is missing, one question at a time.
   reports `changed` plus `updated: [...]` so you know whether anything
   actually moved. It never claims a plain success for a field it did not
   apply.
+
+  A project for one team or department of an entity takes that team as its
+  `--entity` — create the team first with `entity ensure --parent <entity>`
+  (see `/update-entity`), so the work rolls up under its parent's dossier.
 - **Parent** — only for initiatives, and only if the user implies one.
   Maximum two levels; areas of responsibility are always top-level. The CLI
   enforces both.

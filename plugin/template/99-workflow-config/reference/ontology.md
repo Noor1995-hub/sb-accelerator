@@ -347,7 +347,7 @@ with: a client, a business unit, a partner, a supplier.
 ```yaml
 object: entity
 required: [type, entity-name, slug, status]
-optional: [entity-type, industry, owner, created, last-updated]
+optional: [entity-type, industry, owner, parent, created, last-updated]
 enums:
   status: [prospect, active, dormant]
   entity-type: [client, business-unit, partner, supplier, other]
@@ -355,6 +355,20 @@ enums:
 body_sections: [Context, Stakeholders, Relationship History, Meeting Log,
                 Sensitivities, Engagements]
 ```
+
+**Teams (#253).** A team or department is an entity with `parent:` — the slug
+of the entity it belongs to — usually `entity-type: business-unit`. At most two
+levels, as for projects: a parent has no parent, and an entity with teams of
+its own cannot become a team. The team's dossier opens with
+`**Part of** [[40-entities/{parent}/dossier|{Parent name}]]` under its title;
+the parent's dossier gains a `## Teams` section (two Dataview queries: its
+teams, and their projects) the first time a team is attached. `## Teams` is
+not one of the six managed sections — `read()` returns it under
+`extra_sections` and every write preserves it. `Entities.base` groups each
+team under its parent. Meeting routing is unchanged: an email domain resolves
+to the top-level entity, and a meeting reaches a team through its projects.
+Suggested team slug: `{parent}-{team}` (`acme-finance`), so two companies'
+Finance teams never collide.
 
 A filled dossier's frontmatter looks like this (an example, not the schema):
 

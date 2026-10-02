@@ -55,6 +55,22 @@ that flag is the fix — it applies whichever fields you pass to an existing
 dossier instead of silently dropping them, and the envelope's `changed` /
 `updated` tell you whether it actually took.
 
+**A team or department of an entity** (Finance at Acme, Yard Operations at
+Meridian) is its own entity under its parent — pass `--parent <entity slug>`
+and `--type business-unit`, with the slug `{parent}-{team}` so two companies'
+Finance teams never collide:
+
+```bash
+python3 "$VAULTLIB" entity ensure --vault "$VAULT" \n  --slug acme-finance --name "Finance" --type business-unit --status active --parent acme
+```
+
+The CLI writes **Part of** on the team's dossier and adds a **Teams** section to
+the parent's. `--parent` on an existing entity attaches it as a team. Teams go
+one level deep only: a team cannot be a parent, and an entity that already
+has teams cannot become one — the refusal says which. Meetings still reach the
+parent by email domain and a team through its projects, so put a team's work
+on a project whose entity is the team.
+
 ### 2. Read the current dossier
 
 ```bash

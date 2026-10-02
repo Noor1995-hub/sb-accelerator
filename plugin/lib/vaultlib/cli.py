@@ -234,6 +234,9 @@ def build_parser() -> argparse.ArgumentParser:
     ent_ensure.add_argument("--status",
                             choices=schema.enum_values("entity", "status"))
     ent_ensure.add_argument("--owner", help="owner person slug")
+    ent_ensure.add_argument(
+        "--parent", help="entity slug this one is a team or department of "
+                         "(at most two levels); attaches an existing entity too")
     ent_ensure.add_argument("--today", help="ISO date; defaults to today")
 
     ent_read = entities_sub.add_parser(
@@ -877,7 +880,7 @@ def _dispatch(args: argparse.Namespace) -> int:
                 root, slug=args.slug, name=args.name,
                 today=vault.today_iso(args.today),
                 entity_type=args.entity_type, status=args.status,
-                owner=args.owner,
+                owner=args.owner, parent=args.parent,
             ))
         if args.action == "read":
             return _ok(entity.read(root, args.slug))
