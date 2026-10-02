@@ -10,8 +10,9 @@ from datetime import date, timedelta
 
 import pytest
 
-from vaultlib import health, provenance, schema, syncjob, template
+from vaultlib import config, health, provenance, schema, syncjob, template
 
+from test_vaultlib_config import valid_config, write_config
 from test_vaultlib_vault import make_vault
 
 TODAY = "2026-08-25"
@@ -477,3 +478,57 @@ def test_entity_staleness_boundary_is_inclusive_at_exactly_30_days(tmp_path):
                     projects=[], entities=["edge-case-entity"])
     data = health.report(root, TODAY)
     assert data["entities"]["no_meeting_30d"] == 1
+
+
+def test_health_counts_logs_and_days_at_the_limit(tmp_path):
+    root = make_vault(tmp_path)
+    (root / "structure-version").write_text("2\n", encoding="utf-8")
+    folder = root / "_messages"
+    folder.mkdir()
+    for day, limit in (("2026-09-29", "false"), ("2026-09-30", "true"), ("2026-08-01", "true")):
+        (folder / f"{day}-messages.md").write_text(
+            f"---\ntype: message-log\ndate: {day}\nat-limit: {limit}\n---\n", encoding="utf-8")
+    block = health.report(root, "2026-09-30", window=28)["messages"]
+    assert block["logs_in_window"] == 2 and block["days_at_limit"] == 1
+    assert "days at the limit" in health.render(health.report(root, "2026-09-30", window=28))
+
+
+def _messages_vault(tmp_path):
+    root = make_vault(tmp_path)
+    (root / "structure-version").write_text("2\n", encoding="utf-8")
+    (root / "_messages").mkdir()
+    return root
+
+
+def test_damaged_logs_never_raise_and_are_counted_as_unparsed(tmp_path):
+    root = _messages_vault(tmp_path)
+    before = health.report(root, "2026-09-30")["unparsed"]
+    (root / "_messages" / "2026-09-28-messages.md").write_text("no frontmatter here", encoding="utf-8")
+    (root / "_messages" / "2026-09-29-messages.md").write_text(
+        "---\ntype: message-log\ndate: notadate\n---\n", encoding="utf-8")
+    data = health.report(root, "2026-09-30")
+    assert data["unparsed"] == before + 2
+    assert data["messages"]["logs_in_window"] == 0
+
+
+def test_a_misnamed_log_is_not_counted_in_the_window_but_is_unparsed(tmp_path):
+    root = _messages_vault(tmp_path)
+    (root / "_messages" / "2026-09-30-messages.md").write_text(
+        "---\ntype: message-log\ndate: 2026-09-29\nat-limit: true\n---\n", encoding="utf-8")
+    data = health.report(root, "2026-09-30")
+    assert data["messages"]["logs_in_window"] == 0
+    assert data["messages"]["days_at_limit"] == 0
+    assert data["unparsed"] == 1
+
+
+def test_messages_block_reflects_config_and_renders_its_rows(tmp_path):
+    root = _messages_vault(tmp_path)
+    assert health.report(root, "2026-09-30")["messages"]["enabled"] is False
+    write_config(root, valid_config())
+    config.write(root, "messages.enabled", True)
+    data = health.report(root, "2026-09-30")
+    assert data["messages"]["enabled"] is True
+    text = health.render(data)
+    assert "## Mail and Teams" in text
+    for row in ("| feed on | True |", "| logs in window | 0 |", "| days at the limit | 0 |"):
+        assert row in text

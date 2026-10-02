@@ -35,6 +35,7 @@ M365_WORKER_DISALLOWED_TOOLS = [
     "ShareOnboardingGuide", "Monitor", "SendMessage", "PushNotification",
     "RemoteTrigger", "TaskStop", "CronCreate", "CronDelete", "CronList",
 ]
+M365_WORKER_DISALLOWED_TOOLS_SET = set(M365_WORKER_DISALLOWED_TOOLS)
 
 
 def known_subcommands() -> set:
@@ -52,7 +53,7 @@ def known_subcommands() -> set:
 
 
 NET_NEW = {"report-feedback", "health-check", "upgrade-vault", "setup-my-brain",
-           "schedule-daily-loop", "provision-vault"}
+           "schedule-daily-loop", "provision-vault", "sync-messages"}
 
 
 def test_expected_skills_exist():
@@ -62,7 +63,8 @@ def test_expected_skills_exist():
     assert {"new-project", "update-entity", "log-decision",
             "sync-recordings", "evening-sync", "report-feedback",
             "health-check", "upgrade-vault", "setup-my-brain",
-            "schedule-daily-loop", "provision-vault"} <= names
+            "schedule-daily-loop", "provision-vault",
+            "sync-messages"} <= names
 
 
 @pytest.mark.parametrize("path", SKILL_FILES, ids=lambda p: p.parent.name)
@@ -1235,6 +1237,21 @@ def _normalized(text: str) -> str:
     return re.sub(r"\s+", " ", text)
 
 
+def test_evening_sync_runs_messages_between_sync_and_project_updates():
+    text = read_skill("evening-sync")
+    stage3, stage4 = text.index("## Stage 3"), text.index("## Stage 4")
+    marker = text.index("### Stage 3b — Mail and Teams")
+    assert stage3 < marker < stage4
+    assert text.index("skills/sync-messages/SKILL.md") > stage3
+    refresh = text.index('"$VAULTLIB" sync update-queue')
+    assert refresh > marker, "the queue must see tonight's logs"
+    assert refresh < stage4
+    heading = text.index("### Stage 3c — Refresh (every evening)")
+    assert marker < heading < refresh < stage4, "refresh has its own heading after 3b"
+    assert "Runs every evening, whatever stage 3b did" in text[heading:refresh]
+    assert "update-queue" not in text[marker:heading], "refresh is not inside 3b"
+
+
 def test_evening_sync_states_the_no_back_fill_rule():
     # Decision 16: one catch-up note covers the window; the vault owner is told so.
     text = _evening_sync().lower()
@@ -1959,8 +1976,26 @@ def test_setup_my_brain_asks_the_company_rules_question_before_reading():
         'discover build --vault "$VAULT"')
 
 
+def test_setup_offers_the_feed_in_step_10_after_the_company_rules_gate():
+    text = read_skill("setup-my-brain")
+    step10 = text.index("## Step 10")
+    step11 = text.index("## Step 11")
+    offer = text.index("### Mail and Teams every evening")
+    assert step10 < offer < step11
+    assert text.index("Does your company have rules") < offer
+    section = re.sub(r"\s+", " ", text[offer:step11])
+    assert "skills/sync-messages/SKILL.md" in section
+    assert "rules out reading" in section
+    assert "`messages.enabled` is already true" in section
+    assert "not connected" in section
+    assert "do not run `verify-account` again" in section
+    rules = text.split("## Hard rules")[1]
+    assert "During the step-3 read" in re.sub(r"\s+", " ", rules)
+
+
 def test_setup_my_brain_never_reads_chat_text():
-    assert "Chat message text is never read" in read_skill("setup-my-brain")
+    text = re.sub(r"\s+", " ", read_skill("setup-my-brain"))
+    assert "chat message text is never read" in text
 
 
 def test_setup_my_brain_dispatches_the_worker_and_consumes_raw_reads():
@@ -2046,3 +2081,154 @@ def test_setup_my_brain_keeps_approvals_and_heads_ups_on_screen():
     assert "no command in between" in text
     note = text[text.index("## Step 9"):text.index("## Step 10")]
     assert "typing a line in the chat" in note
+
+
+def read_contract():
+    return (REPO_ROOT / "plugin/skills/sync-messages/references/messages-contract.md").read_text(encoding="utf-8")
+
+
+def test_messages_contract_pins_the_tool_rules():
+    text = re.sub(r"\s+", " ", read_contract())
+    assert 'chat_message_search' in text and 'query: "*"' in text
+    assert "Never pass a date filter to `chat_message_search`" in text
+    assert '`folderName` `"Inbox"`' in text and '`folderName` `"Sent Items"`' in text
+    assert "Never search mail without `folderName`" in text
+    assert "Never call `read_resource` on a mail" in text
+    assert "Never write a page file with no rows" in text
+    assert "at most 5" in text
+    assert "20 pages" in text and "8 pages" in text
+    assert "25 rows" not in text
+    assert "--failed <source>" in text and '{"groups": []}' in text
+    assert "fetch-error: <build|check|write>: <error>" in text
+    assert "repeat `--owner-address` once per address" in text
+
+
+def test_messages_contract_orders_build_check_write():
+    text = read_contract()
+    assert (text.index("messages build --vault") < text.index("messages check --dir")
+            < text.index("messages write --vault"))
+
+
+def test_messages_worker_agent_definition():
+    text = (REPO_ROOT / "plugin/agents/sync-messages-worker.md").read_text(encoding="utf-8")
+    front = text.split("---")[1]
+    assert "name: sync-messages-worker" in front and "model: sonnet" in front
+    assert "tools:" not in front
+    disallowed = re.search(r"disallowedTools: (.*)", front).group(1)
+    assert {t.strip() for t in disallowed.split(",")} == M365_WORKER_DISALLOWED_TOOLS_SET
+    assert "messages contract" in text and "outcome line" in text
+
+
+def test_sync_messages_asks_consent_with_the_honest_text():
+    text = re.sub(r"\s+", " ", read_skill("sync-messages"))
+    assert "save short notes on what was said" in text
+    assert "they include what other people wrote to you" in text
+    assert "stop and delete everything" in text
+
+
+def test_sync_messages_checks_everything_before_dispatch():
+    workflow = read_skill("sync-messages").split("## Workflow")[1]
+    dispatch = workflow.index("second-brain:sync-messages-worker")
+    assert workflow.index("config verify-account --vault") < dispatch
+    assert workflow.index("messages cursor --vault") < dispatch
+
+
+def test_sync_messages_never_writes_without_the_owner_on_removals():
+    flat = re.sub(r"\s+", " ", read_skill("sync-messages"))
+    assert 'messages forget --vault "$VAULT" --text "X" --apply <ref1> --apply <ref2>' in flat
+    assert 'messages forget --vault "$VAULT" --exclusion <id> --apply <ref1>' in flat
+    assert "messages forget --exclusion <id> --apply <ref1> --apply <ref2>" in flat
+    assert "Shall I keep what I saved so far, or delete it?" in flat
+    assert not re.search(r"forget[^`]*--all[^`]*--apply|forget[^`]*--apply[^`]*--all", flat)
+
+
+def test_sync_messages_unattended_mode_never_asks():
+    unattended = read_skill("sync-messages").split("## Unattended mode")[1]
+    assert "never ask" in unattended.lower()
+
+
+def test_stage4_reads_logs_marks_their_items_and_captures_decisions():
+    stage4 = read_skill("evening-sync").split("## Stage 4")[1].split("## Stage 5")[0]
+    flat = re.sub(r"\s+", " ", stage4)
+    assert "messages for-project" in flat and "newLogs" in flat
+    assert "(mail ·" in flat or "(chat ·" in flat
+    assert "removedSources" in flat
+    assert flat.index("messages for-project") < flat.index("log-decision")
+    assert "--logs" in flat and "source: <log stem>" in flat
+    assert "unless a meeting or a remaining group still supports it" in flat
+    assert "per the group's `kind`" in flat and "group's `log` field" in flat
+    ld = re.sub(r"\s+", " ", read_skill("log-decision"))
+    assert "message log (`_messages/<YYYY-MM-DD>-messages`)" in ld
+
+
+def test_evening_sync_stage_6_builds_the_messages_field_with_the_real_cli():
+    text = _normalized(_evening_sync())
+    stage6 = text[text.index("## Stage 6"):]
+    for needle in ('"messages"', "messages status --vault", "--first-run-since",
+                   "messages keywords-propose --vault", "messages check-lines --vault",
+                   "msg_lines.payload.json", "decisions_to_confirm",
+                   "keyword_proposal", "<YYYY-MM-DD>-messages#<gid>"):
+        assert needle in stage6, f"stage 6 must carry {needle}"
+    assert ("Run steps 1 and 2 exactly once per evening and reuse their results "
+            "on any retry of the daily-note payload") in stage6
+
+
+def test_sync_messages_resolves_what_to_skip_before_adding_it():
+    skill = read_skill("sync-messages")
+    section = re.sub(r"\s+", " ", skill.split("### What to skip")[1].split("## Workflow")[0])
+    assert "the `email` of their note in `50-people/`" in section and "ask the owner for the address" in section
+    assert "call `teams_list_chats`" in section and "never message text" in section
+    assert "confirm by name" in section and "that chat's `id`" in section
+    assert "its email domain" in section
+    assert "add nothing" in section and "never retry with a guess" in section
+    flat = re.sub(r"\s+", " ", skill)
+    assert "Resolve X to an exact value first (**What to skip**, below)" in flat
+
+
+def test_messages_contract_passes_the_timezone_to_write():
+    text = re.sub(r"\s+", " ", read_contract())
+    assert 'messages write --vault "$VAULT" --dir "$SCRATCH" --now "$NOW" --timezone "$TIMEZONE"' in text
+
+
+def test_sync_messages_passes_the_timezone_on_every_removal():
+    skill = read_skill("sync-messages")
+    for line in skill.splitlines():
+        if re.search(r"messages (forget|unlink) --vault", line) and (
+                "--apply" in line or "--all" in line or "unlink" in line):
+            assert '--timezone "<timezone>"' in line, line
+    assert "takes\n`--timezone` with the `timezone` from `config read`" in skill
+
+
+def test_stage_6_reports_the_feed_whenever_it_is_enabled():
+    text = _normalized(_evening_sync())
+    stage6 = text[text.index("## Stage 6"):]
+    assert ("whenever `messages.enabled` is true in `config read`, whatever stage 3b did "
+            "(ran, skipped or failed)") in stage6
+    assert "only when stage 3b ran" not in stage6
+    assert "[--auth-error]" in stage6 and "outcome line was `auth-error`" in stage6
+
+
+def test_messages_contract_closes_an_empty_gap_and_fails_an_empty_teams_feed():
+    text = re.sub(r"\s+", " ", read_contract())
+    assert ('write `msg_<source>.gap<id>.p1.payload.json` holding exactly `{"moreResults": false}`'
+            in text)
+    assert "If the first page (`offset: 0`) comes back with no results at all" in text
+    assert "treat Teams as failed (pass `--failed teams` to build)" in text
+
+
+def test_switching_on_resets_the_feed_right_after_enabling_it():
+    on = read_skill("sync-messages").split("## Switching on")[1].split("## Switching off")[0]
+    enabled = on.index("--field messages.enabled --value true")
+    reset = on.index('messages reset --vault "$VAULT"')
+    assert enabled < reset < on.index("--field messages.consented-at")
+
+
+def test_sync_messages_never_runs_on_a_vault_awaiting_its_update():
+    skill = read_skill("sync-messages")
+    on = skill.split("## Switching on")[1].split("## Switching off")[0]
+    assert on.index('migrate status --vault "$VAULT"') < on.index("--field messages.enabled --value true")
+    assert "/upgrade-vault" in on and "switch nothing on" in on
+    workflow = skill.split("## Workflow")[1]
+    assert (workflow.index('migrate status --vault "$VAULT"')
+            < workflow.index("second-brain:sync-messages-worker"))
+    assert "skip the run with one line" in re.sub(r"\s+", " ", workflow)

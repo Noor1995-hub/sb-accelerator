@@ -542,6 +542,20 @@ no-meetings line; walk through it anyway.
 
 ## Step 10 — the standing evening run
 
+### Mail and Teams every evening
+
+Skip this section entirely, without mentioning it, when the company-rules
+answer from step 2 rules out reading, when Microsoft 365 is not connected, or
+when `messages.enabled` is already true in `config read` (a re-run). Otherwise,
+before scheduling, say in plain words: *"One more option: your evening run can
+also keep up with your mail and Teams. This is different from the one-time look
+I did earlier."* Then follow **Switching on** in
+`${CLAUDE_PLUGIN_ROOT}/skills/sync-messages/SKILL.md` for the consent question,
+its one exclusions question and its read-back. The Microsoft 365 account was
+already proven in step 1: use that result, do not run `verify-account` again.
+This has its own consent, separate from the step-3 read. A no changes nothing
+here.
+
 **Invoke `/schedule-daily-loop` now, in this session** — follow
 `${CLAUDE_PLUGIN_ROOT}/skills/schedule-daily-loop/SKILL.md`. Do not compose a
 schedule by hand. They already chose the time in step 8: when
@@ -627,8 +641,10 @@ later picks the connection step up where this session left it.
 7. **Organisations may be proposed from calendar and mail; only the owner
    confirms.**
 8. **Nothing is shown to the owner that `discover check` did not pass.**
-9. **Chat message text is never read, and neither is the Inbox.** Chats are
-   read as a list: who is in them and what they are called.
+9. **During the step-3 read, chat message text is never read, and neither is
+   the Inbox.** Chats are read as a list: who is in them and what they are
+   called. The nightly mail and Teams feed is a separate feature with its own
+   consent (step 10).
 10. **Every block is read back and approved before it is written.**
 11. **Every write goes through the CLI.**
 12. **Prefer fewer, confirmed objects to more, inferred ones.**

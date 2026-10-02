@@ -77,6 +77,17 @@ def test_person_ensure_returns_the_created_note(capsys, tmp_path):
     }
 
 
+def test_person_ensure_takes_an_optional_email(capsys, tmp_path):
+    root = make_vault(tmp_path)
+    code, payload = run(capsys, [
+        "person", "ensure", "--vault", str(root), "--name", "Jordan Reyes",
+        "--today", "2026-09-30", "--email", "Jordan.Reyes@acme.example",
+    ])
+    assert code == 0
+    text = (root / payload["result"]["path"]).read_text(encoding="utf-8")
+    assert "email: jordan.reyes@acme.example" in text
+
+
 def test_a_bad_vault_path_is_a_structured_error_not_a_traceback(capsys, tmp_path):
     code, payload = run(capsys, [
         "person", "ensure", "--vault", str(tmp_path / "nope"), "--name", "A",
@@ -2364,3 +2375,133 @@ def test_discover_clock_via_the_cli(capsys, tmp_path):
 def test_discover_clock_check_without_a_start_fails_inside_the_envelope(capsys, tmp_path):
     code, payload = run(capsys, ["discover", "clock-check", "--dir", str(tmp_path)])
     assert code == 1 and "clock-start" in payload["error"]
+
+
+def test_project_keywords_through_the_cli(capsys, tmp_path):
+    from test_vaultlib_project import vault_with_entity
+    root = vault_with_entity(tmp_path)
+    run(capsys, ["project", "scaffold", "--vault", str(root), "--name", "Operating model",
+                 "--type", "initiative", "--entity", "meridian-freight-holdings",
+                 "--owner", "morgan-ellery", "--today", "2026-09-30"])
+    slug = "meridian-freight-holdings-operating-model"
+    code, payload = run(capsys, ["project", "keywords", "add", "--vault", str(root),
+                                 "--slug", slug, "--keyword", "P-2317", "--today", "2026-09-30"])
+    assert code == 0 and payload["result"]["keywords"] == ["P-2317"]
+    code, payload = run(capsys, ["project", "keywords", "list", "--vault", str(root), "--slug", slug])
+    assert payload["result"]["keywords"] == ["P-2317"]
+    code, payload = run(capsys, ["project", "keywords", "remove", "--vault", str(root),
+                                 "--slug", slug, "--keyword", "nope"])
+    assert code != 0 and payload["ok"] is False
+
+
+def test_messages_round_trip_through_the_cli(capsys, tmp_path):
+    root = make_vault(tmp_path)
+    write_vault_config(root)
+    scratch = tmp_path / "scratch"
+    scratch.mkdir()
+    (scratch / "msg_inbox.p1.payload.json").write_text(json.dumps({
+        "id": "m1", "subject": "Workshop 2 agenda", "sender": "jordan.reyes@acme.example",
+        "recipients": ["morgan.ellery@northwind.example"], "receivedDateTime": "2026-09-30T09:00:00Z",
+        "summary": "Can we move workshop 2 to 14 Oct?"}), encoding="utf-8")
+    code, payload = run(capsys, ["messages", "build", "--vault", str(root), "--dir", str(scratch),
+                                 "--now", "2026-09-30T18:47:00Z", "--utc-offset", "+02:00",
+                                 "--owner-address", "morgan.ellery@northwind.example",
+                                 "--since", "2026-09-29T22:00:00Z", "--consume"])
+    assert code == 0 and payload["result"]["groups"] == 1
+    gid = json.loads((scratch / "msg_groups.payload.json").read_text(encoding="utf-8"))["groups"][0]["gid"]
+    (scratch / "msg_condensed.payload.json").write_text(json.dumps({"groups": [{"gid": gid, "needs_owner": False,
+        "points": [{"text": "Jordan asks to move workshop 2 to 14 Oct.", "cites": ["m1"]}]}]}), encoding="utf-8")
+    assert run(capsys, ["messages", "check", "--dir", str(scratch)])[1]["result"]["passed"] == 1
+    code, payload = run(capsys, ["messages", "write", "--vault", str(root), "--dir", str(scratch),
+                                 "--now", "2026-09-30T18:52:00Z"])
+    assert code == 1 and payload["ok"] is False and "--timezone" in payload["error"]
+    code, payload = run(capsys, ["messages", "write", "--vault", str(root), "--dir", str(scratch),
+                                 "--now", "2026-09-30T18:52:00Z", "--utc-offset", "+02:00"])
+    assert code == 0 and payload["result"]["written"] == ["2026-09-30-messages"]
+    text = (root / "_messages" / "2026-09-30-messages.md").read_text(encoding="utf-8")
+    assert "updated-at: 2026-09-30T20:52" in text or 'updated-at: "2026-09-30T20:52"' in text
+
+
+def test_messages_build_accepts_failed_sources(capsys, tmp_path):
+    root = make_vault(tmp_path)
+    write_vault_config(root)
+    scratch = tmp_path / "scratch"
+    scratch.mkdir()
+    (scratch / "msg_inbox.p1.payload.json").write_text(json.dumps({
+        "id": "m1", "subject": "Workshop 2 agenda", "sender": "jordan.reyes@acme.example",
+        "recipients": ["morgan.ellery@northwind.example"], "receivedDateTime": "2026-09-30T09:00:00Z",
+        "summary": "Can we move workshop 2 to 14 Oct?"}), encoding="utf-8")
+    code, payload = run(capsys, ["messages", "build", "--vault", str(root), "--dir", str(scratch),
+                                 "--now", "2026-09-30T18:47:00Z", "--utc-offset", "+02:00",
+                                 "--owner-address", "morgan.ellery@northwind.example",
+                                 "--since", "2026-09-29T22:00:00Z", "--failed", "teams"])
+    assert code == 0 and payload["result"]["new_gaps"] == [
+        {"source": "teams", "from": "2026-09-29T22:00:00Z", "to": "2026-09-30T18:47:00Z"}]
+
+
+def test_messages_errors_stay_inside_the_envelope(capsys, tmp_path):
+    root = make_vault(tmp_path)
+    code, payload = run(capsys, ["messages", "check", "--dir", str(tmp_path)])
+    assert code == 1 and payload["ok"] is False and "msg_groups" in payload["error"] and payload["hint"]
+
+
+def test_messages_exclude_add_list_remove(capsys, tmp_path):
+    root = make_vault(tmp_path)
+    write_vault_config(root)
+    code, payload = run(capsys, ["messages", "exclude", "add", "--vault", str(root), "--kind", "word",
+                                 "--value", "salaris", "--today", "2026-09-30"])
+    assert code == 0 and payload["result"]["id"] == "x1"
+    assert run(capsys, ["messages", "exclude", "list", "--vault", str(root)])[1]["result"]["exclusions"][0]["value"] == "salaris"
+    assert run(capsys, ["messages", "exclude", "remove", "--vault", str(root), "--id", "x1"])[0] == 0
+
+
+def _strong_log(root):
+    from vaultlib import msglog
+    group = {"gid": "a1", "key": "mail:a1", "kind": "mail", "label": "Plan", "chat_type": None,
+             "people": [], "names": {}, "participants": [], "projects": ["acme-rollout"],
+             "projects_weak": [], "entities": [], "needs_owner": False,
+             "points": [{"text": "A point.", "cites": ["m1"]}]}
+    msglog.save_log(root, {"schema": 1, "date": "2026-09-30", "ids": ["m1"], "groups": [group]},
+                    {"type": "message-log", "date": "2026-09-30", "updated-at": "2026-09-30T20:52",
+                     "projects": ["acme-rollout"], "projects-weak": [], "people": [],
+                     "messages-read": 1})
+
+
+def test_messages_unlink_and_forget_stamp_the_requeue_in_local_time(capsys, tmp_path):
+    from vaultlib import msgstate
+    root = make_vault(tmp_path)
+    write_vault_config(root)
+    _strong_log(root)
+    base = ["messages", "unlink", "--vault", str(root), "--log", "2026-09-30-messages",
+            "--gid", "a1", "--project", "acme-rollout", "--now", "2026-09-30T19:05:00Z"]
+    code, payload = run(capsys, base)
+    assert code == 1 and payload["ok"] is False and "--timezone" in payload["error"]
+    assert msgstate.load(root)["requeue"] == []
+    code, payload = run(capsys, base + ["--utc-offset", "+02:00"])
+    assert code == 0 and payload["result"]["unlinked"] is True
+    assert msgstate.load(root)["requeue"] == [
+        {"slug": "acme-rollout", "log": "2026-09-30-messages", "at": "2026-09-30T21:05"}]
+    _strong_log(root)
+    code, payload = run(capsys, ["messages", "forget", "--vault", str(root), "--all",
+                                 "--now", "2026-09-30T20:10:00Z", "--utc-offset", "+02:00"])
+    assert code == 0 and payload["result"]["deleted"] == ["2026-09-30-messages"]
+    assert msgstate.load(root)["requeue"][0]["at"] == "2026-09-30T22:10"
+
+
+def test_messages_status_takes_auth_error(capsys, tmp_path):
+    root = make_vault(tmp_path)
+    write_vault_config(root)
+    code, payload = run(capsys, ["messages", "status", "--vault", str(root), "--now", "2026-09-30T19:00:00Z",
+                                 "--auth-error"])
+    assert code == 0 and payload["result"]["lines"] == [
+        "I can't reach your mail and Teams \u2014 please reconnect Microsoft 365."]
+
+
+def test_messages_reset(capsys, tmp_path):
+    from vaultlib import msgstate
+    root = make_vault(tmp_path)
+    write_vault_config(root)
+    msgstate.advance(root, newest="2026-09-01T18:00:00Z", filled=[], now="2026-09-01T18:50:00Z", new_gaps=[])
+    code, payload = run(capsys, ["messages", "reset", "--vault", str(root)])
+    assert code == 0 and payload["result"] == {"reset": True}
+    assert msgstate.load(root)["cursor"] is None

@@ -24,7 +24,7 @@ from pathlib import Path
 # than read from the migration chain, because the two drifting apart is exactly
 # what this check is for — importing the chain would make the assertion agree
 # with whatever the chain says and catch nothing. Bump both together.
-EXPECTED_STRUCTURE_VERSION = "5"
+EXPECTED_STRUCTURE_VERSION = "6"
 
 
 def main(root: Path) -> list[str]:
@@ -123,6 +123,11 @@ def check_config(template: Path) -> list[str]:
         problems.append(
             'template config.json must ship sync as {"start-date": null} — '
             "provisioning writes the real date per deployment")
+    if cfg.get("messages") != {"enabled": False, "consented-at": None,
+                               "scope": [], "exclusions": []}:
+        problems.append(
+            "template config.json must ship messages off, with no consent, "
+            "no scope and no exclusions")
     return problems
 
 

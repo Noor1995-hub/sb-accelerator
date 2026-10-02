@@ -8,7 +8,7 @@ tags: [meta, reference, ontology]
 > controlled vocabularies.** Edit here; never let the schema live in prose
 > elsewhere.
 
-Six object types: **Meeting · Project · Person · Decision · Entity · Daily note**.
+Seven object types: **Meeting · Project · Person · Decision · Entity · Daily note · Message log**.
 Relationships live in YAML frontmatter (wikilinks / slug joins), not folder
 hierarchy. Curation happens in Bases, not by browsing folders.
 
@@ -164,7 +164,7 @@ object: project
 required: [project-name, slug, status, project-type, entity, owner, created,
            last-updated]
 optional: [type, parent, stakeholders, meetings-7d, meetings-30d, key-people,
-           next-milestone, next-milestone-date, state-updated]
+           next-milestone, next-milestone-date, state-updated, keywords]
 enums:
   status: [active, paused, completed, cancelled]
   project-type: [initiative, area-of-responsibility]
@@ -186,6 +186,7 @@ body_sections: [Coming up, Recent meetings, Recent decisions, Background]
   `state-updated`.
   **Index extras:** `next-milestone`, `next-milestone-date`.
 - `entity` is a slug string joining to an Entity's `slug` (and folder name).
+- `keywords` — optional list of strings (project codes, nicknames, client terms) the message feed routes on; added by `project keywords add`, never by hand.
 - **Slug convention: `{entity}-{name-slug}`**, composed by `project scaffold`
   (never re-prefixed when the name already starts with the entity; explicit
   `--slug` overrides). `project-name` stays entity-free — the Projects base
@@ -216,7 +217,7 @@ object: person
 required: [person-name, slug]
 keys_present: [relationship]
 optional: [email, company, role, projects, created, last-updated,
-           meetings-7d, meetings-30d, last-met]
+           meetings-7d, meetings-30d, last-met, messages-7d, messages-30d]
 enums:
   relationship: [colleague, direct-report, external, null]
 ```
@@ -238,8 +239,10 @@ enums:
   attended; emptied when there is none) and `projects` — **add-only**: a
   project from a confirmed meeting is appended, a hand-entered one is never
   removed.
-- `email` is stored when the M365 sync creates the person, and filled into
-  an existing note whose `email` is empty; a set email is never overwritten.
+- `messages-7d`, `messages-30d` are auto-maintained by `sync update-queue` from message logs, next to the meeting counters.
+- `email` is stored when the M365 sync (or the message feed) creates the
+  person, and filled into an existing note whose `email` is empty; a set
+  email is never overwritten.
 - `relationship`, `company` and `role` stay hand-curated — nothing writes
   them. `last-updated` is the creation day and is not a recency signal; sort
   on `last-met` for that.
@@ -257,7 +260,7 @@ enums:
   status: [active, superseded, withdrawn]
 ```
 
-- **Edges:** `supersedes` (`[[decision]]` / null) · `source` (`[[meeting]]`).
+- **Edges:** `supersedes` (`[[decision]]` / null) · `source` (`[[meeting]]` / `[[message log]]`).
 - Never deleted — status flips only. Supersession is a wikilink edge.
 - `archived: true` is the owner's **Dismiss** tick (#247): the capture was
   not a real decision. Same field and meaning as on a meeting; the file
@@ -282,7 +285,7 @@ enums:
   review state the way project metrics gate on a meeting's `review_status`, so
   ticking the box *is* the confirmation and no sync step folds it further. The
   asymmetry with Meeting is deliberate, not a missing feature.
-- `source` names a note in `20-meetings/`. A decision drawn from an inbox
+- `source` names a note in `20-meetings/` or a message log in `_messages/`. A decision drawn from an inbox
   transcript, a pasted paragraph or dictation carries no `source`; its
   provenance goes in the **Why** text.
 - Example: `30-projects/acme-industries-operating-model/decisions/2026-05-20-single-vendor-strategy-adopted.md`
@@ -515,6 +518,32 @@ A day in the life of a daily note:
 - proposal on track for September submission   ← hand jotting, untouchable
 ```
 
+### Message log — `_messages/{YYYY-MM-DD}-messages.md` · no Base
+
+```yaml
+object: message-log
+required: [type, date, updated-at]
+keys_present: [projects, people, messages-read]
+optional: [projects-weak, entities, window-from, window-to, skipped,
+           at-limit, gaps]
+enums:
+  type: [message-log]
+```
+
+- One per calendar day of mail and Teams chat, written only by
+  `messages write`. Machine material: hidden from the file list and search;
+  sessions and the evening run read it, the owner meets it only through a
+  "from mail" link.
+- `projects[]` holds every linked project; `projects-weak[]` the subset that
+  never queues a project-state update. `people[]` and `entities[]` follow the
+  Meeting pattern.
+- `projects`, `people` and `messages-read` are `keys_present`: the keys must
+  exist, but `[]` and `0` are legitimate on a quiet day.
+- The body is rendered from the `%% log-data … %%` block at its end; never
+  edit either by hand.
+- **Update-queue exception:** a log counts as project activity without a
+  review tick (strong links only), unlike meetings.
+
 ## 2. Relationship graph
 
 - `Meeting —projects[]→ Project`
@@ -523,4 +552,7 @@ A day in the life of a daily note:
 - `Project —entity→ Entity`
 - `Decision —project→ Project`
 - `Decision —source→ Meeting`
+- `Decision —source→ Message log`
 - `Decision —supersedes→ Decision`
+- `Message log —projects[]→ Project`
+- `Message log —people[]→ Person`

@@ -9,6 +9,7 @@ import json
 import subprocess
 import sys
 from datetime import date, datetime
+import re
 from pathlib import Path
 
 import pytest
@@ -581,6 +582,170 @@ def test_reconcile_then_queue_picks_up_the_late_tick(tmp_path):
         "20-meetings/yesterday.md"]
 
 
+# --- message logs as activity (D1) -----------------------------------------
+
+def vault_with_project_and_owner(tmp_path, slug, state_updated):
+    root = make_vault(tmp_path)
+    write_person(root, "morgan-ellery")
+    write_project(root, slug, state_updated=state_updated)
+    return root
+
+
+def write_log(root, day, groups, updated_at):
+    from vaultlib import msglog
+    data = {"schema": 1, "date": day, "ids": [g["gid"] for g in groups],
+            "groups": groups}
+    projects = sorted({p for g in groups for p in g["projects"]})
+    weak = sorted({p for g in groups for p in g["projects_weak"]})
+    msglog.save_log(root, data, {
+        "type": "message-log", "date": day, "updated-at": updated_at,
+        "projects": projects, "projects-weak": weak,
+        "people": sorted({p for g in groups for p in g["people"]}),
+        "messages-read": len(groups)})
+
+
+def g(gid, projects=(), weak=(), people=()):
+    return {"gid": gid, "key": f"mail:{gid}", "kind": "mail", "label": gid,
+            "chat_type": None, "people": list(people), "names": {},
+            "participants": [], "projects": list(projects),
+            "projects_weak": list(weak), "entities": [],
+            "needs_owner": False,
+            "points": [{"text": "x", "cites": [gid]}]}
+
+
+def test_a_strong_log_after_state_updated_queues_the_project(tmp_path):
+    root = vault_with_project_and_owner(
+        tmp_path, "acme-industries-rollout", "2026-09-29T19:00")
+    write_log(root, "2026-09-30",
+              [g("a1", projects=["acme-industries-rollout"])],
+              "2026-09-30T18:52")
+    queue = updatequeue.run(root, "2026-09-30", "morgan-ellery")[
+        "projectsNeedingUpdate"]
+    assert queue[0]["slug"] == "acme-industries-rollout"
+    assert queue[0]["newLogs"] == ["2026-09-30-messages"]
+    assert queue[0]["newFiles"] == [] and queue[0]["newCount"] == 1
+
+
+def test_a_weak_log_never_queues(tmp_path):
+    root = vault_with_project_and_owner(
+        tmp_path, "acme-industries-rollout", "2026-09-29T19:00")
+    write_log(root, "2026-09-30",
+              [g("a1", projects=["acme-industries-rollout"],
+                 weak=["acme-industries-rollout"])], "2026-09-30T18:52")
+    assert updatequeue.run(root, "2026-09-30", "morgan-ellery")[
+        "projectsNeedingUpdate"] == []
+
+
+def _set_state_updated(root, slug, stamp):
+    index = root / "30-projects" / slug / "index.md"
+    text = index.read_text(encoding="utf-8")
+    index.write_text(re.sub(r"state-updated: .*", f"state-updated: {stamp}", text),
+                     encoding="utf-8")
+
+
+def test_a_requeued_source_stays_queued_until_a_later_state_update(tmp_path):
+    from vaultlib import msgstate
+    slug = "acme-industries-rollout"
+    root = vault_with_project_and_owner(tmp_path, slug, "2026-10-01T19:00")
+    msgstate.requeue_add(root, slug, "2026-09-30-messages", at="2026-10-01T19:30")
+    for _ in range(2):  # a re-run before stage 4 wrote the state loses nothing
+        queue = updatequeue.run(root, "2026-10-01", "morgan-ellery")[
+            "projectsNeedingUpdate"]
+        assert queue[0]["removedSources"] == ["2026-09-30-messages"]
+    _set_state_updated(root, slug, "2026-10-01T19:30")  # same minute: kept
+    assert updatequeue.run(root, "2026-10-01", "morgan-ellery")[
+        "projectsNeedingUpdate"][0]["removedSources"] == ["2026-09-30-messages"]
+    _set_state_updated(root, slug, "2026-10-01T20:45")  # stage 4 ran after it
+    assert updatequeue.run(root, "2026-10-01", "morgan-ellery")[
+        "projectsNeedingUpdate"] == []
+    assert msgstate.requeue_list(root) == []
+
+
+def test_a_damaged_log_warns_and_the_queue_continues(tmp_path):
+    root = vault_with_project_and_owner(
+        tmp_path, "acme-industries-rollout", "2026-09-29T19:00")
+    (root / "_messages").mkdir()
+    (root / "_messages" / "2026-09-30-messages.md").write_text(
+        "---\ntype: message-log\n---\nno data block\n", encoding="utf-8")
+    out = updatequeue.run(root, "2026-09-30", "morgan-ellery")
+    assert any("2026-09-30-messages.md" in w for w in out["warnings"])
+
+
+def test_people_get_message_counters(tmp_path):
+    from vaultlib import markdown, person
+    root = vault_with_project_and_owner(
+        tmp_path, "acme-industries-rollout", "2026-09-29T19:00")
+    person.ensure(root, "Sam Lee", "2026-09-01")
+    write_log(root, "2026-09-30", [g("a1", people=["sam-lee"]),
+                                   g("a2", people=["sam-lee"])],
+              "2026-09-30T18:52")
+    write_log(root, "2026-09-10", [g("b1", people=["sam-lee"])],
+              "2026-09-10T18:52")
+    updatequeue.run(root, "2026-09-30", "morgan-ellery")
+    fm, _ = markdown.split_frontmatter(
+        (root / "50-people" / "sam-lee.md").read_text(encoding="utf-8"))
+    assert (int(fm["messages-7d"]), int(fm["messages-30d"])) == (2, 3)
+
+
+def test_a_group_without_people_warns_and_the_queue_continues(tmp_path):
+    import re
+    from vaultlib import msglog
+    root = vault_with_project_and_owner(
+        tmp_path, "acme-industries-rollout", "2026-09-29T19:00")
+    group = g("x")
+    msglog.save_log(root, {"schema": 1, "date": "2026-09-30", "ids": ["x"],
+                           "groups": [group]},
+                    {"type": "message-log", "date": "2026-09-30",
+                     "updated-at": "2026-09-30T18:52", "projects": [],
+                     "people": [], "messages-read": 1})
+    log = root / "_messages" / "2026-09-30-messages.md"
+    text = log.read_text(encoding="utf-8")
+    stripped = re.sub(r'\s*"people": \[\],?', "", text, count=1)
+    assert stripped != text
+    log.write_text(stripped, encoding="utf-8")
+    out = updatequeue.run(root, "2026-09-30", "morgan-ellery")
+    assert any("group 'x'" in w for w in out["warnings"])
+
+
+def test_malformed_requeue_entries_warn_and_never_abort(tmp_path):
+    from vaultlib import msgstate
+    root = vault_with_project_and_owner(
+        tmp_path, "acme-industries-rollout", "2026-10-01T19:00")
+    state = msgstate.load(root)
+    state["requeue"] = [{}, "junk", {"slug": 3, "log": "l"},
+                        {"slug": "acme-industries-rollout",
+                         "log": "2026-09-29-messages"},
+                        {"slug": "acme-industries-rollout",
+                         "log": "2026-09-30-messages", "at": "2026-10-01T19:30"}]
+    msgstate.save(root, state)
+    out = updatequeue.run(root, "2026-10-01", "morgan-ellery")
+    assert len([w for w in out["warnings"] if "malformed requeue" in w]) == 4
+    assert out["projectsNeedingUpdate"][0]["removedSources"] == [
+        "2026-09-30-messages"]
+
+
+def test_a_requeued_slug_with_no_active_project_warns(tmp_path):
+    from vaultlib import msgstate
+    root = vault_with_project_and_owner(
+        tmp_path, "acme-industries-rollout", "2026-10-01T19:00")
+    msgstate.requeue_add(root, "ghost-project", "2026-09-30-messages",
+                         at="2026-10-01T09:00")
+    out = updatequeue.run(root, "2026-10-01", "morgan-ellery")
+    assert any("ghost-project" in w and "no active project" in w
+               for w in out["warnings"])
+    assert out["projectsNeedingUpdate"] == []
+
+
+def test_a_strong_log_older_than_state_updated_does_not_queue(tmp_path):
+    root = vault_with_project_and_owner(
+        tmp_path, "acme-industries-rollout", "2026-09-30T19:00")
+    write_log(root, "2026-09-30",
+              [g("a1", projects=["acme-industries-rollout"])],
+              "2026-09-30T18:52")
+    assert updatequeue.run(root, "2026-09-30", "morgan-ellery")[
+        "projectsNeedingUpdate"] == []
+
+
 # --- #242: people learn when they were last met and on which projects ---
 
 def write_person_with(root: Path, slug: str, extra: str = "") -> Path:
@@ -639,7 +804,8 @@ def test_projects_already_complete_are_not_rewritten(tmp_path):
     # a block list the owner's property editor wrote must survive untouched
     path = write_person_with(root, "ana-fields",
                              "projects:\n  - beta\n  - alpha\nlast-met: 2026-06-10\n"
-                             "meetings-7d: 1\nmeetings-30d: 1\n")
+                             "meetings-7d: 1\nmeetings-30d: 1\n"
+                             "messages-7d: 0\nmessages-30d: 0\n")
     write_meeting(root, "m1", projects=("alpha", "beta"), attendees=("ana-fields",))
     before = path.read_bytes()
     updatequeue.run(root, today="2026-06-12", owner="owner-morgan")

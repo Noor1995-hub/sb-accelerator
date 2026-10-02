@@ -86,5 +86,5 @@ def test_the_shipped_template_is_already_where_the_migration_lands(tmp_path):
 def test_run_through_the_framework_bumps_to_5(tmp_path):
     root = vault_v4(tmp_path, {"vaultProfiles": [{"id": "default"}]})
     result = migrate.run(root, "2026-10-01", stamp="2026-10-01-120000")
-    assert [a["slug"] for a in result["applied"]] == ["structure-version-5"]
-    assert (root / "structure-version").read_text(encoding="utf-8").strip() == "5"
+    assert [a["slug"] for a in result["applied"]] == ["structure-version-5", "structure-version-6"]
+    assert (root / "structure-version").read_text(encoding="utf-8").strip() == "6"

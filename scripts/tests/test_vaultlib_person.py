@@ -104,6 +104,43 @@ def test_ensure_uses_lf_endings(tmp_path):
     assert b"\r\n" not in raw
 
 
+def test_a_new_person_from_the_feed_carries_their_address(tmp_path):
+    root = make_vault(tmp_path)
+    result = person.ensure(root, "Jordan Reyes", "2026-09-30", email="Jordan.Reyes@acme.example")
+    fm, _ = md.split_frontmatter((root / result["path"]).read_text(encoding="utf-8"))
+    assert fm["email"] == "jordan.reyes@acme.example"
+
+
+def test_an_existing_person_gets_a_missing_email_once_and_never_overwritten(tmp_path):
+    root = make_vault(tmp_path)
+    person.ensure(root, "Jordan Reyes", "2026-09-30")
+    assert person.set_email_if_missing(root, "jordan-reyes", "jordan.reyes@acme.example") is True
+    assert person.set_email_if_missing(root, "jordan-reyes", "other@acme.example") is False
+    assert person.address_book(root) == {"jordan.reyes@acme.example": "jordan-reyes"}
+
+
+def test_enrichment_of_an_unknown_slug_is_a_no_op(tmp_path):
+    root = make_vault(tmp_path)
+    assert person.set_email_if_missing(root, "nobody", "x@acme.example") is False
+
+
+def test_enrichment_never_raises_on_a_note_without_frontmatter(tmp_path):
+    root = make_vault(tmp_path)
+    note = root / "50-people" / "plain.md"
+    note.write_text("just a body" + chr(10), encoding="utf-8")
+    assert person.set_email_if_missing(root, "plain", "x@acme.example") is False
+    assert note.read_text(encoding="utf-8") == "just a body" + chr(10)
+
+
+def test_enrichment_refuses_an_address_that_would_not_parse_back(tmp_path):
+    root = make_vault(tmp_path)
+    person.ensure(root, "Jordan Reyes", "2026-09-30")
+    note = root / "50-people" / "jordan-reyes.md"
+    before = note.read_text(encoding="utf-8")
+    assert person.set_email_if_missing(root, "jordan-reyes", "a: b@acme.example") is False
+    assert note.read_text(encoding="utf-8") == before
+
+
 # --- #242: the M365 attendee address is kept ---
 
 def test_ensure_stores_the_email_on_creation(tmp_path):

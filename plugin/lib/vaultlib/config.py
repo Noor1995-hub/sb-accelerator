@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from pathlib import Path
+from typing import Optional
 
 import json
 import re
@@ -27,16 +28,21 @@ CONNECTOR_ADAPTERS = ("plaud", "m365")
 ADAPTERS = ("inbox",) + CONNECTOR_ADAPTERS
 FEEDBACK_REPO_RE = re.compile(r"\A[\w.-]+/[\w.-]+\Z")
 _TOP_LEVEL_KEYS = ("config-version", "timezone", "owner", "adapters",
-                   "feedback", "sync")
+                   "feedback", "sync", "messages")
+MESSAGES_SCOPES = ("teams-chats", "inbox", "sent-items")
+EXCLUSION_KINDS = ("person", "domain", "chat", "word")
+MESSAGES_DEFAULT = {"enabled": False, "consented-at": None, "scope": [], "exclusions": []}
 
 WRITABLE_FIELDS = (
     "timezone", "owner", "feedback.repo", "sync.start-date",
     "adapters.m365.home_domains",
+    "messages.enabled", "messages.consented-at", "messages.scope",
 ) + tuple(f"adapters.{name}.enabled" for name in ADAPTERS) + tuple(
     f"adapters.{name}.account_hint" for name in CONNECTOR_ADAPTERS)
 
 _BOOL_FIELDS = tuple(f for f in WRITABLE_FIELDS if f.endswith(".enabled"))
-_LIST_FIELDS = ("adapters.m365.home_domains",)
+_LIST_FIELDS = ("adapters.m365.home_domains", "messages.scope")
+_CONSENT_RE = re.compile(r"\A\d{4}-\d{2}-\d{2}T\d{2}:\d{2}\Z")
 
 
 class ConfigError(Exception):
@@ -110,6 +116,35 @@ def _validate_home_domains(value) -> None:
         seen.add(folded)
 
 
+def _validate_messages(messages) -> None:
+    if not isinstance(messages, dict) or set(messages) != set(MESSAGES_DEFAULT):
+        raise ConfigError(
+            f"messages must be an object with exactly {sorted(MESSAGES_DEFAULT)}")
+    if not isinstance(messages["enabled"], bool):
+        raise ConfigError("messages.enabled must be true or false")
+    consented = messages["consented-at"]
+    if consented is not None and (not isinstance(consented, str)
+                                  or not _CONSENT_RE.match(consented)):
+        raise ConfigError("messages.consented-at must be null or YYYY-MM-DDTHH:MM")
+    scope = messages["scope"]
+    if not isinstance(scope, list) or any(s not in MESSAGES_SCOPES for s in scope):
+        raise ConfigError(f"messages.scope must be a list drawn from {list(MESSAGES_SCOPES)}")
+    exclusions = messages["exclusions"]
+    if not isinstance(exclusions, list):
+        raise ConfigError("messages.exclusions must be a list")
+    seen = set()
+    for entry in exclusions:
+        if not isinstance(entry, dict) or set(entry) != {"id", "kind", "value", "label", "added"}:
+            raise ConfigError("each messages.exclusions entry needs exactly id, kind, value, label, added")
+        if entry["kind"] not in EXCLUSION_KINDS:
+            raise ConfigError(f"exclusion kind {entry['kind']!r} must be one of {list(EXCLUSION_KINDS)}")
+        if not isinstance(entry["value"], str) or not entry["value"].strip():
+            raise ConfigError("an exclusion needs a non-empty value")
+        if entry["id"] in seen:
+            raise ConfigError(f"duplicate exclusion id {entry['id']!r}")
+        seen.add(entry["id"])
+
+
 def _validate(cfg: dict) -> dict:
     version = cfg.get("config-version")
     if version != KNOWN_VERSION:
@@ -120,6 +155,7 @@ def _validate(cfg: dict) -> dict:
     cfg.setdefault("feedback", {"repo": None})
     # Deployed vaults predate both keys; absence is the honest null state.
     cfg.setdefault("sync", {"start-date": None})
+    cfg.setdefault("messages", json.loads(json.dumps(MESSAGES_DEFAULT)))
     unknown = sorted(set(cfg) - set(_TOP_LEVEL_KEYS))
     if unknown:
         raise ConfigError(f"unknown config keys: {unknown}")
@@ -186,6 +222,7 @@ def _validate(cfg: dict) -> dict:
         raise ConfigError(
             'sync must be an object with exactly the key "start-date"')
     _validate_start_date(sync["start-date"])
+    _validate_messages(cfg["messages"])
     return cfg
 
 
@@ -338,6 +375,10 @@ def write(root: Path, field: str, value) -> dict:
             "ships a default; copy it in or regenerate the vault")
     raw = json.loads(path.read_text(encoding="utf-8"))   # keeps _readme
     node = raw
+    if field.startswith("messages."):
+        # Deployed vaults predate the block; seed it so a single-field write
+        # lands in a complete object.
+        raw.setdefault("messages", json.loads(json.dumps(MESSAGES_DEFAULT)))
     parts = field.split(".")
     for key in parts[:-1]:
         node = node.setdefault(key, {})
@@ -346,3 +387,77 @@ def write(root: Path, field: str, value) -> dict:
     _validate({k: v for k, v in raw.items() if not k.startswith("_")})
     vault.atomic_write(path, json.dumps(raw, indent=2) + "\n")
     return read(root)
+
+
+def messages_settings(root: Path) -> dict:
+    """The feed's settings, or the off state with a warning. Never raises:
+    a broken config must switch the feed off, not crash the evening."""
+    try:
+        return dict(read(root)["config"]["messages"])
+    except (ConfigError, OSError) as exc:
+        return {**json.loads(json.dumps(MESSAGES_DEFAULT)), "warning": str(exc)}
+
+
+def _edit_exclusions(root: Path, change) -> dict:
+    path = root / CONFIG_RELPATH
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    messages = raw.setdefault("messages", json.loads(json.dumps(MESSAGES_DEFAULT)))
+    result = change(messages["exclusions"])
+    _validate({k: v for k, v in raw.items() if not k.startswith("_")})
+    vault.atomic_write(path, json.dumps(raw, indent=2) + "\n")
+    return result
+
+
+_EMAIL_SHAPE = re.compile(r"\A[^@\s]+@[^@\s]+\.[^@\s]+\Z")
+_DOMAIN_SHAPE = re.compile(r"\A[^@\s]+\.[^@\s]+\Z")
+
+
+def _exclusion_shape_error(kind: str, value: str) -> Optional[str]:
+    """Why a value cannot match anything the feed reads, or None.
+
+    The feed matches exclusions on exact values (an address, a domain, a Teams
+    chat id), so a name or a chat title would be stored and silently skip
+    nothing. Refusing the wrong shape here is what makes "don't read X" real.
+    """
+    if kind == "person" and not _EMAIL_SHAPE.match(value):
+        return (f"a person exclusion needs their email address, not {value!r} — "
+                "look up the address on their person note or ask the owner for it")
+    if kind == "domain" and not _DOMAIN_SHAPE.match(value):
+        return (f"a domain exclusion needs a bare domain like acme.example, without '@', not {value!r}")
+    if kind == "chat" and not ("@thread" in value or "@unq.gbl.spaces" in value
+                               or value.startswith("19:")):
+        return (f"a chat exclusion needs the Teams chat id (from teams_list_chats), not {value!r} — "
+                "a chat name matches nothing")
+    return None
+
+
+def exclusion_add(root: Path, *, kind: str, value: str, label, today: str) -> dict:
+    if kind not in EXCLUSION_KINDS:
+        raise ConfigError(f"exclusion kind {kind!r} must be one of {list(EXCLUSION_KINDS)}")
+    clean = str(value or "").strip()
+    if kind in ("person", "domain", "word"):
+        clean = clean.casefold()
+    if not clean:
+        raise ConfigError("an exclusion needs a non-empty value")
+    shape = _exclusion_shape_error(kind, clean)
+    if shape:
+        raise ConfigError(shape)
+
+    def add(entries):
+        numbers = [int(e["id"][1:]) for e in entries if str(e.get("id", "")).startswith("x")
+                   and str(e["id"])[1:].isdigit()]
+        entry = {"id": f"x{max(numbers, default=0) + 1}", "kind": kind, "value": clean,
+                 "label": label, "added": today}
+        entries.append(entry)
+        return entry
+    return _edit_exclusions(root, add)
+
+
+def exclusion_remove(root: Path, exclusion_id: str) -> dict:
+    def remove(entries):
+        kept = [e for e in entries if e["id"] != exclusion_id]
+        if len(kept) == len(entries):
+            raise ConfigError(f"no exclusion with id {exclusion_id!r}")
+        entries[:] = kept
+        return {"removed": exclusion_id}
+    return _edit_exclusions(root, remove)

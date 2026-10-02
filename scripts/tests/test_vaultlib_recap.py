@@ -213,3 +213,78 @@ def test_theme_source_label_must_be_one_line(tmp_path):
     with pytest.raises(recap.RecapError,
                         match=r"recap\.themes\[0\]\.sources\[0\]\.label"):
         recap.validate(root, payload)
+
+
+def _glance_only():
+    return {"glance": {"entities": [], "headlines": [{"label": "Quiet", "text": "Nothing moved"}]}}
+
+
+def _messages(**over):
+    base = {"items": [], "status": [], "decisions_to_confirm": 0, "keyword_proposal": None}
+    return {**base, **over}
+
+
+def test_messages_block_renders_needs_you_first_with_the_pointers(tmp_path):
+    root = make_vault(tmp_path)
+    clean, offenders, _ = recap.validate(root, {**full_payload(), "messages": {
+        "items": [{"kind": "context", "text": "Operating model: workshop 2 moves to 14 Oct."},
+                  {"kind": "needs-you", "text": "Sam is waiting for your budget figures."}],
+        "status": ["From today, this note also covers your mail and Teams."],
+        "decisions_to_confirm": 1, "keyword_proposal": None}})
+    assert offenders == []
+    out = recap.render(root, clean, meetings=0, window_label="today")
+    block = out.split("> [!info] Mail and Teams")[1].split("\n\n")[0]
+    lines = [l for l in block.splitlines() if l.startswith("> - ")]
+    assert lines[0] == "> - **Needs you:** Sam is waiting for your budget figures."
+    assert lines[1] == "> - Operating model: workshop 2 moves to 14 Oct."
+    assert "1 decision from mail to confirm" in block
+    assert out.index("At a glance") < out.index("Mail and Teams") < out.index("Themes")
+
+
+def test_messages_block_refuses_more_than_five_items(tmp_path):
+    root = make_vault(tmp_path)
+    with pytest.raises(recap.RecapError, match="messages.items"):
+        recap.validate(root, {**full_payload(), "messages": _messages(
+            items=[{"kind": "context", "text": "x"}] * 6)})
+
+
+def test_messages_status_and_item_caps(tmp_path):
+    root = make_vault(tmp_path)
+    with pytest.raises(recap.RecapError, match="messages.status"):
+        recap.validate(root, {**full_payload(), "messages": _messages(status=["a"] * 4)})
+    with pytest.raises(recap.RecapError, match="30 words"):
+        recap.validate(root, {**full_payload(), "messages": _messages(
+            items=[{"kind": "context", "text": " ".join(["w"] * 31)}])})
+
+
+def test_messages_keyword_proposal_renders_the_project_link(tmp_path):
+    root = make_vault(tmp_path)
+    clean, offenders, _ = recap.validate(root, {**full_payload(), "messages": _messages(
+        keyword_proposal={"keyword": "yard", "project": "yard-automation"})})
+    assert offenders == []
+    out = recap.render(root, clean, meetings=0, window_label="today")
+    assert ("> - Mails about 'yard' seem to be about "
+            "[[30-projects/yard-automation/index|Yard Automation Program]]. "
+            "Say 'link yard' to me and I'll link them from now on.") in out
+
+
+def test_messages_decision_pointer_does_not_trip_link_normalisation(tmp_path):
+    root = make_vault(tmp_path)
+    clean, offenders, warnings = recap.validate(root, {**full_payload(), "messages": _messages(
+        decisions_to_confirm=2)})
+    out = recap.render(root, clean, meetings=0, window_label="today")
+    assert "**2 decisions from mail to confirm** → Decisions, To review" in out
+    assert "[[" not in out.split("Mail and Teams")[1].split("\n\n")[0]
+    assert offenders == [] and warnings == []
+
+
+def test_no_messages_field_renders_no_block(tmp_path):
+    root = make_vault(tmp_path)
+    clean, _, _ = recap.validate(root, full_payload())
+    assert "Mail and Teams" not in recap.render(root, clean, meetings=0, window_label="today")
+
+
+def test_an_empty_messages_field_renders_no_block(tmp_path):
+    root = make_vault(tmp_path)
+    clean, _, _ = recap.validate(root, {**_glance_only(), "messages": _messages()})
+    assert "Mail and Teams" not in recap.render(root, clean, meetings=0, window_label="today")

@@ -264,11 +264,12 @@ def test_context_portfolio_is_filled_not_placeholder():
 
 def test_ontology_schema_blocks_present_and_wellformed():
     """The guard's schemas come FROM ontology.md — this test locks the
-    contract: six object blocks, each with non-empty required fields, and
+    contract: seven object blocks (message-log has no fixture harness), each with non-empty required fields, and
     enums shaped as field -> list."""
     blocks = load_ontology_schemas()
-    assert set(blocks) == set(HARNESS), (
-        f"ontology.md schema blocks {sorted(blocks)} != expected object types {sorted(HARNESS)}"
+    expected = set(HARNESS) | {"message-log"}
+    assert set(blocks) == expected, (
+        f"ontology.md schema blocks {sorted(blocks)} != expected object types {sorted(expected)}"
     )
     for name, block in blocks.items():
         assert block.get("required"), f"ontology.md block {name!r}: empty or missing 'required'"

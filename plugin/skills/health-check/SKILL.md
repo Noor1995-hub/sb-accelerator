@@ -90,6 +90,10 @@ object; the counts carry the whole story:
   act on at the next visit. `baseline: "unknown"` means this vault predates
   the feature entirely, so every managed file will need consent the first
   time someone runs a refresh.
+- `messages`, only when `enabled` is true (skip it entirely when the feed
+  is off): read out `days_at_limit` against `logs_in_window`. Days at the
+  limit means a day had more mail and chat than the safety limit; a few are
+  fine, many mean the limit should be raised.
 
 Then name the report file so the user can open it themselves:
 

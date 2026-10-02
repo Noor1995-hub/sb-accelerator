@@ -120,10 +120,11 @@ For each candidate, decide:
   paragraph.
 - **`status`** — `active`, or `withdrawn` if the source shows it was decided and
   then reversed. Never `superseded`; that status is set on the *prior* note.
-- **`source`** — the stem of the meeting note this came from, if there is one.
-  It must resolve to a file in `20-meetings/`. For an inbox transcript, a pasted
-  paragraph or dictation there is no meeting note: **omit `source`** and put the
-  provenance in the `why` text instead.
+- **`source`** — the stem of the meeting note this came from, or of the message
+  log (`_messages/<YYYY-MM-DD>-messages`) when the decision came from mail or
+  chat. A meeting stem must resolve to a file in `20-meetings/`. **Omit
+  `source`** only when there is neither (an inbox transcript, a pasted
+  paragraph or dictation): put the provenance in the `why` text instead.
 - **`supersedes`** — see below.
 - **the date** — the date the decision was **made**, read out of the source. A
   steerco on the 12th logged on the 14th is dated the 12th; the date is what

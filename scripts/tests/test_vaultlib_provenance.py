@@ -1,7 +1,7 @@
 """TDD for plugin/lib/vaultlib/provenance.py — the CLI-owned vault
 provenance record (99-workflow-config/provenance.json).
 
-record_provision's "all 34" test copies the plugin's own shipped template
+record_provision's "all 35" test copies the plugin's own shipped template
 verbatim (the same tree instantiate_vault.instantiate() copies in
 production) rather than a synthetic fixture — the count is a property of
 the real template, and a synthetic tree would prove nothing about it.
@@ -240,7 +240,7 @@ def test_rebaseline_leaves_earlier_events_and_entries_untouched(tmp_path):
 # --- record_provision -------------------------------------------------------
 
 
-def test_record_provision_records_all_34_shipped_files(tmp_path):
+def test_record_provision_records_all_35_shipped_files(tmp_path):
     # len(template.ALL_TIERED) is the single source of truth for this count
     # — #117's shared constant, so this file and test_vaultlib_template.py
     # cannot drift apart on what "the shipped template" contains.
@@ -256,7 +256,7 @@ def test_record_provision_records_all_34_shipped_files(tmp_path):
     assert data["events"][-1] == {
         "event": "provision", "at": "2026-09-03T09:12:00Z",
         "plugin_version": data["events"][-1]["plugin_version"],
-        "structure_version": "5",
+        "structure_version": "6",
     }
 
 

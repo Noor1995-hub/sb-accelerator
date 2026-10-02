@@ -301,7 +301,8 @@ def test_sidebar_shows_one_menu_and_no_plumbing():
     assert data["showTags"] is False and data["showProperties"] is False
     assert data["checkForUpdatesOnStart"] is False, "the update notice pushes an unpinned version"
     profile = load_profile()
-    assert set(profile["hiddenFolders"]) == {"claude", "99-workflow-config"}
+    # _messages: the mail and Teams logs (#249)
+    assert set(profile["hiddenFolders"]) == {"claude", "99-workflow-config", "_messages"}
     assert profile["hiddenFileNames"] == ["CLAUDE.md"]
     order = data["rootFolderOrder"]
     assert order[-3:] == ["90-archive", "95-private", "_heavy-assets"]

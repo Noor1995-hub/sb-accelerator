@@ -632,6 +632,13 @@ def test_the_fixture_footer_matches_what_the_code_writes(tmp_path):
     assert expected in fixture.read_text(encoding="utf-8")
 
 
+def test_source_may_name_a_log(tmp_path):
+    root = vault_with_project(tmp_path, "acme-industries-operating-model")
+    (root / "_messages").mkdir()
+    (root / "_messages" / "2026-09-30-messages.md").write_text("---\ntype: message-log\n---\n", encoding="utf-8")
+    assert decision._resolve_source(root, "[[2026-09-30-messages]]") == "2026-09-30-messages"
+
+
 # --- #247: a dismissed decision (archived: true) ---------------------------
 
 def test_list_flags_a_dismissed_decision_so_the_evening_run_does_not_recapture_it(tmp_path):

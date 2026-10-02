@@ -148,6 +148,20 @@ Carry `changed` (a count worth mentioning if non-zero) and `unresolved` (a
 project slug missing its `entity:` field, or missing outright — the note is
 left untouched, not silently skipped) into the final summary.
 
+### Stage 3b — Mail and Teams
+
+When `messages.enabled` is true in `config read`: run the `/sync-messages`
+workflow (follow `${CLAUDE_PLUGIN_ROOT}/skills/sync-messages/SKILL.md`),
+unattended when this run is unattended. Record its outcome line for the
+summary, verbatim, and `since` when it reports a first run (stage 6 needs it).
+It runs before the refresh below so tonight's update queue sees tonight's
+logs. A failed stage 3b is recorded and the evening continues. Off, or no
+M365: skip with one line in the summary.
+
+### Stage 3c — Refresh (every evening)
+
+Runs every evening, whatever stage 3b did — off, skipped or failed.
+
 **Refresh:**
 
 ```bash
@@ -191,6 +205,17 @@ The instructions each subagent gets:
 
 1. Read the `newFiles` meetings end-to-end — Key Takeaways, Debrief, Action
    Items.
+   When the entry has `newLogs`, also run
+   `python3 "$VAULTLIB" messages for-project --vault "$VAULT" --slug <slug> --logs <comma-separated newLogs>`
+   and read the returned groups as input next to the meetings. Every state item
+   you take from one (a Hot potato, an Owe, an Awaiting, a closed action) ends
+   with its source marker, `(mail · <link>)` or `(chat · <link>)` (`mail` or
+   `chat` per the group's `kind`), where `<link>` is the group's `link`
+   verbatim. The marker counts toward the item's
+   word cap (hot potatoes ≤ 30 words, owe and awaiting items ≤ 40), so write
+   the item short enough to carry it. When the entry has `removedSources`, drop
+   every current item whose marker links one of those logs unless a meeting or
+   a remaining group still supports it.
 2. Compose the project's **state** as JSON and write it to
    `$SCRATCH/project-state-<slug>.json`. The CLI renders the whole index body
    from it and refuses anything over its caps, naming the field:
@@ -238,11 +263,13 @@ python3 "$VAULTLIB" project state write --vault "$VAULT" --slug <slug> \
 3. Never edit `index.md` with your editor — the body is machine-rendered and
    a hand edit is overwritten on the next run; the owner's own `## Notes`
    section at the bottom, if present, is the one thing the CLI preserves.
-4. Decision capture: extract candidates from the new meetings AND the
-   harvest jottings, then follow
+4. Decision capture: extract candidates from the new meetings, the
+   harvest jottings AND the message log groups read in step 1, then follow
    `${CLAUDE_PLUGIN_ROOT}/skills/log-decision/SKILL.md` in **background mode**
    (`/log-decision <slug> --background`) with those candidates as the
-   source. Its rules apply unchanged: the material-decision test (commits
+   source. A decision from a message log group carries `source: <log stem>`, where `<log stem>` is the
+   group's `log` field.
+   Its rules apply unchanged: the material-decision test (commits
    the engagement AND changes a stakeholder's behaviour), dedup against
    `existingDecisions` (a `dismissed` one included — the owner rejected it,
    so it is never captured again), supersession only on explicit conflict language,
@@ -422,6 +449,36 @@ names the field, so one retry always suffices.
   `sync_notes`, which renders folded, and never in `watch`.
 - `carried_forward` — jottings worth carrying, one line each.
 - `sync_notes` — the mechanics, one line each; also in the run summary.
+- `messages` — whenever `messages.enabled` is true in `config read`,
+  whatever stage 3b did (ran, skipped or failed): a feed that keeps failing
+  must still say so in the note. Omit the field only when the feed is off.
+  The CLI renders it as the *Mail and Teams* block right after *At a
+  glance*, inside the recap (below the *Waiting for you* queues). Build it
+  in this order:
+  1. `python3 "$VAULTLIB" messages status --vault "$VAULT" --now <now UTC> [--first-run-since <since from stage 3b, first run only>] [--auth-error]`
+     gives `{"lines": [...]}`; use those lines verbatim as `status` (at most 3).
+     Pass `--auth-error` when stage 3b's outcome line was `auth-error`: the
+     CLI then adds the one line asking the owner to reconnect Microsoft 365;
+     never write that line yourself.
+  2. `python3 "$VAULTLIB" messages keywords-propose --vault "$VAULT" --today <today>`
+     gives `{"proposal": {"keyword", "project", "count"} | null}`;
+     `keyword_proposal` is the proposal's `keyword` and `project` without
+     `count`, or `null`.
+  3. `decisions_to_confirm` — the number of decisions stage 4 wrote with a log
+     `source`.
+  4. `items` — at most 5 lines (≤ 30 words each) from tonight's logs: first
+     what needs the owner (groups with **Needs you**), each with one concrete
+     action (`kind: "needs-you"`); then one context line per project
+     (`kind: "context"`). Write them to `$SCRATCH/msg_lines.payload.json` as
+     `{"lines": [{"kind", "text", "cites": ["<YYYY-MM-DD>-messages#<gid>"]}]}`,
+     run `python3 "$VAULTLIB" messages check-lines --vault "$VAULT" --lines "$SCRATCH/msg_lines.payload.json"`,
+     and use only the `passed` lines (`{kind, text}`) as `items`. No counts,
+     no internal terms.
+
+  Run steps 1 and 2 exactly once per evening and reuse their results on any
+  retry of the daily-note payload — never run them again: `messages status`
+  clears the closed-unread state and `messages keywords-propose` records the
+  proposal, so a second run would lose or double what the first one did.
 
 The catch-up banner is the CLI's: `dates plan`'s `is_catchup` becomes the
 callout on write, and a banner you put in a payload is stripped with a
@@ -461,7 +518,14 @@ cat > "$SCRATCH/daily-note.payload.json" <<'JSON'
     "decisions": ["<decision-stem>"],
     "watch": ["<content risk, one line>"],
     "carried_forward": ["<jotting worth carrying>"],
-    "sync_notes": ["<mechanical item, one line>"]
+    "sync_notes": ["<mechanical item, one line>"],
+    "messages": {
+      "items": [{"kind": "needs-you", "text": "<≤ 30 words, one concrete action>"},
+                {"kind": "context", "text": "<≤ 30 words>"}],
+      "status": ["<line from messages status, verbatim>"],
+      "decisions_to_confirm": 0,
+      "keyword_proposal": {"keyword": "<keyword>", "project": "<project-slug>"}
+    }
   },
   "meetings": [
     {"time": "09:00", "subject": "Weekly Status", "entity": "<entity-slug>",
@@ -519,6 +583,7 @@ reported "Processed: 0" after writing a meeting correctly):
 **Synced:** {N} recordings → `20-meetings/` ({stems})
 **Meetings you ticked Keep on:** {N} now confirmed
 **Possible duplicates:** {N} ({list the stems}) — kept as separate notes; each would have overwritten a meeting you already confirmed
+**Mail and Teams:** {outcome line | off | skipped: no M365 | failed: …}
 **Metrics refreshed:** {P} projects · {Q} people
 **Projects updated:** {N} ({slugs}) — {M} decisions captured for review, {K} candidates skipped
 **Next note:** `60-daily-notes/{date}.md` ({DayName}, {tomorrow | today — for-today catch-up}) — {N} meetings prepped | calendar unavailable | calendar REFUSED — signed in as a different account (account-mismatch) | calendar REFUSED — no account bound to this vault yet (no-account-hint) | m365 disabled
@@ -529,8 +594,9 @@ reported "Processed: 0" after writing a meeting correctly):
 
 A non-empty warnings block means investigate before tomorrow's run.
 
-**Scratch hygiene, one last time.** Stage 3's `/sync-recordings` run already
-swept its own scratch files at its own end; this run may also have written
+**Scratch hygiene, one last time.** Stage 3's `/sync-recordings` and `/sync-messages`
+runs already swept their own scratch files at their own end (including
+`msg_*.payload.json`); this run may also have written
 `m365.whoami.json` and `m365_calendar.json` in stage 5. Sweep once more
 before the run ends, whether or not stage 5 ran:
 

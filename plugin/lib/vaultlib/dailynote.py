@@ -335,6 +335,12 @@ def _fingerprint_inputs(root: Path, start: date, end: date) -> List[Tuple[str, P
                 found.append((
                     f"{vault.PROJECTS_DIR}/{folder.parent.name}/decisions/"
                     f"{path.name}", path))
+    logs = root / vault.MESSAGES_DIR
+    for path in sorted(logs.glob("*-messages.md")) if logs.is_dir() else []:
+        noted = _iso_prefix_date(path.stem)
+        if (noted is not None and path.stem == f"{noted.isoformat()}-messages"
+                and start <= noted <= end):
+            found.append((f"{vault.MESSAGES_DIR}/{path.name}", path))
     return found
 
 

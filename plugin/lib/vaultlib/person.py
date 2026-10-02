@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Optional
+from typing import Dict, Optional
 
 from . import markdown, naming, vault
 
@@ -35,7 +35,8 @@ def _require_email(value) -> str:
     text = str(value).strip()
     if not EMAIL_RE.match(text):
         raise ValueError(f"email {value!r} is not a single email address")
-    return text
+    # Casefolded so the message feed's address book (#249) matches it.
+    return text.casefold()
 
 
 def ensure(root: Path, name: str, today: str,
@@ -106,3 +107,38 @@ def ensure(root: Path, name: str, today: str,
         target, markdown.emit_frontmatter(frontmatter, PERSON_QUOTE_KEYS)
     )
     return {"slug": slug, "path": target.relative_to(root).as_posix(), "created": True}
+
+
+def set_email_if_missing(root: Path, slug: str, email: str) -> bool:
+    """Fill a person note's empty `email` (the message feed learns addresses
+    from Teams chat members). Never overwrites one that is set."""
+    found = _existing_note(root, slug)
+    address = str(email or "").strip().casefold()
+    if found is None or "@" not in address:
+        return False
+    try:
+        text = found.read_text(encoding="utf-8")
+        frontmatter, _ = markdown.split_frontmatter(text)
+        if frontmatter.get("email"):
+            return False
+        updated = markdown.upsert_scalar_field(
+            text, "email", markdown.emit_scalar(address, quoted=False))
+    except (ValueError, OSError):
+        return False
+    vault.atomic_write(found, updated)
+    return True
+
+
+def address_book(root: Path) -> Dict[str, str]:
+    """Map every person note's email to its slug."""
+    book: Dict[str, str] = {}
+    people = root / PEOPLE_DIR
+    for path in sorted(people.glob("*.md")) if people.is_dir() else []:
+        try:
+            frontmatter, _ = markdown.split_frontmatter(path.read_text(encoding="utf-8"))
+        except (ValueError, OSError):
+            continue
+        address = str(frontmatter.get("email") or "").strip().casefold()
+        if "@" in address and frontmatter.get("slug"):
+            book.setdefault(address, str(frontmatter["slug"]))
+    return book

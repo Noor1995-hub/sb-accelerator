@@ -7,7 +7,8 @@
       "propertyKeys": [],
       "hiddenFolders": [
         "claude",
-        "99-workflow-config"
+        "99-workflow-config",
+        "_messages"
       ],
       "descendantExcludedFolders": [],
       "hiddenTags": [],

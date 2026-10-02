@@ -34,7 +34,7 @@ from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple
 
-from . import decision, markdown, naming, vault
+from . import decision, markdown, msglog, msgstate, naming, vault
 
 MEETINGS_DIR = vault.MEETINGS_DIR
 PROJECTS_DIR = vault.PROJECTS_DIR
@@ -154,6 +154,44 @@ def _index_meetings(root: Path) -> Tuple[List[dict], List[str]]:
     return meetings, warnings
 
 
+def _index_logs(root: Path) -> Tuple[List[dict], List[str]]:
+    """Message logs as activity sources. A damaged log warns and is skipped —
+    it must never abort the queue. A project in `projects-weak` never counts."""
+    out: List[dict] = []
+    warnings: List[str] = []
+    folder = root / vault.MESSAGES_DIR
+    for path in sorted(folder.glob("*-messages.md")) if folder.is_dir() else []:
+        rel = f"{vault.MESSAGES_DIR}/{path.name}"
+        try:
+            loaded = msglog.load_log(path)
+        except (msglog.MessagesError, ValueError, OSError) as exc:
+            warnings.append(f"{rel}: {exc}")
+            continue
+        fm, data = loaded["frontmatter"], loaded["data"]
+        weak = set(_slug_list(fm.get("projects-weak"), "projects-weak", rel,
+                              warnings))
+        strong = [p for p in _slug_list(fm.get("projects"), "projects", rel,
+                                        warnings) if p not in weak]
+        people_groups: List[str] = []
+        for group in data["groups"]:
+            people = group.get("people")
+            if (isinstance(people, list)
+                    and all(isinstance(p, str) for p in people)):
+                people_groups.extend(people)
+            else:
+                warnings.append(
+                    f"{rel}: group {group.get('gid')!r} has no usable "
+                    "people list — its people are not counted")
+        out.append({
+            "stem": path.stem,
+            "date": _parse_first_iso_date(fm.get("date")),
+            "updated": _parse_iso_datetime(fm.get("updated-at")),
+            "strong": strong,
+            "people_groups": people_groups,
+        })
+    return out, warnings
+
+
 def _activity(meeting: dict) -> datetime:
     """The moment a confirmed meeting last became new information for its
     projects: its datetime, or its `confirmed-at` stamp when that is later.
@@ -253,6 +291,29 @@ def run(root: Path, today: str, owner: str) -> dict:
     d90 = today_date - timedelta(days=KEY_PEOPLE_WINDOW_DAYS)
 
     meetings, warnings = _index_meetings(root)
+    logs, log_warnings = _index_logs(root)
+    warnings.extend(log_warnings)
+    # Requeue entries are read, never taken: an entry stays until the
+    # project's `state-updated` is strictly later than the entry's `at`. Both
+    # are the owner's local wall clock (YYYY-MM-DDTHH:MM), so they compare
+    # directly; the same minute keeps the entry (one extra cycle rather than
+    # a removal stage 4 never saw). A malformed entry, or one for a slug that
+    # names no active project, is warned about once and pruned.
+    requeued: Dict[str, List[Tuple[str, datetime, dict]]] = {}
+    prune: List = []
+    for entry in msgstate.requeue_list(root):
+        at = (_parse_iso_datetime(entry.get("at"))
+              if isinstance(entry, dict) and isinstance(entry.get("at"), str)
+              else None)
+        if (isinstance(entry, dict) and isinstance(entry.get("slug"), str)
+                and isinstance(entry.get("log"), str) and at is not None):
+            requeued.setdefault(entry["slug"], []).append(
+                (entry["log"], at, entry))
+        else:
+            warnings.append(f"messages state: skipped malformed requeue "
+                            f"entry {entry!r}")
+            prune.append(entry)
+    active_slugs: Set[str] = set()
     confirmed = [m for m in meetings
                  if m["review_status"] == "confirmed" and m["date"]]
     # confirmed drives the queue and the self-check; countable drives every
@@ -276,6 +337,7 @@ def run(root: Path, today: str, owner: str) -> dict:
         if data.get("status") != "active" or not slug:
             continue
         slug = str(slug)
+        active_slugs.add(slug)
 
         for_project = [m for m in confirmed if slug in m["projects"]]
         countable_for_project = [m for m in countable
@@ -327,7 +389,16 @@ def run(root: Path, today: str, owner: str) -> dict:
         threshold = (state_updated if state_updated is not None
                      else datetime.combine(last_updated, time.min))
         new_meetings = [m for m in for_project if _activity(m) >= threshold]
-        if new_meetings:
+        new_logs = [d["stem"] for d in logs
+                    if slug in d["strong"] and d["updated"] is not None
+                    and d["updated"] >= threshold]
+        removed: List[str] = []
+        for log, at, entry in requeued.get(slug, []):
+            if state_updated is not None and state_updated > at:
+                prune.append(entry)
+            elif log not in removed:
+                removed.append(log)
+        if new_meetings or new_logs or removed:
             queue.append({
                 "slug": slug,
                 "indexPath": rel,
@@ -335,12 +406,20 @@ def run(root: Path, today: str, owner: str) -> dict:
                 "lastUpdated": last_updated.isoformat(),
                 "stateUpdated": (state_updated.isoformat(timespec="minutes")
                                  if state_updated is not None else None),
-                "newCount": len(new_meetings),
+                "newCount": len(new_meetings) + len(new_logs),
                 "newFiles": [m["file"] for m in new_meetings],
+                "newLogs": new_logs,
+                "removedSources": removed,
                 "existingDecisions":
                     decision.list_decisions(root, slug)["decisions"],
             })
     queue.sort(key=lambda entry: (-entry["newCount"], entry["slug"]))
+    for slug in sorted(set(requeued) - active_slugs):
+        warnings.append(f"requeued project '{slug}' matches no active "
+                        f"project — its removed sources "
+                        f"{[log for log, _, _ in requeued[slug]]} were dropped")
+        prune.extend(entry for _, _, entry in requeued[slug])
+    msgstate.requeue_prune(root, prune)
 
     people_written = 0
     people_dir = root / PEOPLE_DIR
@@ -361,7 +440,12 @@ def run(root: Path, today: str, owner: str) -> dict:
                  if slug in m["attendees"] and m["date"] > d7)
         m30 = sum(1 for m in countable
                   if slug in m["attendees"] and m["date"] > d30)
-        fields = {"meetings-7d": str(m7), "meetings-30d": str(m30)}
+        msg7 = sum(d["people_groups"].count(slug) for d in logs
+                   if d["date"] and d["date"] > d7)
+        msg30 = sum(d["people_groups"].count(slug) for d in logs
+                    if d["date"] and d["date"] > d30)
+        fields = {"meetings-7d": str(m7), "meetings-30d": str(m30),
+                  "messages-7d": str(msg7), "messages-30d": str(msg30)}
         # #242: what the meetings already know. Met = a confirmed meeting
         # (never a capture) that has happened; nobody types these in.
         met = [m for m in countable

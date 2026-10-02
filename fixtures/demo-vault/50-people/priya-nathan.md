@@ -11,6 +11,8 @@ last-updated: 2026-06-01
 meetings-7d: 0
 meetings-30d: 1
 last-met: 2026-05-20
+messages-7d: 0
+messages-30d: 0
 ---
 
 ## Context

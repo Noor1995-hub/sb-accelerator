@@ -785,6 +785,17 @@ def _check_claim(item: dict, index: Dict[str, dict]) -> Tuple[bool, List[str]]:
     return not reasons, reasons
 
 
+def unsupported_tokens(text: str, sources: List[str]) -> List[str]:
+    """The checkable tokens of `text` that none of `sources` holds.
+
+    The same rule as a claim's check, for callers whose sources are plain
+    strings rather than evidence entries (the message feed's condensed
+    points and morning lines). Empty means every token is supported.
+    """
+    haystack = _norm(" \x00 ".join(str(source) for source in sources))
+    return [token for token in _tokens(text) if not _present(token, haystack)]
+
+
 def check(scratch_dir: str, proposal_path: str) -> dict:
     """Split a proposal into what may be shown and what is dropped.
 

@@ -25,10 +25,10 @@ def test_check_mode_agrees_with_the_file_on_disk():
     assert co.main(["--check"]) == 0
 
 
-def test_all_six_objects_compile():
+def test_all_seven_objects_compile():
     objects = co.compile_schema()["objects"]
     assert set(objects) == {"meeting", "project", "person", "decision",
-                            "entity", "daily-note"}
+                            "entity", "daily-note", "message-log"}
     for name, block in objects.items():
         assert block["required"], f"{name}: empty required list"
 

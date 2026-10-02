@@ -1475,6 +1475,26 @@ def test_meetings_in_window_counts_meeting_notes_only(tmp_path):
     assert dailynote.meetings_in_window(root, date(2026, 6, 13), date(2026, 6, 14)) == 0
 
 
+def test_a_log_in_the_window_feeds_the_fingerprint(tmp_path):
+    root = make_vault(tmp_path)
+    (root / "_messages").mkdir()
+    (root / "_messages" / "2026-09-30-messages.md").write_text(
+        "---\ntype: message-log\n---\n", encoding="utf-8")
+    (root / "_messages" / "2026-09-01-messages.md").write_text(
+        "---\ntype: message-log\n---\n", encoding="utf-8")
+    names = [n for n, _ in dailynote._fingerprint_inputs(root, date(2026, 9, 30), date(2026, 9, 30))]
+    assert "_messages/2026-09-30-messages.md" in names
+    assert "_messages/2026-09-01-messages.md" not in names
+
+
+def test_a_oddly_named_log_never_enters_the_fingerprint(tmp_path):
+    root = make_vault(tmp_path)
+    (root / "_messages").mkdir()
+    (root / "_messages" / "2026-09-30-backup-messages.md").write_text("x", encoding="utf-8")
+    names = [n for n, _ in dailynote._fingerprint_inputs(root, date(2026, 9, 30), date(2026, 9, 30))]
+    assert names == []
+
+
 def test_review_block_is_not_read_as_the_owners_words(tmp_path):
     # #238: the embedded queues sit above the recap, where any other line
     # would land in other_lines and be fed back to the evening run.
@@ -1484,6 +1504,22 @@ def test_review_block_is_not_read_as_the_owners_words(tmp_path):
     assert data["other_lines"] == []
     text = (root / "60-daily-notes" / "2026-06-15.md").read_text(encoding="utf-8")
     assert text.index(dailynote.REVIEW_BLOCK) < text.index("## Recap")
+
+
+def test_mail_and_teams_sits_under_at_a_glance_below_the_review_queues(tmp_path):
+    # #249 on the #238 layout: the review queues stay on top; the feed's
+    # block is the recap's second callout, before Themes and the meetings.
+    root = v2_vault(tmp_path)
+    recap_payload = dict(v2_payload()["recap"], messages={
+        "items": [{"kind": "needs-you", "text": "Sam is waiting for your budget figures."}],
+        "status": [], "decisions_to_confirm": 1, "keyword_proposal": None})
+    dailynote.write(root, v2_payload(recap=recap_payload))
+    text = (root / "60-daily-notes" / "2026-06-15.md").read_text(encoding="utf-8")
+    assert (text.index(dailynote.REVIEW_BLOCK) < text.index("At a glance")
+            < text.index("> [!info] Mail and Teams") < text.index("Themes")
+            < text.index("## Meetings"))
+    assert "→ Decisions, To review" in text
+    assert dailynote.read(root, "2026-06-15")["other_lines"] == []
 
 
 def test_old_notes_headings_still_read_as_notes_and_actions(tmp_path):

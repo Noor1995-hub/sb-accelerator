@@ -5,9 +5,9 @@ import pytest
 from vaultlib import schema
 
 
-def test_all_six_objects_are_present():
+def test_all_seven_objects_are_present():
     assert set(schema.load()["objects"]) == {
-        "meeting", "project", "person", "decision", "entity", "daily-note",
+        "meeting", "project", "person", "decision", "entity", "daily-note", "message-log",
     }
 
 
@@ -120,3 +120,16 @@ def test_a_note_still_needs_a_real_calendar_subject():
         {**frontmatter,
          "calendar-subject": "Renewal terms — heads up before next steerco"},
     ) == []
+
+
+def test_log_schema_requires_its_core_fields():
+    errors = schema.validate("message-log", {"type": "message-log", "date": "2026-09-30"})
+    assert any("updated-at" in e for e in errors)
+    assert schema.validate("message-log", {
+        "type": "message-log", "date": "2026-09-30", "updated-at": "2026-09-30T18:52",
+        "projects": [], "people": [], "messages-read": 0}) == []
+
+
+def test_person_and_project_carry_the_new_optional_fields():
+    assert "messages-7d" in schema.for_object("person")["optional"]
+    assert "keywords" in schema.for_object("project")["optional"]

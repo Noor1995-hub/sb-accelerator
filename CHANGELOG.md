@@ -15,6 +15,9 @@ delivers them.
 
 ## Unreleased
 
+- Your daily note now has a short *Mail and Teams* block when the feed is on: what needs you first, then what moved per project. (#249)
+- Your second brain can now keep up with your mail and Teams chats. Switch it on during setup or by asking ("start reading my mail and Teams"): each evening it saves short notes on what was said, so your projects and your second brain already know what was said. Channels and attachments are never read, you can tell it to skip anyone or anything, and you can stop and delete everything at any time. (#249)
+
 - Teams and departments can sit under the entity they belong to. Ask for "the Finance team at Acme" and it becomes its own entity under Acme: its page says **Part of Acme**, Acme's page gains a **Teams** section listing its teams and their projects, and the Entities table groups each team under its parent. One level only — a team has no teams of its own. Existing entities can be attached to a parent too. Meetings still find the parent by email domain; a team's meetings come through its projects. (#254)
 
 - Long Teams meetings sync again. A transcript of roughly an hour or more is too large to come back from the Microsoft 365 connector in one piece, so the evening run used to report it as a fetch error, retry it every night, and park it after three days, leaving no meeting note. The full transcript was there all along: the host saves an oversized result to a file, and the sync now copies that file into its scratch space instead of giving up, then reads the whole meeting before writing the note. A transcript that is cut off is refused rather than turned into a half note. Meetings already parked for this reason come back with `sync unskip` (the run summary names the command). (#255)
