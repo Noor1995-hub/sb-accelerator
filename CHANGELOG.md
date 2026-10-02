@@ -15,7 +15,7 @@ delivers them.
 
 ## Unreleased
 
-- On a Windows computer, saving a note no longer fails now and then with "Access is denied". Windows briefly locks a file that was just written, for example while the virus scanner checks it, and the assistant used to give up on the save at once; it now waits a moment and tries again, so evening runs and other writes no longer stop halfway for that reason. (#PR)
+- On a Windows computer, saving a note no longer fails now and then with "Access is denied". Windows briefly locks a file that was just written, for example while the virus scanner checks it, and the assistant used to give up on the save at once; it now waits a moment and tries again, so evening runs and other writes no longer stop halfway for that reason. (#256)
 
 - Decisions get a **Dismiss** tick, like meetings. When the evening run captured something that was not really a decision, tick Dismiss in *To review* — or in **Waiting for you** at the top of the daily note — and it leaves the queue, the *Active* view and the project page's recent decisions at once. The note stays in the vault and shows as *Dismissed* in *All*, and the evening run will not capture the same thing again. Use it for a capture that was never a decision; a real decision that was later reversed is still *Withdrawn*. A vault whose Decisions table was never edited picks this up at the next `/upgrade-vault`; project pages show it the next time the evening run updates them. (#252)
 
