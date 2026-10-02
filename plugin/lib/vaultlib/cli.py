@@ -575,6 +575,18 @@ def build_parser() -> argparse.ArgumentParser:
                          help="scratch directory for the blob (never the vault)")
     m365_re.add_argument("--timezone", help="IANA timezone name")
     m365_re.add_argument("--utc-offset", dest="utc_offset")
+    m365_cap = m365_sub.add_parser(
+        "capture",
+        help="copy a transcript read the host spilled to a tool-results file "
+             "into scratch, verbatim — counts only, never content")
+    m365_cap.add_argument(
+        "--from", dest="source", required=True,
+        help="the path the host's oversized-result notice named, as given — "
+             "a host path the sandbox cannot see is resolved by name")
+    m365_cap.add_argument("--out", required=True,
+                          help="scratch transcript file (never the vault)")
+    m365_cap.add_argument("--event",
+                          help="the event file — enables the coverage check")
 
     discover_group = top.add_parser(
         "discover", help="Session-1 discovery: M365 evidence and the proposal check")
@@ -993,6 +1005,8 @@ def _dispatch(args: argparse.Namespace) -> int:
                     else Path(args.events).read_text(encoding="utf-8"))
             return _ok(m365.agenda(m365.load_listing(text), timezone=args.timezone,
                                    utc_offset=args.utc_offset, date=args.date))
+        if args.action == "capture":
+            return _ok(m365.capture(args.source, args.out, event_path=args.event))
         return _ok(m365.reassemble(
             args.event, args.transcript, args.out,
             timezone=args.timezone, utc_offset=args.utc_offset))

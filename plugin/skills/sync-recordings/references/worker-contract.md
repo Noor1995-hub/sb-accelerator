@@ -30,7 +30,9 @@ connector sent and are never edited.
 If a page is too large for the tool result, the harness spills it to a file
 under `~/.claude/projects/…/tool-results/`. Do not go near that path — not
 to read, copy, or delete. Halve `limit` and re-fetch from the same `cursor`
-instead.
+instead. (M365 has no `limit` to halve, so its transcript read has its own
+rule — `m365 capture`, in step 4 below — and that is the only time a
+spilled file is ever touched, by the CLI, never by you.)
 
 On a transient error retry up to 3×, then reply `fetch-error`. On a **401**,
 reply `auth-error` — re-authentication is interactive and belongs to the
@@ -121,6 +123,28 @@ event and derive your own ids before you touch a transcript:
    transcripts. Write the raw result to
    `$SCRATCH/m365_event_<n>.transcript.json` verbatim. Then:
 
+   - **Oversized — the result is a notice, not content.** A transcript of
+     roughly an hour or more exceeds the tool-result cap, and the host
+     answers with an error like `result (104,221 characters across 1
+     line) exceeds maximum allowed tokens. Output has been saved to
+     <path>`. That is not a failed read: the full transcript is on disk.
+     Never open, read, grep, or re-type that file — not even a few lines —
+     and never write the scratch transcript yourself. Hand the path to the
+     CLI, **exactly as the notice gave it** (a Windows path in Cowork is
+     expected; the CLI resolves it inside the sandbox):
+
+     ```bash
+     python3 "$VAULTLIB" m365 capture --from "<path from the notice>" \
+       --out "$SCRATCH/m365_event_<n>.transcript.json" \
+       --event <your event file — the object file, as in Reassemble>
+     ```
+
+     `ok: true` → the scratch transcript is written, verbatim; continue
+     to Attendees and confidence as for any found transcript, and carry
+     the result's `warnings` (if any) to the end of your outcome line.
+     `ok: false` → reply `fetch-error: transcript too large to capture
+     (<the CLI's error, first clause>)` — it retries next run, and a
+     human can still drop the Teams transcript file in the inbox.
    - `NOT_FOUND` with `transcripts_empty` → reply `no-transcript`
      (transcription was off for that meeting — settled, not an error).
    - **403/Forbidden** — classify by the body: Graph code 3003 / "does not
@@ -139,8 +163,8 @@ event and derive your own ids before you touch a transcript:
      Microsoft Graph access" setting off. Only a 403 body that positively
      names a different cause → reply `forbidden` (another tenant owns it,
      permanently).
-   - A transport error, or a result too large for the tool result → reply
-     `fetch-error`.
+   - A transport error → reply `fetch-error`. (A result too large for the
+     tool result is the oversized case above, not this one.)
 
 Sanctioned Graph calls: exactly two — your own event, your own transcript.
 You make no other Graph call — not the calendar, not another occurrence.
@@ -259,7 +283,12 @@ its `date` and `source-recording-id` arrive in your prompt.
 Extract from the blob file the `reassemble` result named — never from the raw
 transcript files you wrote to scratch: the M365 one is unparsed WEBVTT, and
 for a recurring series it may carry other occurrences' transcripts (an inbox
-item has no blob: extract from the file you were given). Read
+item has no blob: extract from the file you were given). Read the blob
+**completely**: `reassemble` reports `blob_lines` and `blob_chars`, and
+a long meeting's blob is larger than one Read call returns. When
+`blob_chars` is over 60,000, read it in consecutive `offset`/`limit`
+windows of 400 lines until you have covered all `blob_lines` lines, and
+draft from the whole meeting — never from the first window alone. Read
 `references/payload-contract.md` (its path is in your prompt) and draft
 the payload to `$SCRATCH/<scratch stem>.payload.json`: content fields from the
 transcript; every routing field copied from your prompt unchanged — except
@@ -324,11 +353,11 @@ orchestrator's summary.
 
 | Line | When |
 |---|---|
-| `written: <note stem>` | note verified on disk (append any reassemble warnings / conflict kind; M365 additionally appends `(recording-id: m365:<hex>)` and `(new-people: <names>` or `none)`) |
+| `written: <note stem>` | note verified on disk (append any capture / reassemble warnings / conflict kind; M365 additionally appends `(recording-id: m365:<hex>)` and `(new-people: <names>` or `none)`) |
 | `no-transcript` | M365: `m365 ids` returned `skipped: no-transcript-url` (before any fetch), or the transcript read answered `transcripts_empty` |
 | `no-access` | M365: 403 on the transcript read, body carries Graph code 3003 / "does not have access to lookup meeting" — or the body is unreadable / carries no readable Graph error code at all (safer default); the transcript is not reachable from this account, either because the organizer's domain is missing from `adapters.m365.home_domains` (or the list is unset) or because the tenant's Microsoft Graph transcript-access setting is off; permanent |
 | `forbidden` | M365: a 403 on the transcript read whose body positively names a different cause — another tenant, permanent |
-| `fetch-error: <one clause why>` | transport failure, incomplete page set, oversized result — retries next run; append `(recording-id: <ns:id>)` whenever the id is known — Plaud: always, straight from your briefing; M365: only once your own `m365 ids` call has already succeeded, never before |
+| `fetch-error: <one clause why>` | transport failure, incomplete page set, a Plaud page still oversized at the smallest `limit`, or an oversized M365 transcript `m365 capture` refused — retries next run; append `(recording-id: <ns:id>)` whenever the id is known — Plaud: always, straight from your briefing; M365: only once your own `m365 ids` call has already succeeded, never before |
 | `auth-error` | connector wants re-authentication — the adapter should stop |
 | `already-synced: <recording_id>` | M365 only: `sync dedup` already reports your derived id `synced` — stop before the transcript read; no payload |
 | `skip-listed: <recording_id>` | M365 only: `sync dedup` already reports your derived id `skipped` — stop before the transcript read; no payload |

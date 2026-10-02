@@ -1257,7 +1257,7 @@ adapter that was `REFUSED`, `unavailable`, or stopped mid-run on
 `auth-error`: nothing past the point of failure was actually covered, and
 advancing the mark past that would hide what still needs listing next run.
 A batch's `fetch-error` outcomes do not hold this back — a persistently
-failing item (an oversized transcript, say) retries itself next run inside
+failing item (a transcript `m365 capture` cannot reach, say) retries itself next run inside
 `dates window`'s own 2-day floor regardless of where the watermark sits,
 until `sync fetch-error` parks it on its third failing day.
 Everything after the window's `utc_to` was never listed this run, so

@@ -10,8 +10,10 @@ anything else raises rather than guessing.
 """
 from __future__ import annotations
 
+import glob
 import hashlib
 import json
+import os
 import re
 from datetime import datetime, timedelta, timezone as _timezone
 from pathlib import Path
@@ -41,7 +43,7 @@ def _load(path: Optional[str], label: str):
     if path is None:
         return None
     try:
-        return json.loads(Path(path).read_text(encoding="utf-8"))
+        return json.loads(Path(path).read_text(encoding="utf-8-sig"))
     except (OSError, json.JSONDecodeError) as exc:
         raise M365Error(f"{label} file {path!r} is unreadable: {exc}") from exc
 
@@ -548,4 +550,135 @@ def reassemble(event_path: str, transcript_path: str, out_dir: str, *,
         "recorded_local": recorded_local,
         "has_enrichment": False,
         "blob_path": str(blob_path),
+        # A long meeting's blob outgrows one Read call; the worker pages
+        # through it by line count instead of guessing where it ends.
+        "blob_lines": blob.count("\n"),
+        "blob_chars": len(blob),
     }
+
+
+# --- capture: a transcript read the host spilled to a tool-results file -----
+#
+# A transcript read over the host's tool-result cap comes back as an error
+# notice naming the file the host saved it to, not as content (live
+# reproduction 2026-10-01: a 104,221-character, 72-minute transcript; the
+# cap sits somewhere below that). Re-typing ~100k characters through a
+# model's output is neither verbatim nor possible within one reply, so the
+# CLI copies the bytes instead. Cowork names the file by its Windows host
+# path; the sandbox's Bash sees the same file under
+# /sessions/<name>/mnt/.claude/projects/..., one session-id level below
+# projects/ — so the path in the notice is a hint, resolved here.
+
+SPILL_DIR = "tool-results"
+# Cues ending before this share of the event span are worth a look: a
+# meeting that ended early is normal (72 of 90 minutes, live), a transcript
+# covering under half its slot is rare enough to say so.
+COVERAGE_WARN_RATIO = 0.5
+
+
+def spill_roots() -> List[Path]:
+    """Where a host keeps tool-results files, most specific first."""
+    roots = []
+    config_dir = os.environ.get("CLAUDE_CONFIG_DIR")
+    if config_dir:
+        roots.append(Path(config_dir) / "projects")
+    roots.append(Path.home() / ".claude" / "projects")
+    roots.extend(Path(p) for p in sorted(glob.glob("/sessions/*/mnt/.claude/projects")))
+    return roots
+
+
+def _resolve_spill(source: str, roots: List[Path]) -> Path:
+    parts = [p for p in re.split(r"[\\/]+", source) if p]
+    if not parts:
+        raise M365Error("capture needs the path the host's notice named")
+    name = parts[-1]
+    literal = Path(source)
+    found: List[Path] = []
+    if literal.is_file():
+        found.append(literal)
+    else:
+        # The notice's path below projects/ survives the host-to-sandbox
+        # mapping; only the prefix differs.
+        if "projects" in parts:
+            at = len(parts) - 1 - parts[::-1].index("projects")
+            for root in roots:
+                candidate = root.joinpath(*parts[at + 1:])
+                if candidate.is_file():
+                    found.append(candidate)
+        if not found:
+            for root in roots:
+                if root.is_dir():
+                    found.extend(p for p in root.rglob(name)
+                                 if p.parent.name == SPILL_DIR and p.is_file())
+    unique = sorted({p.resolve() for p in found})
+    if not unique:
+        raise M365Error(
+            f"spilled transcript {name!r} is not reachable from this shell "
+            f"(looked under: {', '.join(str(r) for r in roots) or 'no roots'})")
+    if len(unique) > 1:
+        raise M365Error(f"spilled transcript {name!r} matches {len(unique)} files")
+    path = unique[0]
+    if path.parent.name != SPILL_DIR:
+        raise M365Error(
+            f"{str(path)!r} is not a host {SPILL_DIR} file — capture only "
+            f"copies a spilled tool result")
+    return path
+
+
+def _fmt_ms(ms: int) -> str:
+    s = max(int(ms), 0) // 1000
+    return f"{s // 3600:02d}:{s % 3600 // 60:02d}:{s % 60:02d}"
+
+
+def capture(source: str, out_path: str, *, event_path: Optional[str] = None,
+            roots: Optional[List[Path]] = None) -> dict:
+    """Copy a spilled transcript read to scratch, byte for byte (a leading
+    BOM aside), after proving it is one complete transcript read. Returns
+    counts only — never content."""
+    path = _resolve_spill(source, spill_roots() if roots is None else list(roots))
+    raw = path.read_bytes()
+    body = raw[3:] if raw.startswith(b"\xef\xbb\xbf") else raw
+    try:
+        payload = json.loads(body.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise M365Error(
+            f"spilled file is not a complete transcript read (invalid JSON: "
+            f"{exc}) — a cut-off read must not become a meeting note") from exc
+    transcripts = payload.get("transcripts") if isinstance(payload, dict) else None
+    if not isinstance(transcripts, list) or not transcripts:
+        raise M365Error("spilled file carries no transcripts — not a "
+                        "transcript read")
+    cues = 0
+    last_ms = 0
+    for entry in transcripts:
+        if not isinstance(entry, dict) or not entry.get("content"):
+            raise M365Error("each transcript entry needs id and content")
+        content = str(entry["content"])
+        _, end_ms = _parse_vtt(content, str(entry.get("id") or "?"))
+        cues += sum(1 for line in content.splitlines()
+                    if _CUE_RE.match(line.strip()))
+        last_ms = max(last_ms, end_ms)
+
+    out = Path(out_path)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_bytes(body)
+
+    result = {
+        "source_path": str(path),
+        "transcript_path": str(out),
+        "bytes": len(raw),
+        "transcripts": len(transcripts),
+        "cues": cues,
+        "last_cue": _fmt_ms(last_ms),
+    }
+    if event_path is not None:
+        event = _load(event_path, "event")
+        span_ms = _event_span_ms(event) if isinstance(event, dict) else None
+        # A recurring series' read can carry several occurrences; coverage
+        # of one event is only meaningful for a single transcript.
+        if span_ms and len(transcripts) == 1 and last_ms < span_ms * COVERAGE_WARN_RATIO:
+            result["warnings"] = [
+                f"transcript cues end at {_fmt_ms(last_ms)} of a "
+                f"{round(span_ms / 60000)}-minute event — check the "
+                f"transcript is complete"]
+    return result
