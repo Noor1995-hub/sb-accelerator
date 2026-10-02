@@ -10,6 +10,7 @@ import json
 import os
 import re
 import tempfile
+import time
 from pathlib import Path
 from typing import List, Optional
 
@@ -68,6 +69,26 @@ def resolve(raw: str) -> Path:
     return root
 
 
+# Windows refuses a rename onto (or of) a file another process holds open
+# without delete-sharing — a scanner or indexer looking at the file just
+# written — with WinError 5 for a few milliseconds. Seen at ~8% of
+# migration-test runs on a Windows host; a short retry cleared all of them.
+# A lasting PermissionError still surfaces, ~0.6 s later.
+REPLACE_ATTEMPTS = 6
+_REPLACE_BACKOFF_S = 0.02
+
+
+def _replace(src: str, dst: str) -> None:
+    for attempt in range(REPLACE_ATTEMPTS):
+        try:
+            os.replace(src, dst)
+            return
+        except PermissionError:
+            if attempt == REPLACE_ATTEMPTS - 1:
+                raise
+            time.sleep(_REPLACE_BACKOFF_S * 2 ** attempt)
+
+
 def atomic_write(path: Path, text: str) -> None:
     """Write UTF-8 with LF endings, via a temp file in the same directory.
 
@@ -82,7 +103,7 @@ def atomic_write(path: Path, text: str) -> None:
     try:
         with handle:
             handle.write(text)
-        os.replace(handle.name, str(path))
+        _replace(handle.name, str(path))
     except BaseException:
         try:
             os.unlink(handle.name)

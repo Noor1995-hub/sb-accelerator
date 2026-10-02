@@ -4,9 +4,19 @@ filters:
     - type == "entity"
 formulas:
   open: link(file.path, "→")
+  # Teams (#253): an entity with `parent` groups under its parent's name, the
+  # parent first. The name is looked up from the parent's dossier, so the
+  # table shows names, never the slug that joins them.
+  group: if(parent, file("40-entities/" + parent + "/dossier.md").properties["entity-name"], note["entity-name"])
+  part-of: if(parent, link("40-entities/" + parent + "/dossier.md", file("40-entities/" + parent + "/dossier.md").properties["entity-name"]), "")
+  team-order: if(parent, 1, 0)
 properties:
   formula.open:
     displayName: " "
+  formula.group:
+    displayName: " "
+  formula.part-of:
+    displayName: Part of
   note.entity-name:
     displayName: Entity
   note.entity-type:
@@ -22,32 +32,44 @@ properties:
 views:
   - type: table
     name: All
+    groupBy:
+      property: formula.group
+      direction: ASC
     order:
       - formula.open
       - entity-name
+      - formula.part-of
       - entity-type
       - status
       - industry
       - owner
       - last-updated
     sort:
-      - property: last-updated
-        direction: DESC
+      - property: formula.team-order
+        direction: ASC
+      - property: entity-name
+        direction: ASC
   - type: table
     name: Active
     filters:
       and:
         - status == "active"
+    groupBy:
+      property: formula.group
+      direction: ASC
     order:
       - formula.open
       - entity-name
+      - formula.part-of
       - entity-type
       - industry
       - owner
       - last-updated
     sort:
-      - property: last-updated
-        direction: DESC
+      - property: formula.team-order
+        direction: ASC
+      - property: entity-name
+        direction: ASC
   - type: table
     name: Prospects
     filters:

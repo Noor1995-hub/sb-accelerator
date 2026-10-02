@@ -77,6 +77,35 @@ SORT date DESC
 LIMIT 20
 ```"""
 
+# Teams (#253): an entity with `parent:` is a team or department of that
+# entity. The parent's dossier gets this section the first time a team is
+# attached — two live queries, slug-free like the Meeting Log, so nothing has
+# to be rewritten when a team is added later. It is not one of the six managed
+# sections; read() returns it under extra_sections and writes preserve it.
+TEAMS_HEADING = "## Teams"
+TEAMS_SECTION = TEAMS_HEADING + """
+
+```dataview
+TABLE WITHOUT ID
+  link(file.path, entity-name) AS "Team",
+  status AS "Status"
+FROM "40-entities"
+WHERE parent = this.slug
+SORT entity-name ASC
+```
+
+```dataview
+TABLE WITHOUT ID
+  link(file.path, project-name) AS "Project",
+  link("40-entities/" + entity + "/dossier").entity-name AS "Team",
+  status AS "Status"
+FROM "30-projects"
+WHERE type = "project" AND link("40-entities/" + entity + "/dossier").parent = this.slug
+SORT project-name ASC
+```
+"""
+PART_OF_PREFIX = "**Part of** "
+
 STAKEHOLDER_HEADER = (
     "| Name | Title | Role in Decision | Stance | Notes |\n"
     "|------|-------|------------------|--------|-------|"
@@ -162,7 +191,7 @@ def _dossier_path(root: Path, slug: str) -> Path:
 
 # --- creation -------------------------------------------------------------
 
-def _empty_body(name: str) -> str:
+def _empty_body(name: str, part_of: Optional[str] = None) -> str:
     parts = []
     for title in schema.body_sections("entity"):
         if title == "Context":
@@ -184,13 +213,88 @@ def _empty_body(name: str) -> str:
             parts.append(f"## {title}\n\n{PLACEHOLDER}\n")
     # `# {name}` because every dossier file is called dossier.md: without it
     # the only title Obsidian shows for the note is the word "dossier".
-    return f"\n# {name}\n\n" + BANNER + "\n\n" + "\n".join(parts)
+    head = f"\n# {name}\n\n" + (f"{part_of}\n\n" if part_of else "")
+    return head + BANNER + "\n\n" + "\n".join(parts)
+
+
+# --- teams (#253) ---------------------------------------------------------
+
+def _children(root: Path, slug: str) -> List[str]:
+    """Slugs of the entities whose `parent` is `slug`."""
+    found = []
+    for path in sorted((root / ENTITIES_DIR).glob("*/dossier.md")):
+        try:
+            data, _ = markdown.split_frontmatter(path.read_text(encoding="utf-8"))
+        except (ValueError, OSError):
+            continue
+        if data.get("parent") == slug:
+            found.append(path.parent.name)
+    return found
+
+
+def _validate_parent(root: Path, slug: str, parent: str) -> dict:
+    """At most two levels, like projects. Returns the parent's frontmatter."""
+    try:
+        naming.validate_slug(parent)
+    except ValueError as exc:
+        raise EntityError(f"parent {parent!r} is not an entity slug: {exc}") from exc
+    if parent == slug:
+        raise EntityError(f"entity {slug!r} cannot be its own parent")
+    path = _dossier_path(root, parent)
+    if not path.is_file():
+        raise EntityError(
+            f"no dossier for parent {parent!r} at {ENTITIES_DIR}/{parent}/"
+            f"dossier.md — create it first with: entity ensure --slug {parent} "
+            "--name <name>")
+    data, _ = markdown.split_frontmatter(path.read_text(encoding="utf-8"))
+    if data.get("parent"):
+        raise EntityError(
+            f"{parent!r} is itself a team of {data['parent']!r} — teams go at "
+            f"most one level deep; attach to {data['parent']!r} instead")
+    children = _children(root, slug)
+    if children:
+        raise EntityError(
+            f"{slug!r} has teams of its own ({', '.join(children)}) — an entity "
+            "with teams cannot become a team; teams go at most one level deep")
+    return data
+
+
+def _part_of_line(parent: str, parent_fm: dict) -> str:
+    shown = str(parent_fm.get("entity-name") or parent).replace("|", "-")
+    return f"{PART_OF_PREFIX}[[{ENTITIES_DIR}/{parent}/dossier|{shown}]]"
+
+
+def _with_part_of(text: str, line: str) -> str:
+    """Put the Part of line right under the dossier's `# title` (replacing a
+    previous one), leaving every other byte alone."""
+    lines = text.split("\n")
+    for index, current in enumerate(lines):
+        if current.startswith(PART_OF_PREFIX):
+            lines[index] = line
+            return "\n".join(lines)
+    fm_end = next((i for i, l in enumerate(lines) if i > 0 and l.strip() == "---"), -1)
+    for index in range(fm_end + 1, len(lines)):
+        if lines[index].startswith("# "):
+            lines[index + 1:index + 1] = ["", line]
+            return "\n".join(lines)
+    raise EntityError("dossier has no `# title` line to put the Part of link under")
+
+
+def _ensure_teams_section(root: Path, parent: str) -> bool:
+    path = _dossier_path(root, parent)
+    text = path.read_text(encoding="utf-8")
+    if f"\n{TEAMS_HEADING}\n" in text.replace("\r\n", "\n"):
+        return False
+    vault.atomic_write(path, text.rstrip("\n") + "\n\n" + TEAMS_SECTION)
+    return True
 
 
 def _apply_existing_fields(root: Path, path: Path, slug: str, *,
                            name: str, entity_type: Optional[str],
                            status: Optional[str],
-                           owner: Optional[str], today: str) -> dict:
+                           owner: Optional[str], today: str,
+                           parent: Optional[str] = None,
+                           part_of: Optional[str] = None) -> dict:
     """Apply explicitly provided fields to an already-existing dossier.
 
     Only fields the caller actually passed are candidates for an update — an
@@ -210,13 +314,16 @@ def _apply_existing_fields(root: Path, path: Path, slug: str, *,
         provided["status"] = status
     if owner is not None:
         provided["owner"] = owner
+    if parent is not None:
+        provided["parent"] = parent
 
     updated_fields = sorted(
         field for field, value in provided.items()
         if frontmatter.get(field) != value
     )
     rel_path = path.relative_to(root).as_posix()
-    if not updated_fields:
+    part_of_missing = part_of is not None and part_of not in text
+    if not updated_fields and not part_of_missing:
         return {"slug": slug, "path": rel_path, "created": False,
                 "changed": False, "updated": []}
 
@@ -234,6 +341,8 @@ def _apply_existing_fields(root: Path, path: Path, slug: str, *,
         quoted = field in ENTITY_QUOTE_KEYS
         rendered = markdown.emit_scalar(merged[field], quoted=quoted)
         rewritten = markdown.upsert_scalar_field(rewritten, field, rendered)
+    if part_of is not None:
+        rewritten = _with_part_of(rewritten, part_of)
     rewritten = markdown.upsert_scalar_field(rewritten, "last-updated", today)
     vault.atomic_write(path, rewritten)
     return {"slug": slug, "path": rel_path, "created": False,
@@ -242,12 +351,17 @@ def _apply_existing_fields(root: Path, path: Path, slug: str, *,
 
 def ensure(root: Path, *, slug: str, name: str, today: str,
            entity_type: Optional[str] = None, status: Optional[str] = None,
-           owner: Optional[str] = None) -> dict:
+           owner: Optional[str] = None,
+           parent: Optional[str] = None) -> dict:
     """Create 40-entities/{slug}/dossier.md if it does not exist.
 
     On an existing dossier, apply whichever of name / entity_type / status /
-    owner the caller explicitly passed as an update instead of silently
-    dropping them — see _apply_existing_fields.
+    owner / parent the caller explicitly passed as an update instead of
+    silently dropping them — see _apply_existing_fields.
+
+    `parent` makes this entity a team of another (#253): validated to two
+    levels, written to frontmatter, linked as **Part of** under the title, and
+    the parent's dossier gains its `## Teams` section on the first team.
     """
     naming.validate_slug(slug)
     if owner:
@@ -261,12 +375,20 @@ def ensure(root: Path, *, slug: str, name: str, today: str,
                 f"owner {owner!r} is not a person slug: {exc}. "
                 "owner joins to 50-people/<slug>.md"
             ) from exc
+    part_of = None
+    if parent is not None:
+        parent = str(parent).strip()
+        part_of = _part_of_line(parent, _validate_parent(root, slug, parent))
     path = _dossier_path(root, slug)
     if path.is_file():
-        return _apply_existing_fields(
+        result = _apply_existing_fields(
             root, path, slug, name=name, entity_type=entity_type,
             status=status, owner=owner, today=today,
+            parent=parent, part_of=part_of,
         )
+        if parent is not None and _ensure_teams_section(root, parent):
+            result["parent_teams_section"] = "added"
+        return result
 
     frontmatter = {
         "type": "entity",
@@ -279,6 +401,10 @@ def ensure(root: Path, *, slug: str, name: str, today: str,
         "created": today,
         "last-updated": today,
     }
+    if parent is not None:
+        frontmatter = {**{k: v for k, v in frontmatter.items()
+                          if k not in ("created", "last-updated")},
+                       "parent": parent, "created": today, "last-updated": today}
     problems = schema.validate("entity", frontmatter)
     if problems:
         raise EntityError(
@@ -286,10 +412,13 @@ def ensure(root: Path, *, slug: str, name: str, today: str,
             + "; ".join(problems)
         )
     text = (markdown.emit_frontmatter(frontmatter, ENTITY_QUOTE_KEYS)
-            + _empty_body(name))
+            + _empty_body(name, part_of))
     vault.atomic_write(path, text)
-    return {"slug": slug, "path": path.relative_to(root).as_posix(),
-            "created": True}
+    result = {"slug": slug, "path": path.relative_to(root).as_posix(),
+              "created": True}
+    if parent is not None and _ensure_teams_section(root, parent):
+        result["parent_teams_section"] = "added"
+    return result
 
 
 # --- reading --------------------------------------------------------------

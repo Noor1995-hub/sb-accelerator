@@ -1464,3 +1464,78 @@ def test_second_identical_write_is_byte_identical(tmp_path):
     first = _dossier(root).read_bytes()
     entity.write(root, SLUG, edits, TODAY)
     assert _dossier(root).read_bytes() == first
+
+
+# --- #253: teams and departments as a level under an entity ----------------
+
+def two_entities(tmp_path):
+    root = make_vault(tmp_path)
+    entity.ensure(root, slug="acme", name="Acme Industries", today="2026-10-02",
+                  entity_type="client")
+    return root
+
+
+def dossier(root, slug):
+    return (root / "40-entities" / slug / "dossier.md").read_text(encoding="utf-8")
+
+
+def test_a_team_is_created_under_its_entity(tmp_path):
+    root = two_entities(tmp_path)
+    result = entity.ensure(root, slug="acme-finance", name="Finance", today="2026-10-02",
+                           entity_type="business-unit", parent="acme")
+    assert result["created"] is True
+    fm, body = md.split_frontmatter(dossier(root, "acme-finance"))
+    assert fm["parent"] == "acme"
+    assert not schema.validate("entity", fm)
+    assert "**Part of** [[40-entities/acme/dossier|Acme Industries]]" in body
+    assert body.index("# Finance") < body.index("**Part of**") < body.index("## Context")
+    # the parent learns about its teams once, through live queries
+    parent = dossier(root, "acme")
+    assert parent.count("## Teams") == 1
+    assert "WHERE parent = this.slug" in parent
+    entity.ensure(root, slug="acme-legal", name="Legal", today="2026-10-02", parent="acme")
+    assert dossier(root, "acme").count("## Teams") == 1
+
+
+def test_teams_section_survives_a_dossier_write(tmp_path):
+    root = two_entities(tmp_path)
+    entity.ensure(root, slug="acme-finance", name="Finance", today="2026-10-02", parent="acme")
+    entity.write(root, "acme", {"sensitivities": [
+        {"topic": "Budget", "detail": "Tight this year", "implications": "Keep scope small"}]},
+        "2026-10-03")
+    assert "## Teams" in dossier(root, "acme")
+    assert "Teams" in entity.read(root, "acme")["extra_sections"]
+
+
+@pytest.mark.parametrize("parent, message", [
+    ("nobody", "no dossier"),
+    ("acme-finance", "itself a team"),
+    ("acme-legal", "own parent"),
+])
+def test_a_bad_parent_is_refused(tmp_path, parent, message):
+    root = two_entities(tmp_path)
+    entity.ensure(root, slug="acme-finance", name="Finance", today="2026-10-02", parent="acme")
+    with pytest.raises(entity.EntityError, match=message):
+        entity.ensure(root, slug="acme-legal", name="Legal", today="2026-10-02", parent=parent)
+    assert not (root / "40-entities" / "acme-legal").exists() or parent == "acme-legal"
+
+
+def test_an_existing_entity_can_be_attached_as_a_team(tmp_path):
+    root = two_entities(tmp_path)
+    entity.ensure(root, slug="finance-dept", name="Finance", today="2026-10-02")
+    result = entity.ensure(root, slug="finance-dept", name="Finance", today="2026-10-03", parent="acme")
+    assert "parent" in result["updated"]
+    fm, body = md.split_frontmatter(dossier(root, "finance-dept"))
+    assert fm["parent"] == "acme" and "**Part of** [[40-entities/acme/dossier|Acme Industries]]" in body
+    assert "## Teams" in dossier(root, "acme")
+    # attaching again changes nothing
+    again = entity.ensure(root, slug="finance-dept", name="Finance", today="2026-10-04", parent="acme")
+    assert again["changed"] is False
+
+
+def test_an_entity_with_teams_cannot_become_a_team(tmp_path):
+    root = two_entities(tmp_path)
+    entity.ensure(root, slug="acme-finance", name="Finance", today="2026-10-02", parent="acme")
+    entity.ensure(root, slug="holding", name="Holding", today="2026-10-02")
+    with pytest.raises(entity.EntityError, match="has teams of its own"):
+        entity.ensure(root, slug="acme", name="Acme Industries", today="2026-10-02", parent="holding")

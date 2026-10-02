@@ -1064,6 +1064,47 @@ def test_m365_reassemble_through_the_cli(capsys, tmp_path):
     assert payload["result"]["recorded_local"] == "2026-08-25T16:00"
 
 
+def test_m365_capture_through_the_cli_feeds_reassemble(capsys, tmp_path):
+    spill_dir = tmp_path / "projects" / "session" / "s1" / "tool-results"
+    spill_dir.mkdir(parents=True)
+    spilled = spill_dir / "mcp-x-read_resource-1.txt"
+    spilled.write_text(json.dumps(M365_TRANSCRIPT), encoding="utf-8")
+    event = tmp_path / "event.json"
+    event.write_text(json.dumps(M365_EVENT), encoding="utf-8")
+    out = tmp_path / "scratch" / "m365_event_1.transcript.json"
+
+    code, payload = run(capsys, [
+        "m365", "capture", "--from", str(spilled), "--out", str(out),
+        "--event", str(event),
+    ])
+
+    assert code == 0, payload
+    assert payload["result"]["transcripts"] == 1
+    assert "Alles goed" not in json.dumps(payload)  # counts only, never content
+    code, payload = run(capsys, [
+        "m365", "reassemble", "--event", str(event), "--transcript", str(out),
+        "--out", str(tmp_path / "scratch"), "--utc-offset", "+02:00",
+    ])
+    assert code == 0, payload
+
+
+def test_m365_capture_unreachable_file_fails_through_the_cli(
+    capsys, tmp_path, monkeypatch
+):
+    from vaultlib import m365
+    monkeypatch.setattr(m365, "spill_roots", lambda: [tmp_path / "projects"])
+
+    code, payload = run(capsys, [
+        "m365", "capture", "--from",
+        r"C:\host\projects\session\s1\tool-results\mcp-x-read_resource-9.txt",
+        "--out", str(tmp_path / "out.json"),
+    ])
+
+    assert code != 0
+    assert payload["ok"] is False
+    assert "not reachable" in payload["error"]
+
+
 M365_LISTING = [{
     "id": "AAMkAGId1",
     "subject": "Weekly sync",
