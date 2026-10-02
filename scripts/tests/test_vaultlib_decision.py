@@ -637,3 +637,26 @@ def test_source_may_name_a_log(tmp_path):
     (root / "_messages").mkdir()
     (root / "_messages" / "2026-09-30-messages.md").write_text("---\ntype: message-log\n---\n", encoding="utf-8")
     assert decision._resolve_source(root, "[[2026-09-30-messages]]") == "2026-09-30-messages"
+
+
+# --- #247: a dismissed decision (archived: true) ---------------------------
+
+def test_list_flags_a_dismissed_decision_so_the_evening_run_does_not_recapture_it(tmp_path):
+    root = vault_with_project(tmp_path)
+    write_note(root, PROJECT, "2026-03-10-noise", archived=True, reviewed=False)
+    write_note(root, PROJECT, "2026-03-11-real")
+    entries = {e["stem"]: e for e in decision.list_decisions(root, PROJECT)["decisions"]}
+    # still listed — the dedup needs to see it — but marked
+    assert entries["2026-03-10-noise"]["dismissed"] is True
+    assert entries["2026-03-11-real"]["dismissed"] is False
+
+
+def test_a_dismissed_decision_cannot_be_superseded(tmp_path):
+    root = vault_with_project(tmp_path)
+    write_note(root, PROJECT, "2026-03-10-noise", archived=True)
+    with pytest.raises(decision.DecisionError, match="dismissed"):
+        decision.write(root, project=PROJECT, date="2026-05-20",
+                       payload=note(supersedes="2026-03-10-noise"), reviewed=True)
+    # nothing was written for the refused supersession
+    stems = [e["stem"] for e in decision.list_decisions(root, PROJECT)["decisions"]]
+    assert stems == ["2026-03-10-noise"]

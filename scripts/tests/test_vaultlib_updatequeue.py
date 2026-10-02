@@ -744,3 +744,87 @@ def test_a_strong_log_older_than_state_updated_does_not_queue(tmp_path):
               "2026-09-30T18:52")
     assert updatequeue.run(root, "2026-09-30", "morgan-ellery")[
         "projectsNeedingUpdate"] == []
+
+
+# --- #242: people learn when they were last met and on which projects ---
+
+def write_person_with(root: Path, slug: str, extra: str = "") -> Path:
+    path = root / "50-people" / f"{slug}.md"
+    path.write_text(f'---\nperson-name: "X"\nslug: {slug}\nrelationship:\n'
+                    f"{extra}---\n", encoding="utf-8")
+    return path
+
+
+def person_fm(root: Path, slug: str) -> dict:
+    from vaultlib import markdown
+    data, _ = markdown.split_frontmatter(
+        (root / "50-people" / f"{slug}.md").read_text(encoding="utf-8"))
+    return data
+
+
+def test_last_met_is_the_latest_confirmed_meeting_attended(tmp_path):
+    root = make_vault(tmp_path)
+    write_person(root, "ana-fields")
+    write_meeting(root, "m1", date_value="2026-03-02T10:00", attendees=("ana-fields",))
+    write_meeting(root, "m2", date_value="2026-06-10T10:00", attendees=("ana-fields",))
+    # not counted: unconfirmed, a capture rather than a meeting, and one that
+    # has not happened yet
+    write_meeting(root, "m3", date_value="2026-06-11T10:00",
+                  review_status="needs-review", attendees=("ana-fields",))
+    write_meeting(root, "m4", date_value="2026-06-11T11:00",
+                  type_value="note", attendees=("ana-fields",))
+    write_meeting(root, "m5", date_value="2026-06-20T10:00", attendees=("ana-fields",))
+    updatequeue.run(root, today="2026-06-12", owner="owner-morgan")
+    assert str(person_fm(root, "ana-fields")["last-met"]) == "2026-06-10"
+
+
+def test_someone_never_met_gets_no_last_met_and_a_stale_one_is_cleared(tmp_path):
+    root = make_vault(tmp_path)
+    path = write_person_with(root, "bo-marsh", "last-met: 2026-01-01\n")
+    write_person(root, "cy-never")
+    updatequeue.run(root, today="2026-06-12", owner="owner-morgan")
+    assert person_fm(root, "bo-marsh")["last-met"] is None
+    assert "\nlast-met:\n" in path.read_text(encoding="utf-8")
+    assert "last-met" not in (root / "50-people" / "cy-never.md").read_text(encoding="utf-8")
+
+
+def test_projects_gain_the_projects_of_confirmed_meetings_and_keep_hand_entries(tmp_path):
+    root = make_vault(tmp_path)
+    write_person_with(root, "ana-fields", "projects: [hand-picked, alpha]\n")
+    write_meeting(root, "m1", projects=("alpha", "beta"), attendees=("ana-fields",))
+    write_meeting(root, "m2", projects=("gamma",), review_status="needs-review",
+                  attendees=("ana-fields",))
+    updatequeue.run(root, today="2026-06-12", owner="owner-morgan")
+    # add-only: hand entries stay in place, new ones are appended sorted
+    assert person_fm(root, "ana-fields")["projects"] == ["hand-picked", "alpha", "beta"]
+
+
+def test_projects_already_complete_are_not_rewritten(tmp_path):
+    root = make_vault(tmp_path)
+    # a block list the owner's property editor wrote must survive untouched
+    path = write_person_with(root, "ana-fields",
+                             "projects:\n  - beta\n  - alpha\nlast-met: 2026-06-10\n"
+                             "meetings-7d: 1\nmeetings-30d: 1\n"
+                             "messages-7d: 0\nmessages-30d: 0\n")
+    write_meeting(root, "m1", projects=("alpha", "beta"), attendees=("ana-fields",))
+    before = path.read_bytes()
+    updatequeue.run(root, today="2026-06-12", owner="owner-morgan")
+    assert path.read_bytes() == before
+
+
+def test_adding_a_project_keeps_hand_entries_that_need_quoting(tmp_path):
+    # Review on #245: re-emitting the list bare turned "[[Acme Rollout]]"
+    # into a nested list and split "Ops, EMEA" into two projects.
+    import yaml
+    root = make_vault(tmp_path)
+    path = write_person_with(root, "ana-fields",
+                             'projects:\n  - "[[Acme Rollout]]"\n  - "Ops, EMEA"\n'
+                             '  - "x: y #z"\n  - alpha\n')
+    write_meeting(root, "m1", projects=("zeta",), attendees=("ana-fields",))
+    updatequeue.run(root, today="2026-06-12", owner="owner-morgan")
+    text = path.read_text(encoding="utf-8")
+    parsed = yaml.safe_load(text.split("---")[1])
+    assert parsed["projects"] == ["[[Acme Rollout]]", "Ops, EMEA", "x: y #z", "alpha", "zeta"]
+    assert person_fm(root, "ana-fields")["projects"] == parsed["projects"]
+    # plain slugs stay bare
+    assert ", alpha, zeta]" in text

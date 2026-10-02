@@ -199,7 +199,10 @@ Markdown strings — renders byte-identically to earlier versions (pinned by
 test). **v2** — `recap` is an object (`recap.validate`/`render`) and every
 `prep` is `{attendees, last_meeting, context}` — renders the recap as
 callouts and a pulse table, and each meeting as `### heading` → `#### Prep`
-(region) → `#### Notes` → `#### Actions`. Mixing prep forms in one payload
+(region) → `#### Your notes` → `#### Your actions` (`#### Notes`/`#### Actions`
+before 0.12.11; the reader goes by position, so both read). A fresh note
+opens with the static `REVIEW_BLOCK` callout above `## Recap` (#238), which
+the reader skips. Mixing prep forms in one payload
 is refused. A v2 payload merges into a v1 note (regions only; the
 sub-headings are never retro-fitted), and headings are compared as
 `(time, subject, entity)` so the v1 `· [[slug]]` and v2 `· [[path|Name]]`

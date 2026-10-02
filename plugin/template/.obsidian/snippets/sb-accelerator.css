@@ -89,3 +89,55 @@
 .callout[data-callout="theme"]  { --callout-color: #a855f7; --callout-icon: lucide-git-merge; }
 .callout[data-callout="hot"]    { --callout-color: #ef4444; --callout-icon: lucide-flame; }
 .callout[data-callout="sync"]   { --callout-color: #94a3b8; --callout-icon: lucide-wrench; opacity: 0.85; }
+
+/* No Notebook Navigator ribbon icon (#239).
+   The ribbon keeps two icons: today's daily note and the quick switcher. The
+   rest are hidden through workspace.json's `left-ribbon.hiddenItems`, which
+   the owner can undo with a right-click — but Obsidian resets a plugin's
+   entry to visible when the plugin first loads after "Trust author", so the
+   Navigator icon came back on every fresh vault. Its sidebar is always open,
+   so the icon does nothing a click on the sidebar does not. */
+.side-dock-ribbon-action[aria-label="Notebook Navigator"] {
+  display: none;
+}
+
+/* The review queues at the top of the daily note (#238).
+   `> [!review] Waiting for you` holds two embedded Bases views — Meetings
+   → Triage and Decisions → To review — so the owner ticks Keep or Dismiss
+   right there. Three rules:
+
+   1. An empty table collapses, and the whole callout when both are empty:
+      a clear day shows nothing. Collapsed to zero height rather than
+      `display: none`, because Bases stops re-rendering a view that is not
+      displayed — a decision arriving later would never show up until the
+      note was reopened. Verified live in Obsidian 1.13: hidden when clear,
+      back the moment one row qualifies, gone again when it is ticked.
+   2. "Empty" means the table body is sized for zero rows. Bases writes the
+      body's height for its full result count as an inline style, but draws
+      rows only while they are on screen — so counting drawn rows read a
+      table below the fold as empty, collapsed it, and it never came on
+      screen to be drawn. `height: 0px` on `.bases-tbody` is set only for
+      zero results. Verified live: a 3-result table below the fold stays,
+      a 0-result one collapses, both directions update without a reload.
+   3. The callout takes the full pane width, not the reading line width,
+      or the Triage table scrolls sideways and hides its columns. Reading
+      view wraps it in `.el-div`, Live Preview in `.cm-embed-block`. */
+.callout[data-callout="review"] {
+  --callout-color: #f97316;
+  --callout-icon: lucide-inbox;
+}
+.callout[data-callout="review"] .bases-embed:has(.bases-tbody[style*="height: 0px"]),
+.callout[data-callout="review"]:not(:has(.bases-tbody:not([style*="height: 0px"]))) {
+  height: 0;
+  min-height: 0;
+  overflow: hidden;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.markdown-preview-view .el-div:has(> .callout[data-callout="review"]),
+.markdown-source-view .cm-embed-block:has(.callout[data-callout="review"]) {
+  max-width: 100% !important;
+  width: 100% !important;
+  margin-inline: 0 !important;
+}

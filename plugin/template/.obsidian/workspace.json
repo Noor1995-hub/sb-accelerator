@@ -93,7 +93,7 @@
       }
     ],
     "direction": "horizontal",
-    "width": 400
+    "width": 290
   },
   "right": {
     "id": "ab91c3bb3ad4c390",
@@ -190,11 +190,11 @@
   "left-ribbon": {
     "hiddenItems": {
       "switcher:Open quick switcher": false,
-      "graph:Open graph view": false,
+      "graph:Open graph view": true,
       "daily-notes:Open today's daily note": false,
-      "command-palette:Open command palette": false,
-      "bases:Create new base": false,
-      "notebook-navigator:Notebook Navigator": false
+      "command-palette:Open command palette": true,
+      "bases:Create new base": true,
+      "notebook-navigator:Notebook Navigator": true
     }
   },
   "active": "f132e825ed5917d9"

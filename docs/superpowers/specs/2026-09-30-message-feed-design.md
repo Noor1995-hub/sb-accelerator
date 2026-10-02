@@ -180,7 +180,7 @@ is off, M365 is not connected or the account proof fails.
 | `plugin/lib/vaultlib/health.py`, `/health-check` | changed | one content-free number: days that hit the limit (§9) |
 | `plugin/lib/vaultlib/updatequeue.py` | changed | strong message log links count as project activity; `messages-7d/30d` person counters (§7.2) |
 | `plugin/lib/vaultlib/project.py`, `cli.py` | changed | `project keywords add/remove/list`, writing the optional `keywords` field (decision 18) |
-| template (`_messages/`, hide settings), ontology, migration 003 | changed/new | §8 |
+| template (`_messages/`, hide settings), ontology, migration 005 | changed/new | §8 |
 
 ### 5.3 Data flow of one run
 
@@ -367,7 +367,10 @@ of a hand-kept table:
 
 ## 8. Vault changes
 
-### 8.1 Structure version 4
+### 8.1 Structure version 6
+
+Renumbered when merging main (0.12.12): main's migrations 003 and 004 took
+structure versions 4 and 5, so this feed's migration is 005 → version 6.
 
 - New folder `_messages/`, hidden in two places:
   - the file list: Notebook Navigator's `hiddenFolders` in the template's
@@ -390,7 +393,7 @@ of a hand-kept table:
   none, so existing projects need no migration).
 - The vault's `CLAUDE.md` folder table gains the row.
 
-### 8.2 Migration `003-structure-version-4`
+### 8.2 Migration `005-structure-version-6`
 
 Creates the folder, adds it to both hide settings (merging into whatever the
 owner already has there, never replacing it), updates the ontology and

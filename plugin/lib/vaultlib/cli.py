@@ -166,7 +166,9 @@ def build_parser() -> argparse.ArgumentParser:
     _add_vault_argument(person_ensure)
     person_ensure.add_argument("--name", required=True, help="display name")
     person_ensure.add_argument("--today", help="ISO date; defaults to today")
-    person_ensure.add_argument("--email", help="email address for a new note")
+    person_ensure.add_argument(
+        "--email", help="the attendee's address; stored on creation, and "
+                        "filled into an existing note whose email is empty")
 
     projects = top.add_parser("project", help="project folders")
     projects_sub = projects.add_subparsers(dest="action", required=True)

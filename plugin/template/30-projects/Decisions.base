@@ -4,7 +4,7 @@ filters:
     - type == "decision"
 formulas:
   open: link(file.path, "→")
-  decision-status: if(status == "superseded", "Replaced", if(status == "withdrawn", "Withdrawn", if(status == "active", "Active", status)))
+  decision-status: if(archived, "Dismissed", if(status == "superseded", "Replaced", if(status == "withdrawn", "Withdrawn", if(status == "active", "Active", status))))
 properties:
   formula.open:
     displayName: " "
@@ -20,6 +20,8 @@ properties:
     displayName: Status
   note.reviewed:
     displayName: Keep
+  note.archived:
+    displayName: Dismiss
   note.supersedes:
     displayName: Replaces
 views:
@@ -28,25 +30,29 @@ views:
     filters:
       and:
         - reviewed != true
+        - archived != true
     order:
       - formula.open
       - date
       - summary
       - project
       - reviewed
+      - archived
       - formula.decision-status
       - supersedes
     sort:
       - property: date
         direction: DESC
     columnSize:
-      note.summary: 260
+      note.summary: 240
+      note.archived: 80
       formula.decision-status: 104
   - type: table
     name: Active
     filters:
       and:
         - status == "active"
+        - archived != true
     order:
       - formula.open
       - date
@@ -63,11 +69,13 @@ views:
       - summary
       - project
       - reviewed
+      - archived
       - formula.decision-status
       - supersedes
     sort:
       - property: date
         direction: DESC
     columnSize:
-      note.summary: 260
+      note.summary: 240
+      note.archived: 80
       formula.decision-status: 104

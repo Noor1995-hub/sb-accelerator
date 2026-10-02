@@ -240,6 +240,7 @@ RECAP_CALLOUT_ACCENTS = {
     "theme": ("#a855f7", "lucide-git-merge"),
     "hot": ("#ef4444", "lucide-flame"),
     "sync": ("#94a3b8", "lucide-wrench"),
+    "review": ("#f97316", "lucide-inbox"),
 }
 
 

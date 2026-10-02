@@ -290,21 +290,23 @@ def render(root: Path, clean: dict, *, meetings: int, window_label: str) -> str:
         parts.append("**Themes** — none this window.")
 
     if clean["pulse"]:
-        rows = ["**Project pulse**", "", "| | Project | What moved |", "|:-:|---|---|"]
+        # The legend sits above the table it explains (#238), not under it.
+        rows = ["**Project pulse**", "", LEGEND, "",
+                "| | Project | What moved |", "|:-:|---|---|"]
         for row in clean["pulse"]:
             project = _cell(row["project"])
             if row["entity"]:
                 project += " · " + _cell(row["entity"])
             rows.append(f"| {SIGNALS[row['signal']]} | {project} | {_cell(row['text'])} |")
         parts.append("\n".join(rows))
-        parts.append(LEGEND)
     else:
         parts.append("**Project pulse** — no project touched this window.")
 
     if clean["decisions"]:
         parts.append("**Decisions logged**\n" + "\n".join(f"- {d}" for d in clean["decisions"]))
     else:
-        parts.append("**Decisions logged** — none this run.")
+        # A per-run count: "none this run" read as "there are no decisions".
+        parts.append("**No new decisions.**")
 
     watch = clean["watch"] or ["nothing needs your hand this window"]
     parts.append(_callout_list("hot", "Watch", watch, folded=False))

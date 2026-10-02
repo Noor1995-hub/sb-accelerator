@@ -29,6 +29,8 @@ KNOWN_FUNCTIONS = {"link", "dateformat", "econtains", "slice"}
 KEYWORDS = {
     "table", "list", "task", "calendar", "without", "id", "as", "from", "where",
     "sort", "limit", "group", "by", "flatten", "rows", "asc", "desc", "and", "or", "not",
+    # literals, not fields: `WHERE archived != true` (#247)
+    "true", "false", "null",
 }
 
 _FENCE_RE = re.compile(r"(?P<ticks>`{3,})dataview[ \t]*\n(?P<body>.*?)\n(?P=ticks)", re.DOTALL)

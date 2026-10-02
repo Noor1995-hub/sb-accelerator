@@ -217,7 +217,7 @@ object: person
 required: [person-name, slug]
 keys_present: [relationship]
 optional: [email, company, role, projects, created, last-updated,
-           meetings-7d, meetings-30d, messages-7d, messages-30d]
+           meetings-7d, meetings-30d, last-met, messages-7d, messages-30d]
 enums:
   relationship: [colleague, direct-report, external, null]
 ```
@@ -232,8 +232,20 @@ enums:
 - Optional body convention for direct-report notes: a `## Development`
   section with `### Feedback History` (a dated table) and `### Growth Areas`.
   Nothing in the plugin reads or writes it; it is a place, not a pipeline.
-- `messages-7d`, `messages-30d` are auto-maintained by `sync update-queue` from message logs, next to the meeting counters.
 - Auto-created from meeting attendees; enriched manually via People Base.
+- **Auto-maintained** by the evening run's metrics step, from confirmed
+  meetings only (never a `type: note` capture): `meetings-7d`,
+  `meetings-30d`, `last-met` (ISO date of the latest such meeting the person
+  attended; emptied when there is none) and `projects` — **add-only**: a
+  project from a confirmed meeting is appended, a hand-entered one is never
+  removed.
+- `messages-7d`, `messages-30d` are auto-maintained by `sync update-queue` from message logs, next to the meeting counters.
+- `email` is stored when the M365 sync (or the message feed) creates the
+  person, and filled into an existing note whose `email` is empty; a set
+  email is never overwritten.
+- `relationship`, `company` and `role` stay hand-curated — nothing writes
+  them. `last-updated` is the creation day and is not a recency signal; sort
+  on `last-met` for that.
 - Example: `50-people/jordan-reyes.md`
 
 ### Decision — `30-projects/{slug}/decisions/YYYY-MM-DD-{title}.md` · Base: `Decisions.base`
@@ -241,7 +253,7 @@ enums:
 ```yaml
 object: decision
 required: [type, project, date, status, summary]
-optional: [supersedes, source]
+optional: [supersedes, source, archived]
 keys_present: [reviewed]
 enums:
   type: [decision]
@@ -250,6 +262,14 @@ enums:
 
 - **Edges:** `supersedes` (`[[decision]]` / null) · `source` (`[[meeting]]` / `[[message log]]`).
 - Never deleted — status flips only. Supersession is a wikilink edge.
+- `archived: true` is the owner's **Dismiss** tick (#247): the capture was
+  not a real decision. Same field and meaning as on a meeting; the file
+  stays. A dismissed decision leaves `Decisions.base`'s *To review* and
+  *Active* views and the project page's Recent decisions, shows as
+  *Dismissed* in *All*, is never a project's defining decision and is never
+  superseded. `decision list` still returns it, flagged `dismissed`, so the
+  evening run's dedup does not capture it again. It is not `withdrawn`: a
+  withdrawn decision was real and later reversed.
 - `date` is the date the decision was **made**, not the date it was written
   down. It is what orders the decision log.
 - `summary` is one full sentence — it is the Decision column in
@@ -445,6 +465,10 @@ body_sections: [Recap, Meetings, End of day]
   `daily-note write` regenerates marked regions wholesale on any re-run and
   is forbidden from touching a byte outside them. One writer class per
   region.
+- **Review block**: a fresh note opens with `> [!review] Waiting for you`,
+  above `## Recap` — the embedded Meetings `Triage` and Decisions
+  `To review` views, written once at creation, collapsed by the CSS snippet
+  when both are empty. It is not a region and holds no state.
 - **Everything outside the markers is human territory**: jotting bullets
   under each meeting heading, `## End of day`, anything else. The evening
   harvest reads jottings as input; nothing ever edits or routes them in v1.
@@ -459,8 +483,9 @@ body_sections: [Recap, Meetings, End of day]
   CLI's; one supplied in a payload is stripped.
 - **Meeting blocks v2**: `### {HH:MM} — {Subject}[ · [[40-entities/{slug}/dossier|{Entity name}]]]`,
   then `#### Prep` holding the prep region (three lines: **Attendees**,
-  **Last meeting**, **Context**), then `#### Notes` (`- `) and `#### Actions`
-  (`- [ ] `). Notes and Actions are written once at creation and never
+  **Last meeting**, **Context**), then `#### Your notes` (`- `) and
+  `#### Your actions` (`- [ ] `) — `#### Notes`/`#### Actions` on notes
+  written before 0.12.11. Notes and Actions are written once at creation and never
   regenerated; the harvest returns them separately, actions with done state.
 - **Identity links are path links.** Entities and projects are folders, and
   Obsidian resolves `[[name]]` by file name only, so writers emit

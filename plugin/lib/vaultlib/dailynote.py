@@ -22,8 +22,20 @@ DAILY_NOTES_DIR = vault.DAILY_NOTES_DIR
 NO_MEETINGS_LINE = "*No meetings scheduled.*"
 
 PREP_HEADING = "#### Prep"
-NOTES_BLOCK = "#### Notes\n- "
-ACTIONS_BLOCK = "#### Actions\n- [ ] "
+# "Your" says whose they are (#238); the reader finds them by position under
+# the meeting heading, so notes written with the old "#### Notes" still read.
+NOTES_BLOCK = "#### Your notes\n- "
+ACTIONS_BLOCK = "#### Your actions\n- [ ] "
+# The live review queues, at the top of every note the evening run writes
+# (#238). Embedded Bases views, so ticking Keep or Dismiss here works and the
+# rows leave at once; the CSS snippet collapses an empty table, and the whole
+# callout when both are empty, so a clear day shows nothing. Written once at
+# creation and never merged: it holds no machine state.
+REVIEW_BLOCK = ("> [!review] Waiting for you\n"
+                "> ![[20-meetings/Meetings.base#Triage]]\n"
+                ">\n"
+                "> ![[30-projects/Decisions.base#To review]]")
+_REVIEW_LINES = frozenset(REVIEW_BLOCK.split("\n"))
 _PREP_KEYS = ("attendees", "last_meeting", "context")
 _PREP_LABELS = (("attendees", "Attendees"), ("last_meeting", "Last meeting"),
                 ("context", "Context"))
@@ -465,6 +477,7 @@ def _render(root: Path, data: dict, fingerprint: Optional[str]) -> str:
     attrs = {"inputs": fingerprint} if fingerprint else None
     parts = ["---", f"date: {date_iso}", "type: daily-note", "---", "",
              f"# {date_iso} · {_day_name(date_iso)}", "",
+             REVIEW_BLOCK, "",
              "## Recap", _region("recap", _recap_body(root, data), attrs), "",
              "## Meetings", ""]
     if data["meetings"]:
@@ -736,6 +749,8 @@ def read(root: Path, date_iso_raw) -> dict:
             continue
         if line.startswith("# "):
             continue
+        if line in _REVIEW_LINES:
+            continue            # the embedded queues, not the owner's words
         if section == "Meetings" and line.startswith("### "):
             heading = line[4:].strip()
             parsed = parse_heading(heading)

@@ -64,7 +64,7 @@ Each PR: tests first, then code, then the three CI commands, then `/code-review`
 | `plugin/lib/vaultlib/decision.py` | `source` may name a message log |
 | `plugin/lib/vaultlib/cli.py` | `messages` group, `project keywords`, new config fields |
 | ontology, `schema.json` | Message log object; Person counters; Project `keywords` |
-| template + `plugin/migrations/003-structure-version-4/` | `_messages/`, hide settings, structure 4 |
+| template + `plugin/migrations/005-structure-version-6/` | `_messages/`, hide settings, structure 6 |
 | `plugin/skills/sync-messages/` (new), `plugin/agents/sync-messages-worker.md` (new) | orchestration and the worker contract |
 | `evening-sync`, `setup-my-brain`, `health-check` SKILL.md | stage 3b/4/6, switch-on, the health number |
 | `updatequeue.py`, `recap.py`, `dailynote.py`, `health.py` | downstream consumers |
@@ -2578,7 +2578,7 @@ Run `/code-review`, fix findings, open PR A (`feat/messages-core`).
 
 ## PR B — `feat/messages-structure-v4`
 
-### Task B1: Template — `_messages/`, hide settings, structure 4
+### Task B1: Template — `_messages/`, hide settings, structure 6
 
 **Files:**
 - Create: `plugin/template/_messages/.gitkeep`
@@ -2595,7 +2595,7 @@ def test_template_hides_the_messages_folder():
     app = json.loads((template / ".obsidian/app.json").read_text(encoding="utf-8"))
     assert "_messages/" in app["userIgnoreFilters"]
     assert (template / "_messages" / ".gitkeep").is_file()
-    assert (template / "structure-version").read_text(encoding="utf-8").strip() == "4"
+    assert (template / "structure-version").read_text(encoding="utf-8").strip() == "6"
 ```
 
 - [ ] **Step 2: Run it to see it fail**
@@ -2608,7 +2608,7 @@ Expected: FAIL (`KeyError: 'userIgnoreFilters'`)
 - `notebook-navigator/data.json`: `"hiddenFolders": ["_messages"]`.
 - `app.json`: `{"attachmentFolderPath": "70-resources/attachments", "alwaysUpdateLinks": true, "userIgnoreFilters": ["_messages/"]}`.
 - Template `CLAUDE.md` folder table, after the `_heavy-assets/` row: `` | `_messages/` | Mail and Teams message logs — machine material for Claude, hidden; you never need to open them | ``. Object-model line: "Seven object types: **Meeting · Project · Person · Decision · Entity · Daily note · Message log**."
-- `structure-version`: `4`. `validate_template.py`: `EXPECTED_STRUCTURE_VERSION = "4"`.
+- `structure-version`: `6`. `validate_template.py`: `EXPECTED_STRUCTURE_VERSION = "6"`.
 
 - [ ] **Step 4: Run CI checks and `/visual-check`**
 
@@ -2619,23 +2619,28 @@ Expected: PASS. Then run `/visual-check` on a scratch vault built from the templ
 
 ```bash
 git add plugin/template scripts/validate_template.py scripts/tests/
-git commit -m "feat(template): hidden _messages/ folder, structure-version 4 (#236)"
+git commit -m "feat(template): hidden _messages/ folder, structure-version 6 (#236)"
 ```
 
-### Task B2: Migration `003-structure-version-4`
+### Task B2: Migration `005-structure-version-6`
+
+> Renumbered when merging main (0.12.12): main's migrations 003 (structure 4)
+> and 004 (structure 5) landed first, so this migration ships as
+> `005-structure-version-6` (TARGET_VERSION 6, test `test_migration_005.py`);
+> the steps below use the new numbers.
 
 **Files:**
-- Create: `plugin/migrations/003-structure-version-4/migrate.py`
-- Test: `scripts/tests/test_migration_003.py`
+- Create: `plugin/migrations/005-structure-version-6/migrate.py`
+- Test: `scripts/tests/test_migration_005.py`
 - Modify: `plugin/.claude-plugin/plugin.json` (main+2)
 
 **Interfaces:**
-- Produces: `TARGET_VERSION = 4`, `LOSSY = None`, `apply(root) -> {"created": bool, "nav": bool, "app": bool}`, `verify(root) -> {"checked": 3}` (raises `RuntimeError` when the folder or either hide entry is missing).
+- Produces: `TARGET_VERSION = 6`, `LOSSY = None`, `apply(root) -> {"created": bool, "nav": bool, "app": bool}`, `verify(root) -> {"checked": 3}` (raises `RuntimeError` when the folder or either hide entry is missing).
 
 - [ ] **Step 1: Write the failing tests**
 
 ```python
-"""Migration 003: the hidden _messages/ folder. Made-up vaults only."""
+"""Migration 005: the hidden _messages/ folder. Made-up vaults only."""
 import importlib.util, json
 from pathlib import Path
 import pytest
@@ -2643,11 +2648,11 @@ from vaultlib import migrate
 from test_vaultlib_vault import make_vault
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-M003 = REPO_ROOT / "plugin" / "migrations" / "003-structure-version-4" / "migrate.py"
+M005 = REPO_ROOT / "plugin" / "migrations" / "005-structure-version-6" / "migrate.py"
 
 
 def load():
-    spec = importlib.util.spec_from_file_location("m003", M003)
+    spec = importlib.util.spec_from_file_location("m005", M005)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -2662,7 +2667,7 @@ def obsidian(root, nav_hidden, app_extra):
 
 def test_module_contract():
     module = load()
-    assert module.TARGET_VERSION == 4 and module.LOSSY is None
+    assert module.TARGET_VERSION == 6 and module.LOSSY is None
 
 
 def test_apply_merges_into_what_the_owner_already_hid_and_is_idempotent(tmp_path):
@@ -2686,20 +2691,20 @@ def test_verify_fails_when_the_folder_is_missing(tmp_path):
         load().verify(root)
 
 
-def test_discover_chains_through_003():
+def test_discover_chains_through_005():
     found = migrate.discover()
-    assert [m["module"].TARGET_VERSION for m in found][:3] == [2, 3, 4]
+    assert [m["module"].TARGET_VERSION for m in found][:5] == [2, 3, 4, 5, 6]
 ```
 
 - [ ] **Step 2: Run them to see them fail**
 
-Run: `python -m pytest scripts/tests/test_migration_003.py -q`
+Run: `python -m pytest scripts/tests/test_migration_005.py -q`
 Expected: FAIL (file not found)
 
-- [ ] **Step 3: Implement `plugin/migrations/003-structure-version-4/migrate.py`**
+- [ ] **Step 3: Implement `plugin/migrations/005-structure-version-6/migrate.py`**
 
 ```python
-"""Structure version 4: the hidden `_messages/` folder for mail and Teams logs.
+"""Structure version 6: the hidden `_messages/` folder for mail and Teams logs.
 
 Creates `_messages/` and hides it in the file list (Notebook Navigator's
 `hiddenFolders`) and in search, graph and quick switcher (Obsidian's
@@ -2722,7 +2727,7 @@ if str(_LIB) not in sys.path:
 
 from vaultlib import vault  # noqa: E402
 
-TARGET_VERSION = 4
+TARGET_VERSION = 6
 LOSSY = None
 _NAV = Path(".obsidian") / "plugins" / "notebook-navigator" / "data.json"
 _APP = Path(".obsidian") / "app.json"
@@ -2784,8 +2789,8 @@ Expected: PASS
 - [ ] **Step 5: Commit, review, PR**
 
 ```bash
-git add plugin/migrations/003-structure-version-4 scripts/tests/test_migration_003.py plugin/.claude-plugin/plugin.json
-git commit -m "feat(migrations): 003 creates and hides _messages/ (#236)"
+git add plugin/migrations/005-structure-version-6 scripts/tests/test_migration_005.py plugin/.claude-plugin/plugin.json
+git commit -m "feat(migrations): 005 creates and hides _messages/ (#236)"
 ```
 
 `/code-review`, then open PR B.
@@ -3691,7 +3696,7 @@ git commit -m "feat(health): days the mail and Teams feed hit its limit (#236)"
 
 ## Task E1: Release to dryrun and verify in Cowork
 
-- [ ] **Step 1:** After D merges, cut a dryrun release (tag push, per root `CLAUDE.md`), `claude plugin update` in the DryRunVault, run `/upgrade-vault` (structure 3 → 4, lossless).
+- [ ] **Step 1:** After D merges, cut a dryrun release (tag push, per root `CLAUDE.md`), `claude plugin update` in the DryRunVault, run `/upgrade-vault` (structure 3 → 6; 005 is lossless).
 - [ ] **Step 2:** In Cowork, on Matthias's own account: switch the feed on by asking, add one word exclusion, then run `/evening-sync` once interactively.
 - [ ] **Step 3:** Check, by looking only at the vault, never at message content in chat:
   - `_messages/<today>-messages.md` exists and is hidden in the file list and in search;

@@ -99,6 +99,7 @@ def _dataview_decisions(slug: str) -> str:
         '  summary AS "Decision",',
         '  status AS "Status"',
         f'FROM "{vault.PROJECTS_DIR}/{slug}/decisions"',
+        "WHERE archived != true",       # dismissed: not a decision (#247)
         "SORT date DESC", "LIMIT 10", "```"])
 
 
@@ -213,6 +214,10 @@ def validate(root: Path, slug: str, raw) -> Tuple[dict, List[str], List[str]]:
                 f"defining_decision {decision!r} is not a decision under "
                 f"{vault.PROJECTS_DIR}/{slug}/decisions/")
         fm, _ = markdown.split_frontmatter(path.read_text(encoding="utf-8"))
+        if fm.get("archived") is True:
+            raise ProjectStateError(
+                f"defining_decision {decision!r} was dismissed by the owner as "
+                "not a real decision — pick one that stands, or null")
         summary = str(fm.get("summary") or "").strip() or str(decision)
         when = str(fm.get("date") or "")[:10]
         suffix = f" ({display_long_date(when)})" if vault.ISO_DATE_RE.match(when) else ""

@@ -5,22 +5,27 @@
       "name": "Default",
       "fileVisibility": "all",
       "propertyKeys": [],
-      "hiddenFolders": ["_messages"],
+      "hiddenFolders": [
+        "claude",
+        "99-workflow-config",
+        "_messages"
+      ],
       "descendantExcludedFolders": [],
       "hiddenTags": [],
-      "hiddenFileNames": [],
+      "hiddenFileNames": [
+        "CLAUDE.md"
+      ],
       "hiddenFileTags": [],
       "hiddenFileProperties": [],
       "navigationBanner": null,
       "periodicNotesFolder": "",
       "shortcuts": [
-        { "type": "note", "path": "Start here.md" },
-        { "type": "note", "path": "20-meetings/Meetings.base" },
-        { "type": "note", "path": "30-projects/Projects.base" },
-        { "type": "note", "path": "30-projects/Decisions.base" },
-        { "type": "note", "path": "40-entities/Entities.base" },
-        { "type": "note", "path": "50-people/People.base" },
-        { "type": "folder", "path": "60-daily-notes" }
+        { "type": "folder", "path": "60-daily-notes", "alias": "Daily notes" },
+        { "type": "note", "path": "20-meetings/Meetings.base", "alias": "Meetings" },
+        { "type": "note", "path": "30-projects/Projects.base", "alias": "Projects" },
+        { "type": "note", "path": "50-people/People.base", "alias": "People" },
+        { "type": "note", "path": "40-entities/Entities.base", "alias": "Organisations" },
+        { "type": "note", "path": "30-projects/Decisions.base", "alias": "Decisions" }
       ],
       "navRainbow": {
         "mode": "foreground",
@@ -74,6 +79,39 @@
   ],
   "vaultProfile": "default",
   "folderAppearances": {
-    "claude/skills": { "groupBy": "custom" }
-  }
+    "claude/skills": {
+      "groupBy": "custom"
+    }
+  },
+  "checkForUpdatesOnStart": false,
+  "shortcutBadgeDisplay": "none",
+  "showRecentNotes": false,
+  "showTags": false,
+  "showProperties": false,
+  "dualPane": true,
+  "dualPaneOrientation": "vertical",
+  "narrowSidebarLayout": "none",
+  "syncModes": {
+    "dualPane": "synced",
+    "dualPaneOrientation": "synced"
+  },
+  "rootFolderOrder": [
+    "10-inbox",
+    "20-meetings",
+    "30-projects",
+    "40-entities",
+    "50-people",
+    "60-daily-notes",
+    "70-resources",
+    "80-thoughts-ideas",
+    "90-archive",
+    "95-private",
+    "_heavy-assets"
+  ],
+  "homepage": {
+    "source": "daily-note",
+    "file": null,
+    "createMissingPeriodicNote": false
+  },
+  "calendarIntegrationMode": "daily-notes"
 }

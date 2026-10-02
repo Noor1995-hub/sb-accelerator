@@ -444,10 +444,29 @@ def run(root: Path, today: str, owner: str) -> dict:
                    if d["date"] and d["date"] > d7)
         msg30 = sum(d["people_groups"].count(slug) for d in logs
                     if d["date"] and d["date"] > d30)
-        updated = _upsert_all(text, {"meetings-7d": str(m7),
-                                     "meetings-30d": str(m30),
-                                     "messages-7d": str(msg7),
-                                     "messages-30d": str(msg30)})
+        fields = {"meetings-7d": str(m7), "meetings-30d": str(m30),
+                  "messages-7d": str(msg7), "messages-30d": str(msg30)}
+        # #242: what the meetings already know. Met = a confirmed meeting
+        # (never a capture) that has happened; nobody types these in.
+        met = [m for m in countable
+               if slug in m["attendees"] and m["date"] <= today_date]
+        if met:
+            fields["last-met"] = max(m["date"] for m in met).isoformat()
+        elif str(data.get("last-met") or "").strip():
+            fields["last-met"] = ""
+        # projects is add-only: a hand-entered project stays, and the field
+        # is rewritten only when a meeting adds one it does not have yet.
+        current = _slug_list(data.get("projects"), "projects", rel, warnings)
+        added = sorted({p for m in met for p in m["projects"]} - set(current))
+        if added:
+            # Person `projects` is hand-editable and has no slug rule, so a
+            # kept entry may be a wikilink or carry a comma: quote anything
+            # that is not a bare slug, or the flow list reads back wrong.
+            fields["projects"] = "[{}]".format(", ".join(
+                item if naming.is_slug(item)
+                else markdown.emit_scalar(item, quoted=True)
+                for item in current + added))
+        updated = _upsert_all(text, fields)
         if updated != text:
             vault.atomic_write(path, updated)
         people_written += 1

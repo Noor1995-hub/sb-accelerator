@@ -10,6 +10,7 @@ created: 2026-03-10
 last-updated: 2026-03-10
 meetings-7d: 0
 meetings-30d: 0
+last-met: 2026-03-10
 messages-7d: 0
 messages-30d: 0
 ---

@@ -180,11 +180,15 @@ pre-fetched event variant this is the event file your briefing named, not
 one you fetched yourself — its `attendees[].name` array is already sitting
 in that file verbatim, whichever way it got there. For every attendee
 **name** in your fetched event, batch one call per name into a single Bash
-invocation:
+invocation, passing that attendee's `address` from the same entry:
 
 ```bash
-python3 "$VAULTLIB" person ensure --vault "$VAULT" --name "<name>"
+python3 "$VAULTLIB" person ensure --vault "$VAULT" --name "<name>" --email "<address>"
 ```
+
+The address is stored on a new person and filled into an existing one whose
+email is empty; a set email is never overwritten. Leave `--email` off for an
+entry with no address — never guess one.
 
 Use each result's `slug`, plus the vault owner's person slug your prompt
 already carries, for the payload's `attendees` — the owner's slug arrives

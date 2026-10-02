@@ -278,3 +278,20 @@ def test_cli_state_write_envelope(tmp_path):
                            "--slug", slug, "--state", str(state_file)], capture_output=True, text=True)
     envelope = json.loads(proc.stdout)
     assert proc.returncode != 0 and envelope["ok"] is False and "stage" in envelope["error"]
+
+
+def test_a_dismissed_decision_is_never_the_defining_decision(tmp_path):
+    # #247: archived: true marks a capture the owner dismissed as not a decision
+    root, slug = scaffolded(tmp_path)
+    path = root / "30-projects" / slug / "decisions" / "2026-05-20-single-vendor-strategy-adopted.md"
+    path.write_text(path.read_text(encoding="utf-8").replace("status: active\n", "status: active\narchived: true\n"),
+                    encoding="utf-8")
+    with pytest.raises(projectstate.ProjectStateError, match="dismissed"):
+        projectstate.write(root, slug=slug, payload=state(), today="2026-06-15")
+
+
+def test_recent_decisions_leave_out_dismissed_ones(tmp_path):
+    root, slug = scaffolded(tmp_path)
+    body = (root / "30-projects" / slug / "index.md").read_text(encoding="utf-8")
+    block = body.split("## Recent decisions")[1].split("```")[1]
+    assert "WHERE archived != true" in block

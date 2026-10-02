@@ -20,8 +20,8 @@ properties:
     displayName: Projects
   note.meetings-30d:
     displayName: Meetings (30d)
-  note.last-updated:
-    displayName: Updated
+  note.last-met:
+    displayName: Last met
 views:
   - type: table
     name: All
@@ -31,12 +31,33 @@ views:
       - relationship
       - company
       - role
-      - projects
+      - last-met
       - meetings-30d
-      - last-updated
+      - projects
     sort:
-      - property: last-updated
+      - property: person-name
+        direction: ASC
+    columnSize:
+      note.projects: 260
+  - type: table
+    name: Recently met
+    filters:
+      and:
+        - '!note["last-met"].isEmpty()'
+    order:
+      - formula.open
+      - person-name
+      - last-met
+      - relationship
+      - company
+      - role
+      - meetings-30d
+      - projects
+    sort:
+      - property: last-met
         direction: DESC
+    columnSize:
+      note.projects: 260
   - type: table
     name: Uncurated
     filters:
@@ -61,7 +82,7 @@ views:
       - person-name
       - role
       - meetings-30d
-      - last-updated
+      - last-met
     sort:
       - property: person-name
         direction: ASC

@@ -119,10 +119,10 @@ python3 "$VAULTLIB" daily-note read --vault "$VAULT" --date <recap_from>
 ```
 
 `exists: false` is a normal first-run state — note it and move on. Otherwise
-collect, per meeting, `notes` (the owner's bullets under `#### Notes`, or
-bullets directly under the heading on a note written before v2) and
-`actions` (`{text, done}` from the `- [ ]` / `- [x]` list under
-`#### Actions`), plus the `end_of_day` bullets. All of it is context for the
+collect, per meeting, `notes` (the owner's bullets under `#### Your notes`
+— `#### Notes` on notes written before 0.12.11 — or bullets directly under
+the heading on a note written before v2) and `actions` (`{text, done}` from
+the `- [ ]` / `- [x]` list under `#### Your actions`), plus the `end_of_day` bullets. All of it is context for the
 recap (stage 6) and decision candidates (stage 4); an action is a jotting
 the owner marked as a task, nothing routes it anywhere yet. The note itself
 is the archive of the day — **never modify it**.
@@ -271,7 +271,8 @@ python3 "$VAULTLIB" project state write --vault "$VAULT" --slug <slug> \
    group's `log` field.
    Its rules apply unchanged: the material-decision test (commits
    the engagement AND changes a stakeholder's behaviour), dedup against
-   `existingDecisions`, supersession only on explicit conflict language,
+   `existingDecisions` (a `dismissed` one included — the owner rejected it,
+   so it is never captured again), supersession only on explicit conflict language,
    never delete, status flips only. Writing nothing is a valid outcome.
 5. Return a fenced JSON block: `{"slug", "stateWritten": bool,
    "decisionsWritten": [stems], "decisionsSkipped": N, "notes"}`. A subagent
@@ -381,7 +382,9 @@ project with a one-line what-happened, or `none on file`), and `context`
 (one line from the entity dossier and the project's *Where it stands* card,
 or, with no confident match, one line from the event alone and `No tracked
 project.`). Each field is one line; the CLI renders them under `#### Prep`
-and adds empty `#### Notes` and `#### Actions` lists for the owner.
+and adds empty `#### Your notes` and `#### Your actions` lists for the owner.
+It also opens every new note with the `> [!review] Waiting for you` block —
+the live Meetings and Decisions review queues; nothing to pass for it.
 The lookups: match attendee email domains and subject keywords against
 `40-entities/*/` and active projects in `30-projects/*/index.md` (same
 signals, same order, as `/sync-recordings` step 3); read the matched dossier
@@ -450,7 +453,8 @@ names the field, so one retry always suffices.
   whatever stage 3b did (ran, skipped or failed): a feed that keeps failing
   must still say so in the note. Omit the field only when the feed is off.
   The CLI renders it as the *Mail and Teams* block right after *At a
-  glance*. Build it in this order:
+  glance*, inside the recap (below the *Waiting for you* queues). Build it
+  in this order:
   1. `python3 "$VAULTLIB" messages status --vault "$VAULT" --now <now UTC> [--first-run-since <since from stage 3b, first run only>] [--auth-error]`
      gives `{"lines": [...]}`; use those lines verbatim as `status` (at most 3).
      Pass `--auth-error` when stage 3b's outcome line was `auth-error`: the

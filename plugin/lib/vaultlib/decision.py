@@ -156,6 +156,10 @@ def list_decisions(root: Path, project: str) -> dict:
                 "supersedes": _unwrap(data.get("supersedes")),
                 "source": _unwrap(data.get("source")),
                 "reviewed": data.get("reviewed"),
+                # Dismissed by the owner as not a real decision (#247). Still
+                # listed, so the evening run's dedup sees it and does not
+                # capture it again — but never cited or superseded.
+                "dismissed": data.get("archived") is True,
             })
         entries.append(entry)
     entries.sort(key=lambda e: (str(e.get("date") or ""), e["stem"]),
@@ -297,6 +301,12 @@ def _plan_supersession(root: Path, project: str, raw: Optional[str],
             f"{found.relative_to(root).as_posix()} cannot be read as a "
             f"decision note: {exc}"
         ) from exc
+    if data.get("archived") is True:
+        raise DecisionError(
+            f"decision {found.stem!r} was dismissed — the owner marked it as "
+            "not a real decision, so there is nothing in force to supersede. "
+            "Write the new decision without `supersedes`."
+        )
     prior_status = data.get("status")
     if prior_status != "active":
         held = (f"has status {prior_status!r}" if prior_status

@@ -51,6 +51,11 @@ def slugify(text: str, max_length: int = MAX_SLUG_LENGTH) -> str:
     return result
 
 
+def is_slug(value) -> bool:
+    """Whether `value` is already a slug — safe to write unquoted in YAML."""
+    return isinstance(value, str) and bool(_SLUG_RE.match(value))
+
+
 def validate_slug(slug: str, max_length: int = MAX_SLUG_LENGTH) -> None:
     """Raise ValueError if the slug is unusable as a folder or file stem."""
     if not slug:

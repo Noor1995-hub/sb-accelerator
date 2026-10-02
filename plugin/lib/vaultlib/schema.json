@@ -34,7 +34,8 @@
       ],
       "optional": [
         "supersedes",
-        "source"
+        "source",
+        "archived"
       ],
       "required": [
         "type",
@@ -206,6 +207,7 @@
         "last-updated",
         "meetings-7d",
         "meetings-30d",
+        "last-met",
         "messages-7d",
         "messages-30d"
       ],
