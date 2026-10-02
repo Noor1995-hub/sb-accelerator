@@ -97,6 +97,46 @@ def test_atomic_write_leaves_no_temp_files(tmp_path):
     assert [p.name for p in tmp_path.iterdir()] == ["note.md"]
 
 
+def _flaky_replace(monkeypatch, failures):
+    """os.replace that raises WinError 5 `failures` times, then works — the
+    shape of a scanner or indexer briefly holding the freshly written file
+    (reproduced at ~8% of migration-test runs on a Windows host)."""
+    real = vault.os.replace
+    calls = []
+
+    def replace(src, dst):
+        calls.append(dst)
+        if len(calls) <= failures:
+            raise PermissionError(13, "Access is denied")
+        return real(src, dst)
+
+    monkeypatch.setattr(vault.os, "replace", replace)
+    monkeypatch.setattr(vault.time, "sleep", lambda s: None)
+    return calls
+
+
+def test_atomic_write_retries_a_briefly_locked_rename(tmp_path, monkeypatch):
+    calls = _flaky_replace(monkeypatch, failures=2)
+    target = tmp_path / "note.md"
+
+    vault.atomic_write(target, "x\n")
+
+    assert target.read_text(encoding="utf-8") == "x\n"
+    assert len(calls) == 3
+    assert [p.name for p in tmp_path.iterdir()] == ["note.md"]
+
+
+def test_atomic_write_gives_up_on_a_lasting_lock(tmp_path, monkeypatch):
+    calls = _flaky_replace(monkeypatch, failures=99)
+    target = tmp_path / "note.md"
+
+    with pytest.raises(PermissionError):
+        vault.atomic_write(target, "x\n")
+
+    assert len(calls) == vault.REPLACE_ATTEMPTS
+    assert list(tmp_path.iterdir()) == [], "the temp file must not be left behind"
+
+
 def test_atomic_write_overwrites(tmp_path):
     target = tmp_path / "note.md"
     vault.atomic_write(target, "first\n")
