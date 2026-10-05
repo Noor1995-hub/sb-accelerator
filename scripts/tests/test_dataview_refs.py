@@ -52,6 +52,27 @@ def test_string_literals_do_not_leak_in_as_properties():
         assert leaked not in refs.properties
 
 
+NAMES = '''TABLE WITHOUT ID
+  map(slice(attendees, 0, 3), (a) => default(link("50-people/" + a).person-name, a)) AS "With",
+  map(projects, (p) => link("30-projects/" + p + "/index", default(link("30-projects/" + p + "/index").project-name, p))) AS "Projects"
+FROM "20-meetings"
+WHERE econtains(projects, this.slug)'''
+
+
+def test_lambda_params_and_linked_fields_are_not_the_queried_objects(tmp_path):
+    """#259: `a` and `p` are lambda parameters, and `.person-name` /
+    `.project-name` belong to the linked note, not to the meeting."""
+    refs = dqlrefs.extract_refs(NAMES)
+    assert refs.properties == {"attendees", "projects"}
+    assert refs.linked_properties == {("person", "person-name"), ("project", "project-name")}
+
+
+def test_a_linked_field_the_ontology_does_not_know_is_caught():
+    refs = dqlrefs.extract_refs(NAMES.replace(".person-name", ".full-name"))
+    assert ("person", "full-name") in refs.linked_properties
+    assert "full-name" not in dqlrefs.known_fields("person")
+
+
 def test_keywords_and_functions_are_not_properties():
     refs = dqlrefs.extract_refs(SAMPLE)
     for keyword in ("TABLE", "WITHOUT", "ID", "AS", "FROM", "WHERE", "SORT", "LIMIT", "DESC"):
@@ -186,6 +207,11 @@ def test_every_property_reference_resolves(root, note):
             "the ontology renamed them, or the query is wrong. Either way the table "
             "renders empty in Obsidian."
         )
+        bad_links = {(kind, name) for kind, name in refs.linked_properties
+                     if name not in dqlrefs.known_fields(kind)}
+        assert not bad_links, (
+            f"{note_rel} block {index}: {sorted(bad_links)} read a field the linked "
+            "note's object type does not have — the cell renders empty")
         if refs.this_properties:
             assert containing_type, (
                 f"{note_rel} block {index}: uses `this.` but the note is not an "

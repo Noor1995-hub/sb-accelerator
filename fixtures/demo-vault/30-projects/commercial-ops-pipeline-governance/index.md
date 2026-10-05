@@ -35,7 +35,7 @@ next-milestone-date: 2026-09-30
 TABLE WITHOUT ID
   link(file.path, dateformat(date, "ccc dd-MM")) AS "Date",
   calendar-subject AS "Subject",
-  slice(attendees, 0, 3) AS "With"
+  map(slice(attendees, 0, 3), (a) => default(link("50-people/" + a).person-name, a)) AS "With"
 FROM "20-meetings"
 WHERE econtains(projects, this.slug)
 SORT date DESC
@@ -48,7 +48,7 @@ LIMIT 10
 TABLE WITHOUT ID
   link(file.path, dateformat(date, "dd-MM")) AS "Date",
   summary AS "Decision",
-  status AS "Status"
+  choice(status = "superseded", "Replaced", choice(status = "withdrawn", "Withdrawn", choice(status = "active", "Active", status))) AS "Status"
 FROM "30-projects/commercial-ops-pipeline-governance/decisions"
 WHERE archived != true
 SORT date DESC

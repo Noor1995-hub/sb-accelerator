@@ -21,7 +21,7 @@ next-milestone-date: 2026-08-30
 
 > [!summary] Where it stands — 1 June
 > - **Stage** — Three-vendor shortlist approved; RFP out, with scoring that weights integration effort above sticker price.
-> - **Defining decision** — [[2026-06-01-vendor-shortlist-approved]]
+> - **Defining decision** — [[2026-06-01-vendor-shortlist-approved|Approve a three-vendor shortlist for the CRM data modernization RFP, weighted toward integration effort over list price.]]
 
 ## Coming up
 
@@ -35,7 +35,7 @@ next-milestone-date: 2026-08-30
 TABLE WITHOUT ID
   link(file.path, dateformat(date, "ccc dd-MM")) AS "Date",
   calendar-subject AS "Subject",
-  slice(attendees, 0, 3) AS "With"
+  map(slice(attendees, 0, 3), (a) => default(link("50-people/" + a).person-name, a)) AS "With"
 FROM "20-meetings"
 WHERE econtains(projects, this.slug)
 SORT date DESC
@@ -48,7 +48,7 @@ LIMIT 10
 TABLE WITHOUT ID
   link(file.path, dateformat(date, "dd-MM")) AS "Date",
   summary AS "Decision",
-  status AS "Status"
+  choice(status = "superseded", "Replaced", choice(status = "withdrawn", "Withdrawn", choice(status = "active", "Active", status))) AS "Status"
 FROM "30-projects/commercial-ops-crm-modernization/decisions"
 WHERE archived != true
 SORT date DESC

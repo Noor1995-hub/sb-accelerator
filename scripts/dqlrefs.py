@@ -23,7 +23,9 @@ from typing import Optional, Set
 from vaultlib import schema
 
 # DQL functions the vault's queries use. Extend deliberately.
-KNOWN_FUNCTIONS = {"link", "dateformat", "econtains", "slice"}
+KNOWN_FUNCTIONS = {"link", "dateformat", "econtains", "slice",
+                   # names and labels instead of codes (#259)
+                   "map", "default", "choice", "upper", "substring"}
 
 # Matched case-insensitively: Dataview's keywords are case-insensitive.
 KEYWORDS = {
@@ -38,6 +40,13 @@ _FROM_RE = re.compile(r"\bFROM\b(?P<rest>[^\n]*)", re.IGNORECASE)
 _QUOTED_RE = re.compile(r"\"[^\"]*\"|'[^']*'")
 _CALL_RE = re.compile(r"([A-Za-z_][A-Za-z0-9_-]*)\s*\(")
 _IDENT_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_.-]*")
+# `(a) => ...` — a lambda's parameter is a local name, not a property.
+_LAMBDA_RE = re.compile(r"\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*\)\s*=>")
+# `link("50-people/" + a).person-name` reads a field of *another* note; the
+# literal folder at the start of the link says which object type it is.
+_DEREF_RE = re.compile(r'link\("(?P<prefix>[^"]*)"[^()]*(?:\([^()]*\)[^()]*)*\)\.(?P<field>[A-Za-z_][A-Za-z0-9_-]*)')
+_DEREF_TAIL_RE = re.compile(r"\)\.[A-Za-z_][A-Za-z0-9_-]*")
+_LINK_PREFIX_TYPES = [("50-people/", "person"), ("40-entities/", "entity"), ("30-projects/", "project")]
 
 # Object notes, by where they live. Same shapes as the HARNESS globs in
 # test_fixtures_ontology.py, expressed as paths because that is what a DQL
@@ -74,6 +83,8 @@ class Refs:
     properties: Set[str] = field(default_factory=set)
     this_properties: Set[str] = field(default_factory=set)
     from_paths: Set[str] = field(default_factory=set)
+    # (object type, field) pairs read through `link("folder/...").field`
+    linked_properties: Set[tuple] = field(default_factory=set)
 
 
 def dataview_blocks(text: str):
@@ -94,9 +105,19 @@ def extract_refs(block: str) -> Refs:
     for match in _FROM_RE.finditer(block):
         refs.from_paths.update(re.findall(r"\"([^\"]+)\"", match.group("rest")))
 
+    for match in _DEREF_RE.finditer(block):
+        kind = next((t for prefix, t in _LINK_PREFIX_TYPES
+                     if match.group("prefix").startswith(prefix)), None)
+        if kind is None:
+            raise UnmodeledQuery(f"link({match.group('prefix')!r}...).{match.group('field')}: "
+                                 "no object type for that folder")
+        refs.linked_properties.add((kind, match.group("field")))
+    params = set(_LAMBDA_RE.findall(block))
+
     # Strip literals so format strings ("dd-MM-yy") and display aliases
     # (AS "Date") cannot masquerade as property references.
     stripped = _QUOTED_RE.sub(" ", block)
+    stripped = _DEREF_TAIL_RE.sub(") ", stripped)
 
     functions = set(_CALL_RE.findall(stripped))
     unknown = functions - KNOWN_FUNCTIONS
@@ -111,7 +132,7 @@ def extract_refs(block: str) -> Refs:
             refs.this_properties.add(token[len("this."):])
         elif token == "file" or token.startswith("file."):
             continue
-        elif token.lower() in KEYWORDS or token in functions:
+        elif token.lower() in KEYWORDS or token in functions or token in params:
             continue
         else:
             refs.properties.add(token)

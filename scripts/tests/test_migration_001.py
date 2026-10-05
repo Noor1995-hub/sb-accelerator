@@ -1245,13 +1245,23 @@ def test_already_restructured_dossiers_are_left_byte_identical(tmp_path):
 def test_meeting_log_query_is_pinned_to_the_shipped_fixtures(tmp_path):
     """The plan pins the fixture as the contract, not the prose. The query is
     a frozen literal here rather than an import of entity.MEETING_LOG_QUERY:
-    a migration's output must not change when the writer's does."""
+    a migration's output must not change when the writer's does. Migration
+    007 (#259) later rewrote one line of it, so the fixtures carry 001's query
+    as 007 leaves it — which is also what the writer emits today."""
     module = load_m001()
+    spec = importlib.util.spec_from_file_location(
+        "m007", REPO_ROOT / "plugin" / "migrations" / "007-structure-version-8" / "migrate.py")
+    m007 = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m007)
+    lines = module.MEETING_LOG_QUERY.split("\n")
+    assert m007._swap_in_dataview(lines, m007.DOSSIER_LINES) == 1
+    expected = "\n".join(lines)
+    assert expected == entity_module.MEETING_LOG_QUERY
     dossiers = sorted(DEMO_ENTITIES.glob("*/dossier.md"))
     assert dossiers
     for path in dossiers:
-        assert module.MEETING_LOG_QUERY in path.read_text(encoding="utf-8"), (
-            f"{path} does not carry the query migration 001 writes")
+        assert expected in path.read_text(encoding="utf-8"), (
+            f"{path} does not carry the query migrations 001 and 007 write")
 
 
 def test_verify_names_every_offending_dossier_in_one_error(tmp_path):

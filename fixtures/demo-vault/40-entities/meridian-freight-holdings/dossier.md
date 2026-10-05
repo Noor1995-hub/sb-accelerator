@@ -43,7 +43,7 @@ last-updated: 2026-06-01
 TABLE WITHOUT ID
   link(file.path, dateformat(date, "dd-MM-yy")) AS "Date",
   calendar-subject AS "Subject",
-  projects AS "Projects"
+  map(projects, (p) => link("30-projects/" + p + "/index", default(link("30-projects/" + p + "/index").project-name, p))) AS "Projects"
 FROM "20-meetings"
 WHERE econtains(entities, this.slug)
 SORT date DESC

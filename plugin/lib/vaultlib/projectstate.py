@@ -86,7 +86,8 @@ def _dataview_meetings() -> str:
         "```dataview", "TABLE WITHOUT ID",
         '  link(file.path, dateformat(date, "ccc dd-MM")) AS "Date",',
         '  calendar-subject AS "Subject",',
-        '  slice(attendees, 0, 3) AS "With"',
+        # Names, not slugs (#259); a slug with no person note shows as itself.
+        '  map(slice(attendees, 0, 3), (a) => default(link("50-people/" + a).person-name, a)) AS "With"',
         f'FROM "{vault.MEETINGS_DIR}"',
         "WHERE econtains(projects, this.slug)",
         "SORT date DESC", "LIMIT 10", "```"])
@@ -97,7 +98,8 @@ def _dataview_decisions(slug: str) -> str:
         "```dataview", "TABLE WITHOUT ID",
         '  link(file.path, dateformat(date, "dd-MM")) AS "Date",',
         '  summary AS "Decision",',
-        '  status AS "Status"',
+        '  choice(status = "superseded", "Replaced", choice(status = "withdrawn", "Withdrawn", '
+        'choice(status = "active", "Active", status))) AS "Status"',
         f'FROM "{vault.PROJECTS_DIR}/{slug}/decisions"',
         "WHERE archived != true",       # dismissed: not a decision (#247)
         "SORT date DESC", "LIMIT 10", "```"])

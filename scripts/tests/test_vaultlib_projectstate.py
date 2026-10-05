@@ -73,7 +73,9 @@ def test_write_renders_the_v2_body_and_touches_frontmatter(tmp_path):
     assert "## Recent meetings" in body and 'dateformat(date, "ccc dd-MM")' in body and "LIMIT 10" in body
     # #237: no duration column — the field is 0 on most notes and the column
     # had no unit; the field itself stays for the duplicate check
-    assert 'slice(attendees, 0, 3) AS "With"\nFROM' in body
+    # names, not slugs (#259)
+    assert ('map(slice(attendees, 0, 3), (a) => default(link("50-people/" + a).person-name, a))'
+            ' AS "With"\nFROM') in body
     assert "recording-duration" not in body
     assert "## Recent decisions" in body and f'FROM "30-projects/{slug}/decisions"' in body
     assert "## Background" in body

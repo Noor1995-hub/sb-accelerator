@@ -136,10 +136,10 @@ def test_the_shipped_template_is_already_where_the_migration_lands(tmp_path):
     assert json.loads((root / WS).read_text(encoding="utf-8")) == shipped_ws
 
 
-def test_run_through_the_framework_bumps_to_7(tmp_path):
+def test_run_through_the_framework_bumps_to_8(tmp_path):
     root = vault_v6(tmp_path)
     (root / "99-workflow-config").mkdir()
     result = migrate.run(root, "2026-10-02", stamp="2026-10-02-120000")
-    assert [a["slug"] for a in result["applied"]] == ["structure-version-7"]
-    assert result["structure_version"] == 7
-    assert (root / "structure-version").read_text(encoding="utf-8").strip() == "7"
+    assert [a["slug"] for a in result["applied"]] == ["structure-version-7", "structure-version-8"]
+    assert result["structure_version"] == 8
+    assert (root / "structure-version").read_text(encoding="utf-8").strip() == "8"

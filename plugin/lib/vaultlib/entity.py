@@ -70,7 +70,7 @@ MEETING_LOG_QUERY = """```dataview
 TABLE WITHOUT ID
   link(file.path, dateformat(date, "dd-MM-yy")) AS "Date",
   calendar-subject AS "Subject",
-  projects AS "Projects"
+  map(projects, (p) => link("30-projects/" + p + "/index", default(link("30-projects/" + p + "/index").project-name, p))) AS "Projects"
 FROM "20-meetings"
 WHERE econtains(entities, this.slug)
 SORT date DESC
@@ -88,7 +88,7 @@ TEAMS_SECTION = TEAMS_HEADING + """
 ```dataview
 TABLE WITHOUT ID
   link(file.path, entity-name) AS "Team",
-  status AS "Status"
+  upper(substring(status, 0, 1)) + substring(status, 1) AS "Status"
 FROM "40-entities"
 WHERE parent = this.slug
 SORT entity-name ASC
@@ -98,7 +98,7 @@ SORT entity-name ASC
 TABLE WITHOUT ID
   link(file.path, project-name) AS "Project",
   link("40-entities/" + entity + "/dossier").entity-name AS "Team",
-  status AS "Status"
+  upper(substring(status, 0, 1)) + substring(status, 1) AS "Status"
 FROM "30-projects"
 WHERE type = "project" AND link("40-entities/" + entity + "/dossier").parent = this.slug
 SORT project-name ASC

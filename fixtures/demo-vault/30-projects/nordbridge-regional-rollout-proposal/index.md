@@ -21,7 +21,7 @@ next-milestone-date: 2026-09-15
 
 > [!summary] Where it stands — 12 June
 > - **Stage** — Proposal in drafting for a September submission; Phase 1 site still unresolved after Liège came off the table.
-> - **Defining decision** — [[2026-03-02-pilot-site-selection-withdrawn]]
+> - **Defining decision** — [[2026-03-02-pilot-site-selection-withdrawn|Proposed piloting the rollout at Nordbridge's Liège plant first; withdrawn after Nordbridge flagged an unrelated ERP migration freeze at that site.]]
 
 ## Coming up
 
@@ -35,7 +35,7 @@ next-milestone-date: 2026-09-15
 TABLE WITHOUT ID
   link(file.path, dateformat(date, "ccc dd-MM")) AS "Date",
   calendar-subject AS "Subject",
-  slice(attendees, 0, 3) AS "With"
+  map(slice(attendees, 0, 3), (a) => default(link("50-people/" + a).person-name, a)) AS "With"
 FROM "20-meetings"
 WHERE econtains(projects, this.slug)
 SORT date DESC
@@ -48,7 +48,7 @@ LIMIT 10
 TABLE WITHOUT ID
   link(file.path, dateformat(date, "dd-MM")) AS "Date",
   summary AS "Decision",
-  status AS "Status"
+  choice(status = "superseded", "Replaced", choice(status = "withdrawn", "Withdrawn", choice(status = "active", "Active", status))) AS "Status"
 FROM "30-projects/nordbridge-regional-rollout-proposal/decisions"
 WHERE archived != true
 SORT date DESC

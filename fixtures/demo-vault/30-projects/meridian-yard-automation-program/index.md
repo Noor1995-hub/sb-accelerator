@@ -22,7 +22,7 @@ next-milestone-date: 2026-09-01
 
 > [!summary] Where it stands — 1 June
 > - **Stage** — Yard 1 commissioned on the Phase 0 vendor's platform; yards 2–3 being re-scoped onto it after the May consolidation.
-> - **Defining decision** — [[2026-05-20-single-vendor-strategy-adopted]]
+> - **Defining decision** — [[2026-05-20-single-vendor-strategy-adopted|Consolidate on a single automation vendor across all three yards to simplify integration and reduce total cost of ownership.]]
 
 ## Coming up
 
@@ -36,7 +36,7 @@ next-milestone-date: 2026-09-01
 TABLE WITHOUT ID
   link(file.path, dateformat(date, "ccc dd-MM")) AS "Date",
   calendar-subject AS "Subject",
-  slice(attendees, 0, 3) AS "With"
+  map(slice(attendees, 0, 3), (a) => default(link("50-people/" + a).person-name, a)) AS "With"
 FROM "20-meetings"
 WHERE econtains(projects, this.slug)
 SORT date DESC
@@ -49,7 +49,7 @@ LIMIT 10
 TABLE WITHOUT ID
   link(file.path, dateformat(date, "dd-MM")) AS "Date",
   summary AS "Decision",
-  status AS "Status"
+  choice(status = "superseded", "Replaced", choice(status = "withdrawn", "Withdrawn", choice(status = "active", "Active", status))) AS "Status"
 FROM "30-projects/meridian-yard-automation-program/decisions"
 WHERE archived != true
 SORT date DESC

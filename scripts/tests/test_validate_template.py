@@ -41,7 +41,7 @@ def make_populated_template(tmp_path):
         "Never read or display files under 99-workflow-config/secrets/.\n",
         encoding="utf-8",
     )
-    (t / "structure-version").write_text("7\n", encoding="utf-8")
+    (t / "structure-version").write_text("8\n", encoding="utf-8")
     secrets = t / "99-workflow-config" / "secrets"
     secrets.mkdir(parents=True, exist_ok=True)
     (secrets / "README.md").write_text("secrets readme", encoding="utf-8")
@@ -85,13 +85,13 @@ def test_stale_structure_version_is_flagged(tmp_path):
     write_template_config(t, shipping_config())
     (t / "structure-version").write_text("1\n", encoding="utf-8")
     problems = main(tmp_path)
-    assert any("structure-version" in p and "7" in p for p in problems)
+    assert any("structure-version" in p and "8" in p for p in problems)
 
 
 def test_structure_version_tolerates_no_trailing_newline(tmp_path):
     t = make_populated_template(tmp_path)
     write_template_config(t, shipping_config())
-    (t / "structure-version").write_text("7", encoding="utf-8")
+    (t / "structure-version").write_text("8", encoding="utf-8")
     assert main(tmp_path) == []
 
 
@@ -230,4 +230,4 @@ def test_template_hides_the_messages_folder():
     app = json.loads((template / ".obsidian/app.json").read_text(encoding="utf-8"))
     assert "_messages/" in app["userIgnoreFilters"]
     assert (template / "_messages" / ".gitkeep").is_file()
-    assert (template / "structure-version").read_text(encoding="utf-8").strip() == "7"
+    assert (template / "structure-version").read_text(encoding="utf-8").strip() == "8"
