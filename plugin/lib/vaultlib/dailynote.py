@@ -652,7 +652,9 @@ def write(root: Path, payload) -> dict:
     window = data["recap_window"]
     fingerprint = recap_fingerprint(root, window) if window else None
     path = root / DAILY_NOTES_DIR / f"{data['date']}.md"
-    if path.is_file():
+    # A blank note is the one Obsidian creates on opening today (#263): write
+    # the real note over it, as if it were not there.
+    if path.is_file() and not vault.is_blank_note(path):
         original = path.read_text(encoding="utf-8")
         merged, replaced, recap_skipped = _merge(
             root, original, data, fingerprint)
@@ -700,7 +702,7 @@ def read(root: Path, date_iso_raw) -> dict:
     date_iso = _require_date(date_iso_raw)
     rel = f"{DAILY_NOTES_DIR}/{date_iso}.md"
     path = root / DAILY_NOTES_DIR / f"{date_iso}.md"
-    if not path.is_file():
+    if not path.is_file() or vault.is_blank_note(path):
         return {"exists": False, "path": rel}
     text = path.read_text(encoding="utf-8")
     warnings: List[str] = []

@@ -96,9 +96,10 @@ Platform limits, none of which we are near: 200 MB uncompressed per plugin,
 marketplace, 25 marketplaces per user.
 
 **Size, since #164.** The plugin vendors the pinned Obsidian plugins and
-theme (`plugin/vendor/obsidian/`, about 7.7 MB uncompressed, 1.9 MB zipped —
-notebook-navigator's and dataview's `main.js` are most of it) so
-`/provision-vault` step 2 runs offline. That puts the plugin at roughly
+theme (`plugin/vendor/obsidian/`, about 2.8 MB uncompressed since Notebook
+Navigator left in #263 — it was 7.7 MB, 1.9 MB zipped; dataview's `main.js`
+is most of what remains) so
+`/provision-vault` step 2 runs offline. That put the plugin (before #263) at roughly
 9.5 MB against the 200 MB platform limit and the path-E zip at about 2 MB
 against its 50 MB cap. The cost that does accrue is history: every pin bump
 rewrites those blobs, so each one adds ~8 MB to the `sb-dist*` repos' git

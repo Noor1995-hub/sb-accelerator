@@ -34,13 +34,16 @@
         "type": "tabs",
         "children": [
           {
-            "id": "48d16ae5156fbc08",
+            "id": "c9d04389abb5c8f0",
             "type": "leaf",
             "state": {
-              "type": "notebook-navigator",
-              "state": {},
-              "icon": "notebook-navigator",
-              "title": "Notebook Navigator"
+              "type": "bookmarks",
+              "state": {
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-bookmark",
+              "title": "Bookmarks"
             }
           },
           {
@@ -74,26 +77,13 @@
               "icon": "lucide-search",
               "title": "Search"
             }
-          },
-          {
-            "id": "c9d04389abb5c8f0",
-            "type": "leaf",
-            "state": {
-              "type": "bookmarks",
-              "state": {
-                "showSearch": false,
-                "searchQuery": ""
-              },
-              "icon": "lucide-bookmark",
-              "title": "Bookmarks"
-            }
           }
         ],
         "currentTab": 0
       }
     ],
     "direction": "horizontal",
-    "width": 400
+    "width": 280
   },
   "right": {
     "id": "ab91c3bb3ad4c390",

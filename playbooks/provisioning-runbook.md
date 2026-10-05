@@ -117,7 +117,7 @@ checkout carries the same vendored tree.
 If neither is available, install by hand from within Obsidian. The list the
 vault expects is in its own `.obsidian/community-plugins.json`, so you do
 not need this runbook in front of you to recover it: Dataview, Minimal
-Theme Settings, Style Settings, Notebook Navigator — plus the **Minimal**
+Theme Settings and Style Settings — plus the **Minimal**
 theme via Settings → Appearance. **Installing Dataview by hand, pick 0.5.68
 explicitly** — the community browser's newer 0.5.70 is a mislabeled beta
 with a broken manifest (see `plugin-pins.json`'s `_readme`).

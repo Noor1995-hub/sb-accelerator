@@ -88,9 +88,9 @@ def test_verify_catches_a_note_without_its_name(tmp_path):
         module.verify(root)
 
 
-def test_run_through_the_framework_bumps_to_9(tmp_path):
+def test_run_through_the_framework_bumps_to_10(tmp_path):
     root = vault_v8(tmp_path)
     (root / "99-workflow-config").mkdir()
     result = migrate.run(root, "2026-10-05", stamp="2026-10-05-120000")
-    assert [a["slug"] for a in result["applied"]] == ["structure-version-9"]
-    assert result["structure_version"] == 9
+    assert [a["slug"] for a in result["applied"]] == ["structure-version-9", "structure-version-10"]
+    assert result["structure_version"] == 10

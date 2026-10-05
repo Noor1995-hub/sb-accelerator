@@ -236,7 +236,7 @@ def _shipped_entries(pins: dict):
 def test_shipped_pins_manifest_is_wellformed():
     pins = load_pins(PINS_PATH)
     ids = {p["id"] for p in pins["plugins"]}
-    assert ids == {"dataview", "obsidian-minimal-settings", "obsidian-style-settings", "notebook-navigator"}
+    assert ids == {"dataview", "obsidian-minimal-settings", "obsidian-style-settings"}
     assert pins["theme"]["name"] == "Minimal"
     for entry in [*pins["plugins"], pins["theme"]]:
         assert entry["repo"] and entry["tag"] and entry["license"]
@@ -302,19 +302,19 @@ def test_shipped_licences_are_present_and_indexed():
 def test_shipped_tree_provisions_a_fresh_vault_with_the_network_refused(tmp_path):
     """#164's acceptance, as a test: a fresh vault, the real pins, the real
     vendored tree, and a fetch that fails the test if it is ever called.
-    First run installs all 14; the re-run finds all 14 already ok."""
+    First run installs all 11; the re-run finds all 11 already ok."""
     vault = make_vault(tmp_path)
     pins = load_pins(PINS_PATH)
     actions, problems = provision(vault, pins, fetch=refuse_fetch)
     assert problems == []
-    assert sum(1 for a in actions if a.startswith("installed")) == 14
+    assert sum(1 for a in actions if a.startswith("installed")) == 11
     for label, entry in _shipped_entries(pins):
         folder = "themes" if label == pins["theme"]["name"] else "plugins"
         for asset in entry["assets"]:
             assert (vault / ".obsidian" / folder / label / asset).is_file()
     again, problems = provision(vault, pins, fetch=refuse_fetch)
     assert problems == []
-    assert sum(1 for a in again if a.startswith("ok")) == 14
+    assert sum(1 for a in again if a.startswith("ok")) == 11
 
 
 def test_cli_summary_line_on_the_shipped_tree(tmp_path, capsys, monkeypatch):
@@ -328,6 +328,6 @@ def test_cli_summary_line_on_the_shipped_tree(tmp_path, capsys, monkeypatch):
     monkeypatch.setattr(provision_plugins.urllib.request, "urlopen", no_network)
     vault = make_vault(tmp_path)
     assert main([str(vault)]) == 0
-    assert capsys.readouterr().out.rstrip().splitlines()[-1] == "14 installed, 0 already ok, 0 problem(s)."
+    assert capsys.readouterr().out.rstrip().splitlines()[-1] == "11 installed, 0 already ok, 0 problem(s)."
     assert main([str(vault)]) == 0
-    assert capsys.readouterr().out.rstrip().splitlines()[-1] == "0 installed, 14 already ok, 0 problem(s)."
+    assert capsys.readouterr().out.rstrip().splitlines()[-1] == "0 installed, 11 already ok, 0 problem(s)."

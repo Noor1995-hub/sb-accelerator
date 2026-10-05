@@ -74,19 +74,11 @@ def test_broken_json_is_refused_without_writing(tmp_path):
     assert (root / NN).read_text(encoding="utf-8") == "{nope"
 
 
-def test_the_shipped_template_is_already_where_the_migration_lands(tmp_path):
-    module = load()
-    root = tmp_path / "fresh"
-    shutil.copytree(TEMPLATE / ".obsidian", root / ".obsidian")
-    shipped = json.loads((root / NN).read_text(encoding="utf-8"))
-    module.apply(root)
-    assert json.loads((root / NN).read_text(encoding="utf-8")) == shipped
-
-
+# Convergence with the shipped template is checked for the whole chain at once in test_migration_009 (#263): the template no longer ships Navigator's settings.
 def test_run_through_the_framework_bumps_to_5(tmp_path):
     root = vault_v4(tmp_path, {"vaultProfiles": [{"id": "default"}]})
     result = migrate.run(root, "2026-10-01", stamp="2026-10-01-120000")
     assert [a["slug"] for a in result["applied"]] == ["structure-version-5", "structure-version-6",
                                                         "structure-version-7", "structure-version-8",
-        "structure-version-9"]
-    assert (root / "structure-version").read_text(encoding="utf-8").strip() == "9"
+        "structure-version-9", "structure-version-10"]
+    assert (root / "structure-version").read_text(encoding="utf-8").strip() == "10"

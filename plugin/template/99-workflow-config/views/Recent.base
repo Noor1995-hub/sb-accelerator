@@ -1,0 +1,33 @@
+filters:
+  and:
+    - file.ext == "md"
+    - file.name != "CLAUDE"
+    - '!file.inFolder("99-workflow-config")'
+    - '!file.inFolder("claude")'
+    - '!file.inFolder("_messages")'
+    - '!file.inFolder("90-archive")'
+    - '!file.inFolder("95-private")'
+formulas:
+  item: link(file.path, if(note["project-name"], note["project-name"], if(note["entity-name"], note["entity-name"], if(note["person-name"], note["person-name"], if(note["calendar-subject"], note["calendar-subject"], if(note["summary"], note["summary"], file.basename))))))
+  kind: if(file.ext == "md", "Note", if(file.ext == "pdf", "PDF", if(file.ext == "png" || file.ext == "jpg" || file.ext == "jpeg", "Image", if(file.ext == "pptx", "Slides", if(file.ext == "xlsx", "Spreadsheet", if(file.ext == "docx", "Document", if(file.ext == "txt", "Text", file.ext.upper())))))))
+properties:
+  formula.item:
+    displayName: Note
+  formula.kind:
+    displayName: Kind
+  file.mtime:
+    displayName: Last changed
+  file.ctime:
+    displayName: Added
+views:
+  - type: table
+    name: All
+    order:
+      - formula.item
+      - file.mtime
+    sort:
+      - property: file.mtime
+        direction: DESC
+    limit: 30
+    columnSize:
+      formula.item: 420

@@ -41,7 +41,7 @@ def make_populated_template(tmp_path):
         "Never read or display files under 99-workflow-config/secrets/.\n",
         encoding="utf-8",
     )
-    (t / "structure-version").write_text("9\n", encoding="utf-8")
+    (t / "structure-version").write_text("10\n", encoding="utf-8")
     secrets = t / "99-workflow-config" / "secrets"
     secrets.mkdir(parents=True, exist_ok=True)
     (secrets / "README.md").write_text("secrets readme", encoding="utf-8")
@@ -85,13 +85,13 @@ def test_stale_structure_version_is_flagged(tmp_path):
     write_template_config(t, shipping_config())
     (t / "structure-version").write_text("1\n", encoding="utf-8")
     problems = main(tmp_path)
-    assert any("structure-version" in p and "9" in p for p in problems)
+    assert any("structure-version" in p and "10" in p for p in problems)
 
 
 def test_structure_version_tolerates_no_trailing_newline(tmp_path):
     t = make_populated_template(tmp_path)
     write_template_config(t, shipping_config())
-    (t / "structure-version").write_text("9", encoding="utf-8")
+    (t / "structure-version").write_text("10", encoding="utf-8")
     assert main(tmp_path) == []
 
 
@@ -225,9 +225,9 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 
 def test_template_hides_the_messages_folder():
     template = REPO_ROOT / "plugin" / "template"
-    nav = json.loads((template / ".obsidian/plugins/notebook-navigator/data.json").read_text(encoding="utf-8"))
-    assert "_messages" in nav["vaultProfiles"][0]["hiddenFolders"]
+    css = (template / ".obsidian/snippets/sb-accelerator.css").read_text(encoding="utf-8")
+    assert '[data-path="_messages"]' in css   # hidden in the file view (#263)
     app = json.loads((template / ".obsidian/app.json").read_text(encoding="utf-8"))
     assert "_messages/" in app["userIgnoreFilters"]
     assert (template / "_messages" / ".gitkeep").is_file()
-    assert (template / "structure-version").read_text(encoding="utf-8").strip() == "9"
+    assert (template / "structure-version").read_text(encoding="utf-8").strip() == "10"

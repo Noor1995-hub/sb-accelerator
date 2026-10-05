@@ -74,7 +74,7 @@ ship as files, by design).
 If you created the vault without the flag, either re-create it with
 `--with-plugins`, run `python plugin/lib/provision_plugins.py /tmp/sb-test-vault`
 and reopen the vault, or install by hand — Dataview, Minimal Theme Settings,
-Style Settings, Notebook Navigator, plus the Minimal theme via Settings →
+Style Settings, plus the Minimal theme via Settings →
 Appearance. The authoritative list is the vault's own
 `.obsidian/community-plugins.json`; `playbooks/provisioning-runbook.md` §2
 covers the same fallback on a client machine.
@@ -117,10 +117,10 @@ vault. Assertions cover what a selector can express; these are judgement:
 - Two projects — `commercial-ops-pipeline-governance` and
   `meridian-warehouse-pilot-phase-0` — have no decisions yet, so an empty
   decisions table there is correct, not a bug.
-- Notebook Navigator's Shortcuts section lists Meetings, Projects, Entities,
-  People, Decisions and the daily-notes folder (rainbow-tinted), and
-  `claude/skills` is browsable in the file tree (`ls -la` shows
-  `.claude -> claude`).
+- The sidebar is the coloured menu (Obsidian's Bookmarks tab): Start here,
+  Daily notes, Inbox, Meetings, Projects, People, Entities, Decisions,
+  Thoughts & ideas and a folded Library group; each opens its table (#263).
+  `ls -la` shows `.claude -> claude`.
 
 If a row set ever disagrees with what Obsidian shows, **Obsidian is right** —
 fix `scripts/basesim.py` and the expectations it pinned. The probe's

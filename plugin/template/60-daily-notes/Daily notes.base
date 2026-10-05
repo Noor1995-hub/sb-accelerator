@@ -1,0 +1,21 @@
+filters:
+  and:
+    - file.inFolder("60-daily-notes")
+    - type == "daily-note"
+formulas:
+  day: link(file.path, date.format("dddd D MMMM YYYY"))
+properties:
+  formula.day:
+    displayName: Day
+views:
+  - type: table
+    name: All
+    order:
+      - formula.day
+    sort:
+      - property: date
+        direction: DESC
+    columnSize:
+      formula.day: 320
+  - type: table
+    name: View

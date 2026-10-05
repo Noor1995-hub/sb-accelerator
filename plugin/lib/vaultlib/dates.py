@@ -283,6 +283,9 @@ def _daily_note_dates(root: Path) -> set:
     for path in sorted(notes_dir.glob("*.md")) if notes_dir.is_dir() else []:
         if not vault.ISO_DATE_RE.match(path.stem):
             continue
+        # A blank note was opened by Obsidian, not written by a run (#263).
+        if vault.is_blank_note(path):
+            continue
         try:
             found.add(datetime.strptime(path.stem, "%Y-%m-%d").date())
         except ValueError:

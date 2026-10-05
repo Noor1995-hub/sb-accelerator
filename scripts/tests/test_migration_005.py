@@ -103,8 +103,8 @@ def test_run_from_structure_3_keeps_003s_hidden_folders_and_adds_messages(tmp_pa
     assert [a["slug"] for a in result["applied"]] == [
         "structure-version-4", "structure-version-5", "structure-version-6",
         "structure-version-7", "structure-version-8",
-        "structure-version-9"]
-    assert result["structure_version"] == 9
+        "structure-version-9", "structure-version-10"]
+    assert result["structure_version"] == 10
     nav = json.loads((root / NAV).read_text(encoding="utf-8"))
     hidden = nav["vaultProfiles"][0]["hiddenFolders"]
     assert hidden == ["old-stuff", "claude", "99-workflow-config", "_messages"]

@@ -4,13 +4,10 @@ filters:
     - type == "entity"
 formulas:
   open: link(file.path, "→")
-  # Teams (#253): an entity with `parent` groups under its parent's name, the
-  # parent first. The name is looked up from the parent's dossier, so the
-  # table shows names, never the slug that joins them.
   group: if(parent, file("40-entities/" + parent + "/dossier.md").properties["entity-name"], note["entity-name"])
   part-of: if(parent, link("40-entities/" + parent + "/dossier.md", file("40-entities/" + parent + "/dossier.md").properties["entity-name"]), "")
   team-order: if(parent, 1, 0)
-  # Names and plain labels, not codes (#240).
+  name: if(parent, "↳ " + note["entity-name"], note["entity-name"])
   owner-name: if(owner, if(file("50-people/" + owner + ".md"), file("50-people/" + owner + ".md").properties["person-name"], owner), "")
   kind: if(note["entity-type"] == "business-unit", "Business unit", if(note["entity-type"], note["entity-type"].title(), ""))
   state: if(status, status.title(), "")
@@ -22,6 +19,8 @@ properties:
   formula.part-of:
     displayName: Part of
   note.entity-name:
+    displayName: Entity
+  formula.name:
     displayName: Entity
   formula.kind:
     displayName: Type
@@ -36,12 +35,9 @@ properties:
 views:
   - type: table
     name: All
-    groupBy:
-      property: formula.group
-      direction: ASC
     order:
       - formula.open
-      - entity-name
+      - formula.name
       - formula.part-of
       - formula.kind
       - formula.state
@@ -49,6 +45,8 @@ views:
       - formula.owner-name
       - last-updated
     sort:
+      - property: formula.group
+        direction: ASC
       - property: formula.team-order
         direction: ASC
       - property: entity-name
@@ -58,18 +56,17 @@ views:
     filters:
       and:
         - status == "active"
-    groupBy:
-      property: formula.group
-      direction: ASC
     order:
       - formula.open
-      - entity-name
+      - formula.name
       - formula.part-of
       - formula.kind
       - industry
       - formula.owner-name
       - last-updated
     sort:
+      - property: formula.group
+        direction: ASC
       - property: formula.team-order
         direction: ASC
       - property: entity-name

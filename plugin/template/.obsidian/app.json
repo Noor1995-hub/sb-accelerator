@@ -1,5 +1,9 @@
 {
   "attachmentFolderPath": "70-resources/attachments",
   "alwaysUpdateLinks": true,
-  "userIgnoreFilters": ["_messages/"]
+  "userIgnoreFilters": [
+    "_messages/"
+  ],
+  "newFileLocation": "folder",
+  "newFileFolderPath": "80-thoughts-ideas"
 }

@@ -1,0 +1,25 @@
+filters:
+  and:
+    - file.inFolder("80-thoughts-ideas")
+    - file.ext == "md"
+formulas:
+  note: link(file.path, file.basename)
+properties:
+  formula.note:
+    displayName: Note
+  file.mtime:
+    displayName: Last edited
+  file.ctime:
+    displayName: Created
+views:
+  - type: table
+    name: All
+    order:
+      - formula.note
+      - file.mtime
+      - file.ctime
+    sort:
+      - property: file.mtime
+        direction: DESC
+    columnSize:
+      formula.note: 168

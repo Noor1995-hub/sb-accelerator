@@ -1,0 +1,95 @@
+{
+  "items": [
+    {
+      "type": "file",
+      "ctime": 1759000000000,
+      "path": "Start here.md",
+      "title": "Start here"
+    },
+    {
+      "type": "file",
+      "ctime": 1759000000001,
+      "path": "60-daily-notes/Daily notes.base",
+      "title": "Daily notes"
+    },
+    {
+      "type": "file",
+      "ctime": 1759000000002,
+      "path": "99-workflow-config/views/Inbox.base",
+      "title": "Inbox"
+    },
+    {
+      "type": "file",
+      "ctime": 1759000000003,
+      "path": "20-meetings/Meetings.base",
+      "title": "Meetings"
+    },
+    {
+      "type": "file",
+      "ctime": 1759000000004,
+      "path": "30-projects/Projects.base",
+      "title": "Projects"
+    },
+    {
+      "type": "file",
+      "ctime": 1759000000005,
+      "path": "50-people/People.base",
+      "title": "People"
+    },
+    {
+      "type": "file",
+      "ctime": 1759000000006,
+      "path": "40-entities/Entities.base",
+      "title": "Entities"
+    },
+    {
+      "type": "file",
+      "ctime": 1759000000007,
+      "path": "30-projects/Decisions.base",
+      "title": "Decisions"
+    },
+    {
+      "type": "file",
+      "ctime": 1759000000008,
+      "path": "80-thoughts-ideas/Thoughts & ideas.base",
+      "title": "Thoughts & ideas"
+    },
+    {
+      "type": "group",
+      "ctime": 1759000000050,
+      "title": "Library",
+      "items": [
+        {
+          "type": "file",
+          "ctime": 1759000000060,
+          "path": "99-workflow-config/views/Resources.base",
+          "title": "Resources"
+        },
+        {
+          "type": "file",
+          "ctime": 1759000000061,
+          "path": "99-workflow-config/views/Heavy assets.base",
+          "title": "Heavy assets"
+        },
+        {
+          "type": "file",
+          "ctime": 1759000000062,
+          "path": "99-workflow-config/views/Archive.base",
+          "title": "Archive"
+        },
+        {
+          "type": "file",
+          "ctime": 1759000000063,
+          "path": "99-workflow-config/views/Private.base",
+          "title": "Private"
+        },
+        {
+          "type": "file",
+          "ctime": 1759000000064,
+          "path": "99-workflow-config/views/Recent.base",
+          "title": "Recent"
+        }
+      ]
+    }
+  ]
+}

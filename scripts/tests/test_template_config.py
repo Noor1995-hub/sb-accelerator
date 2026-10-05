@@ -1,71 +1,89 @@
 """Guards for shipped .obsidian configuration in the template.
 
-The Notebook Navigator settings file references template paths (shortcuts)
-— these tests keep it honest when folders or .base files get renamed."""
+The sidebar menu (bookmarks.json) references template paths — these tests
+keep it honest when folders or .base files get renamed."""
 import json
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 TEMPLATE = REPO_ROOT / "plugin" / "template"
-NN_DATA = TEMPLATE / ".obsidian" / "plugins" / "notebook-navigator" / "data.json"
+BOOKMARKS = TEMPLATE / ".obsidian" / "bookmarks.json"
 MINIMAL_DATA = TEMPLATE / ".obsidian" / "plugins" / "obsidian-minimal-settings" / "data.json"
 APPEARANCE = TEMPLATE / ".obsidian" / "appearance.json"
 SNIPPET = TEMPLATE / ".obsidian" / "snippets" / "sb-accelerator.css"
 WORKSPACE = TEMPLATE / ".obsidian" / "workspace.json"
 CONFIG = TEMPLATE / "99-workflow-config" / "config.json"
 
-# The sidebar's one menu (#239), each entry with the label it shows. Start
-# here is no longer a shortcut — the vault opens on it, and it sits at the
-# root of the file list.
-EXPECTED_SHORTCUTS = [
-    ("folder", "60-daily-notes", "Daily notes"),
-    ("note", "20-meetings/Meetings.base", "Meetings"),
-    ("note", "30-projects/Projects.base", "Projects"),
-    ("note", "50-people/People.base", "People"),
-    ("note", "40-entities/Entities.base", "Entities"),
-    ("note", "30-projects/Decisions.base", "Decisions"),
+# The sidebar is one menu (#263): Obsidian's Bookmarks list, each entry a
+# table except Start here, with the rarely used ones in a folded Library group.
+# Names are the readable folder names the owner already knew.
+EXPECTED_MENU = [
+    ("Start here", "Start here.md"),
+    ("Daily notes", "60-daily-notes/Daily notes.base"),
+    ("Inbox", "99-workflow-config/views/Inbox.base"),
+    ("Meetings", "20-meetings/Meetings.base"),
+    ("Projects", "30-projects/Projects.base"),
+    ("People", "50-people/People.base"),
+    ("Entities", "40-entities/Entities.base"),
+    ("Decisions", "30-projects/Decisions.base"),
+    ("Thoughts & ideas", "80-thoughts-ideas/Thoughts & ideas.base"),
+]
+EXPECTED_LIBRARY = [
+    ("Resources", "99-workflow-config/views/Resources.base"),
+    ("Heavy assets", "99-workflow-config/views/Heavy assets.base"),
+    ("Archive", "99-workflow-config/views/Archive.base"),
+    ("Private", "99-workflow-config/views/Private.base"),
+    ("Recent", "99-workflow-config/views/Recent.base"),
 ]
 
 
-def load_profile() -> dict:
-    data = json.loads(NN_DATA.read_text(encoding="utf-8"))
-    profiles = data["vaultProfiles"]
-    assert len(profiles) == 1, "template ships exactly one NN profile"
-    return profiles[0]
+def _menu() -> list:
+    return json.loads(BOOKMARKS.read_text(encoding="utf-8"))["items"]
 
 
-def test_nn_data_json_parses_and_profile_selected():
-    data = json.loads(NN_DATA.read_text(encoding="utf-8"))
-    assert data["vaultProfile"] == data["vaultProfiles"][0]["id"]
+def test_menu_is_the_shipped_entries_in_order_and_every_target_exists():
+    items = _menu()
+    files = [(i["title"], i["path"]) for i in items if i["type"] == "file"]
+    assert files == EXPECTED_MENU, f"menu drifted: {files}"
+    groups = [i for i in items if i["type"] == "group"]
+    assert [g["title"] for g in groups] == ["Library"] and items[-1] is groups[0]
+    assert [(i["title"], i["path"]) for i in groups[0]["items"]] == EXPECTED_LIBRARY
+    for _, path in EXPECTED_MENU + EXPECTED_LIBRARY:
+        assert (TEMPLATE / path).is_file(), f"menu entry points at a missing file: {path}"
 
 
-def test_nn_shortcuts_exact_order_and_paths_exist():
-    profile = load_profile()
-    got = [(s["type"], s["path"], s.get("alias")) for s in profile["shortcuts"]]
-    assert got == EXPECTED_SHORTCUTS, f"shortcut list drifted: {got}"
-    for kind, path, _ in got:
-        target = TEMPLATE / path
-        if kind == "folder":
-            assert target.is_dir(), f"shortcut folder missing in template: {path}"
-        else:
-            assert target.is_file(), f"shortcut file missing in template: {path}"
+def test_menu_matches_what_migration_009_writes():
+    """A fresh vault and an upgraded one get the same menu bytes."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "m009", REPO_ROOT / "plugin" / "migrations" / "009-structure-version-10" / "migrate.py")
+    m009 = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m009)
+    assert _menu() == m009.shipped_menu()
 
 
-def test_nn_file_visibility_is_all():
-    """.base files show even under "documents"; "all" is a deliberate choice so attachments and generated deliverables are browsable too."""
-    assert load_profile()["fileVisibility"] == "all"
+def test_notebook_navigator_is_not_shipped():
+    """#263 replaced it with the Bookmarks menu; nothing may still enable it."""
+    plugins = json.loads((TEMPLATE / ".obsidian" / "community-plugins.json").read_text(encoding="utf-8"))
+    assert "notebook-navigator" not in plugins
+    assert not (TEMPLATE / ".obsidian" / "plugins" / "notebook-navigator").exists()
+    pins = json.loads((REPO_ROOT / "plugin" / "lib" / "plugin-pins.json").read_text(encoding="utf-8"))
+    assert "notebook-navigator" not in {p["id"] for p in pins["plugins"]}
 
 
-def test_nn_folder_appearances_claude_skills_path_exists():
-    data = json.loads(NN_DATA.read_text(encoding="utf-8"))
-    assert "claude/skills" in data["folderAppearances"]
-    assert (TEMPLATE / "claude" / "skills").is_dir()
+def test_every_shipped_menu_entry_has_a_colour_and_an_icon():
+    css = SNIPPET.read_text(encoding="utf-8")
+    titles = [t for t, _ in EXPECTED_MENU] + ["Library"] + [f"Library/{t}" for t, _ in EXPECTED_LIBRARY]
+    for title in titles:
+        rule = f'.tree-item[data-path="{title}"] > .tree-item-self {{'
+        assert rule in css, f"menu entry {title!r} has no colour rule"
+        body = css.split(rule)[1].split("}")[0]
+        assert "--sb-menu-color: #" in body and "--sb-menu-icon: url(" in body, title
 
 
-def test_nn_rainbow_enabled_for_folders_shortcuts_recents():
-    rainbow = load_profile()["navRainbow"]
-    for section in ("folders", "shortcuts", "recent"):
-        assert rainbow[section]["enabled"] is True, f"navRainbow.{section} must be enabled"
+def test_new_notes_go_to_thoughts_and_ideas():
+    app = json.loads((TEMPLATE / ".obsidian" / "app.json").read_text(encoding="utf-8"))
+    assert app["newFileLocation"] == "folder" and app["newFileFolderPath"] == "80-thoughts-ideas"
 
 
 # --- appearance defaults (#60 items 1-3) ------------------------------------
@@ -247,20 +265,16 @@ def _left_sidebar_tabs() -> dict:
     return layout["left"]["children"][0]
 
 
-def test_workspace_opens_with_notebook_navigator_selected():
-    """Without a shipped workspace.json a fresh vault gets Obsidian's default
-    sidebar (file-explorer / search / bookmarks) and the whole Notebook
-    Navigator configuration — the rainbow Shortcuts to the five Bases and the
-    orientation note — is invisible on first open. The plugin's data.json
-    shipping is not enough; the layout that surfaces it has to ship too.
-
-    This was found by the probe harness. The manual check in
-    docs/local-setup.md step 3 had passed, because the vault it was run against
-    had accumulated a workspace.json from being clicked around in."""
+def test_workspace_opens_with_the_menu_selected():
+    """The left sidebar opens on the Bookmarks tab — the menu (#263). Without a
+    shipped workspace.json a fresh vault gets Obsidian's default sidebar with
+    the file explorer selected, and the menu is a tab nobody clicks. The probe
+    harness found the equivalent problem with Navigator (#60)."""
     tabs = _left_sidebar_tabs()
     types = [c["state"]["type"] for c in tabs["children"]]
-    assert types[0] == "notebook-navigator", f"navigator must lead the sidebar, got {types}"
-    assert tabs.get("currentTab") == 0, "the navigator tab must be the selected one"
+    assert types[0] == "bookmarks", f"the menu must lead the sidebar, got {types}"
+    assert "notebook-navigator" not in types
+    assert tabs.get("currentTab") == 0, "the menu tab must be the selected one"
 
 
 def test_workspace_opens_the_orientation_note_in_reading_view():
@@ -279,45 +293,26 @@ def test_workspace_references_no_files_outside_the_template():
         assert (TEMPLATE / path).exists(), f"workspace.json references {path!r}, absent from plugin/template/"
 
 
-def test_navigator_keeps_one_pane_layout_in_a_narrow_sidebar():
-    """Notebook Navigator used to collapse to a single pane in a narrow
-    sidebar and show the *file list*, hiding the Shortcuts — and it flipped
-    between the two as the sidebar width changed (#239). Its default
-    `narrowSidebarLayout: singlePane` did that. Shipping `none` keeps one
-    layout at any width. The panes sit side by side (#240, the owner's
-    choice over #239's stacked layout), in a 400px sidebar. The two layout
-    keys are per-device in Navigator unless `syncModes` marks them synced, so
-    without that the vault's value is ignored; verified live against
-    Obsidian 1.13."""
-    data = json.loads(NN_DATA.read_text(encoding="utf-8"))
-    assert data["narrowSidebarLayout"] == "none"
-    assert data["dualPane"] is True and data["dualPaneOrientation"] == "horizontal"
-    assert data["syncModes"]["dualPane"] == data["syncModes"]["dualPaneOrientation"] == "synced"
+def test_sidebar_is_narrow_now_that_it_holds_only_the_menu():
+    """Navigator needed 400px for two panes (#240); the menu needs far less,
+    and the pages get the width back."""
+    assert json.loads(WORKSPACE.read_text(encoding="utf-8"))["left"]["width"] == 280
 
 
-def test_sidebar_shows_one_menu_and_no_plumbing():
-    data = json.loads(NN_DATA.read_text(encoding="utf-8"))
-    assert data["shortcutBadgeDisplay"] == "none"
-    assert data["showRecentNotes"] is False
-    assert data["showTags"] is False and data["showProperties"] is False
-    assert data["checkForUpdatesOnStart"] is False, "the update notice pushes an unpinned version"
-    profile = load_profile()
-    # _messages: the mail and Teams logs (#249)
-    assert set(profile["hiddenFolders"]) == {"claude", "99-workflow-config", "_messages"}
-    assert profile["hiddenFileNames"] == ["CLAUDE.md"]
-    order = data["rootFolderOrder"]
-    assert order[-3:] == ["90-archive", "95-private", "_heavy-assets"]
-    roots = {p.name for p in TEMPLATE.iterdir() if p.is_dir() and not p.name.startswith(".")}
-    assert set(order) | set(profile["hiddenFolders"]) == roots, (
-        "every root folder is either ordered or hidden")
+def test_file_view_hides_the_machinery():
+    """Obsidian's file view stays one click away, without the assistant's
+    machinery (Navigator hid it before #263)."""
+    css = SNIPPET.read_text(encoding="utf-8")
+    rule = css.split('.nav-folder:has(> .nav-folder-title:is(')[1].split("{")[0]
+    for folder in ("claude", "99-workflow-config", "_messages"):
+        assert f'[data-path="{folder}"]' in rule
+    assert '.nav-file:has(> .nav-file-title[data-path="CLAUDE.md"])' in css
 
 
 def test_ribbon_keeps_today_and_the_quick_switcher_only():
     hidden = json.loads(WORKSPACE.read_text(encoding="utf-8"))["left-ribbon"]["hiddenItems"]
     shown = sorted(k for k, v in hidden.items() if v is False)
     assert shown == ["daily-notes:Open today's daily note", "switcher:Open quick switcher"]
-    css = (TEMPLATE / ".obsidian" / "snippets" / "sb-accelerator.css").read_text(encoding="utf-8")
-    assert '.side-dock-ribbon-action[aria-label="Notebook Navigator"]' in css
 
 
 def test_orientation_note_has_no_duplicate_h1():
@@ -373,16 +368,12 @@ def test_base_groupby_uses_the_object_form():
 
 
 def test_vault_opens_on_todays_daily_note():
-    """#238: Navigator's homepage is the daily note, found through Obsidian's
-    own Daily notes settings (the folder and name the evening run writes).
-    Never created when missing — an empty note would lack the recap and
-    prep markers, and the catch-up run refuses to write into it."""
-    data = json.loads(NN_DATA.read_text(encoding="utf-8"))
-    assert data["homepage"] == {"source": "daily-note", "file": None,
-                                "createMissingPeriodicNote": False}
-    assert data["calendarIntegrationMode"] == "daily-notes"
+    """#263: Obsidian's own Daily notes plugin opens today's note on startup
+    (Navigator's homepage did it in #238). It creates the note, empty, when
+    there is none; the daily-note code treats a blank note as absent, so the
+    catch-up run writes the real one over it (test_vaultlib_dailynote)."""
     daily = json.loads((TEMPLATE / ".obsidian" / "daily-notes.json").read_text(encoding="utf-8"))
-    assert daily["folder"] == "60-daily-notes"
+    assert daily == {"folder": "60-daily-notes", "format": "YYYY-MM-DD", "autorun": True}
 
 
 def test_review_callout_collapses_when_empty_and_spans_the_pane():
@@ -405,15 +396,18 @@ def test_triage_rows_are_tall_enough_for_three_attendees():
     assert triage["rowHeight"] == "tall"
 
 
-def test_entities_table_groups_teams_under_their_parent():
-    """#253: an entity with `parent` is a team; All and Active group by the
-    parent's *name* (looked up from its dossier, never the slug) with the
-    parent first, and show Part of."""
+def test_entities_table_keeps_teams_under_their_parent_without_headings():
+    """#253 grouped teams under a bold heading per parent; with no teams every
+    heading just repeated its one row (#263). Now there are no headings: the
+    table sorts on the parent's *name* (looked up from its dossier, never the
+    slug), the parent first, and a team's name carries a leading arrow."""
     import yaml
     base = yaml.safe_load((TEMPLATE / "40-entities" / "Entities.base").read_text(encoding="utf-8"))
     assert 'file("40-entities/" + parent + "/dossier.md").properties["entity-name"]' in base["formulas"]["group"]
+    assert base["formulas"]["name"].startswith('if(parent, "↳ "')
     for name in ("All", "Active"):
         view = next(v for v in base["views"] if v["name"] == name)
-        assert view["groupBy"] == {"property": "formula.group", "direction": "ASC"}
-        assert view["sort"][0] == {"property": "formula.team-order", "direction": "ASC"}
-        assert "formula.part-of" in view["order"]
+        assert "groupBy" not in view
+        assert view["sort"][:2] == [{"property": "formula.group", "direction": "ASC"},
+                                    {"property": "formula.team-order", "direction": "ASC"}]
+        assert view["order"][1:3] == ["formula.name", "formula.part-of"]
