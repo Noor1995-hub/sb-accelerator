@@ -2126,6 +2126,17 @@ def test_sync_messages_asks_consent_with_the_honest_text():
     assert "stop and delete everything" in text
 
 
+def test_sync_messages_waits_only_for_the_update_that_hides_its_notes():
+    """#263: mail and Teams stopped whenever *any* vault update was pending,
+    so every UI update silenced the feed until the next tune-up. The feed
+    needs structure version 6 (`_messages/` hidden) and nothing later."""
+    flat = re.sub(r"\s+", " ", read_skill("sync-messages"))
+    assert "If `structure_version` is below 6, switch nothing on" in flat
+    assert "while `structure_version` is below 6" in flat
+    assert "while `pending` is non-empty" not in flat
+    assert "If `pending` is non-empty" not in flat
+
+
 def test_sync_messages_checks_everything_before_dispatch():
     workflow = read_skill("sync-messages").split("## Workflow")[1]
     dispatch = workflow.index("second-brain:sync-messages-worker")

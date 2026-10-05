@@ -84,6 +84,20 @@ def test_render_matches_the_contract_exactly(tmp_path):
     assert recap.render(root, clean, meetings=1, window_label="Friday") == EXPECTED
 
 
+def test_a_vault_behind_the_plugin_gets_one_sync_line(tmp_path):
+    """#263: the plugin updates itself, the vault only at /upgrade-vault. The
+    recap says so while an update is waiting, and stops once it is applied."""
+    from vaultlib import migrate
+    root = make_vault(tmp_path)
+    clean, _, _ = recap.validate(root, full_payload())
+    (root / "structure-version").write_text("9\n", encoding="utf-8")
+    text = recap.render(root, clean, meetings=1, window_label="Friday")
+    assert "An update for this vault is waiting (1 step) — ask a consultant to run /upgrade-vault" in text
+    latest = max(m["module"].TARGET_VERSION for m in migrate.discover())
+    (root / "structure-version").write_text(f"{latest}\n", encoding="utf-8")
+    assert recap.render(root, clean, meetings=1, window_label="Friday") == EXPECTED
+
+
 def test_empty_lists_render_their_none_phrasing(tmp_path):
     root = make_vault(tmp_path)
     clean, _, _ = recap.validate(root, {"glance": {"entities": [], "headlines": [

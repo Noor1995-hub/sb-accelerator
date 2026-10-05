@@ -36,15 +36,17 @@ write the raw JSON to `$SCRATCH/m365.whoami.json` and pass it as `--identity`).
 On `match: false`, tell the owner plainly that the connected account is not
 theirs, and switch nothing on.
 
-Only on a vault that is up to date: the update is what hides the saved notes
-from the file list, search and graph.
+Only on a vault at structure version 6 or later: that update is what hides
+the saved notes from the file list, search and graph.
 
 ```bash
 python3 "$VAULTLIB" migrate status --vault "$VAULT"
 ```
 
-If `pending` is non-empty, switch nothing on and say in plain words that the
-vault needs its update first, which a consultant does with `/upgrade-vault`.
+If `structure_version` is below 6, switch nothing on and say in plain words
+that the vault needs its update first, which a consultant does with
+`/upgrade-vault`. Later updates still waiting in `pending` do not matter
+here: they change how the vault looks, not where the notes are kept.
 
 1. Ask, verbatim: *"Each evening I can look through your inbox, your sent mail
    and your Teams chats (not Teams channels, not attachments). I read the
@@ -140,9 +142,11 @@ say so in one plain sentence and add nothing.
 
 1. **Preflight.** `config read`: stop with one line if `messages.enabled` is
    false, M365 is disabled, or `timezone`/`owner` are missing. Run
-   `python3 "$VAULTLIB" migrate status --vault "$VAULT"`: while `pending` is
-   non-empty, skip the run with one line (the vault needs its update first)
-   and read nothing. Call `get_me`,
+   `python3 "$VAULTLIB" migrate status --vault "$VAULT"`: while
+   `structure_version` is below 6 (the update that hides `_messages/`), skip
+   the run with one line (the vault needs its update first) and read nothing.
+   Later updates waiting in `pending` do not stop the run — a vault waits for
+   its next tune-up for those, and mail must not go quiet meanwhile. Call `get_me`,
    write the raw JSON to scratch and run:
    ```bash
    python3 "$VAULTLIB" config verify-account --vault "$VAULT" --adapter m365 --identity "$SCRATCH/m365.whoami.json"

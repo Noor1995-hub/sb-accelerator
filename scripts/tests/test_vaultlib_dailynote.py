@@ -437,6 +437,25 @@ def test_a_blank_note_obsidian_opened_is_written_over_and_read_as_missing(tmp_pa
     assert blank.read_text(encoding="utf-8") == EXPECTED_FRESH
 
 
+def test_a_vault_whose_meetings_table_still_says_triage_embeds_triage(tmp_path):
+    """#263: until /upgrade-vault refreshes Meetings.base, its queue is still
+    called Triage; embedding "To review" would show an error in its place."""
+    root = make_vault(tmp_path)
+    base = root / "20-meetings" / "Meetings.base"
+    base.parent.mkdir(parents=True, exist_ok=True)
+    base.write_text("views:\n  - type: table\n    name: Triage\n  - type: table\n    name: All Meetings\n",
+                    encoding="utf-8")
+    dailynote.write(root, payload())
+    text = (root / "60-daily-notes" / "2026-06-15.md").read_text(encoding="utf-8")
+    assert dailynote.LEGACY_TRIAGE_EMBED in text.split("\n")
+    assert "Meetings.base#To review" not in text
+    assert text.replace(dailynote.LEGACY_TRIAGE_EMBED, "> ![[20-meetings/Meetings.base#To review]]") == EXPECTED_FRESH
+    base.write_text(base.read_text(encoding="utf-8").replace("name: Triage", "name: To review"), encoding="utf-8")
+    (root / "60-daily-notes" / "2026-06-15.md").unlink()
+    dailynote.write(root, payload())
+    assert (root / "60-daily-notes" / "2026-06-15.md").read_text(encoding="utf-8") == EXPECTED_FRESH
+
+
 def test_a_note_with_anything_in_it_is_still_merged_not_replaced(tmp_path):
     root = make_vault(tmp_path)
     note = root / "60-daily-notes" / "2026-06-15.md"

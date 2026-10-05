@@ -313,7 +313,28 @@ def render(root: Path, clean: dict, *, meetings: int, window_label: str) -> str:
     if clean["carried_forward"]:
         parts.append(_callout_list("quote", "Carried forward — your jottings",
                                    clean["carried_forward"], folded=True))
-    if clean["sync_notes"]:
-        title = f"Sync notes — {_plural(len(clean['sync_notes']), 'item')}, also in the run log"
-        parts.append(_callout_list("sync", title, clean["sync_notes"], folded=True))
+    sync_notes = list(clean["sync_notes"]) + _upgrade_waiting(root)
+    if sync_notes:
+        title = f"Sync notes — {_plural(len(sync_notes), 'item')}, also in the run log"
+        parts.append(_callout_list("sync", title, sync_notes, folded=True))
     return "\n\n".join(parts)
+
+
+def _upgrade_waiting(root: Path) -> List[str]:
+    """One line when the vault is behind the plugin (#263).
+
+    The plugin updates on its own; the vault's tables and settings change only
+    when a consultant runs /upgrade-vault. Until then the evening run keeps
+    working, but the vault looks older than the plugin — this line is how the
+    owner, and the consultant reading the run, learn a tune-up is due. Computed
+    here, not supplied in the payload, so it cannot be forgotten.
+    """
+    from . import migrate      # lazy: migrate is not otherwise needed to render
+    try:
+        pending = migrate.status(Path(root))["pending"]
+    except Exception:          # an unreadable marker is health-check's to report
+        return []
+    if not pending:
+        return []
+    return [f"An update for this vault is waiting ({_plural(len(pending), 'step')}) — "
+            "ask a consultant to run /upgrade-vault"]

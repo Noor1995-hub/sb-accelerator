@@ -39,6 +39,27 @@ REVIEW_BLOCK = ("> [!review] Waiting for you\n"
 # has not rewritten still carries this line, and it is not a jotting.
 LEGACY_TRIAGE_EMBED = "> ![[20-meetings/Meetings.base#Triage]]"
 _REVIEW_LINES = frozenset(REVIEW_BLOCK.split("\n")) | {LEGACY_TRIAGE_EMBED}
+MEETINGS_BASE = Path(vault.MEETINGS_DIR) / "Meetings.base"
+_TRIAGE_VIEW_RE = re.compile(r"^\s*-?\s*name:\s*[\"']?Triage[\"']?\s*$", re.MULTILINE)
+_TO_REVIEW_VIEW_RE = re.compile(r"^\s*-?\s*name:\s*[\"']?To review[\"']?\s*$", re.MULTILINE)
+
+
+def _review_block(root: Path) -> str:
+    """The review block, embedding the Meetings view this vault actually has.
+
+    The plugin updates on its own; the vault's tables change only at the next
+    `/upgrade-vault`. Until then a vault's Meetings table may still call its
+    queue Triage, and an embed of "To review" would show an error where the
+    queue belongs. So the note embeds whichever name the vault's own table
+    carries (#263); a vault without the table gets the shipped name.
+    """
+    try:
+        text = (root / MEETINGS_BASE).read_text(encoding="utf-8")
+    except OSError:
+        return REVIEW_BLOCK
+    if _TRIAGE_VIEW_RE.search(text) and not _TO_REVIEW_VIEW_RE.search(text):
+        return REVIEW_BLOCK.replace("> ![[20-meetings/Meetings.base#To review]]", LEGACY_TRIAGE_EMBED)
+    return REVIEW_BLOCK
 _PREP_KEYS = ("attendees", "last_meeting", "context")
 _PREP_LABELS = (("attendees", "Attendees"), ("last_meeting", "Last meeting"),
                 ("context", "Context"))
@@ -480,7 +501,7 @@ def _render(root: Path, data: dict, fingerprint: Optional[str]) -> str:
     attrs = {"inputs": fingerprint} if fingerprint else None
     parts = ["---", f"date: {date_iso}", "type: daily-note", "---", "",
              f"# {date_iso} · {_day_name(date_iso)}", "",
-             REVIEW_BLOCK, "",
+             _review_block(root), "",
              "## Recap", _region("recap", _recap_body(root, data), attrs), "",
              "## Meetings", ""]
     if data["meetings"]:
