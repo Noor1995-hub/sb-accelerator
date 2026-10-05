@@ -15,6 +15,8 @@ delivers them.
 
 ## Unreleased
 
+- The assistant's helpers that turn recordings, mail and Teams into notes, and that read your accounts during setup, now run on Sonnet 5.5 instead of Sonnet 5. (#265)
+
 - A vault that has not had its latest update yet keeps working properly. Mail and Teams no longer stop every time a vault update is waiting; they only need the update that hides their notes (structure version 6). **Waiting for you** on the daily note shows the meetings queue under whichever name the vault's Meetings table still uses, instead of an error. And while an update is waiting, the recap's Sync notes say so: "An update for this vault is waiting — ask a consultant to run /upgrade-vault". (#264)
 
 - The sidebar is one menu, and every entry opens a table: Start here, Daily notes, Inbox, Meetings, Projects, People, Entities, Decisions, Thoughts & ideas, and a folded Library with Resources, Heavy assets, Archive, Private and Recent. Each has its own colour and icon. The extra file list and folder tree are gone (Obsidian's file view is one click away, without the assistant's machinery). Daily notes, Inbox, Thoughts & ideas and the Library entries are new tables; a new note now lands in Thoughts & ideas. The Entities table no longer repeats each name as a heading: teams sit under their company with an arrow. The vault still opens on today's note; if the evening run has not written it yet, the note Obsidian opens is blank and the next run fills it in. Notebook Navigator is no longer used. Existing vaults get the menu at the next `/upgrade-vault` (structure version 10), keeping any bookmarks of their own; the new tables arrive with its template refresh. (#264)

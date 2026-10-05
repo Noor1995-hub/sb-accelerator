@@ -338,7 +338,7 @@ def test_sync_recordings_dispatch_names_the_worker_agent_types():
     agent = (agents_dir / "sync-worker.md").read_text(encoding="utf-8")
     front = agent.split("---")[1]
     assert "name: sync-worker" in front
-    assert "model: sonnet" in front, "the model mandate must be structural"
+    assert "model: claude-sonnet-5-5" in front, "the model mandate must be structural"
     assert "tools:" in front, "the plaud/inbox tool surface must be trimmed"
     for tool in ("ToolSearch", "Bash", "Read", "Write",
                  "mcp__plaud__get_transcript", "mcp__plaud__get_note"):
@@ -347,7 +347,7 @@ def test_sync_recordings_dispatch_names_the_worker_agent_types():
     m365 = (agents_dir / "sync-worker-m365.md").read_text(encoding="utf-8")
     m365_front = m365.split("---")[1]
     assert "name: sync-worker-m365" in m365_front
-    assert "model: sonnet" in m365_front, (
+    assert "model: claude-sonnet-5-5" in m365_front, (
         "the model mandate must be structural for the m365 worker too")
     assert "tools:" not in m365_front, (
         "the m365 worker's tools must stay open — a fixed list cannot name "
@@ -1926,7 +1926,7 @@ def test_setup_discovery_worker_agent_frontmatter():
     worker = (agents_dir / "setup-discovery-worker.md").read_text(encoding="utf-8")
     front = worker.split("---")[1]
     assert "name: setup-discovery-worker" in front
-    assert "model: sonnet" in front, "verbatim transcription is the trust point"
+    assert "model: claude-sonnet-5-5" in front, "verbatim transcription is the trust point"
     assert "tools:" not in front, (
         "the worker's tools must stay open — connector tool names differ per "
         "deployment, exactly as for sync-worker-m365")
@@ -2112,7 +2112,7 @@ def test_messages_contract_orders_build_check_write():
 def test_messages_worker_agent_definition():
     text = (REPO_ROOT / "plugin/agents/sync-messages-worker.md").read_text(encoding="utf-8")
     front = text.split("---")[1]
-    assert "name: sync-messages-worker" in front and "model: sonnet" in front
+    assert "name: sync-messages-worker" in front and "model: claude-sonnet-5-5" in front
     assert "tools:" not in front
     disallowed = re.search(r"disallowedTools: (.*)", front).group(1)
     assert {t.strip() for t in disallowed.split(",")} == M365_WORKER_DISALLOWED_TOOLS_SET

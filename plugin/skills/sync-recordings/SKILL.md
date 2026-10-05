@@ -958,7 +958,7 @@ is only one** (rule 7) — dispatch a worker as the plugin's own agent type:
 connector's tool names differ per deployment, so that worker's tool
 surface stays open where the other's is pinned). No M365 worker is ever
 dispatched for an entry a probe has not promoted — the probe wave above
-is the only route in. Both agent definitions pin `model: sonnet`
+is the only route in. Both agent definitions pin `model: claude-sonnet-5-5`
 structurally — the model is never a per-dispatch decision. On a harness
 where the plugin agent types do not resolve, fall back to a generic
 subagent spawned with `model: sonnet` passed explicitly — a live cost
