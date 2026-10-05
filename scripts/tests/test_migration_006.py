@@ -126,21 +126,12 @@ def test_verify_catches_a_daily_note_still_on_triage(tmp_path):
         module.verify(root)
 
 
-def test_the_shipped_template_is_already_where_the_migration_lands(tmp_path):
-    root = tmp_path / "fresh"
-    shutil.copytree(TEMPLATE / ".obsidian", root / ".obsidian")
-    shipped_nn = json.loads((root / NN).read_text(encoding="utf-8"))
-    shipped_ws = json.loads((root / WS).read_text(encoding="utf-8"))
-    load().apply(root)
-    assert json.loads((root / NN).read_text(encoding="utf-8")) == shipped_nn
-    assert json.loads((root / WS).read_text(encoding="utf-8")) == shipped_ws
-
-
+# Convergence with the shipped template is checked for the whole chain at once in test_migration_009 (#263): the template no longer ships Navigator's settings.
 def test_run_through_the_framework_bumps_to_8(tmp_path):
     root = vault_v6(tmp_path)
     (root / "99-workflow-config").mkdir()
     result = migrate.run(root, "2026-10-02", stamp="2026-10-02-120000")
     assert [a["slug"] for a in result["applied"]] == ["structure-version-7", "structure-version-8",
-        "structure-version-9"]
-    assert result["structure_version"] == 9
-    assert (root / "structure-version").read_text(encoding="utf-8").strip() == "9"
+        "structure-version-9", "structure-version-10"]
+    assert result["structure_version"] == 10
+    assert (root / "structure-version").read_text(encoding="utf-8").strip() == "10"

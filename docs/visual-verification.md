@@ -4,7 +4,7 @@ How to check what this product's vault **actually renders** in Obsidian, rather
 than opening it and looking.
 
 The vault is the UI. Five `.base` files, the Minimal theme, Minimal Theme
-Settings, Notebook Navigator shortcuts, a CSS snippet, and Dataview blocks
+Settings, the Bookmarks sidebar menu, a CSS snippet, and Dataview blocks
 inside note bodies — a client sees all of it and none of it was machine-checked
 before this harness. `scripts/basesim.py` closed the *which rows* half of the
 gap in CI; this closes the *rendering* half by asking a real Obsidian.

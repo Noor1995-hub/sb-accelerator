@@ -125,5 +125,5 @@ def test_run_through_the_framework_bumps_to_9(tmp_path):
     root = vault_v7(tmp_path)
     (root / "99-workflow-config").mkdir()
     result = migrate.run(root, "2026-10-05", stamp="2026-10-05-120000")
-    assert [a["slug"] for a in result["applied"]] == ["structure-version-8", "structure-version-9"]
-    assert result["structure_version"] == 9
+    assert [a["slug"] for a in result["applied"]] == ["structure-version-8", "structure-version-9", "structure-version-10"]
+    assert result["structure_version"] == 10

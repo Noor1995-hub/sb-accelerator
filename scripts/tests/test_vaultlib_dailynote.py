@@ -422,6 +422,50 @@ def test_read_on_a_missing_note_is_a_normal_state(tmp_path):
     assert result == {"exists": False, "path": "60-daily-notes/2026-06-12.md"}
 
 
+def test_a_blank_note_obsidian_opened_is_written_over_and_read_as_missing(tmp_path):
+    """#263: Obsidian opens today's note on startup and creates it, empty,
+    when the evening run has not written it yet. That note is not a note: the
+    catch-up run writes the real one over it, and a harvest reads it as absent."""
+    root = make_vault(tmp_path)
+    blank = root / "60-daily-notes" / "2026-06-15.md"
+    blank.parent.mkdir(parents=True, exist_ok=True)
+    blank.write_text("\n  \n", encoding="utf-8")
+    assert dailynote.read(root, "2026-06-15") == {
+        "exists": False, "path": "60-daily-notes/2026-06-15.md"}
+    result = dailynote.write(root, payload())
+    assert result["created"] is True
+    assert blank.read_text(encoding="utf-8") == EXPECTED_FRESH
+
+
+def test_a_vault_whose_meetings_table_still_says_triage_embeds_triage(tmp_path):
+    """#263: until /upgrade-vault refreshes Meetings.base, its queue is still
+    called Triage; embedding "To review" would show an error in its place."""
+    root = make_vault(tmp_path)
+    base = root / "20-meetings" / "Meetings.base"
+    base.parent.mkdir(parents=True, exist_ok=True)
+    base.write_text("views:\n  - type: table\n    name: Triage\n  - type: table\n    name: All Meetings\n",
+                    encoding="utf-8")
+    dailynote.write(root, payload())
+    text = (root / "60-daily-notes" / "2026-06-15.md").read_text(encoding="utf-8")
+    assert dailynote.LEGACY_TRIAGE_EMBED in text.split("\n")
+    assert "Meetings.base#To review" not in text
+    assert text.replace(dailynote.LEGACY_TRIAGE_EMBED, "> ![[20-meetings/Meetings.base#To review]]") == EXPECTED_FRESH
+    base.write_text(base.read_text(encoding="utf-8").replace("name: Triage", "name: To review"), encoding="utf-8")
+    (root / "60-daily-notes" / "2026-06-15.md").unlink()
+    dailynote.write(root, payload())
+    assert (root / "60-daily-notes" / "2026-06-15.md").read_text(encoding="utf-8") == EXPECTED_FRESH
+
+
+def test_a_note_with_anything_in_it_is_still_merged_not_replaced(tmp_path):
+    root = make_vault(tmp_path)
+    note = root / "60-daily-notes" / "2026-06-15.md"
+    note.parent.mkdir(parents=True, exist_ok=True)
+    note.write_text("- a thought I typed before the run\n", encoding="utf-8")
+    with pytest.raises(dailynote.DailyNoteError):
+        dailynote.write(root, payload())
+    assert note.read_text(encoding="utf-8") == "- a thought I typed before the run\n"
+
+
 def test_read_tolerates_a_hand_written_note_without_markers(tmp_path):
     root = make_vault(tmp_path)
     (root / "60-daily-notes" / "2026-06-12.md").write_text(

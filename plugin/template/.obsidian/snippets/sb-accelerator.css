@@ -131,14 +131,80 @@
 .callout[data-callout="hot"]    { --callout-color: #ef4444; --callout-icon: lucide-flame; }
 .callout[data-callout="sync"]   { --callout-color: #94a3b8; --callout-icon: lucide-wrench; opacity: 0.85; }
 
-/* No Notebook Navigator ribbon icon (#239).
-   The ribbon keeps two icons: today's daily note and the quick switcher. The
-   rest are hidden through workspace.json's `left-ribbon.hiddenItems`, which
-   the owner can undo with a right-click — but Obsidian resets a plugin's
-   entry to visible when the plugin first loads after "Trust author", so the
-   Navigator icon came back on every fresh vault. Its sidebar is always open,
-   so the icon does nothing a click on the sidebar does not. */
-.side-dock-ribbon-action[aria-label="Notebook Navigator"] {
+/* The sidebar menu (#263). Obsidian's Bookmarks list is the menu — every
+   entry opens a table, and the list stays put when clicked (Notebook
+   Navigator, which this replaces, swapped its menu for a file list). Each
+   shipped entry gets the colour and Lucide icon of the old menu, matched on
+   the bookmark's title, which Obsidian writes as `data-path` (`Library/...`
+   inside the group). An entry the owner adds keeps Obsidian's own look. The
+   icons are masks filled with the entry's colour; the SVG paths are Lucide's
+   (ISC licence). The Library entries are muted: they are looked up, not
+   worked in. */
+.workspace-leaf-content[data-type=bookmarks] .tree-item-self { font-weight: 500; padding-block: 6px; }
+.workspace-leaf-content[data-type=bookmarks] .tree-item[data-path="Library"] { margin-top: 12px; }
+.workspace-leaf-content[data-type=bookmarks] .tree-item[data-path="Start here"] > .tree-item-self { color: #0ea5e9; --sb-menu-color: #0ea5e9; --sb-menu-icon: url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27black%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Ccircle%20cx%3D%2712%27%20cy%3D%2712%27%20r%3D%2710%27/%3E%3Cpath%20d%3D%27M12%2016v-4M12%208h.01%27/%3E%3C/svg%3E"); }
+.workspace-leaf-content[data-type=bookmarks] .tree-item[data-path="Daily notes"] > .tree-item-self { color: #ef4444; --sb-menu-color: #ef4444; --sb-menu-icon: url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27black%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Crect%20width%3D%2718%27%20height%3D%2718%27%20x%3D%273%27%20y%3D%274%27%20rx%3D%272%27/%3E%3Cpath%20d%3D%27M16%202v4M8%202v4M3%2010h18%27/%3E%3C/svg%3E"); }
+.workspace-leaf-content[data-type=bookmarks] .tree-item[data-path="Inbox"] > .tree-item-self { color: #8b5cf6; --sb-menu-color: #8b5cf6; --sb-menu-icon: url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27black%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Cpolyline%20points%3D%2722%2012%2016%2012%2014%2015%2010%2015%208%2012%202%2012%27/%3E%3Cpath%20d%3D%27M5.45%205.11%202%2012v6a2%202%200%200%200%202%202h16a2%202%200%200%200%202-2v-6l-3.45-6.89A2%202%200%200%200%2016.76%204H7.24a2%202%200%200%200-1.79%201.11z%27/%3E%3C/svg%3E"); }
+.workspace-leaf-content[data-type=bookmarks] .tree-item[data-path="Meetings"] > .tree-item-self { color: #f97316; --sb-menu-color: #f97316; --sb-menu-icon: url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27black%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Cpath%20d%3D%27M16%2021v-2a4%204%200%200%200-4-4H6a4%204%200%200%200-4%204v2%27/%3E%3Ccircle%20cx%3D%279%27%20cy%3D%277%27%20r%3D%274%27/%3E%3Cpath%20d%3D%27M22%2021v-2a4%204%200%200%200-3-3.87M16%203.13a4%204%200%200%201%200%207.75%27/%3E%3C/svg%3E"); }
+.workspace-leaf-content[data-type=bookmarks] .tree-item[data-path="Projects"] > .tree-item-self { color: #eab308; --sb-menu-color: #eab308; --sb-menu-icon: url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27black%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Crect%20width%3D%2720%27%20height%3D%2714%27%20x%3D%272%27%20y%3D%277%27%20rx%3D%272%27/%3E%3Cpath%20d%3D%27M16%2021V5a2%202%200%200%200-2-2h-4a2%202%200%200%200-2%202v16%27/%3E%3C/svg%3E"); }
+.workspace-leaf-content[data-type=bookmarks] .tree-item[data-path="People"] > .tree-item-self { color: #22c55e; --sb-menu-color: #22c55e; --sb-menu-icon: url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27black%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Cpath%20d%3D%27M19%2021v-2a4%204%200%200%200-4-4H9a4%204%200%200%200-4%204v2%27/%3E%3Ccircle%20cx%3D%2712%27%20cy%3D%277%27%20r%3D%274%27/%3E%3C/svg%3E"); }
+.workspace-leaf-content[data-type=bookmarks] .tree-item[data-path="Entities"] > .tree-item-self { color: #14b8a6; --sb-menu-color: #14b8a6; --sb-menu-icon: url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27black%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Crect%20width%3D%2716%27%20height%3D%2720%27%20x%3D%274%27%20y%3D%272%27%20rx%3D%272%27/%3E%3Cpath%20d%3D%27M9%2022v-4h6v4M8%206h.01M16%206h.01M12%206h.01M12%2010h.01M12%2014h.01M16%2010h.01M16%2014h.01M8%2010h.01M8%2014h.01%27/%3E%3C/svg%3E"); }
+.workspace-leaf-content[data-type=bookmarks] .tree-item[data-path="Decisions"] > .tree-item-self { color: #3b82f6; --sb-menu-color: #3b82f6; --sb-menu-icon: url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27black%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Ccircle%20cx%3D%2712%27%20cy%3D%2712%27%20r%3D%2710%27/%3E%3Cpath%20d%3D%27m9%2012%202%202%204-4%27/%3E%3C/svg%3E"); }
+.workspace-leaf-content[data-type=bookmarks] .tree-item[data-path="Thoughts & ideas"] > .tree-item-self { color: #6366f1; --sb-menu-color: #6366f1; --sb-menu-icon: url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27black%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Cpath%20d%3D%27M12%2020h9%27/%3E%3Cpath%20d%3D%27M16.5%203.5a2.12%202.12%200%200%201%203%203L7%2019l-4%201%201-4Z%27/%3E%3C/svg%3E"); }
+.workspace-leaf-content[data-type=bookmarks] .tree-item[data-path="Library"] > .tree-item-self { color: #64748b; --sb-menu-color: #64748b; --sb-menu-icon: url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27black%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Cpath%20d%3D%27M4%2019.5v-15A2.5%202.5%200%200%201%206.5%202H20v20H6.5a2.5%202.5%200%200%201%200-5H20%27/%3E%3C/svg%3E"); }
+.workspace-leaf-content[data-type=bookmarks] .tree-item[data-path="Library/Resources"] > .tree-item-self { color: #64748b; --sb-menu-color: #64748b; --sb-menu-icon: url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27black%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Cpath%20d%3D%27m21.44%2011.05-9.19%209.19a6%206%200%200%201-8.49-8.49l8.57-8.57A4%204%200%201%201%2018%208.84l-8.59%208.57a2%202%200%200%201-2.83-2.83l8.49-8.48%27/%3E%3C/svg%3E"); }
+.workspace-leaf-content[data-type=bookmarks] .tree-item[data-path="Library/Heavy assets"] > .tree-item-self { color: #64748b; --sb-menu-color: #64748b; --sb-menu-icon: url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27black%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Cpath%20d%3D%27M2%203h20M21%203v11a2%202%200%200%201-2%202H5a2%202%200%200%201-2-2V3M7%2021l5-5%205%205%27/%3E%3C/svg%3E"); }
+.workspace-leaf-content[data-type=bookmarks] .tree-item[data-path="Library/Archive"] > .tree-item-self { color: #64748b; --sb-menu-color: #64748b; --sb-menu-icon: url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27black%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Crect%20width%3D%2720%27%20height%3D%275%27%20x%3D%272%27%20y%3D%273%27%20rx%3D%271%27/%3E%3Cpath%20d%3D%27M4%208v11a2%202%200%200%200%202%202h12a2%202%200%200%200%202-2V8M10%2012h4%27/%3E%3C/svg%3E"); }
+.workspace-leaf-content[data-type=bookmarks] .tree-item[data-path="Library/Private"] > .tree-item-self { color: #64748b; --sb-menu-color: #64748b; --sb-menu-icon: url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27black%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Crect%20width%3D%2718%27%20height%3D%2711%27%20x%3D%273%27%20y%3D%2711%27%20rx%3D%272%27/%3E%3Cpath%20d%3D%27M7%2011V7a5%205%200%200%201%2010%200v4%27/%3E%3C/svg%3E"); }
+.workspace-leaf-content[data-type=bookmarks] .tree-item[data-path="Library/Recent"] > .tree-item-self { color: #64748b; --sb-menu-color: #64748b; --sb-menu-icon: url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27black%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Ccircle%20cx%3D%2712%27%20cy%3D%2712%27%20r%3D%2710%27/%3E%3Cpath%20d%3D%27M12%206v6l4%202%27/%3E%3C/svg%3E"); }
+.workspace-leaf-content[data-type=bookmarks] .tree-item:is(
+  [data-path="Start here"],
+  [data-path="Daily notes"],
+  [data-path="Inbox"],
+  [data-path="Meetings"],
+  [data-path="Projects"],
+  [data-path="People"],
+  [data-path="Entities"],
+  [data-path="Decisions"],
+  [data-path="Thoughts & ideas"],
+  [data-path="Library"],
+  [data-path="Library/Resources"],
+  [data-path="Library/Heavy assets"],
+  [data-path="Library/Archive"],
+  [data-path="Library/Private"],
+  [data-path="Library/Recent"]
+) > .tree-item-self .tree-item-icon svg {
+  display: none;
+}
+.workspace-leaf-content[data-type=bookmarks] .tree-item:is(
+  [data-path="Start here"],
+  [data-path="Daily notes"],
+  [data-path="Inbox"],
+  [data-path="Meetings"],
+  [data-path="Projects"],
+  [data-path="People"],
+  [data-path="Entities"],
+  [data-path="Decisions"],
+  [data-path="Thoughts & ideas"],
+  [data-path="Library"],
+  [data-path="Library/Resources"],
+  [data-path="Library/Heavy assets"],
+  [data-path="Library/Archive"],
+  [data-path="Library/Private"],
+  [data-path="Library/Recent"]
+) > .tree-item-self .tree-item-icon::before {
+  content: ""; display: block; width: 16px; height: 16px;
+  background-color: var(--sb-menu-color);
+  -webkit-mask: var(--sb-menu-icon) center / contain no-repeat;
+  mask: var(--sb-menu-icon) center / contain no-repeat;
+}
+
+/* Obsidian's file view stays one click away for anyone who wants folders, but
+   the assistant's machinery is not browsed there (#263; Navigator hid it
+   before). Hidden from this view only: search still finds it, which is how
+   a consultant reaches it. */
+.nav-folder:has(> .nav-folder-title:is([data-path="claude"], [data-path="99-workflow-config"], [data-path="_messages"])),
+.nav-file:has(> .nav-file-title[data-path="CLAUDE.md"]) {
   display: none;
 }
 

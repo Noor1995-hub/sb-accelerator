@@ -32,9 +32,9 @@ them (`test_every_shipped_file_is_classified_exactly_once` is the pin):
   every `.gitkeep`. Never reported, never refreshed.
 
 `MANAGED` (this module's status()/refresh() surface) is `MANAGED_SILENT |
-MANAGED_CONSENT_ALWAYS` — 20 files. `ALL_TIERED` (used only to pin that
+MANAGED_CONSENT_ALWAYS` — 28 files. `ALL_TIERED` (used only to pin that
 every shipped file is classified exactly once) is `MANAGED | SEEDED_ONCE |
-IGNORED` — all 36.
+IGNORED` — all 44.
 """
 from __future__ import annotations
 
@@ -59,10 +59,10 @@ KEEP_SNAPSHOTS = 3
 MANAGED_SILENT = frozenset({
     ".obsidian/app.json",
     ".obsidian/appearance.json",
+    ".obsidian/bookmarks.json",
     ".obsidian/community-plugins.json",
     ".obsidian/core-plugins.json",
     ".obsidian/daily-notes.json",
-    ".obsidian/plugins/notebook-navigator/data.json",
     ".obsidian/plugins/obsidian-minimal-settings/data.json",
     ".obsidian/snippets/sb-accelerator.css",
     "10-inbox/README.md",
@@ -71,8 +71,16 @@ MANAGED_SILENT = frozenset({
     "30-projects/Projects.base",
     "40-entities/Entities.base",
     "50-people/People.base",
+    "60-daily-notes/Daily notes.base",
+    "80-thoughts-ideas/Thoughts & ideas.base",
     "90-archive/README.md",
     "99-workflow-config/secrets/README.md",
+    "99-workflow-config/views/Archive.base",
+    "99-workflow-config/views/Heavy assets.base",
+    "99-workflow-config/views/Inbox.base",
+    "99-workflow-config/views/Private.base",
+    "99-workflow-config/views/Recent.base",
+    "99-workflow-config/views/Resources.base",
     "How it works.md",
     "Start here.md",
 })

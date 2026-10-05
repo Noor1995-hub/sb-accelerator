@@ -1,0 +1,33 @@
+filters:
+  and:
+    - file.inFolder("_heavy-assets")
+    - file.ext != "base"
+    - file.name != ".gitkeep"
+formulas:
+  item: link(file.path, file.basename)
+  kind: if(file.ext == "md", "Note", if(file.ext == "pdf", "PDF", if(file.ext == "png" || file.ext == "jpg" || file.ext == "jpeg", "Image", if(file.ext == "pptx", "Slides", if(file.ext == "xlsx", "Spreadsheet", if(file.ext == "docx", "Document", if(file.ext == "txt", "Text", file.ext.upper())))))))
+  project: file.backlinks.map(link(value, if(file(value).properties["project-name"], file(value).properties["project-name"], file(value).basename)))
+properties:
+  formula.item:
+    displayName: Name
+  formula.kind:
+    displayName: Kind
+  file.mtime:
+    displayName: Last changed
+  file.ctime:
+    displayName: Added
+  formula.project:
+    displayName: Linked from
+views:
+  - type: table
+    name: All
+    order:
+      - formula.item
+      - formula.kind
+      - formula.project
+      - file.ctime
+    sort:
+      - property: file.mtime
+        direction: DESC
+    columnSize:
+      formula.item: 420

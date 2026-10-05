@@ -317,6 +317,14 @@ def test_missed_runs_counts_a_run_by_the_note_it_left_behind(tmp_path):
     assert dates.missed_runs(root, date(2026, 8, 21), date(2026, 8, 22)) == 1
 
 
+def test_a_blank_note_obsidian_opened_is_not_proof_of_a_run(tmp_path):
+    """#263: Obsidian creates today's note, empty, when it opens on it. That is
+    not the note a run writes, so the missed run still counts."""
+    root = make_repro_vault(tmp_path)
+    (root / "60-daily-notes" / "2026-08-24.md").write_text("", encoding="utf-8")
+    assert dates.missed_runs(root, date(2026, 8, 21), date(2026, 8, 22)) == 1
+
+
 def test_missed_runs_of_an_empty_or_reversed_interval_is_zero(tmp_path):
     root = make_repro_vault(tmp_path)
     assert dates.missed_runs(root, date(2026, 8, 21), date(2026, 8, 21)) == 0

@@ -51,23 +51,6 @@
         "manifest.json": "9cffdc20cf2aa1354820e0050b694b0f9b576446e3d5d44a36ae8b0187e5bfb8",
         "styles.css": "ee7937d2be50653a89ccb30ae5f0572b23507d5b7f1328d005271a363075bfd8"
       }
-    },
-    {
-      "id": "notebook-navigator",
-      "repo": "johansan/notebook-navigator",
-      "tag": "3.3.4",
-      "assets": [
-        "main.js",
-        "manifest.json",
-        "styles.css"
-      ],
-      "license": "GPL-3.0",
-      "license_file": "LICENSE",
-      "sha256": {
-        "main.js": "9ddacbcf2878344122dbbab9c716c077fed459dea0b4853f1c5336683ba13802",
-        "manifest.json": "59e701c41497a24b1b1f4d89fe0b11f559ae43cb99f0050cc9ae25cbfd46946b",
-        "styles.css": "8c55a861eb2beece9fe9a85c539514da11ec81e6e3a467ebbd60c776c1c9ec49"
-      }
     }
   ],
   "theme": {

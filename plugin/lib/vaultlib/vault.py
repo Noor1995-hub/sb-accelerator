@@ -198,6 +198,21 @@ def today_iso(explicit: Optional[str] = None) -> str:
     return explicit
 
 
+def is_blank_note(path: Path) -> bool:
+    """True for a note that holds nothing but whitespace.
+
+    Obsidian's Daily notes plugin opens today's note on startup and creates
+    it, empty, when it does not exist yet (#263) — on a morning after a missed
+    evening run, say. Such a note is not a note: it proves no run happened and
+    holds nothing to harvest, so the daily-note code treats it as absent and
+    the catch-up run writes the real one over it.
+    """
+    try:
+        return path.is_file() and not path.read_text(encoding="utf-8").strip()
+    except OSError:
+        return False
+
+
 def list_dir_names(path: Path) -> List[str]:
     if not path.is_dir():
         return []

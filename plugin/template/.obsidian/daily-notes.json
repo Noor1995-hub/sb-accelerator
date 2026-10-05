@@ -1,3 +1,5 @@
 {
-  "folder": "60-daily-notes"
+  "folder": "60-daily-notes",
+  "format": "YYYY-MM-DD",
+  "autorun": true
 }

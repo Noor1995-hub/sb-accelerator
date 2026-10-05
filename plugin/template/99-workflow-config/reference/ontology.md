@@ -507,7 +507,12 @@ body_sections: [Recap, Meetings, End of day]
   `[!hot] Watch` (content risks only), folded `[!quote]- Carried forward`
   and folded `[!sync]- Sync notes` (mechanics: duplicates, fetch errors,
   refusals, SELF-CHECK lines). A `[!warning] Catch-up note` callout is the
-  CLI's; one supplied in a payload is stripped.
+  CLI's; one supplied in a payload is stripped. The CLI also adds one Sync
+  notes line while a vault update is waiting (`migrate status` has pending
+  steps), so a vault left behind the plugin is visible in its own recap.
+- **The review block embeds the vault's own Meetings view**: `To review`, or
+  `Triage` in a vault whose Meetings.base has not been refreshed since #240,
+  so a not-yet-upgraded vault never shows a broken embed.
 - **Meeting blocks v2**: `### {HH:MM} — {Subject}[ · [[40-entities/{slug}/dossier|{Entity name}]]]`,
   then `#### Prep` holding the prep region (three lines: **Attendees**,
   **Last meeting**, **Context**), then `#### Your notes` (`- `) and

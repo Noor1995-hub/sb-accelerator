@@ -46,6 +46,6 @@ Only two commands talk to delaware: `/report-feedback` and `/health-check`. Betw
 - `70-resources` · `80-thoughts-ideas` — reference material and your own notes.
 - `90-archive` — finished, kept.
 - `95-private` — never read by any command. Yours alone.
-- `99-workflow-config` and `claude` — how the assistant works: who you are, how you like things written, and its own machinery. Hidden from the sidebar but not from you; worth editing when something reads wrong.
+- `99-workflow-config` and `claude` — how the assistant works: who you are, how you like things written, and its own machinery. Not in the menu but not hidden from you either; worth editing when something reads wrong.
 
 If something reads wrong, say so.

@@ -217,11 +217,11 @@ never ship as files.
 **Fallback if this step fails:** install by hand from within Obsidian. The
 vault's own `.obsidian/community-plugins.json` names exactly what it
 expects, so you do not need this skill or the runbook in front of you to
-recover it: Dataview, Minimal Theme Settings, Style Settings, Notebook
-Navigator — plus the **Minimal** theme via Settings → Appearance. If you
+recover it: Dataview, Minimal Theme Settings and Style Settings — plus the
+**Minimal** theme via Settings → Appearance. If you
 install Dataview by hand, **pick version 0.5.68 explicitly** (the
 community browser offers a newer 0.5.70 that is a mislabeled beta with a
-broken manifest); the other three and the theme can take their latest.
+broken manifest); the other two and the theme can take their latest.
 
 ## Step 3 — Confirm the symlink
 
