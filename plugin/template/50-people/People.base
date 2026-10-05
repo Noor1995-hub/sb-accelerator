@@ -5,6 +5,9 @@ filters:
     - '!note["person-name"].isEmpty()'
 formulas:
   open: link(file.path, "→")
+  # Project names, not slugs (#240); the projects list itself stays
+  # editable on the person's note.
+  project-names: if(projects, projects.map(link("30-projects/" + value + "/index.md", if(file("30-projects/" + value + "/index.md"), file("30-projects/" + value + "/index.md").properties["project-name"], value))), "")
 properties:
   formula.open:
     displayName: " "
@@ -16,10 +19,10 @@ properties:
     displayName: Company
   note.role:
     displayName: Role
-  note.projects:
+  formula.project-names:
     displayName: Projects
   note.meetings-30d:
-    displayName: Meetings (30d)
+    displayName: Meetings (30 days)
   note.last-met:
     displayName: Last met
 views:
@@ -33,12 +36,12 @@ views:
       - role
       - last-met
       - meetings-30d
-      - projects
+      - formula.project-names
     sort:
       - property: person-name
         direction: ASC
     columnSize:
-      note.projects: 260
+      formula.project-names: 260
   - type: table
     name: Recently met
     filters:
@@ -52,12 +55,12 @@ views:
       - company
       - role
       - meetings-30d
-      - projects
+      - formula.project-names
     sort:
       - property: last-met
         direction: DESC
     columnSize:
-      note.projects: 260
+      formula.project-names: 260
   - type: table
     name: Uncurated
     filters:

@@ -2,68 +2,18 @@
 type: note
 ---
 
-Your second brain. Five things to know, then you can close this note.
+## Your day
 
-> [!tip] The one habit that matters
-> There isn't one. The evening run happens on its own, at the time you chose when your vault was set up. **`/evening-sync`** is there for the evenings you want it early, or the mornings your laptop was shut.
+1. **The vault opens on today's note**, written the evening before: a recap, then each meeting today with who's coming and what happened last time. The calendar icon at the far left brings you back to it.
+2. **Waiting for you**, at the top, lists meetings and decisions filed without certainty. Tick **Keep** when a row looks right, **Dismiss** when it is noise.
+3. **During the day**, jot under **Your notes** and tick **Your actions**. Free text is fine.
+4. **In the evening** your notes are read and tomorrow's note is written, on its own — or now, with **`/evening-sync`**. With mail and Teams switched on, a **Mail and Teams** box adds what needs you.
 
-## The daily loop
+## The sidebar
 
-Everything runs off your daily note in `60-daily-notes`, and one thing drives it: the evening run. It writes *tomorrow's* note — a recap of today, then a prepared section for each meeting on tomorrow's calendar, with who's coming and what happened last time. There is no morning command to run: tomorrow's note is already waiting, and the vault opens on it.
+**Meetings** — every meeting, and notes from email or voice memos · **Projects** — your projects and responsibilities · **People** — who you work with · **Entities** — the companies, teams and other groups you work with · **Decisions** — what was decided · **Daily notes** — earlier days.
 
-It runs by itself each working evening, as long as this machine is awake with Claude open. If it was shut at the time, the run happens the next time Claude opens and the note says so. To write tomorrow's note right now instead, run **`/evening-sync`**.
-
-When something needs your eye, the note opens with **Waiting for you**: the meetings and decisions still to review, live — tick **Keep**, or **Dismiss** what is noise, right there and the row goes. On a day with nothing waiting it isn't there at all. Then three parts. **Recap** is written for you. **Meetings** is one heading per meeting, with **Prep** written for you and **Your notes** and **Your actions** left for you — tick an action when it is done. **End of day** is yours. Jot whatever you like under any of them — free text is fine, nothing needs a format, and the next evening run reads what you wrote.
-
-## The five tables
-
-Each is a live view, not a document — they update themselves as notes change.
-
-| | What it holds |
-|---|---|
-| **Meetings** | Every meeting, and notes captured from email or voice memo — newest first. The *Triage* view is your queue. |
-| **Projects** | What's in flight, with the next milestone. |
-| **Organisations** | Organisations you deal with — one dossier each. |
-| **People** | Individuals, their role, and when you last spoke. |
-| **Decisions** | What was decided, when, and what it replaced. *To review* lists decisions the evening run captured that you have not read yet — tick **Keep** once you have, or **Dismiss** if it was not really a decision. |
-
-They're the menu at the top of the sidebar, under **Daily notes**. The calendar icon at the far left always brings you back to today's note.
-
-## Reviewing
-
-Everything in the **Meetings** table arrives with the status **To review** because something was inferred rather than known — a name matched by guess, a calendar entry matched loosely, an email routed to a project by its sender's domain. Open the *Triage* view and, per row, tick **Keep** once it looks right, or **Dismiss** if it is noise (a bad recording, something that was not really a meeting — the file stays, it just leaves the tables). A kept row reads **Kept** straight away. Keep is the signal that a row can be trusted downstream; nothing else writes it.
-
-A row typed `note` is a capture rather than a meeting: a forwarded email or a voice memo that carried context worth keeping. Its **Calendar match** box is never ticked because no calendar was ever consulted — nothing corroborated it but the item itself.
-
-Anything marked `<!-- needs-review -->` in a table cell is the same idea: a value that was inferred and wants your eye.
-
-## Asking for things
-
-Ask in plain language — you don't need to remember commands. Each one below has a name in case you'd rather type it.
-
-| When you want to… | Say | Command |
-|---|---|---|
-| pull in new recordings or transcripts | "sync what's in the inbox" | `/sync-recordings` |
-| write down a decision that was just made | "log that decision" | `/log-decision` |
-| start a project, or an area you own | "start a project for…" | `/new-project` |
-| record context on a client or partner | "update the dossier on that client" | `/update-entity` |
-| tell delaware something is broken | "report this to delaware" | `/report-feedback` |
-| write tomorrow's note now | "run the evening sync" | `/evening-sync` |
+To ask for anything, say it in your own words: "log that decision", "start a project for…", "write tomorrow's note now", "report this to delaware". The details are in [[How it works]].
 
 > [!info] Nothing leaves this vault unless you say so
-> Two commands can talk to delaware, and only these two: `/report-feedback` and `/health-check`. Between them they carry version numbers, which skill was involved, what went wrong, and counts — never a name, never a line of your notes — and never without your yes on the exact text they would send. `95-private` is read by nothing at all.
-
-`/health-check` is worth running weekly in the first month — a numbers-only pulse on the vault, no names and no content in it. It will offer to send the numbers to delaware, and take no for an answer.
-
-## Where things live
-
-- `10-inbox` — anything unfiled. Gets swept into the right place.
-- `20-meetings` · `30-projects` · `40-entities` · `50-people` — the objects behind the five tables.
-- `60-daily-notes` — the daily loop.
-- `70-resources` · `80-thoughts-ideas` — reference material and your own notes.
-- `90-archive` — finished, kept.
-- `95-private` — never read by any command. Yours alone.
-- `99-workflow-config` — how the assistant works: who you are, how you like things written, what the vocabulary means. Worth editing when something reads wrong.
-- `claude` — the assistant's own machinery. Visible on purpose, so nothing about how it works is hidden from you; nothing you need day to day.
-
-Nothing in here is hidden from you. If something reads wrong, say so.
+> Only `/report-feedback` and `/health-check` talk to delaware — counts and versions, never your notes — and only after your yes on the exact text.

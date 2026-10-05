@@ -203,7 +203,7 @@ def test_provenance_flags_a_dirty_vault(tmp_path):
 
 def test_base_views_reads_the_shipped_files():
     meetings = probe.REPO_ROOT / "plugin" / "template" / "20-meetings" / "Meetings.base"
-    assert probe.base_views(meetings) == ["Triage", "All Meetings"]
+    assert probe.base_views(meetings) == ["To review", "All Meetings"]
 
 
 def test_declared_display_names_are_namespaced_in_every_shipped_base():

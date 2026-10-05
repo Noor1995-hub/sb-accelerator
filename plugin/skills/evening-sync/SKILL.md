@@ -208,7 +208,7 @@ The instructions each subagent gets:
    When the entry has `newLogs`, also run
    `python3 "$VAULTLIB" messages for-project --vault "$VAULT" --slug <slug> --logs <comma-separated newLogs>`
    and read the returned groups as input next to the meetings. Every state item
-   you take from one (a Hot potato, an Owe, an Awaiting, a closed action) ends
+   you take from one (a Needs attention item, an Owe, an Awaiting, a closed action) ends
    with its source marker, `(mail · <link>)` or `(chat · <link>)` (`mail` or
    `chat` per the group's `kind`), where `<link>` is the group's `link`
    verbatim. The marker counts toward the item's

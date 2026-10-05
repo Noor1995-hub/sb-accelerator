@@ -222,7 +222,7 @@ it has exactly three outcomes:
 | Not a capture at all — a whitepaper, a deck, a spreadsheet, an image, a stray binary | **park** it |
 
 **When you cannot decide between a capture and a park, write the `note`.**
-A wrongly written note sits in Triage and is one click from `archived: true`;
+A wrongly written note sits in Meetings → To review and is one click from `archived: true`;
 a wrongly parked file is out of the queue and on a never-propose-again list,
 and getting it back means reading the archive and editing that list. The error
 direction matters more than the error rate. Both modes decide all

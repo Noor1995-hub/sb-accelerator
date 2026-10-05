@@ -63,7 +63,7 @@ def test_write_renders_the_v2_body_and_touches_frontmatter(tmp_path):
     assert str(fm["next-milestone-date"]) == "2026-09-01"
     assert body.startswith("\n# Yard Automation Program\n\n> [!summary] Where it stands — 15 June\n")
     assert "> - **Stage** — Yard 1 commissioned" in body
-    assert "> - **Hot potato** — 🔴 Renee owns" in body
+    assert "> - **Needs attention** — 🔴 Renee owns" in body
     assert "> - **Insight** — The six-week slip" in body
     assert ("> - **Defining decision** — [[2026-05-20-single-vendor-strategy-adopted|"
             "Single-vendor consolidation adopted]] (20 May)") in body

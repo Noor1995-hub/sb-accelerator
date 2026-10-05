@@ -4,7 +4,7 @@ Brings an existing vault's Notebook Navigator settings and ribbon to what a
 fresh vault ships:
 
 - Shortcuts become the menu — Daily notes, Meetings, Projects, People,
-  Organisations, Decisions — each with its own label (`alias`), no position
+  Entities, Decisions — each with its own label (`alias`), no position
   numbers. The old shortcut to `Start here.md` is dropped. Any shortcut the
   owner added themselves is kept, after the menu.
 - `claude` and `99-workflow-config` are hidden folders and `CLAUDE.md` a
@@ -61,7 +61,7 @@ MENU = [
     {"type": "note", "path": "20-meetings/Meetings.base", "alias": "Meetings"},
     {"type": "note", "path": "30-projects/Projects.base", "alias": "Projects"},
     {"type": "note", "path": "50-people/People.base", "alias": "People"},
-    {"type": "note", "path": "40-entities/Entities.base", "alias": "Organisations"},
+    {"type": "note", "path": "40-entities/Entities.base", "alias": "Entities"},
     {"type": "note", "path": "30-projects/Decisions.base", "alias": "Decisions"},
 ]
 # Paths whose old, unlabelled shortcuts the menu replaces.

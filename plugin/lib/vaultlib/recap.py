@@ -255,7 +255,7 @@ def _callout_list(kind: str, title: str, items: List[str], folded: bool) -> str:
 def render(root: Path, clean: dict, *, meetings: int, window_label: str) -> str:
     parts: List[str] = []
     first = (f"**{_plural(meetings, 'meeting')}** {window_label} · "
-             f"{_plural(len(clean['entities']), 'organisation')} · "
+             f"{len(clean['entities'])} {'entity' if len(clean['entities']) == 1 else 'entities'} · "
              f"{_plural(len(clean['themes']), 'theme')} · "
              f"{_plural(len(clean['decisions']), 'decision')} logged")
     glance = ["> [!glance] At a glance", f"> {first}"]

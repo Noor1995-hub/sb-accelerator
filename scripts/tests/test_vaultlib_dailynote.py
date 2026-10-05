@@ -98,7 +98,7 @@ type: daily-note
 # 2026-06-15 · Monday
 
 > [!review] Waiting for you
-> ![[20-meetings/Meetings.base#Triage]]
+> ![[20-meetings/Meetings.base#To review]]
 >
 > ![[30-projects/Decisions.base#To review]]
 
@@ -1278,14 +1278,14 @@ type: daily-note
 # 2026-06-15 · Monday
 
 > [!review] Waiting for you
-> ![[20-meetings/Meetings.base#Triage]]
+> ![[20-meetings/Meetings.base#To review]]
 >
 > ![[30-projects/Decisions.base#To review]]
 
 ## Recap
 <!-- evening-sync:recap:begin inputs={digest} -->
 > [!glance] At a glance
-> **1 meeting** Friday · 1 organisation · 0 themes · 1 decision logged
+> **1 meeting** Friday · 1 entity · 0 themes · 1 decision logged
 > - **Moved:** Shortlist approved
 > - **Touched:** [[40-entities/acme-industries/dossier|Acme]]
 

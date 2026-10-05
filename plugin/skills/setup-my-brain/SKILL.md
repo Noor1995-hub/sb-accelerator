@@ -30,9 +30,10 @@ stops — that is the correct outcome, not a gap to work around.
 The owner is a busy executive, not a technologist, and they are alone with
 this. Everything they read must make sense without help.
 
-- **Plain words.** Say "organisation", not entity; "your evening note", not
-  daily note; "your accounts", not connectors or adapters; "project" or
-  "responsibility", not initiative or area of responsibility. Any other term
+- **Plain words.** Say "entity", the word the vault's menu uses, explained
+  once in step 4; "your evening note", not daily note; "your accounts", not
+  connectors or adapters; "project" or "responsibility", not initiative or
+  area of responsibility. Any other term
   gets half a sentence the first time: "your evening note — the page the
   vault writes you each evening for the next day".
 - **Never show machinery.** No evidence ids, file names, commands, JSON,
@@ -442,12 +443,12 @@ Read tool first. Its `## Interview questions` are the full set for that
 file: skip a question only when an accepted proposal or a recorded answer
 already answers it; ask it when not, or when you are unsure.
 
-## Step 4 — your organisations
+## Step 4 — your entities
 
-Explain once: *an organisation is any group you deal with — a client, a
-partner, a supplier, a regulator, your own company, or a department inside
-it.* Propose from the `domain` entries as tick boxes, top first, plus their
-own company from step 2. For each ticked organisation, ask its type as a
+Explain once: *entities are the companies, teams and other groups you work
+with — a client, a partner, a supplier, a regulator, your own company, or a
+department inside it.* Propose from the `domain` entries as tick boxes, top first, plus their
+own company from step 2. For each ticked entity, ask its type as a
 choice — `client`, `business-unit`, `partner`, `supplier`, `other` (their own
 company and its departments are `business-unit`) — and its name as they say
 it:
@@ -586,7 +587,7 @@ Then close from their side of the table, in this order:
 1. **What is true now** — *"You're set up. The vault knows who you are, how
    you write, and what you're working on."*
 2. **What to look at** — tomorrow's note first, then one project page and
-   one organisation page.
+   one entity page.
 3. **What happens next, and when** — the first automatic evening run, or the
    hand-off from step 10.
 4. **When something is missing** — `/new-project` and `/update-entity`, one

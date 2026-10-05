@@ -79,7 +79,7 @@ def test_merge_writes_the_menu_and_keeps_the_owners_state(tmp_path):
     data = nn(root)
     shortcuts = data["vaultProfiles"][0]["shortcuts"]
     assert [s.get("alias") for s in shortcuts] == [
-        "Daily notes", "Meetings", "Projects", "People", "Organisations", "Decisions", None]
+        "Daily notes", "Meetings", "Projects", "People", "Entities", "Decisions", None]
     # the owner's own shortcut survives, after the menu
     assert shortcuts[-1] == {"type": "note", "path": "80-thoughts-ideas/board-prep.md"}
     assert not any(s["path"] == "Start here.md" for s in shortcuts)
@@ -136,23 +136,30 @@ def test_broken_json_is_refused_without_writing(tmp_path):
 def test_the_shipped_template_is_already_where_the_migration_lands(tmp_path):
     """A fresh vault and an upgraded one must converge: applying the migration
     to the template's own files changes no setting, so a later template
-    refresh cannot revert it either."""
+    refresh cannot revert it either. 006 (#240) later moved the pane layout
+    and sidebar width on, so convergence is 003 followed by 006 — the order
+    any upgrade from before structure 4 runs them in."""
     module = load()
+    spec = importlib.util.spec_from_file_location(
+        "m006", M003.parents[1] / "006-structure-version-7" / "migrate.py")
+    m006 = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m006)
     root = tmp_path / "fresh"
     shutil.copytree(TEMPLATE / ".obsidian", root / ".obsidian")
     shipped_nn = json.loads((root / NN).read_text(encoding="utf-8"))
     shipped_ws = json.loads((root / WS).read_text(encoding="utf-8"))
     module.apply(root)
+    m006.apply(root)
     assert json.loads((root / NN).read_text(encoding="utf-8")) == shipped_nn
     assert json.loads((root / WS).read_text(encoding="utf-8")) == shipped_ws
 
 
 def test_run_through_the_framework_bumps_to_4(tmp_path):
-    # 003 applies first; 004 (#238) and 005 (#249) then carry the chain on to 6
+    # 003 applies first; 004 (#238) and 005 (#249) then carry the chain on to 7
     root = lived_in_vault(tmp_path)
     (root / "99-workflow-config").mkdir()
     (root / "20-meetings").mkdir()
     result = migrate.run(root, "2026-10-01", stamp="2026-10-01-120000")
     assert [a["slug"] for a in result["applied"]][:1] == ["structure-version-4"]
-    assert result["structure_version"] == 6
-    assert (root / "structure-version").read_text(encoding="utf-8").strip() == "6"
+    assert result["structure_version"] == 7
+    assert (root / "structure-version").read_text(encoding="utf-8").strip() == "7"

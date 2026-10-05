@@ -114,7 +114,7 @@ def render_body(name: str, slug: str, state: dict) -> str:
     stand = [f"> [!summary] Where it stands — {display_long_date(state['as_of'])}"]
     stand.append(f"> - **Stage** — {state.get('stage') or '_newly created; awaiting first meeting or intake_'}")
     for potato in state.get("hot_potatoes") or []:
-        stand.append(f"> - **Hot potato** — {SIGNALS.get(potato['signal'], '🟠')} {potato['text']}")
+        stand.append(f"> - **Needs attention** — {SIGNALS.get(potato['signal'], '🟠')} {potato['text']}")
     for insight in state.get("insights") or []:
         stand.append(f"> - **Insight** — {insight}")
     stand.append(f"> - **Defining decision** — {state.get('defining_decision') or PLACEHOLDER}")

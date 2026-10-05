@@ -10,6 +10,10 @@ formulas:
   group: if(parent, file("40-entities/" + parent + "/dossier.md").properties["entity-name"], note["entity-name"])
   part-of: if(parent, link("40-entities/" + parent + "/dossier.md", file("40-entities/" + parent + "/dossier.md").properties["entity-name"]), "")
   team-order: if(parent, 1, 0)
+  # Names and plain labels, not codes (#240).
+  owner-name: if(owner, if(file("50-people/" + owner + ".md"), file("50-people/" + owner + ".md").properties["person-name"], owner), "")
+  kind: if(note["entity-type"] == "business-unit", "Business unit", if(note["entity-type"], note["entity-type"].title(), ""))
+  state: if(status, status.title(), "")
 properties:
   formula.open:
     displayName: " "
@@ -19,13 +23,13 @@ properties:
     displayName: Part of
   note.entity-name:
     displayName: Entity
-  note.entity-type:
+  formula.kind:
     displayName: Type
-  note.status:
+  formula.state:
     displayName: Status
   note.industry:
     displayName: Industry
-  note.owner:
+  formula.owner-name:
     displayName: Owner
   note.last-updated:
     displayName: Updated
@@ -39,10 +43,10 @@ views:
       - formula.open
       - entity-name
       - formula.part-of
-      - entity-type
-      - status
+      - formula.kind
+      - formula.state
       - industry
-      - owner
+      - formula.owner-name
       - last-updated
     sort:
       - property: formula.team-order
@@ -61,9 +65,9 @@ views:
       - formula.open
       - entity-name
       - formula.part-of
-      - entity-type
+      - formula.kind
       - industry
-      - owner
+      - formula.owner-name
       - last-updated
     sort:
       - property: formula.team-order

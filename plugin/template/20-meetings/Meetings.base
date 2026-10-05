@@ -4,13 +4,22 @@ filters:
     - file.ext == "md"
 formulas:
   open: link(file.path, "→")
-  project-links: projects.map(link("30-projects/" + value + "/index.md", "↗"))
+  # Names, not slugs, in the read-only view (#240). To review keeps the
+  # editable projects and attendees cells: that is where a wrong project
+  # or person is fixed, by typing its slug.
+  project-names: if(projects, projects.map(link("30-projects/" + value + "/index.md", if(file("30-projects/" + value + "/index.md"), file("30-projects/" + value + "/index.md").properties["project-name"], value))), "")
+  attendee-names: if(attendees, attendees.map(if(file("50-people/" + value + ".md"), file("50-people/" + value + ".md").properties["person-name"], value)), "")
+  kind: if(type == "status-update", "Status update", if(type == "1:1", "1:1", if(type, type.title(), "")))
   review-state: if(archived, "Dismissed", if(reviewed || review_status == "confirmed", "Kept", "To review"))
 properties:
   formula.open:
     displayName: " "
-  formula.project-links:
-    displayName: Open project
+  formula.project-names:
+    displayName: Projects
+  formula.attendee-names:
+    displayName: Attendees
+  formula.kind:
+    displayName: Type
   formula.review-state:
     displayName: Status
   note.date:
@@ -39,7 +48,7 @@ properties:
     displayName: Source
 views:
   - type: table
-    name: Triage
+    name: To review
     filters:
       and:
         - review_status == "needs-review"
@@ -77,13 +86,13 @@ views:
       - formula.open
       - date
       - calendar-subject
-      - projects
-      - attendees
+      - formula.project-names
+      - formula.attendee-names
       - formula.review-state
-      - type
-      - formula.project-links
+      - formula.kind
     sort:
       - property: date
         direction: DESC
     columnSize:
-      formula.project-links: 112
+      formula.project-names: 170
+      formula.attendee-names: 170

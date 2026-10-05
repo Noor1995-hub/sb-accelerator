@@ -71,6 +71,43 @@
   transform: none;
 }
 
+/* Machine-only properties are not shown on a note (#240).
+   Bookkeeping the pipeline writes for itself — which recording a meeting came
+   from, how sure the sync was, when a state or a tick was stamped. The owner
+   never acts on them, and they are still there in Source mode and to every
+   query. Hidden even when the Properties block is opened. */
+.mod-root .metadata-property:is(
+  [data-property-key="processed"],
+  [data-property-key="source-recording-id"],
+  [data-property-key="source-filename"],
+  [data-property-key="confidence"],
+  [data-property-key="confidence-reasons"],
+  [data-property-key="state-updated"],
+  [data-property-key="confirmed-at"]) {
+  display: none !important;
+}
+
+/* A page that opens with its own heading does not repeat its file name above
+   it (#240). Project pages are all `index.md` and entity pages all
+   `dossier.md`, so the inline title read "index" / "dossier" over the real
+   name in the H1; a daily note showed its date twice. Obsidian's inline title
+   stays on for every other note — a meeting, person or decision has no H1,
+   and its file name is the only title it has.
+
+   CSS cannot read a property's value, and Live Preview draws only the lines on
+   screen, so "the first line is an H1" is not detectable once the note is
+   scrolled. The Properties block is always in the DOM, so this keys on it:
+   a `project-name` or `entity-name` property, or exactly `date` then `type`
+   (the daily note's whole frontmatter). Verified in Obsidian 1.13 in Live
+   Preview and Reading view. */
+.mod-root :is(.cm-sizer, .markdown-preview-sizer):has(
+  .metadata-property[data-property-key="project-name"],
+  .metadata-property[data-property-key="entity-name"],
+  .metadata-properties > .metadata-property[data-property-key="date"]:first-child + .metadata-property[data-property-key="type"]:last-child
+) .inline-title {
+  display: none;
+}
+
 /* Daily-note recap v2 callout types: --callout-color plus a Lucide
    --callout-icon. An unknown type falls back to the default "note" look, so a
    vault whose snippet is behind still renders — just without the accents.

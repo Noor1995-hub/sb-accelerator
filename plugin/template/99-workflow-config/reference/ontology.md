@@ -63,7 +63,7 @@ confidence_reasons:
 - `attendee-emails`, `organizer`, `location`, `recurring`, `start-time`
   appear on calendar-matched meetings only. `source-recording-id`,
   `source-filename` are recorder provenance.
-- **Triage checkboxes (booleans, edited in Meetings.base):** `reviewed` —
+- **Review checkboxes (booleans, edited in Meetings.base's *To review* view):** `reviewed` —
   one-click confirm; `archived` — hides the row from triage views (noise
   disposal; the file stays).
 - Write-once; only triage fields (`attendees`, `projects`, `review_status`,
@@ -174,7 +174,7 @@ body_sections: [Coming up, Recent meetings, Recent decisions, Background]
 
 - **Body is machine-rendered** by `project state write` from a state object:
   a `> [!summary] Where it stands — {d Month}` card (Stage · up to three
-  Hot potatoes 🔴/🟠 · up to two Insights · Defining decision), `## Coming up`
+  *Needs attention* items 🔴/🟠 (`hot_potatoes` in the state object) · up to two Insights · Defining decision), `## Coming up`
   (a When/What table, ≤ 10 rows), `## Recent meetings` and
   `## Recent decisions` (Dataview, `LIMIT 10`), and `## Background` — folded
   callouts for 📤 Owe (grouped by owner, one item per bullet), 👤 Awaiting,
@@ -209,6 +209,10 @@ body_sections: [Coming up, Recent meetings, Recent decisions, Background]
   already says whether the work faces a client, a partner, a supplier, or
   your own business unit. Areas of responsibility are always top-level: they
   never carry a `parent`.
+- **What the owner reads:** `initiative` shows as **Project** and
+  `area-of-responsibility` as **Responsibility** — in `Projects.base`, Start
+  here and every skill that talks to the owner. The stored values do not
+  change.
 
 ### Person — `50-people/{slug}.md` · Base: `People.base`
 
@@ -480,8 +484,8 @@ body_sections: [Recap, Meetings, End of day]
   is forbidden from touching a byte outside them. One writer class per
   region.
 - **Review block**: a fresh note opens with `> [!review] Waiting for you`,
-  above `## Recap` — the embedded Meetings `Triage` and Decisions
-  `To review` views, written once at creation, collapsed by the CSS snippet
+  above `## Recap` — the embedded Meetings and Decisions `To review`
+  views (the Meetings one was named `Triage` before #240), written once at creation, collapsed by the CSS snippet
   when both are empty. It is not a region and holds no state.
 - **Everything outside the markers is human territory**: jotting bullets
   under each meeting heading, `## End of day`, anything else. The evening

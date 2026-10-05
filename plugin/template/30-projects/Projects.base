@@ -4,18 +4,25 @@ filters:
     - file.name == "index"
 formulas:
   open: link(file.path, "→")
+  # Names, not slugs (#240): the entity and owner are looked up from their
+  # own notes, so the table shows whatever name the owner gave them; a slug
+  # with no note behind it still shows, as itself.
+  entity-link: if(entity, link("40-entities/" + entity + "/dossier.md", if(file("40-entities/" + entity + "/dossier.md"), file("40-entities/" + entity + "/dossier.md").properties["entity-name"], entity)), "")
+  owner-name: if(owner, if(file("50-people/" + owner + ".md"), file("50-people/" + owner + ".md").properties["person-name"], owner), "")
+  kind: if(note["project-type"] == "area-of-responsibility", "Responsibility", if(note["project-type"] == "initiative", "Project", note["project-type"]))
+  state: if(status, status.title(), "")
 properties:
   formula.open:
     displayName: " "
   note.project-name:
     displayName: Project
-  note.status:
+  formula.state:
     displayName: Status
-  note.project-type:
+  formula.kind:
     displayName: Type
-  note.entity:
+  formula.entity-link:
     displayName: Entity
-  note.owner:
+  formula.owner-name:
     displayName: Owner
   note.next-milestone:
     displayName: Next Milestone
@@ -24,14 +31,14 @@ properties:
   note.last-updated:
     displayName: Updated
   note.meetings-30d:
-    displayName: 30d
+    displayName: Meetings (30 days)
   note.meetings-7d:
-    displayName: 7d
+    displayName: Meetings (7 days)
 views:
   - type: table
     name: Active
     groupBy:
-      property: note.project-type
+      property: formula.kind
       direction: ASC
     filters:
       and:
@@ -39,19 +46,18 @@ views:
     order:
       - formula.open
       - project-name
-      - entity
+      - formula.entity-link
       - next-milestone
       - next-milestone-date
       - last-updated
       - meetings-30d
       - meetings-7d
-      - project-type
     columnSize:
       note.next-milestone: 210
       note.next-milestone-date: 110
       note.last-updated: 110
-      note.meetings-30d: 60
-      note.meetings-7d: 60
+      note.meetings-30d: 160
+      note.meetings-7d: 150
     sort:
       - property: last-updated
         direction: DESC
@@ -60,10 +66,10 @@ views:
     order:
       - formula.open
       - project-name
-      - status
-      - project-type
-      - entity
-      - owner
+      - formula.state
+      - formula.kind
+      - formula.entity-link
+      - formula.owner-name
       - last-updated
     sort:
       - property: last-updated

@@ -96,7 +96,7 @@ def _validate_inputs(root: Path, slug: str, project_type: str,
 
     if project_type == "area-of-responsibility":
         raise ProjectError(
-            "areas of responsibility are always top-level and cannot have a parent"
+            "a responsibility (area-of-responsibility) is always top-level and cannot have a parent"
         )
     parent_data = _load_project(root, parent)
     if parent_data is None:

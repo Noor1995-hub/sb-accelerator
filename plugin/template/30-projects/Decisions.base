@@ -4,6 +4,10 @@ filters:
     - type == "decision"
 formulas:
   open: link(file.path, "→")
+  # Names, not codes (#240): the project's name, and the replaced
+  # decision's own sentence rather than its file name.
+  project-link: if(project, link("30-projects/" + project + "/index.md", if(file("30-projects/" + project + "/index.md"), file("30-projects/" + project + "/index.md").properties["project-name"], project)), "")
+  replaces: if(supersedes, link(file(supersedes), file(supersedes).properties["summary"]), "")
   decision-status: if(archived, "Dismissed", if(status == "superseded", "Replaced", if(status == "withdrawn", "Withdrawn", if(status == "active", "Active", status))))
 properties:
   formula.open:
@@ -12,7 +16,7 @@ properties:
     displayName: Status
   note.summary:
     displayName: Decision
-  note.project:
+  formula.project-link:
     displayName: Project
   note.date:
     displayName: Date
@@ -22,7 +26,7 @@ properties:
     displayName: Keep
   note.archived:
     displayName: Dismiss
-  note.supersedes:
+  formula.replaces:
     displayName: Replaces
 views:
   - type: table
@@ -35,11 +39,11 @@ views:
       - formula.open
       - date
       - summary
-      - project
+      - formula.project-link
       - reviewed
       - archived
       - formula.decision-status
-      - supersedes
+      - formula.replaces
     sort:
       - property: date
         direction: DESC
@@ -57,7 +61,7 @@ views:
       - formula.open
       - date
       - summary
-      - project
+      - formula.project-link
     sort:
       - property: date
         direction: DESC
@@ -67,11 +71,11 @@ views:
       - formula.open
       - date
       - summary
-      - project
+      - formula.project-link
       - reviewed
       - archived
       - formula.decision-status
-      - supersedes
+      - formula.replaces
     sort:
       - property: date
         direction: DESC

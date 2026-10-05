@@ -24,7 +24,7 @@
         { "type": "note", "path": "20-meetings/Meetings.base", "alias": "Meetings" },
         { "type": "note", "path": "30-projects/Projects.base", "alias": "Projects" },
         { "type": "note", "path": "50-people/People.base", "alias": "People" },
-        { "type": "note", "path": "40-entities/Entities.base", "alias": "Organisations" },
+        { "type": "note", "path": "40-entities/Entities.base", "alias": "Entities" },
         { "type": "note", "path": "30-projects/Decisions.base", "alias": "Decisions" }
       ],
       "navRainbow": {
@@ -89,8 +89,10 @@
   "showTags": false,
   "showProperties": false,
   "dualPane": true,
-  "dualPaneOrientation": "vertical",
+  "dualPaneOrientation": "horizontal",
   "narrowSidebarLayout": "none",
+  "useFrontmatterMetadata": true,
+  "frontmatterNameField": "project-name, entity-name, person-name",
   "syncModes": {
     "dualPane": "synced",
     "dualPaneOrientation": "synced"

@@ -44,7 +44,7 @@ def make_vault(tmp_path):
 
 
 EXPECTED = """> [!glance] At a glance
-> **1 meeting** Friday · 1 organisation · 1 theme · 1 decision logged
+> **1 meeting** Friday · 1 entity · 1 theme · 1 decision logged
 > - **Needs your hand:** Vendor scoring has no owner past Friday
 > - **Moved:** Yard 2 re-scope agreed
 > - **Touched:** [[40-entities/acme-industries/dossier|Acme]]
@@ -89,7 +89,7 @@ def test_empty_lists_render_their_none_phrasing(tmp_path):
     clean, _, _ = recap.validate(root, {"glance": {"entities": [], "headlines": [
         {"label": "Quiet", "text": "Nothing moved"}]}})
     text = recap.render(root, clean, meetings=0, window_label="Monday–Friday")
-    assert "**0 meetings** Monday–Friday · 0 organisations · 0 themes · 0 decisions logged" in text
+    assert "**0 meetings** Monday–Friday · 0 entities · 0 themes · 0 decisions logged" in text
     assert "**Touched:**" not in text
     assert "**Themes** — none this window." in text
     assert "**Project pulse** — no project touched this window." in text
@@ -103,7 +103,7 @@ def test_plurals(tmp_path):
     clean, _, _ = recap.validate(root, {"glance": {"entities": ["acme-industries"], "headlines": [
         {"label": "Moved", "text": "x"}]}, "sync_notes": ["a", "b"]})
     text = recap.render(root, clean, meetings=3, window_label="Friday")
-    assert "**3 meetings** Friday · 1 organisation · 0 themes · 0 decisions logged" in text
+    assert "**3 meetings** Friday · 1 entity · 0 themes · 0 decisions logged" in text
     assert "Sync notes — 2 items, also in the run log" in text
 
 

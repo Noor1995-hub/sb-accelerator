@@ -22,7 +22,7 @@ EXPECTED_SHORTCUTS = [
     ("note", "20-meetings/Meetings.base", "Meetings"),
     ("note", "30-projects/Projects.base", "Projects"),
     ("note", "50-people/People.base", "People"),
-    ("note", "40-entities/Entities.base", "Organisations"),
+    ("note", "40-entities/Entities.base", "Entities"),
     ("note", "30-projects/Decisions.base", "Decisions"),
 ]
 
@@ -283,14 +283,15 @@ def test_navigator_keeps_one_pane_layout_in_a_narrow_sidebar():
     """Notebook Navigator used to collapse to a single pane in a narrow
     sidebar and show the *file list*, hiding the Shortcuts — and it flipped
     between the two as the sidebar width changed (#239). Its default
-    `narrowSidebarLayout: singlePane` did that. Shipping `none` with the panes
-    stacked (menu above, list below) keeps one layout at any width, which is
-    what lets the sidebar narrow to give pages room. The two layout keys are
-    per-device in Navigator unless `syncModes` marks them synced, so without
-    that the vault's value is ignored; verified live against Obsidian 1.13."""
+    `narrowSidebarLayout: singlePane` did that. Shipping `none` keeps one
+    layout at any width. The panes sit side by side (#240, the owner's
+    choice over #239's stacked layout), in a 400px sidebar. The two layout
+    keys are per-device in Navigator unless `syncModes` marks them synced, so
+    without that the vault's value is ignored; verified live against
+    Obsidian 1.13."""
     data = json.loads(NN_DATA.read_text(encoding="utf-8"))
     assert data["narrowSidebarLayout"] == "none"
-    assert data["dualPane"] is True and data["dualPaneOrientation"] == "vertical"
+    assert data["dualPane"] is True and data["dualPaneOrientation"] == "horizontal"
     assert data["syncModes"]["dualPane"] == data["syncModes"]["dualPaneOrientation"] == "synced"
 
 
@@ -400,7 +401,7 @@ def test_review_callout_collapses_when_empty_and_spans_the_pane():
 def test_triage_rows_are_tall_enough_for_three_attendees():
     import yaml
     base = yaml.safe_load((TEMPLATE / "20-meetings" / "Meetings.base").read_text(encoding="utf-8"))
-    triage = next(v for v in base["views"] if v["name"] == "Triage")
+    triage = next(v for v in base["views"] if v["name"] == "To review")
     assert triage["rowHeight"] == "tall"
 
 

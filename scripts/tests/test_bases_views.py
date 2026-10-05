@@ -90,7 +90,7 @@ EXPECTED = [
     # ordinary needs-review note carrying a conflicts-with edge — it stays in
     # Triage alongside the unreviewed intro call, flagged by its ⚠ Duplicate
     # of column rather than by a status of its own.
-    ("20-meetings/Meetings.base", "Triage", {
+    ("20-meetings/Meetings.base", "To review", {
         MEETINGS.format("02-03-26-nordbridge-intro-call"),
         MEETINGS.format("12-06-26-jordan-1on1-v2"),
     }),
@@ -171,7 +171,7 @@ def test_template_only_vault_has_no_object_rows(tmp_path):
 # the file. Triage-first posture, and a row-set test cannot see a reordering.
 DEFAULT_VIEWS = [
     ("30-projects/Decisions.base", "To review"),
-    ("20-meetings/Meetings.base", "Triage"),
+    ("20-meetings/Meetings.base", "To review"),
     # People opens A–Z (#242), not on a review queue.
     ("50-people/People.base", "All"),
 ]
@@ -191,10 +191,10 @@ def test_first_view_is_the_review_queue(vault, base_path, expected):
 # queue. A filter that hides ticked rows is a dead end without the checkbox.
 REQUIRED_COLUMNS = [
     ("30-projects/Decisions.base", "To review", "reviewed"),
-    ("20-meetings/Meetings.base", "Triage", "reviewed"),
+    ("20-meetings/Meetings.base", "To review", "reviewed"),
     # The clobber-risk signal, relocated off review_status in #58: triage has
     # to show which capture is a duplicate of a confirmed note.
-    ("20-meetings/Meetings.base", "Triage", "conflicts-with"),
+    ("20-meetings/Meetings.base", "To review", "conflicts-with"),
 ]
 
 

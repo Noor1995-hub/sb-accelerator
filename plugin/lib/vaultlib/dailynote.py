@@ -32,10 +32,13 @@ ACTIONS_BLOCK = "#### Your actions\n- [ ] "
 # callout when both are empty, so a clear day shows nothing. Written once at
 # creation and never merged: it holds no machine state.
 REVIEW_BLOCK = ("> [!review] Waiting for you\n"
-                "> ![[20-meetings/Meetings.base#Triage]]\n"
+                "> ![[20-meetings/Meetings.base#To review]]\n"
                 ">\n"
                 "> ![[30-projects/Decisions.base#To review]]")
-_REVIEW_LINES = frozenset(REVIEW_BLOCK.split("\n"))
+# The Meetings view was named Triage until #240. A note that migration 006
+# has not rewritten still carries this line, and it is not a jotting.
+LEGACY_TRIAGE_EMBED = "> ![[20-meetings/Meetings.base#Triage]]"
+_REVIEW_LINES = frozenset(REVIEW_BLOCK.split("\n")) | {LEGACY_TRIAGE_EMBED}
 _PREP_KEYS = ("attendees", "last_meeting", "context")
 _PREP_LABELS = (("attendees", "Attendees"), ("last_meeting", "Last meeting"),
                 ("context", "Context"))

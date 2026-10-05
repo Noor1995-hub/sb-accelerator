@@ -1,6 +1,6 @@
 ---
 name: new-project
-description: Create a project or area of responsibility with a structured index, and link it into its entity's dossier. Triggers when the user invokes /new-project or asks to start a new project, initiative, engagement, opportunity, or area of responsibility.
+description: Create a project or a responsibility (an area of responsibility) with a structured index, and link it into its entity's dossier. Triggers when the user invokes /new-project or asks to start a new project, initiative, engagement, opportunity, responsibility, or area of responsibility.
 user_invocable: true
 upstreamed-from: busdev@ccc27b8
 ---
@@ -52,8 +52,10 @@ Ask only for what is missing, one question at a time.
   user explicitly wants a different one.
 - **Type** — `initiative` (timeboxed work with an end) or
   `area-of-responsibility` (standing, no end date). Default to `initiative`
-  without asking when the name plainly describes bounded work.
-- **Entity** — which organisation this belongs to. List what exists:
+  without asking when the name plainly describes bounded work. To the user
+  these are a **project** and a **responsibility** — the words the Projects
+  table shows; never say "initiative" or "area of responsibility" to them.
+- **Entity** — which company, team or other group this belongs to. List what exists:
 
   ```bash
   ls "$VAULT/40-entities"
@@ -79,7 +81,7 @@ Ask only for what is missing, one question at a time.
   `--entity` — create the team first with `entity ensure --parent <entity>`
   (see `/update-entity`), so the work rolls up under its parent's dossier.
 - **Parent** — only for initiatives, and only if the user implies one.
-  Maximum two levels; areas of responsibility are always top-level. The CLI
+  Maximum two levels; responsibilities are always top-level. The CLI
   enforces both.
 
 ### 2. Offer to gather context
