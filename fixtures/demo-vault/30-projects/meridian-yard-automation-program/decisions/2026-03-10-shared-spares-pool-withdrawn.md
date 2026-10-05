@@ -9,6 +9,8 @@ source: "[[10-03-26-meridian-steerco-01]]"
 reviewed: true
 ---
 
+# Proposed a shared spares inventory across the three yards; withdrawn once the per-site vendor catalogues showed almost no part overlap.
+
 **Decision** — Pool spares inventory across the three regional yards instead of each yard holding its own stock.
 
 **Why** — Under the phased multi-vendor rollout, spares were the largest recurring cost line; a shared pool promised roughly a third off carrying cost.

@@ -254,7 +254,7 @@ def _resolve_source(root: Path, raw: Optional[str]) -> Optional[str]:
     return found.stem
 
 
-def _render_body(decision_text: str, why: str, implications: str) -> str:
+def _render_body(summary: str, decision_text: str, why: str, implications: str) -> str:
     """One source line per paragraph, never hard-wrapped.
 
     Obsidian renders a single newline as a line break (strict line breaks are
@@ -267,7 +267,9 @@ def _render_body(decision_text: str, why: str, implications: str) -> str:
         for marker, text in zip(BODY_MARKERS,
                                 (decision_text, why, implications))
     ]
-    return "\n" + "\n\n".join(paragraphs) + "\n"
+    # The summary sentence is the page's heading (#258): the file name is a
+    # dated kebab label, not something to read.
+    return "\n" + markdown.title_heading(summary) + "\n\n" + "\n\n".join(paragraphs) + "\n"
 
 
 def _plan_supersession(root: Path, project: str, raw: Optional[str],
@@ -389,7 +391,8 @@ def write(root: Path, *, project: str, date: str, payload: dict,
             + "; ".join(problems)
         )
 
-    body = _render_body(_collapse(payload["decision"], "decision"),
+    body = _render_body(frontmatter["summary"],
+                        _collapse(payload["decision"], "decision"),
                         _collapse(payload["why"], "why"),
                         _collapse(payload["implications"], "implications"))
     target = folder / f"{stem}.md"

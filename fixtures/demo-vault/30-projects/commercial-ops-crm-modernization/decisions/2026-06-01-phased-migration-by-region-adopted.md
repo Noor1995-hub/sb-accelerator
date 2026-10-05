@@ -9,6 +9,8 @@ source: "[[01-06-26-commercial-ops-status-update]]"
 reviewed: false
 ---
 
+# Replace the big-bang cutover with a phased, region-by-region migration, cleanest region first.
+
 **Decision** — Migrate region by region, starting with the region whose pipeline-stage data is already closest to the shared definition.
 
 **Why** — The stage-definition divergence surfaced at the kickoff workshop makes a single cutover date unrealistic: no plausible plan gets every region's data clean at once.

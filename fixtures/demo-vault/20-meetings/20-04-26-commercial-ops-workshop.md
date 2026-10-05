@@ -21,6 +21,8 @@ source: teams
 processed: true
 ---
 
+# Commercial Operations — CRM Data Modernization Kickoff Workshop
+
 ## Notes
 
 - Scoped the CRM data model gaps; Omar to draft the target schema.

@@ -180,7 +180,7 @@ def date_from_stem(stem: str) -> Optional[date]:
 
 
 def _render_body(payload: dict) -> str:
-    lines = ["", "## Key Takeaways"]
+    lines = ["", markdown.title_heading(payload["calendar-subject"]), "", "## Key Takeaways"]
     lines += [f"- {item.strip()}" for item in payload["takeaways"]]
     lines += ["", "## Debrief", str(payload["debrief"]).strip()]
     action_items = payload.get("action-items") or []

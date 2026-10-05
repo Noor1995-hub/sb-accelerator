@@ -9,6 +9,8 @@ source: "[[20-04-26-commercial-ops-workshop]]"
 reviewed: true
 ---
 
+# Migrate all regions' CRM data in a single big-bang cutover during the Q4 slow period.
+
 **Decision** — Migrate all regions to the new CRM data platform in one big-bang cutover, scheduled into the Q4 commercial slow period.
 
 **Why** — A single cutover avoids running two systems of record in parallel and keeps the vendor's migration team on site once instead of three times.

@@ -105,6 +105,8 @@ def ensure(root: Path, name: str, today: str,
     target = root / PEOPLE_DIR / f"{slug}.md"
     vault.atomic_write(
         target, markdown.emit_frontmatter(frontmatter, PERSON_QUOTE_KEYS)
+        # The name is the page's heading (#258), not the file's slug.
+        + "\n" + markdown.title_heading(name) + "\n"
     )
     return {"slug": slug, "path": target.relative_to(root).as_posix(), "created": True}
 

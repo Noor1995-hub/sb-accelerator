@@ -155,11 +155,11 @@ def test_the_shipped_template_is_already_where_the_migration_lands(tmp_path):
 
 
 def test_run_through_the_framework_bumps_to_4(tmp_path):
-    # 003 applies first; 004 (#238) and 005 (#249) then carry the chain on to 8
+    # 003 applies first; 004 (#238) and 005 (#249) then carry the chain on to 9
     root = lived_in_vault(tmp_path)
     (root / "99-workflow-config").mkdir()
     (root / "20-meetings").mkdir()
     result = migrate.run(root, "2026-10-01", stamp="2026-10-01-120000")
     assert [a["slug"] for a in result["applied"]][:1] == ["structure-version-4"]
-    assert result["structure_version"] == 8
-    assert (root / "structure-version").read_text(encoding="utf-8").strip() == "8"
+    assert result["structure_version"] == 9
+    assert (root / "structure-version").read_text(encoding="utf-8").strip() == "9"

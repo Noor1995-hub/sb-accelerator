@@ -155,6 +155,9 @@ confidence_reasons:
   meeting now has two notes and a human has to decide which survives. Clearing
   or deleting the field says the duplicate is resolved, and the next run folds
   the tick normally.
+- **The body opens with `# {calendar-subject}`** (#258): the file name is a
+  dated slug, so without it the only title Obsidian shows is that slug.
+  Migration 008 gave existing notes the heading.
 - Example: `20-meetings/05-05-26-quarterly-portfolio-review.md`
 
 ### Project — `30-projects/{slug}/index.md` · Base: `Projects.base`
@@ -237,6 +240,8 @@ enums:
   section with `### Feedback History` (a dated table) and `### Growth Areas`.
   Nothing in the plugin reads or writes it; it is a place, not a pipeline.
 - Auto-created from meeting attendees; enriched manually via People Base.
+  The body opens with `# {person-name}` (#258) so the page shows the name,
+  not the slug.
 - **Auto-maintained** by the evening run's metrics step, from confirmed
   meetings only (never a `type: note` capture): `meetings-7d`,
   `meetings-30d`, `last-met` (ISO date of the latest such meeting the person
@@ -296,8 +301,10 @@ enums:
 
 ### Decision note template
 
-Three bold markers, not H2 sections — so this object has no `body_sections`,
-and the conformance guard checks the markers instead. One paragraph per marker.
+An H1 carrying the `summary` sentence (#258 — the page's title, since the file
+name is a dated kebab label), then three bold markers, not H2 sections — so
+this object has no `body_sections`, and the conformance guard checks the
+markers instead. One paragraph per marker.
 
 ```markdown
 ---
@@ -310,6 +317,8 @@ supersedes: "[[2026-03-10-prior-decision-stem]]"
 source: "[[20-05-26-vendor-strategy-brainstorm]]"
 reviewed: true
 ---
+
+# One sentence stating what was decided, specific enough to be useful without opening the note.
 
 **Decision** — What was decided.
 

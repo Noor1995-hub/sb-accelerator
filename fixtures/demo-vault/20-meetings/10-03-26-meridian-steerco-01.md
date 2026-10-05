@@ -21,6 +21,8 @@ source: teams
 processed: true
 ---
 
+# Meridian Freight — Yard Automation Steering Committee #1
+
 ## Notes
 
 - Agreed to roll out phased, multi-vendor automation across the three

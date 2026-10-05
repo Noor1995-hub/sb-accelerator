@@ -242,11 +242,13 @@ def test_the_body_carries_three_bold_markers_one_line_each(tmp_path):
     result = decision.write(root, project=PROJECT, date="2026-05-20",
                             payload=note(why=long_why), reviewed=True)
     body = (root / result["path"]).read_text(encoding="utf-8").split("---\n", 2)[2]
-    assert body.startswith("\n**Decision** — ")
+    # #258: the summary sentence is the page heading, then the three markers
+    summary = result["summary"]
+    assert body.startswith(f"\n# {summary}\n\n**Decision** — ")
     assert "\n\n**Why** — " in body
     assert "\n\n**Implications** — " in body
     assert body.endswith("\n")
-    lines = [line for line in body.split("\n") if line]
+    lines = [line for line in body.split("\n") if line and not line.startswith("# ")]
     assert len(lines) == 3, f"three paragraphs, three lines: {lines}"
     assert lines[1] == f"**Why** — {long_why}"
 

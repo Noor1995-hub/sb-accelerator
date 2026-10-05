@@ -18,6 +18,8 @@ source-filename: "REC-2026-0520-1103.m4a"
 processed: true
 ---
 
+# Meridian Freight — Vendor Strategy Brainstorm
+
 ## Notes
 
 - Leo pushed to consolidate on a single automation vendor across all three

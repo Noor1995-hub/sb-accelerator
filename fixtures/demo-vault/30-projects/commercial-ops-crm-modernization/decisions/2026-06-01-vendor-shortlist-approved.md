@@ -9,6 +9,8 @@ source: "[[01-06-26-commercial-ops-status-update]]"
 reviewed: false
 ---
 
+# Approve a three-vendor shortlist for the CRM data modernization RFP, weighted toward integration effort over list price.
+
 **Decision** — Shortlist three vendors for the CRM data modernization RFP.
 
 **Why** — Weighting integration effort over sticker price, given the existing pipeline-stage inconsistencies flagged at the kickoff workshop.

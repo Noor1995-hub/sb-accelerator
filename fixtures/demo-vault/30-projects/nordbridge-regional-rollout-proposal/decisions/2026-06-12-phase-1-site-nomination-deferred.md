@@ -9,6 +9,8 @@ source: "[[12-06-26-jordan-1on1]]"
 reviewed: false
 ---
 
+# Let Nordbridge nominate the Phase 1 site around their ERP freeze rather than proposing one for them.
+
 **Decision** — The proposal names no Phase 1 site; it asks Nordbridge to nominate the plant their ERP schedule can absorb first.
 
 **Why** — The first site proposal died on a constraint only Nordbridge could see. Handing them the nomination avoids proposing into another freeze and reads as sequencing around their reality, not ours.

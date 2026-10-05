@@ -21,6 +21,8 @@ source: email
 processed: true
 ---
 
+# Commercial Operations — Weekly Status Update
+
 ## Notes
 
 - Approved a three-vendor shortlist for the CRM modernization RFP; see

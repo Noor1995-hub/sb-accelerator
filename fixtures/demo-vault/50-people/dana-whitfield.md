@@ -14,6 +14,8 @@ messages-7d: 0
 messages-30d: 0
 ---
 
+# Dana Whitfield
+
 ## Context
 
 - Gatekeeper for anything Nordbridge buys; straight about constraints — flagged the ERP freeze before we could propose into it.

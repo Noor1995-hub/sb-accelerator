@@ -90,19 +90,23 @@
 /* A page that opens with its own heading does not repeat its file name above
    it (#240). Project pages are all `index.md` and entity pages all
    `dossier.md`, so the inline title read "index" / "dossier" over the real
-   name in the H1; a daily note showed its date twice. Obsidian's inline title
-   stays on for every other note — a meeting, person or decision has no H1,
-   and its file name is the only title it has.
+   name in the H1; a daily note showed its date twice. Since #258 meeting,
+   person and decision notes open with an H1 too (subject, name, summary;
+   migration 008 gave existing notes theirs). Obsidian's inline title stays on
+   for every other note — Start here, How it works, the owner's own notes.
 
    CSS cannot read a property's value, and Live Preview draws only the lines on
    screen, so "the first line is an H1" is not detectable once the note is
    scrolled. The Properties block is always in the DOM, so this keys on it:
-   a `project-name` or `entity-name` property, or exactly `date` then `type`
-   (the daily note's whole frontmatter). Verified in Obsidian 1.13 in Live
-   Preview and Reading view. */
+   a `project-name`, `entity-name`, `person-name`, `calendar-subject` or
+   `summary` property, or exactly `date` then `type` (the daily note's whole
+   frontmatter). Verified in Obsidian 1.13 in Live Preview and Reading view. */
 .mod-root :is(.cm-sizer, .markdown-preview-sizer):has(
   .metadata-property[data-property-key="project-name"],
   .metadata-property[data-property-key="entity-name"],
+  .metadata-property[data-property-key="person-name"],
+  .metadata-property[data-property-key="calendar-subject"],
+  .metadata-property[data-property-key="summary"],
   .metadata-properties > .metadata-property[data-property-key="date"]:first-child + .metadata-property[data-property-key="type"]:last-child
 ) .inline-title {
   display: none;

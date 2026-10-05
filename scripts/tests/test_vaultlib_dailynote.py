@@ -727,8 +727,10 @@ def test_recap_fingerprint_ignores_line_endings(tmp_path):
         "the recap stamp changed with line endings — a CRLF checkout or a "
         "Windows host will regenerate the recap on every run")
     # Normalisation is a no-op on LF content, so the digest every already
-    # stamped vault holds must be unchanged by this.
-    assert lf == "1f298595a5c7118b", (
+    # stamped vault holds must be unchanged by this. Moved once on purpose in
+    # #258: migration 008 adds a heading to every meeting note (the fixture
+    # included), so each vault's recap regenerates once after that upgrade.
+    assert lf == "6c0bb103fb0aeaf1", (
         f"the LF digest moved to {lf} — every stamped vault would regenerate "
         "its recap once. If that is intended, say so in the PR.")
 

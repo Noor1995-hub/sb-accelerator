@@ -121,9 +121,9 @@ def test_apply_is_idempotent(tmp_path):
     assert {p: p.read_bytes() for p in root.rglob("*.md")} == before
 
 
-def test_run_through_the_framework_bumps_to_8(tmp_path):
+def test_run_through_the_framework_bumps_to_9(tmp_path):
     root = vault_v7(tmp_path)
     (root / "99-workflow-config").mkdir()
     result = migrate.run(root, "2026-10-05", stamp="2026-10-05-120000")
-    assert [a["slug"] for a in result["applied"]] == ["structure-version-8"]
-    assert result["structure_version"] == 8
+    assert [a["slug"] for a in result["applied"]] == ["structure-version-8", "structure-version-9"]
+    assert result["structure_version"] == 9

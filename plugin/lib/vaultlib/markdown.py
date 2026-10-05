@@ -257,6 +257,13 @@ def upsert_scalar_field(text: str, field: str, value: str) -> str:
     return _replace_field_node(text, field, value, insert_if_missing=True)
 
 
+def title_heading(text) -> str:
+    """`# {text}` on one line: the H1 a meeting, person or decision note opens
+    with (#258), so the page shows its name rather than its file name. Runs
+    of whitespace, newlines included, collapse to one space."""
+    return "# " + " ".join(str(text).split())
+
+
 def split_sections(body: str, level: int = 2) -> List[Tuple[str, str]]:
     """Split a body into (heading title, content) pairs at the given heading
     level. Content before the first heading is returned under "".

@@ -9,6 +9,8 @@ source: "[[10-03-26-meridian-steerco-01]]"
 reviewed: true
 ---
 
+# Adopt a phased, multi-vendor rollout across three regional yards, starting with the highest-volume site.
+
 **Decision** — Roll out yard automation in three phases, one yard at a time, using separate vendors selected per-site.
 
 **Why** — Minimizes disruption at any single yard and lets each site's integration team move at its own pace.

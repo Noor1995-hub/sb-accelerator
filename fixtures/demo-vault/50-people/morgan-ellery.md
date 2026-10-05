@@ -15,6 +15,8 @@ messages-7d: 0
 messages-30d: 0
 ---
 
+# Morgan Ellery
+
 ## Context
 
 - This vault's executive. Chief Commercial Officer at Cascadia Intermodal Group; owns the commercial P&L across the Meridian and Nordbridge accounts and the internal Commercial Operations agenda.

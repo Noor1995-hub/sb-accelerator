@@ -19,7 +19,7 @@ def test_ensure_creates_a_conformant_note(tmp_path):
     text = (root / "50-people" / "morgan-ellery.md").read_text(encoding="utf-8")
     data, body = md.split_frontmatter(text)
     assert schema.validate("person", data) == []
-    assert body.strip() == ""
+    assert body.strip() == "# Morgan Ellery"   # the name is the page heading (#258)
 
 
 def test_ensure_writes_relationship_as_a_present_null_key(tmp_path):

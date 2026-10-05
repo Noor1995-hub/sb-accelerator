@@ -15,6 +15,8 @@ messages-7d: 0
 messages-30d: 0
 ---
 
+# Sam Okafor
+
 ## Context
 
 - Delivery owner for the CRM data modernization; runs the Commercial Operations weekly status.

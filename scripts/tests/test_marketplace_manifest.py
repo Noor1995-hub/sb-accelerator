@@ -62,7 +62,7 @@ def test_the_referenced_plugin_carries_its_own_manifest():
 
 
 def test_plugin_version_is_bumped_for_this_release():
-    assert json.loads(PLUGIN_JSON.read_text(encoding="utf-8"))["version"] == "0.13.5"
+    assert json.loads(PLUGIN_JSON.read_text(encoding="utf-8"))["version"] == "0.13.6"
 
 
 def test_manifest_does_not_force_installation():

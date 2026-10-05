@@ -15,6 +15,8 @@ messages-7d: 0
 messages-30d: 0
 ---
 
+# Jordan Vance
+
 ## Context
 
 - Runs the Nordbridge pursuit end to end; brought the account in off a conference introduction in February 2026.

@@ -21,6 +21,8 @@ source: teams
 processed: true
 ---
 
+# Nordbridge Components / Cascadia Intermodal — Intro Call
+
 ## Notes
 
 - Nordbridge open to a regional rollout across all three plants, starting

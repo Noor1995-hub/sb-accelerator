@@ -21,6 +21,8 @@ source: teams
 processed: true
 ---
 
+# Commercial Operations — Pipeline Governance Review
+
 ## Notes
 
 - Reviewed forecast-call cadence; no material decision. Flagged

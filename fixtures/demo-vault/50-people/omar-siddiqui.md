@@ -15,6 +15,8 @@ messages-7d: 0
 messages-30d: 0
 ---
 
+# Omar Siddiqui
+
 ## Context
 
 - Owns the CRM target schema and the RFP scoring model (integration effort weighted above price).
