@@ -1,7 +1,7 @@
 ---
 name: sync-worker
 description: Per-recording sync worker for plaud and inbox recordings, dispatched by /sync-recordings step 6 with a full briefing. Not for direct invocation — without a briefing it has nothing to act on.
-model: sonnet
+model: claude-sonnet-5-5
 color: cyan
 tools: Read, Write, Edit, Bash, ToolSearch, mcp__plaud__get_transcript, mcp__plaud__get_note
 ---

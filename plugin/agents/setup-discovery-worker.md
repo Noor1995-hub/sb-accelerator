@@ -1,7 +1,7 @@
 ---
 name: setup-discovery-worker
 description: Discovery reader for /setup-my-brain, dispatched with a full briefing to read the vault owner's Teams chat list, sent mail and calendar into scratch for up to 5 minutes. Not for direct invocation — without a briefing it has nothing to act on.
-model: sonnet
+model: claude-sonnet-5-5
 color: green
 disallowedTools: Agent, Workflow, WebFetch, WebSearch, NotebookEdit, Skill, SlashCommand, TodoWrite, Artifact, ListAgents, ReportFindings, ShareOnboardingGuide, Monitor, SendMessage, PushNotification, RemoteTrigger, TaskStop, CronCreate, CronDelete, CronList
 ---
