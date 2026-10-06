@@ -231,8 +231,32 @@ def _title_slug(title: str) -> str:
     return slug
 
 
+def _extract_stem_lenient(raw: str) -> str:
+    """Extract a note stem from raw input without strict slug validation.
+
+    Used for owner notes which may contain spaces and mixed case.
+    Still refuses path separators to prevent escape attempts.
+    """
+    text = _WS_RUN_RE.sub(" ", str(raw)).strip()
+    match = _WIKILINK_RE.match(text)
+    if match:
+        text = match.group("target").strip()
+    else:
+        text = text.split("|", 1)[0].strip()
+    if text[-3:].lower() == ".md":
+        text = text[:-3].strip()
+    if not text:
+        raise DecisionError(f"source is empty (got {raw!r})")
+    if "/" in text or "\\" in text:
+        raise DecisionError(
+            f"source {raw!r} looks like a path — pass the bare note stem, "
+            "the filename without its .md extension"
+        )
+    return text
+
+
 def _resolve_source(root: Path, raw: Optional[str]) -> Optional[str]:
-    """Return the on-disk stem of the meeting this decision came from.
+    """Return the on-disk stem of the meeting, message log or owner note this decision came from.
 
     The ontology types the edge as [[meeting]], and a source pointing at
     nothing is a silent data-quality defect — so it is verified. Decisions drawn
@@ -241,15 +265,26 @@ def _resolve_source(root: Path, raw: Optional[str]) -> Optional[str]:
     """
     if raw is None or not str(raw).strip():
         return None
-    stem = canonical_stem(raw, field="source")
+    # Try canonical_stem for strict validation (meetings and message logs use slug format)
+    try:
+        stem = canonical_stem(raw, field="source")
+    except DecisionError:
+        # If canonical_stem fails, try lenient extraction for owner notes
+        stem = _extract_stem_lenient(raw)
+
     found = _find_note(root / MEETINGS_DIR, stem)
     if found is None:
         found = _find_note(root / vault.MESSAGES_DIR, stem)
     if found is None:
+        thoughts = root / vault.THOUGHTS_DIR
+        lowered = stem.lower()
+        found = next((p for p in sorted(thoughts.rglob("*.md"))
+                      if p.stem.lower() == lowered), None) if thoughts.is_dir() else None
+    if found is None:
         raise DecisionError(
-            f"source {stem!r} matches no meeting note at {MEETINGS_DIR}/{stem}.md "
-            f"and no log at {vault.MESSAGES_DIR}/{stem}.md — omit 'source' and "
-            "put the provenance in the 'why' text"
+            f"source {stem!r} matches no meeting note at {MEETINGS_DIR}/{stem}.md, "
+            f"no log at {vault.MESSAGES_DIR}/{stem}.md and no note in "
+            f"{vault.THOUGHTS_DIR}/ — omit 'source' and put the provenance in the 'why' text"
         )
     return found.stem
 

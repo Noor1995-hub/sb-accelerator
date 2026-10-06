@@ -641,6 +641,14 @@ def test_source_may_name_a_log(tmp_path):
     assert decision._resolve_source(root, "[[2026-09-30-messages]]") == "2026-09-30-messages"
 
 
+def test_source_may_name_an_owner_note_even_in_a_subfolder(tmp_path):
+    root = vault_with_project(tmp_path, "acme-industries-operating-model")
+    folder = root / "80-thoughts-ideas" / "clients"
+    folder.mkdir(parents=True)
+    (folder / "Pricing idea.md").write_text("---\ninclude: true\n---\nx\n", encoding="utf-8")
+    assert decision._resolve_source(root, "[[Pricing idea]]") == "Pricing idea"
+
+
 # --- #247: a dismissed decision (archived: true) ---------------------------
 
 def test_list_flags_a_dismissed_decision_so_the_evening_run_does_not_recapture_it(tmp_path):
