@@ -2243,3 +2243,24 @@ def test_sync_messages_never_runs_on_a_vault_awaiting_its_update():
     assert (workflow.index('migrate status --vault "$VAULT"')
             < workflow.index("second-brain:sync-messages-worker"))
     assert "skip the run with one line" in re.sub(r"\s+", " ", workflow)
+
+
+def test_evening_sync_absorbs_notes_ticked_include():
+    text = read_skill("evening-sync")
+    flat = " ".join(text.split())
+    assert 'python3 "$VAULTLIB" notes harvest --vault "$VAULT"' in text
+    assert 'python3 "$VAULTLIB" notes assign --vault "$VAULT"' in text
+    assert 'python3 "$VAULTLIB" notes mark-absorbed --vault "$VAULT"' in text
+    assert "newNotes" in text and "(note · [[" in text
+    assert "`structure_version` is below 11" in flat
+    assert "never changes a note's text" in flat
+
+
+def test_evening_sync_marks_a_note_only_after_its_projects_were_written():
+    flat = " ".join(read_skill("evening-sync").split())
+    assert "only when every project it was queued for came back with `stateWritten: true`" in flat
+
+
+def test_evening_sync_reads_the_notes_section_of_the_daily_note():
+    text = read_skill("evening-sync")
+    assert "`notes`" in text and "## Notes" in text
