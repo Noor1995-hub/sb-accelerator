@@ -1207,7 +1207,7 @@ OLD_PATH = f"{VIEWS}/Inbox.base"
 NEW_PATH = f"{VIEWS}/Input.base"
 NEW_TITLE = "Input"
 # sha256 of Inbox.base as shipped in 0.13.7–0.13.8 (LF line endings).
-SHIPPED_INBOX_SHA256 = "<fill in: see Step 3a>"
+SHIPPED_INBOX_SHA256 = "36d6ea25994b87d932aaf7e1e286313ef27b662a5073c72d6f0c986ffa3eb161"
 
 
 class MigrationError(Exception):
