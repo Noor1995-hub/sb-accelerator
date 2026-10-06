@@ -1,6 +1,6 @@
-# Inbox
+# Input
 
-The landing zone for anything not yet processed into a vault object: meeting transcripts, voice memos, forwarded emails, recorder exports, documents to file.
+Drop files here — transcripts, voice memos, forwarded emails, documents. The evening run picks them up and moves each one out once it is handled, so this folder (and the **Input** table) is empty the morning after. Your own notes ticked **Include** in Thoughts & ideas show in the same table.
 
 Rules:
 

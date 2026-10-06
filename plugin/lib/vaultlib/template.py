@@ -77,7 +77,7 @@ MANAGED_SILENT = frozenset({
     "99-workflow-config/secrets/README.md",
     "99-workflow-config/views/Archive.base",
     "99-workflow-config/views/Heavy assets.base",
-    "99-workflow-config/views/Inbox.base",
+    "99-workflow-config/views/Input.base",
     "99-workflow-config/views/Private.base",
     "99-workflow-config/views/Recent.base",
     "99-workflow-config/views/Resources.base",

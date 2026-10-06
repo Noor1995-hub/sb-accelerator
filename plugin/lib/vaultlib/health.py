@@ -479,7 +479,7 @@ def render(data: dict) -> str:
         ("with_machine_regions", data["daily_notes"]["with_machine_regions"]),
         ("coverage_pct", data["daily_notes"]["coverage_pct"]),
     ])
-    lines += ["", "## Inbox & sync"]
+    lines += ["", "## Input & sync"]
     lines += _table([
         ("inbox_pending", data["inbox_pending"]),
         ("skip_list_size", data["skip_list_size"]),

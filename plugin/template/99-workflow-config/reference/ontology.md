@@ -536,6 +536,21 @@ A day in the life of a daily note:
 - proposal on track for September submission   ← hand jotting, untouchable
 ```
 
+### Your note — `80-thoughts-ideas/**.md` · Base: `Thoughts & ideas.base`
+
+The owner's own writing. Not an object the vault creates; the run only reads
+it when asked.
+
+No schema block: every field is optional and the vault never validates these
+notes, so nothing compiles from this section. The fields it reads and writes:
+
+- `include` (checkbox) — the owner's request to read the note tonight.
+- `absorbed` (ISO date) — stamped by the evening run when it read the note;
+  `include` is unticked in the same write.
+- `projects` (project slugs) — set by the owner, or by the run when empty;
+  never overwritten.
+- The body is never edited, and the note is never moved or deleted.
+
 ### Message log — `_messages/{YYYY-MM-DD}-messages.md` · no Base
 
 ```yaml

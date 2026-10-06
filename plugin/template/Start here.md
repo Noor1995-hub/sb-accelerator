@@ -11,7 +11,7 @@ type: note
 
 ## The sidebar
 
-One menu; each entry opens a table. **Daily notes** — earlier days · **Inbox** — what is waiting to be filed · **Meetings** — every meeting, and notes from email or voice memos · **Projects** — your projects and responsibilities · **People** — who you work with · **Entities** — the companies, teams and other groups you work with · **Decisions** — what was decided · **Thoughts & ideas** — your own notes; a new note lands here. **Library** opens the rest: resources, heavy assets, the archive, your private notes and what changed recently.
+One menu; each entry opens a table. **Daily notes** — earlier days · **Input** — what the evening run picks up tonight · **Meetings** — every meeting, and notes from email or voice memos · **Projects** — your projects and responsibilities · **People** — who you work with · **Entities** — the companies, teams and other groups you work with · **Decisions** — what was decided · **Thoughts & ideas** — your own notes; tick **Include** to have one read tonight. **Library** opens the rest: resources, heavy assets, the archive, your private notes and what changed recently.
 
 To ask for anything, say it in your own words: "log that decision", "start a project for…", "write tomorrow's note now", "report this to delaware". The details are in [[How it works]].
 

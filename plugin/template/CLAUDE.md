@@ -23,14 +23,14 @@ questions, and browses.
 
 | Folder | Holds |
 |---|---|
-| `10-inbox/` | Unprocessed capture — transcripts, voice memos, forwarded emails. See its README |
+| `10-inbox/` | Input: unprocessed capture — transcripts, voice memos, forwarded emails. See its README |
 | `20-meetings/` | Meeting notes (one file per meeting) |
 | `30-projects/{slug}/` | Projects and initiatives — `index.md` hub + `decisions/` log |
 | `40-entities/{slug}/` | Dossiers on organizations you work with — `dossier.md` per entity |
 | `50-people/` | People you work with — one note per person |
 | `60-daily-notes/` | Daily canvas; each day's note is written the evening before |
 | `70-resources/` | Guides, source material, attachments |
-| `80-thoughts-ideas/` | Idea seeds and drafts |
+| `80-thoughts-ideas/` | The owner's own notes; read by the evening run when ticked `include` |
 | `90-archive/` | Completed and historical items |
 | `95-private/` | Vault owner's private notes — never read by any skill |
 | `99-workflow-config/` | Context portfolio, object model reference, lessons log |
@@ -81,7 +81,7 @@ Generated binaries (`.pptx`, `.xlsx`, `.pdf`, `.docx`, `.zip`) go to
 content folders. Add a stub link under `## Deliverables` in the source
 project's `index.md`.
 
-## Inbox Discipline
+## Input Discipline
 
 Unprocessed capture lands in `10-inbox/` and only there. Processing skills
 consume from the inbox and write results to the proper object folders. Skill
@@ -95,6 +95,8 @@ sharing the one triage queue rather than starting a second one. Anything
 that is not a capture at all is parked to the archive rather than filed,
 because deciding where reference material belongs is yours, not the
 sync's.
+
+The owner's own notes are not capture: they are never moved. Ticking `include` asks the evening run to read one; the run stamps `absorbed: <date>` and unticks it, and never changes the text.
 
 ## Feedback to delaware
 

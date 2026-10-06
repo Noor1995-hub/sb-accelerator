@@ -621,9 +621,11 @@ def test_assets_match_template():
     assumption is gone, because that stopped being true the day the template
     ontology moved past structure-version 2.
     """
+    # 10-inbox/README.md is left out like ontology.md: it is a managed file
+    # refreshed from the live template (owner-facing words move on), so the
+    # frozen asset is pinned by test_readmes_and_ontology_written instead.
     pairs = {
         "config.json": TEMPLATE / "99-workflow-config" / "config.json",
-        "10-inbox-README.md": TEMPLATE / "10-inbox" / "README.md",
         "90-archive-README.md": TEMPLATE / "90-archive" / "README.md",
     }
     for name, template_path in pairs.items():
@@ -636,7 +638,9 @@ def test_assets_match_template():
         encoding="utf-8")
     assert inbox_asset.splitlines()[0] == "## Inbox Discipline"
     template_claude = (TEMPLATE / "CLAUDE.md").read_text(encoding="utf-8")
-    assert inbox_asset in template_claude
+    # The section was retitled 'Input Discipline' for the owner; its body is unchanged.
+    frozen_body = inbox_asset.partition("\n")[2]
+    assert frozen_body in template_claude
 
 
 # --- steps ----------------------------------------------------------------
