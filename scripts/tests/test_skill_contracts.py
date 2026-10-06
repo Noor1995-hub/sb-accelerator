@@ -2251,14 +2251,58 @@ def test_evening_sync_absorbs_notes_ticked_include():
     assert 'python3 "$VAULTLIB" notes harvest --vault "$VAULT"' in text
     assert 'python3 "$VAULTLIB" notes assign --vault "$VAULT"' in text
     assert 'python3 "$VAULTLIB" notes mark-absorbed --vault "$VAULT"' in text
-    assert "newNotes" in text and "(note · [[" in text
+    assert "newNotes" in text and "(note · <note title>)" in text
+    # a wikilink marker is refused by `project state write` (notes are not
+    # vault objects links.resolve knows), so the marker is plain text
+    assert "(note · [[" not in text
     assert "`structure_version` is below 11" in flat
     assert "never changes a note's text" in flat
 
 
 def test_evening_sync_marks_a_note_only_after_its_projects_were_written():
     flat = " ".join(read_skill("evening-sync").split())
-    assert "only when every project it was queued for came back with `stateWritten: true`" in flat
+    assert ("mark a note only when it appears in at least one queue entry's `newNotes` "
+            "and every such entry came back `stateWritten: true`, or when its harvested "
+            "`projects` is empty") in flat
+    assert ("A note in `notesNotQueued` is never marked: it keeps `include` ticked "
+            "and gets one `sync_notes` line") in flat
+
+
+def test_evening_sync_carries_notes_not_queued_from_the_update_queue():
+    stage3c = read_skill("evening-sync").split("### Stage 3c")[1].split("## Stage 4")[0]
+    assert "`notesNotQueued`" in stage3c
+
+
+def test_evening_sync_stage_2_heading_admits_its_one_write():
+    text = read_skill("evening-sync")
+    assert "## Stage 2 — Harvest (read-only, except assigning a note's empty projects)" in text
+    assert "## Stage 2 — Harvest (read-only)\n" not in text
+
+
+def test_evening_sync_harvest_warnings_go_to_sync_notes():
+    stage2 = read_skill("evening-sync").split("## Stage 2")[1].split("## Stage 3")[0]
+    flat = " ".join(stage2.split())
+    assert ("`notes harvest` warnings, and a failed `notes harvest` call, go to "
+            "`sync_notes`, never to `watch`") in flat
+
+
+def test_log_decision_source_may_be_an_owner_note():
+    flat = " ".join(read_skill("log-decision").split())
+    assert "80-thoughts-ideas/" in flat
+    assert "may contain spaces and is matched case-insensitively" in flat
+
+
+def test_ontology_types_decision_source_as_meeting_log_or_owner_note():
+    text = (REPO_ROOT / "plugin" / "template" / "99-workflow-config" / "reference"
+            / "ontology.md").read_text(encoding="utf-8")
+    assert "`source` (`[[meeting]]` / `[[message log]]` / `[[owner note]]`)" in text
+    assert "- `Decision —source→ Owner note`" in text
+    assert "a note of your own in `80-thoughts-ideas/`" in text
+
+
+def test_upgrade_vault_accepts_the_input_view_on_structure_11():
+    flat = " ".join(read_skill("upgrade-vault").split())
+    assert "`99-workflow-config/views/Input.base`" in flat and "structure 11" in flat
 
 
 def test_evening_sync_reads_the_notes_section_of_the_daily_note():

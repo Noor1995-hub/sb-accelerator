@@ -878,3 +878,24 @@ def test_every_queue_entry_carries_new_notes(tmp_path):
     write_meeting(root, "10-06-26-x", projects=["acme-crm"])
     [entry] = updatequeue.run(root, "2026-06-21", "owner-morgan")["projectsNeedingUpdate"]
     assert entry["newNotes"] == []
+
+
+def test_a_note_whose_project_cannot_queue_is_listed_as_not_queued(tmp_path):
+    # An unparseable last-updated keeps the project out of the queue, so the
+    # note's projects are non-empty but it appears in no entry's newNotes:
+    # the write-back must not mark it absorbed.
+    root = make_vault(tmp_path)
+    write_project(root, "acme-crm", last_updated="someday")
+    write_project(root, "beta", last_updated="2026-06-20",
+                  state_updated="2026-06-20T18:00")
+    write_owner_note(root, "stuck.md", "include: true\nprojects: [acme-crm]\n")
+    write_owner_note(root, "fine.md", "include: true\nprojects: [beta]\n")
+    write_owner_note(root, "loose.md", "include: true\n")
+    result = updatequeue.run(root, "2026-06-21", "owner-morgan")
+    assert result["notesNotQueued"] == ["80-thoughts-ideas/stuck.md"]
+    assert [e["slug"] for e in result["projectsNeedingUpdate"]] == ["beta"]
+
+
+def test_notes_not_queued_is_empty_when_every_note_queued(tmp_path):
+    root = make_vault(tmp_path)
+    assert updatequeue.run(root, "2026-06-21", "owner-morgan")["notesNotQueued"] == []

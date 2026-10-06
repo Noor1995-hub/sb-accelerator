@@ -64,8 +64,18 @@ def harvest(root: Path) -> dict:
     for path in sorted(folder.rglob("*.md")) if folder.is_dir() else []:
         rel = path.relative_to(root).as_posix()
         try:
-            data, body = markdown.split_frontmatter(path.read_text(encoding="utf-8"))
-        except (ValueError, OSError) as exc:
+            text = path.read_text(encoding="utf-8")
+        except OSError as exc:
+            warnings.append(f"{rel}: {exc} — not read tonight")
+            continue
+        # A note with no frontmatter at all is the normal case (a new note
+        # from the menu): it cannot be ticked, so it is skipped silently.
+        # Only frontmatter that opens but does not parse is worth a warning.
+        if not text.startswith("---"):
+            continue
+        try:
+            data, body = markdown.split_frontmatter(text)
+        except ValueError as exc:
             warnings.append(f"{rel}: {exc} — not read tonight")
             continue
         if data.get("include") is not True:

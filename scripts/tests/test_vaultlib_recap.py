@@ -350,11 +350,34 @@ def test_notes_read_refuses_a_path_outside_the_folder(tmp_path):
                               "notes_read": [{"path": "95-private/x.md", "projects": []}]})
 
 
-def test_notes_read_refuses_a_missing_file(tmp_path):
+def test_notes_read_drops_a_missing_file_with_a_warning(tmp_path):
+    # The owner may rename a note mid-run: one stale path must not sink the recap.
     root = make_vault(tmp_path)
+    rel = _note(root)
+    clean, offenders, warnings = recap.validate(
+        root, {**_glance_only(), "notes_read": [
+            {"path": "80-thoughts-ideas/gone.md", "projects": []},
+            {"path": rel, "projects": []}]})
+    assert offenders == [] and len(clean["notes_read"]) == 1
+    assert any("gone.md" in w for w in warnings)
+
+
+def test_notes_read_refuses_a_path_that_climbs_out_of_the_folder(tmp_path):
+    root = make_vault(tmp_path)
+    (root / "95-private").mkdir(exist_ok=True)
+    (root / "95-private" / "x.md").write_text("x", encoding="utf-8")
     with pytest.raises(recap.RecapError, match="80-thoughts-ideas"):
-        recap.validate(root, {**_glance_only(),
-                              "notes_read": [{"path": "80-thoughts-ideas/gone.md", "projects": []}]})
+        recap.validate(root, {**_glance_only(), "notes_read": [
+            {"path": "80-thoughts-ideas/../95-private/x.md", "projects": []}]})
+
+
+def test_notes_read_refuses_a_non_markdown_path(tmp_path):
+    root = make_vault(tmp_path)
+    (root / "80-thoughts-ideas").mkdir(exist_ok=True)
+    (root / "80-thoughts-ideas" / "photo.png").write_bytes(b"x")
+    with pytest.raises(recap.RecapError, match="80-thoughts-ideas"):
+        recap.validate(root, {**_glance_only(), "notes_read": [
+            {"path": "80-thoughts-ideas/photo.png", "projects": []}]})
 
 
 def test_no_notes_no_line(tmp_path):

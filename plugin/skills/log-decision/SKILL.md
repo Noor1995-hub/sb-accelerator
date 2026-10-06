@@ -122,9 +122,12 @@ For each candidate, decide:
   then reversed. Never `superseded`; that status is set on the *prior* note.
 - **`source`** — the stem of the meeting note this came from, or of the message
   log (`_messages/<YYYY-MM-DD>-messages`) when the decision came from mail or
-  chat. A meeting stem must resolve to a file in `20-meetings/`. **Omit
-  `source`** only when there is neither (an inbox transcript, a pasted
-  paragraph or dictation): put the provenance in the `why` text instead.
+  chat, or the title of one of the owner's own notes in `80-thoughts-ideas/`
+  (any subfolder) when it came from a note they wrote. A meeting stem must
+  resolve to a file in `20-meetings/`. A note title may contain spaces and is
+  matched case-insensitively. **Omit `source`** only when there is none of
+  these (an inbox transcript, a pasted paragraph or dictation): put the
+  provenance in the `why` text instead.
 - **`supersedes`** — see below.
 - **the date** — the date the decision was **made**, read out of the source. A
   steerco on the 12th logged on the 14th is dated the 12th; the date is what

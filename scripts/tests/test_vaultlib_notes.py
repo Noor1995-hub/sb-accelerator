@@ -78,6 +78,17 @@ def test_harvest_warns_on_broken_frontmatter_and_continues(root):
     write_note(root, "ok.md", "include: true\n")
     result = notes.harvest(root)
     assert [n["path"] for n in result["notes"]] == ["80-thoughts-ideas/ok.md"]
+    assert any("broken.md" in w for w in result["warnings"])
+
+
+def test_harvest_skips_a_note_without_frontmatter_silently(root):
+    # A new note from the menu has no frontmatter: it cannot be ticked, so it
+    # is not a problem to report every night.
+    write_note(root, "plain.md", "")
+    write_note(root, "ok.md", "include: true\n")
+    result = notes.harvest(root)
+    assert [n["path"] for n in result["notes"]] == ["80-thoughts-ideas/ok.md"]
+    assert result["warnings"] == []
 
 
 def test_harvest_on_a_vault_without_the_folder(tmp_path):

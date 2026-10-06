@@ -112,7 +112,7 @@ days, you are re-introducing the bug `dates plan` exists to prevent.
 The vault owner's **person slug** is `owner` from the config — a slug,
 used as-is. Stage 3 needs it.
 
-## Stage 2 — Harvest (read-only)
+## Stage 2 — Harvest (read-only, except assigning a note's empty projects)
 
 ```bash
 python3 "$VAULTLIB" daily-note read --vault "$VAULT" --date <recap_from>
@@ -137,7 +137,8 @@ python3 "$VAULTLIB" notes harvest --vault "$VAULT"
 
 Each listed note with a `body` is input tonight, read like a jotting but
 longer; a `body: null` note is over the size cap and its warning goes to
-`sync_notes`. For a note whose `projects` is empty, pick zero or more active
+`sync_notes`. All `notes harvest` warnings, and a failed `notes harvest` call,
+go to `sync_notes`, never to `watch`. For a note whose `projects` is empty, pick zero or more active
 projects it is about — the same signals as for a meeting that are available
 in free text: the project `keywords`, the project and entity names. Then:
 
@@ -204,7 +205,10 @@ This writes `meetings-7d` / `meetings-30d` / `key-people` on active projects
 and `meetings-7d` / `meetings-30d` on people (confirmed meetings only — the
 review queue is the quality gate), and returns `projectsNeedingUpdate`: each
 entry carries `indexPath`, `decisionsDir`, `lastUpdated`, `stateUpdated`,
-`newFiles`, `newNotes` (owner notes ticked Include that belong to the project), and the `existingDecisions` projection. Carry `warnings` — especially `SELF-CHECK`
+`newFiles`, `newNotes` (owner notes ticked Include that belong to the project), and the `existingDecisions` projection. Next to the queue it returns
+`notesNotQueued`: harvested notes with projects that no queue entry carries
+(their project could not be queued) — the write-back in stage 4 never marks
+them. Carry `warnings` — especially `SELF-CHECK`
 lines — into the final summary verbatim.
 
 ## Stage 4 — Project-state updates
@@ -242,7 +246,9 @@ The instructions each subagent gets:
    a remaining group still supports it.
    When the entry has `newNotes`, read each note end-to-end next to the
    meetings. Every state item you take from one ends with
-   `(note · [[<note stem>]])`.
+   `(note · <note title>)` — plain text, no wikilink: a note is not a vault
+   object the state writer resolves, and its title may hold characters a
+   link refuses.
 2. Compose the project's **state** as JSON and write it to
    `$SCRATCH/project-state-<slug>.json`. The CLI renders the whole index body
    from it and refuses anything over its caps, naming the field:
@@ -343,9 +349,12 @@ is the only patience judgment stage 4 makes.
 Projects with only `needs-review` meetings never reach the queue — do not
 "help" one by confirming meetings yourself.
 
-**Write-back for your notes.** After every stage-4 batch has returned, mark each
-harvested note with a `body` — but only when every project it was queued for
-came back with `stateWritten: true`, or when it had no project:
+**Write-back for your notes.** After every stage-4 batch has returned, take
+each harvested note with a `body` and mark a note only when it appears in at
+least one queue entry's `newNotes` and every such entry came back
+`stateWritten: true`, or when its harvested `projects` is empty. A note in
+`notesNotQueued` is never marked: it keeps `include` ticked and gets one
+`sync_notes` line.
 
 ```bash
 python3 "$VAULTLIB" notes mark-absorbed --vault "$VAULT" --path "<path>" --date <today>
@@ -488,7 +497,7 @@ names the field, so one retry always suffices.
   `sync_notes`, which renders folded, and never in `watch`.
 - `carried_forward` — jottings worth carrying, one line each.
 - `sync_notes` — the mechanics, one line each; also in the run summary.
-- `notes_read` — one `{path, projects}` per note whose `mark-absorbed` returned `marked` tonight (never `unchanged` or `missing`: the CLI refuses a path that no longer exists); the CLI renders the line. Omit it when none were.
+- `notes_read` — one `{path, projects}` per note whose `mark-absorbed` returned `marked` tonight (never `unchanged` or `missing`; a path that no longer exists by render time is dropped with a warning); the CLI renders the line. Omit it when none were.
 - `messages` — whenever `messages.enabled` is true in `config read`,
   whatever stage 3b did (ran, skipped or failed): a feed that keeps failing
   must still say so in the note. Omit the field only when the feed is off.

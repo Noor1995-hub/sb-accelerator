@@ -478,12 +478,18 @@ def run(root: Path, today: str, owner: str) -> dict:
 
     warnings.extend(self_check(confirmed, {entry["slug"] for entry in queue},
                                active_stamps))
+    # A linked note no queue entry carries (its project's last-updated does
+    # not parse) must not be marked absorbed: nothing read it for a project.
+    queued_notes = {path for entry in queue for path in entry["newNotes"]}
+    not_queued = [n["path"] for n in included
+                  if n["projects"] and n["path"] not in queued_notes]
     return {
         "today": today_date.isoformat(),
         "owner": owner_slug,
         "meetingsIndexed": len(meetings),
         "confirmedMeetings": len(confirmed),
         "projectsNeedingUpdate": queue,
+        "notesNotQueued": not_queued,
         "metricsWritten": {"projects": projects_written,
                            "people": people_written},
         "warnings": warnings,

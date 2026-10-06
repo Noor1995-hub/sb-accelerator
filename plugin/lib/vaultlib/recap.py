@@ -214,9 +214,17 @@ def validate(root: Path, raw) -> Tuple[dict, List[str], List[str]]:
         if not isinstance(item, dict) or set(item) != {"path", "projects"}:
             raise RecapError(f"recap.notes_read[{i}] needs exactly path and projects")
         rel = str(item["path"])
-        if not rel.startswith(vault.THOUGHTS_DIR + "/") or not (root / rel).is_file():
+        folder = (root / vault.THOUGHTS_DIR).resolve()
+        path = (root / rel).resolve()
+        if not path.is_relative_to(folder) or path.suffix != ".md":
             raise RecapError(f"recap.notes_read[{i}].path {rel!r} is not a note in "
                              f"{vault.THOUGHTS_DIR}/")
+        if not path.is_file():
+            # The owner renamed or deleted it after the write-back: drop the
+            # line item rather than sink the whole recap.
+            warnings.append(f"recap.notes_read[{i}].path {rel!r} no longer exists — "
+                            "left out of the count")
+            continue
         notes_read.append([_identity_link(root, "project", str(slug),
                                           f"recap.notes_read[{i}].projects",
                                           offenders, warnings)
