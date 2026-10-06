@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** The Inbox table becomes **Input**, which shows everything tonight's run will pick up. The owner's own notes in Thoughts & ideas can be ticked **Include**; the evening run then absorbs them into projects and decisions and leaves them in place. The daily note's `## End of day` becomes `## Notes`.
+**Goal:** The Inbox table becomes **Input** (last in the main menu; Thoughts & ideas moves under Daily notes; the Library leads with Recent and ends with Archive), which shows everything tonight's run will pick up. The owner's own notes in Thoughts & ideas can be ticked **Include**; the evening run then absorbs them into projects and decisions and leaves them in place. The daily note's `## End of day` becomes `## Notes`.
 
 **Architecture:** A new `vaultlib.notes` module owns the three frontmatter operations on owner notes: harvest, assign and mark-absorbed. `updatequeue` treats an included note like a new meeting for its projects. `decision` accepts a note as `source`. `recap` renders two lines computed by the CLI: notes read, and items still in Input. Template changes (bases, menu, CSS, prose) arrive through migration 010, which takes the vault to structure 11. The evening-sync skill wires it together and gates note absorption on `structure_version >= 11`.
 
@@ -835,7 +835,7 @@ git commit -m "feat(recap): say which of your notes were read and what is still 
 - Delete: `plugin/template/99-workflow-config/views/Inbox.base`
 - Create: `plugin/template/99-workflow-config/views/Input.base`
 - Modify: `plugin/template/80-thoughts-ideas/Thoughts & ideas.base`
-- Modify: `plugin/template/.obsidian/bookmarks.json` (Inbox entry → title `Input`, path `99-workflow-config/views/Input.base`, same `ctime`)
+- Modify: `plugin/template/.obsidian/bookmarks.json` (the new menu order; see Step 3)
 - Modify: `plugin/template/.obsidian/snippets/sb-accelerator.css:147,163,182` (`data-path="Inbox"` → `data-path="Input"`; keep colour and icon)
 - Modify: `plugin/lib/vaultlib/template.py:80` (`Inbox.base` → `Input.base` in `MANAGED_SILENT`)
 - Modify: `plugin/template/10-inbox/README.md`, `plugin/template/Start here.md:14`, `plugin/template/How it works.md:43,46`, `plugin/template/CLAUDE.md:26,33,84-95`
@@ -848,7 +848,30 @@ git commit -m "feat(recap): say which of your notes were read and what is still 
 
 - [ ] **Step 1: Write the failing tests** in `test_template_config.py`
 
-Change `EXPECTED_MENU`'s third entry to `("Input", "99-workflow-config/views/Input.base")`. Then add:
+Replace `EXPECTED_MENU` and `EXPECTED_LIBRARY` with the menu the owner approved on 2026-10-06:
+
+```python
+EXPECTED_MENU = [
+    ("Start here", "Start here.md"),
+    ("Daily notes", "60-daily-notes/Daily notes.base"),
+    ("Thoughts & ideas", "80-thoughts-ideas/Thoughts & ideas.base"),
+    ("Meetings", "20-meetings/Meetings.base"),
+    ("Projects", "30-projects/Projects.base"),
+    ("People", "50-people/People.base"),
+    ("Entities", "40-entities/Entities.base"),
+    ("Decisions", "30-projects/Decisions.base"),
+    ("Input", "99-workflow-config/views/Input.base"),
+]
+EXPECTED_LIBRARY = [
+    ("Recent", "99-workflow-config/views/Recent.base"),
+    ("Resources", "99-workflow-config/views/Resources.base"),
+    ("Heavy assets", "99-workflow-config/views/Heavy assets.base"),
+    ("Private", "99-workflow-config/views/Private.base"),
+    ("Archive", "99-workflow-config/views/Archive.base"),
+]
+```
+
+Then add:
 
 ```python
 def test_input_shows_dropped_files_and_notes_ticked_include():
@@ -990,7 +1013,7 @@ views:
       formula.note: 320
 ```
 
-`bookmarks.json`: on the third item, set `"path": "99-workflow-config/views/Input.base"` and `"title": "Input"`. CSS: replace the three `data-path="Inbox"` selectors with `data-path="Input"`. `template.py`: `"99-workflow-config/views/Input.base"` in place of `Inbox.base`. `git rm plugin/template/99-workflow-config/views/Inbox.base`.
+`bookmarks.json`: write it as exactly `{"items": <migration 010's shipped_menu()>}` with `json.dumps(..., indent=2, ensure_ascii=False)` plus a trailing newline. That gives the order above, with `ctime` = `1759000000000 + position` for menu entries, `+50` for the Library group and `+60 + position` inside it. Keep any other top-level keys the current file has. CSS: replace the three `data-path="Inbox"` selectors with `data-path="Input"`. `template.py`: `"99-workflow-config/views/Input.base"` in place of `Inbox.base`. `git rm plugin/template/99-workflow-config/views/Inbox.base`.
 
 Prose (owner-facing; plain words, no codes):
 - `10-inbox/README.md`: title `# Input`. Opening: "Drop files here — transcripts, voice memos, forwarded emails, documents. The evening run picks them up and moves each one out once it is handled, so this folder (and the **Input** table) is empty the morning after. Your own notes ticked **Include** in Thoughts & ideas show in the same table." Keep the existing rules list, replacing "the inbox" with "Input" where it addresses the owner.
@@ -1035,25 +1058,37 @@ git commit -m "feat(template): Input table, Include on your notes, plain words"
 
 ---
 
-### Task 7: Migration 010 → structure 11
+### Task 7: Migration 010 → structure 11 (Input, and the new menu order)
 
 **Files:**
 - Create: `plugin/migrations/010-structure-version-11/migrate.py`
 - Modify: `plugin/template/structure-version` (`11`), `plugin/lib/instantiate_vault.py` (`EXPECTED_STRUCTURE_VERSION = "11"`)
-- Test: create `scripts/tests/test_migration_010.py`; update `test_migration_00{1..9}.py` "run through the framework" expectations, `test_migration_009.py`'s chain test, `test_vaultlib_provenance.py`, `test_instantiate_vault.py`, `test_make_test_vault.py`, and any other test pinning structure 10 (`grep -rn "structure_version\"\: \"10\"\|== 10\b\|\"10\"" scripts/tests`)
+- Test: create `scripts/tests/test_migration_010.py`. Also update:
+  - the "run through the framework" expectations in `test_migration_00{1..9}.py`
+  - the chain test in `test_migration_009.py`
+  - `test_vaultlib_provenance.py`, `test_instantiate_vault.py` and `test_make_test_vault.py`
+  - any other test pinning structure 10 (`grep -rn "structure_version\"\: \"10\"\|== 10\b\|\"10\"" scripts/tests`)
 
 **Interfaces:**
-- Consumes: the template from Task 6
-- Produces: `TARGET_VERSION = 11`, `LOSSY = None`, `shipped_menu()` (identical to the template's bookmarks), `apply(root) -> dict`, `verify(root) -> dict`, `MigrationError`
+- Consumes: the template from Task 6 (its `bookmarks.json` must equal `shipped_menu()` byte-for-value)
+- Produces: `TARGET_VERSION = 11`, `LOSSY` (a string: the owner's menu order is reset), `MENU`, `LIBRARY`, `shipped_menu()`, `apply(root) -> dict`, `verify(root) -> dict`, `MigrationError`
 
-- [ ] **Step 1: Write the failing tests** — `scripts/tests/test_migration_010.py`:
+The menu after 010, as the owner approved it on 2026-10-06:
+
+```
+Start here · Daily notes · Thoughts & ideas · Meetings · Projects · People · Entities · Decisions · Input
+▸ Library: Recent · Resources · Heavy assets · Private · Archive
+```
+
+- [ ] **Step 1: Write the failing tests** in `scripts/tests/test_migration_010.py`:
 
 ```python
-"""Migration 010: Inbox becomes Input in the menu and its table moves to
-Input.base. Made-up vaults only."""
+"""Migration 010: Inbox becomes Input, the menu takes its new order, and
+Inbox.base is removed when unmodified. Made-up vaults only."""
 import importlib.util
 import json
 import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -1065,16 +1100,6 @@ TEMPLATE = REPO_ROOT / "plugin" / "template"
 MIGRATIONS = REPO_ROOT / "plugin" / "migrations"
 OBS = Path(".obsidian")
 OLD = Path("99-workflow-config/views/Inbox.base")
-NEW = Path("99-workflow-config/views/Input.base")
-SHIPPED_INBOX_BASE = (  # Inbox.base exactly as 0.13.7 shipped it
-    "filters:\n  and:\n    - file.inFolder(\"10-inbox\")\n    - file.name != \"README\"\n"
-    "    - file.ext != \"base\"\nformulas:\n  item: link(file.path, file.basename)\n"
-    "  kind: if(file.ext == \"txt\", \"Text\", if(file.ext == \"md\", \"Note\", file.ext.upper()))\n"
-    "properties:\n  formula.item:\n    displayName: Waiting to be filed\n  formula.kind:\n"
-    "    displayName: Kind\n  file.ctime:\n    displayName: Added\nviews:\n  - type: table\n"
-    "    name: Waiting\n    order:\n      - formula.item\n      - formula.kind\n      - file.ctime\n"
-    "    sort:\n      - property: formula.item\n        direction: DESC\n      - property: file.ctime\n"
-    "        direction: DESC\n    columnSize:\n      formula.item: 460\n")
 
 
 def load(slug="010-structure-version-11"):
@@ -1084,21 +1109,37 @@ def load(slug="010-structure-version-11"):
     return module
 
 
-def vault_v10(tmp_path: Path, inbox_base: str = SHIPPED_INBOX_BASE) -> Path:
+def shipped_inbox_base() -> bytes:
+    """Inbox.base exactly as 0.13.7 shipped it."""
+    return subprocess.run(
+        ["git", "show", "267043b:plugin/template/99-workflow-config/views/Inbox.base"],
+        cwd=REPO_ROOT, capture_output=True, check=True).stdout
+
+
+def vault_v10(tmp_path: Path, inbox_base: bytes = None) -> Path:
     root = tmp_path / "vault"
     (root / "99-workflow-config" / "views").mkdir(parents=True)
     (root / "structure-version").write_text("10\n", encoding="utf-8")
-    (root / OLD).write_text(inbox_base, encoding="utf-8")
-    m009 = load("009-structure-version-10")
-    items = m009.shipped_menu() + [{"type": "file", "ctime": 1, "path": "x.md", "title": "Mine"}]
+    (root / OLD).write_bytes(shipped_inbox_base() if inbox_base is None else inbox_base)
+    items = load("009-structure-version-10").shipped_menu() + [
+        {"type": "file", "ctime": 1, "path": "70-resources/mine.md", "title": "Mine"}]
     (root / OBS).mkdir()
     (root / OBS / "bookmarks.json").write_text(json.dumps({"items": items}), encoding="utf-8")
     return root
 
 
+def read_items(root):
+    return json.loads((root / OBS / "bookmarks.json").read_text(encoding="utf-8"))["items"]
+
+
 def test_module_contract():
     module = load()
-    assert module.TARGET_VERSION == 11 and module.LOSSY is None
+    assert module.TARGET_VERSION == 11 and module.LOSSY
+    assert [t for t, _ in module.MENU] == [
+        "Start here", "Daily notes", "Thoughts & ideas", "Meetings", "Projects",
+        "People", "Entities", "Decisions", "Input"]
+    assert [t for t, _ in module.LIBRARY] == [
+        "Recent", "Resources", "Heavy assets", "Private", "Archive"]
 
 
 def test_shipped_menu_is_the_template_menu():
@@ -1106,21 +1147,39 @@ def test_shipped_menu_is_the_template_menu():
     assert load().shipped_menu() == shipped
 
 
-def test_apply_renames_the_entry_and_removes_an_unmodified_inbox_base(tmp_path):
+def test_apply_lands_the_new_menu_keeps_the_owners_own_and_removes_inbox_base(tmp_path):
     root = vault_v10(tmp_path)
-    result = load().apply(root)
-    assert result == {"bookmarks": "merged", "inbox_base": "removed"}
-    items = json.loads((root / OBS / "bookmarks.json").read_text(encoding="utf-8"))["items"]
-    assert items[2] == {"type": "file", "ctime": 1759000000002, "path": str(NEW.as_posix()), "title": "Input"}
-    assert items[-1]["title"] == "Mine"
+    module = load()
+    assert module.apply(root) == {"bookmarks": "merged", "inbox_base": "removed"}
+    items = read_items(root)
+    assert items[:len(module.shipped_menu())] == module.shipped_menu()
+    assert items[len(module.shipped_menu()):] == [
+        {"type": "file", "ctime": 1, "path": "70-resources/mine.md", "title": "Mine"}]
+    assert all(i.get("path") != OLD.as_posix() for i in items)
     assert not (root / OLD).exists()
 
 
+def test_the_owners_own_library_entries_survive_in_my_library(tmp_path):
+    root = vault_v10(tmp_path)
+    items = read_items(root)
+    items[-2]["items"].append({"type": "file", "ctime": 7, "path": "70-resources/x.md", "title": "X"})
+    (root / OBS / "bookmarks.json").write_text(json.dumps({"items": items}), encoding="utf-8")
+    load().apply(root)
+    mine = [i for i in read_items(root) if i.get("title") == "My library"]
+    assert mine and mine[0]["items"] == [
+        {"type": "file", "ctime": 7, "path": "70-resources/x.md", "title": "X"}]
+
+
 def test_a_modified_inbox_base_is_kept_and_reported(tmp_path):
-    root = vault_v10(tmp_path, inbox_base=SHIPPED_INBOX_BASE + "# my tweak\n")
+    root = vault_v10(tmp_path, inbox_base=shipped_inbox_base() + b"# my tweak\n")
     result = load().apply(root)
     assert result["inbox_base"].startswith("kept")
     assert (root / OLD).is_file()
+
+
+def test_crlf_copy_of_the_shipped_inbox_base_still_counts_as_unmodified(tmp_path):
+    root = vault_v10(tmp_path, inbox_base=shipped_inbox_base().replace(b"\n", b"\r\n"))
+    assert load().apply(root)["inbox_base"] == "removed"
 
 
 def test_apply_is_idempotent(tmp_path):
@@ -1132,25 +1191,21 @@ def test_apply_is_idempotent(tmp_path):
     assert {p: p.read_bytes() for p in root.rglob("*") if p.is_file()} == before
 
 
-def test_an_input_entry_already_present_is_not_duplicated(tmp_path):
+def test_unreadable_bookmarks_stop_the_migration(tmp_path):
     root = vault_v10(tmp_path)
-    path = root / OBS / "bookmarks.json"
-    data = json.loads(path.read_text(encoding="utf-8"))
-    data["items"].append({"type": "file", "ctime": 9, "path": NEW.as_posix(), "title": "Input"})
-    path.write_text(json.dumps(data), encoding="utf-8")
-    load().apply(root)
-    items = json.loads(path.read_text(encoding="utf-8"))["items"]
-    assert [i.get("path") for i in items].count(NEW.as_posix()) == 1
-    assert items[2]["path"] == NEW.as_posix()
+    (root / OBS / "bookmarks.json").write_text("{not json", encoding="utf-8")
+    with pytest.raises(load().MigrationError):
+        load().apply(root)
 
 
 def test_the_whole_chain_lands_on_the_shipped_template(tmp_path):
     root = tmp_path / "fresh"
     shutil.copytree(TEMPLATE / ".obsidian", root / ".obsidian")
-    shipped = (root / OBS / "bookmarks.json").read_text(encoding="utf-8")
+    (root / "60-daily-notes").mkdir()
+    shipped = read_items(root)
     load("009-structure-version-10").apply(root)
     load().apply(root)
-    assert json.loads((root / OBS / "bookmarks.json").read_text(encoding="utf-8")) == json.loads(shipped)
+    assert read_items(root) == shipped
 
 
 def test_run_through_the_framework_bumps_to_11(tmp_path):
@@ -1168,22 +1223,26 @@ Expected: FAIL, the migration file does not exist.
 - [ ] **Step 3: Implement** `plugin/migrations/010-structure-version-11/migrate.py`
 
 ```python
-"""Structure-version 11: Inbox becomes Input; your own notes can be read.
+"""Structure-version 11: Inbox becomes Input, and the menu takes its new order.
 
-The menu entry that opened `99-workflow-config/views/Inbox.base` now says
-Input and opens `Input.base`, which also lists notes ticked Include. In an
-existing vault this migration:
+The owner approved this menu on 2026-10-06: the places you write sit at the
+top (Daily notes, then Thoughts & ideas), the tables you browse follow, and
+Input — what tonight's run picks up — closes the main list. The Library
+leads with Recent and ends with Archive. In an existing vault this migration:
 
-- rewrites that one bookmark (title and path), keeping every other entry,
-  including the owner's own, exactly where it was;
-- removes `Inbox.base` when it is byte-identical to what 0.13.7 shipped. A
-  copy the owner changed is kept and reported — it is theirs.
+- writes that menu into `.obsidian/bookmarks.json`, exactly as 009 did: the
+  shipped entries first, every bookmark the owner made kept after them, and
+  the owner's own entries in the Library group kept in a "My library" group;
+- removes `99-workflow-config/views/Inbox.base` when it is identical to what
+  0.13.7 shipped (line endings ignored). A copy the owner changed is kept
+  and reported — it is theirs.
 
-`Input.base`, the new Thoughts & ideas views, the menu colour, and the
+`Input.base`, the new Thoughts & ideas views, the menu colours, and the
 wording in Start here, How it works, the inbox README, CLAUDE.md and the
 ontology arrive with the template refresh, like every other managed file.
 No note is touched: daily notes keep their `## End of day` heading, which
-the reader still accepts.
+the reader still accepts. `LOSSY` because a menu order the owner chose
+themselves is reset.
 """
 from __future__ import annotations
 
@@ -1199,14 +1258,33 @@ if str(_LIB) not in sys.path:
 from vaultlib import vault  # noqa: E402
 
 TARGET_VERSION = 11
-LOSSY = None
+LOSSY = ("resets the sidebar menu to its new order (Input last, Thoughts & "
+         "ideas under Daily notes); the owner's own bookmarks are kept, after the menu")
 
 BOOKMARKS = Path(".obsidian") / "bookmarks.json"
+CTIME = 1759000000000
 VIEWS = "99-workflow-config/views"
-OLD_PATH = f"{VIEWS}/Inbox.base"
-NEW_PATH = f"{VIEWS}/Input.base"
-NEW_TITLE = "Input"
-# sha256 of Inbox.base as shipped in 0.13.7–0.13.8 (LF line endings).
+OLD_INBOX = f"{VIEWS}/Inbox.base"
+MENU = [
+    ("Start here", "Start here.md"),
+    ("Daily notes", "60-daily-notes/Daily notes.base"),
+    ("Thoughts & ideas", "80-thoughts-ideas/Thoughts & ideas.base"),
+    ("Meetings", "20-meetings/Meetings.base"),
+    ("Projects", "30-projects/Projects.base"),
+    ("People", "50-people/People.base"),
+    ("Entities", "40-entities/Entities.base"),
+    ("Decisions", "30-projects/Decisions.base"),
+    ("Input", f"{VIEWS}/Input.base"),
+]
+LIBRARY_TITLE = "Library"
+LIBRARY = [
+    ("Recent", f"{VIEWS}/Recent.base"),
+    ("Resources", f"{VIEWS}/Resources.base"),
+    ("Heavy assets", f"{VIEWS}/Heavy assets.base"),
+    ("Private", f"{VIEWS}/Private.base"),
+    ("Archive", f"{VIEWS}/Archive.base"),
+]
+# sha256 of Inbox.base as shipped in 0.13.7–0.13.8, LF line endings.
 SHIPPED_INBOX_SHA256 = "36d6ea25994b87d932aaf7e1e286313ef27b662a5073c72d6f0c986ffa3eb161"
 
 
@@ -1214,91 +1292,102 @@ class MigrationError(Exception):
     """bookmarks.json exists but does not parse."""
 
 
-def _template_menu() -> list:
-    path = Path(__file__).resolve().parents[2] / "template" / BOOKMARKS
-    return json.loads(path.read_text(encoding="utf-8"))["items"]
-
-
 def shipped_menu() -> list:
     """The menu exactly as the template's bookmarks.json carries it."""
-    return _template_menu()
+    items = [{"type": "file", "ctime": CTIME + i, "path": p, "title": t}
+             for i, (t, p) in enumerate(MENU)]
+    items.append({"type": "group", "ctime": CTIME + 50, "title": LIBRARY_TITLE,
+                  "items": [{"type": "file", "ctime": CTIME + 60 + i, "path": p, "title": t}
+                            for i, (t, p) in enumerate(LIBRARY)]})
+    return items
 
 
-def _rename(items: list) -> list:
-    """Inbox -> Input in place. If the vault already carries an Input entry
-    (a template refresh ran before this migration, and 009 then re-added
-    Inbox ahead of it), the first one wins and the later copy is dropped."""
-    out, seen = [], False
-    for item in items:
-        if isinstance(item, dict) and item.get("path") == OLD_PATH:
-            item = {**item, "path": NEW_PATH, "title": NEW_TITLE}
-        if isinstance(item, dict) and item.get("path") == NEW_PATH:
-            if seen:
-                continue
-            seen = True
-        out.append(item)
+def _shipped_paths() -> set:
+    # The old Inbox entry counts as shipped, so it is replaced, never kept.
+    return {p for _, p in MENU} | {p for _, p in LIBRARY} | {OLD_INBOX}
+
+
+def _merge(data) -> dict:
+    existing = data.get("items") if isinstance(data, dict) else None
+    existing = existing if isinstance(existing, list) else []
+    shipped = _shipped_paths()
+    kept = []
+    for item in existing:
+        if not isinstance(item, dict):
+            continue
+        if item.get("type") == "group" and item.get("title") == LIBRARY_TITLE:
+            extra = [x for x in item.get("items") or []
+                     if isinstance(x, dict) and x.get("path") not in shipped]
+            if extra:
+                kept.append({**item, "title": "My library", "items": extra})
+            continue
+        if item.get("path") in shipped:
+            continue
+        kept.append(item)
+    out = dict(data) if isinstance(data, dict) else {}
+    out["items"] = shipped_menu() + kept
     return out
+
+
+def _load_bookmarks(root: Path):
+    path = root / BOOKMARKS
+    if not path.is_file():
+        return {}
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (ValueError, OSError) as exc:
+        raise MigrationError(
+            f"{BOOKMARKS.as_posix()} is not readable JSON ({exc}) — fix or delete it "
+            "(the template refresh writes a fresh one) and re-run") from exc
 
 
 def apply(root: Path) -> dict:
     root = Path(root)
     result = {}
+    text = json.dumps(_merge(_load_bookmarks(root)), indent=2, ensure_ascii=False) + "\n"
     path = root / BOOKMARKS
-    if path.is_file():
-        try:
-            data = json.loads(path.read_text(encoding="utf-8"))
-        except ValueError as exc:
-            raise MigrationError(f"{BOOKMARKS.as_posix()} is not readable JSON ({exc})") from exc
-        items = data.get("items") if isinstance(data, dict) else None
-        renamed = _rename(items) if isinstance(items, list) else items
-        if renamed != items:
-            vault.atomic_write(path, json.dumps({**data, "items": renamed},
-                                                indent=2, ensure_ascii=False) + "\n")
-            result["bookmarks"] = "merged"
-        else:
-            result["bookmarks"] = "unchanged"
+    if path.is_file() and path.read_text(encoding="utf-8") == text:
+        result["bookmarks"] = "unchanged"
     else:
-        result["bookmarks"] = "skipped: no bookmarks.json"
+        vault.atomic_write(path, text)
+        result["bookmarks"] = "merged"
 
-    old = root / OLD_PATH
+    old = root / OLD_INBOX
     if not old.is_file():
         result["inbox_base"] = "absent"
+    elif hashlib.sha256(old.read_bytes().replace(b"\r\n", b"\n")).hexdigest() == SHIPPED_INBOX_SHA256:
+        old.unlink()
+        result["inbox_base"] = "removed"
     else:
-        digest = hashlib.sha256(old.read_bytes().replace(b"\r\n", b"\n")).hexdigest()
-        if digest == SHIPPED_INBOX_SHA256:
-            old.unlink()
-            result["inbox_base"] = "removed"
-        else:
-            result["inbox_base"] = (f"kept: {OLD_PATH} was changed by hand — "
-                                    "Input.base replaces it in the menu")
+        result["inbox_base"] = (f"kept: {OLD_INBOX} was changed by hand — "
+                                "Input.base replaces it in the menu")
     return result
 
 
 def verify(root: Path) -> dict:
-    root = Path(root)
-    path = root / BOOKMARKS
-    if path.is_file():
-        items = json.loads(path.read_text(encoding="utf-8")).get("items") or []
-        if any(isinstance(i, dict) and i.get("path") == OLD_PATH for i in items):
-            raise MigrationError(f"{BOOKMARKS.as_posix()}: the menu still opens Inbox.base")
+    items = (_load_bookmarks(Path(root)) or {}).get("items") or []
+    if items[:len(shipped_menu())] != shipped_menu():
+        raise MigrationError(f"{BOOKMARKS.as_posix()}: the new menu did not land")
     return {"checked": ["bookmarks"]}
 ```
 
-- [ ] **Step 3a: Fill in the digest.** Run:
+The digest is already pinned. Confirm it once, because the test builds its fixture from the same commit:
 
 ```bash
 git show 267043b:plugin/template/99-workflow-config/views/Inbox.base | python -c "import sys,hashlib;print(hashlib.sha256(sys.stdin.buffer.read().replace(b'\r\n',b'\n')).hexdigest())"
 ```
 
-Paste the hex into `SHIPPED_INBOX_SHA256`. Also check that `SHIPPED_INBOX_BASE` in the test equals that file byte for byte (`git show 267043b:… | diff - <(python -c "…print test constant…")`). If it differs, replace the test constant with the real file contents.
+Expected: `36d6ea25994b87d932aaf7e1e286313ef27b662a5073c72d6f0c986ffa3eb161`.
 
 - [ ] **Step 4: Bump the structure version and cascade**
 
 - `plugin/template/structure-version` → `11`
 - `plugin/lib/instantiate_vault.py` → `EXPECTED_STRUCTURE_VERSION = "11"`
-- In each `test_migration_00N.py` "run through the framework" test, append `"structure-version-11"` to the applied list and expect `structure_version == 11`. Do this the same way #264 did for 10.
-- In `test_migration_009.py`, `test_the_whole_chain_lands_on_the_shipped_template` compares 009's output to the *current* template; append `load("010-structure-version-11").apply(root)` after 009 in its loop.
-- `test_vaultlib_provenance.py`, `test_instantiate_vault.py`, `test_make_test_vault.py`: `"10"` → `"11"`. Adjust the managed-file count if a test counts template files (Inbox.base was replaced by Input.base, so the count is unchanged).
+- In each `test_migration_00N.py` "run through the framework" test, append `"structure-version-11"` to the applied list and expect `structure_version == 11`. Do this the same way #264 did for 10. Where a fixture vault lacks `.obsidian/`, 010 creates `bookmarks.json`; that is intended (009 does the same).
+- In `test_migration_009.py`:
+  - `test_the_whole_chain_lands_on_the_shipped_template` compares 009's output to the *current* template. Append `load("010-structure-version-11").apply(root)` after 009 in its loop.
+  - `test_apply_lands_the_menu_and_keeps_the_owners_own` and `verify` compare against 009's own `shipped_menu()`, which stays historical. Leave them.
+- `test_vaultlib_provenance.py`, `test_instantiate_vault.py`, `test_make_test_vault.py`: `"10"` → `"11"`. The managed-file count is unchanged (Inbox.base → Input.base).
 
 Run: `python -m pytest scripts/tests -q`
 Expected: all pass, including `test_menu_matches_what_migration_010_writes` from Task 6.
@@ -1307,7 +1396,7 @@ Expected: all pass, including `test_menu_matches_what_migration_010_writes` from
 
 ```bash
 git add -A plugin/migrations/010-structure-version-11 plugin/template/structure-version plugin/lib/instantiate_vault.py scripts/tests
-git commit -m "feat(migrate): 010 — Inbox becomes Input (structure 11)"
+git commit -m "feat(migrate): 010 — Inbox becomes Input, menu in its new order (structure 11)"
 ```
 
 ---
