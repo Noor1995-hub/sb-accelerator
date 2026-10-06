@@ -209,7 +209,8 @@ lines — into the final summary verbatim.
 
 ## Stage 4 — Project-state updates
 
-If the queue is empty, record "no projects to update" and skip to stage 6.
+If the queue is empty, record "no projects to update", run the write-back for
+your notes below (a note with no project is still marked), then go to stage 6.
 Otherwise, dispatch one subagent per queued project (each with `model:
 sonnet`), each carrying the queue entry, the harvest jottings that mention
 the project, today's date, and these instructions.
@@ -487,7 +488,7 @@ names the field, so one retry always suffices.
   `sync_notes`, which renders folded, and never in `watch`.
 - `carried_forward` — jottings worth carrying, one line each.
 - `sync_notes` — the mechanics, one line each; also in the run summary.
-- `notes_read` — one `{path, projects}` per note marked absorbed tonight; the CLI renders the line. Omit it when none were.
+- `notes_read` — one `{path, projects}` per note whose `mark-absorbed` returned `marked` tonight (never `unchanged` or `missing`: the CLI refuses a path that no longer exists); the CLI renders the line. Omit it when none were.
 - `messages` — whenever `messages.enabled` is true in `config read`,
   whatever stage 3b did (ran, skipped or failed): a feed that keeps failing
   must still say so in the note. Omit the field only when the feed is off.

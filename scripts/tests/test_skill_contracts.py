@@ -2264,3 +2264,21 @@ def test_evening_sync_marks_a_note_only_after_its_projects_were_written():
 def test_evening_sync_reads_the_notes_section_of_the_daily_note():
     text = read_skill("evening-sync")
     assert "`notes`" in text and "## Notes" in text
+
+
+def test_evening_sync_notes_steps_run_in_order():
+    text = read_skill("evening-sync")
+    assert text.index('notes assign --vault') < text.index('"$VAULTLIB" sync update-queue')
+    writeback = text.index('notes mark-absorbed --vault')
+    assert text.index("## Stage 4") < text.index("Dispatch in blocking batches") < writeback
+    assert writeback < text.index("## Stage 6")
+
+
+def test_evening_sync_empty_queue_still_marks_notes():
+    flat = " ".join(read_skill("evening-sync").split())
+    assert 'record "no projects to update", run the write-back for your notes below' in flat
+
+
+def test_evening_sync_notes_read_lists_only_marked_notes():
+    flat = " ".join(read_skill("evening-sync").split())
+    assert "whose `mark-absorbed` returned `marked`" in flat
