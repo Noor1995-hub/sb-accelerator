@@ -46,13 +46,14 @@ class DecisionError(Exception):
     """A decision argument or vault state the caller must fix."""
 
 
-def canonical_stem(raw, *, field: str) -> str:
-    """Reduce any form a model might send to the one canonical note stem.
+def _bare_stem(raw, *, field: str) -> str:
+    """Extract a note stem from raw input without slug validation.
 
     Accepts `stem`, `[[stem]]`, `[[stem|Alias]]` and `stem.md`, in any
     combination. Refuses anything carrying a path separator: a stem is a
     filename, and resolving a caller-supplied path would let a write escape its
-    own project's folder.
+    own project's folder. Does NOT validate that the stem matches the slug format
+    (lowercase alphanumeric with hyphens) — use canonical_stem for that.
     """
     text = _WS_RUN_RE.sub(" ", "" if raw is None else str(raw)).strip()
     match = _WIKILINK_RE.match(text)
@@ -70,6 +71,19 @@ def canonical_stem(raw, *, field: str) -> str:
             "the filename without its .md extension "
             "(e.g. 2026-03-10-phased-regional-rollout-adopted)"
         )
+    return text
+
+
+def canonical_stem(raw, *, field: str) -> str:
+    """Reduce any form a model might send to the one canonical note stem.
+
+    Accepts `stem`, `[[stem]]`, `[[stem|Alias]]` and `stem.md`, in any
+    combination. Refuses anything carrying a path separator: a stem is a
+    filename, and resolving a caller-supplied path would let a write escape its
+    own project's folder. Validates that the stem matches the slug format
+    (lowercase alphanumeric with hyphens).
+    """
+    text = _bare_stem(raw, field=field)
     try:
         naming.validate_slug(text, max_length=naming.MAX_STEM_LENGTH)
     except ValueError as exc:
@@ -231,59 +245,53 @@ def _title_slug(title: str) -> str:
     return slug
 
 
-def _extract_stem_lenient(raw: str) -> str:
-    """Extract a note stem from raw input without strict slug validation.
-
-    Used for owner notes which may contain spaces and mixed case.
-    Still refuses path separators to prevent escape attempts.
-    """
-    text = _WS_RUN_RE.sub(" ", str(raw)).strip()
-    match = _WIKILINK_RE.match(text)
-    if match:
-        text = match.group("target").strip()
-    else:
-        text = text.split("|", 1)[0].strip()
-    if text[-3:].lower() == ".md":
-        text = text[:-3].strip()
-    if not text:
-        raise DecisionError(f"source is empty (got {raw!r})")
-    if "/" in text or "\\" in text:
-        raise DecisionError(
-            f"source {raw!r} looks like a path — pass the bare note stem, "
-            "the filename without its .md extension"
-        )
-    return text
-
-
 def _resolve_source(root: Path, raw: Optional[str]) -> Optional[str]:
     """Return the on-disk stem of the meeting, message log or owner note this decision came from.
 
     The ontology types the edge as [[meeting]], and a source pointing at
-    nothing is a silent data-quality defect — so it is verified. Decisions drawn
-    from an inbox transcript or from dictation carry no source; their provenance
-    goes in the Why prose.
+    nothing is a silent data-quality defect — so it is verified. Meetings and
+    logs must use slug format (canonical_stem). Owner notes in 80-thoughts-ideas/
+    are resolved leniently and may contain spaces. Decisions drawn from an inbox
+    transcript or from dictation carry no source; their provenance goes in the
+    Why prose.
     """
     if raw is None or not str(raw).strip():
         return None
-    # Try canonical_stem for strict validation (meetings and message logs use slug format)
-    try:
-        stem = canonical_stem(raw, field="source")
-    except DecisionError:
-        # If canonical_stem fails, try lenient extraction for owner notes
-        stem = _extract_stem_lenient(raw)
 
-    found = _find_note(root / MEETINGS_DIR, stem)
-    if found is None:
-        found = _find_note(root / vault.MESSAGES_DIR, stem)
+    # Try strict stem for meetings and logs (must be valid slug format)
+    strict_stem = None
+    try:
+        strict_stem = canonical_stem(raw, field="source")
+    except DecisionError:
+        # If canonical_stem fails, the input won't match meetings/logs
+        pass
+
+    # Try lenient stem for owner notes (allows spaces, mixed case, etc.)
+    lenient_stem = None
+    try:
+        lenient_stem = _bare_stem(raw, field="source")
+    except DecisionError:
+        # If even basic parsing fails, propagate the error
+        raise
+
+    # Search meetings and logs with strict stem (only if we have one)
+    found = None
+    if strict_stem is not None:
+        found = _find_note(root / MEETINGS_DIR, strict_stem)
+        if found is None:
+            found = _find_note(root / vault.MESSAGES_DIR, strict_stem)
+
+    # Search owner notes with lenient stem
     if found is None:
         thoughts = root / vault.THOUGHTS_DIR
-        lowered = stem.lower()
+        lowered = lenient_stem.lower()
         found = next((p for p in sorted(thoughts.rglob("*.md"))
                       if p.stem.lower() == lowered), None) if thoughts.is_dir() else None
+
     if found is None:
         raise DecisionError(
-            f"source {stem!r} matches no meeting note at {MEETINGS_DIR}/{stem}.md, "
-            f"no log at {vault.MESSAGES_DIR}/{stem}.md and no note in "
+            f"source {lenient_stem!r} matches no meeting note at {MEETINGS_DIR}/{lenient_stem}.md, "
+            f"no log at {vault.MESSAGES_DIR}/{lenient_stem}.md and no note in "
             f"{vault.THOUGHTS_DIR}/ — omit 'source' and put the provenance in the 'why' text"
         )
     return found.stem

@@ -649,6 +649,40 @@ def test_source_may_name_an_owner_note_even_in_a_subfolder(tmp_path):
     assert decision._resolve_source(root, "[[Pricing idea]]") == "Pricing idea"
 
 
+def test_source_with_path_separators_is_refused(tmp_path):
+    root = vault_with_project(tmp_path, "acme-industries-operating-model")
+    with pytest.raises(decision.DecisionError, match="looks like a path"):
+        decision._resolve_source(root, "[[a/b]]")
+    with pytest.raises(decision.DecisionError, match="looks like a path"):
+        decision._resolve_source(root, "[[../x]]")
+
+
+def test_write_stores_owner_note_source_as_wikilink(tmp_path):
+    root = vault_with_project(tmp_path)  # Uses default PROJECT
+    (root / "80-thoughts-ideas").mkdir()
+    (root / "80-thoughts-ideas" / "Pricing idea.md").write_text("---\ninclude: true\n---\nx\n", encoding="utf-8")
+    result = decision.write(root, project=PROJECT, date="2026-05-20",
+                            payload=note(source="Pricing idea"), reviewed=True)
+    text = (root / result["path"]).read_text(encoding="utf-8")
+    assert f'source: "[[Pricing idea]]"' in text
+    assert result["source"] == "Pricing idea"
+
+
+def test_source_case_insensitive_match_for_owner_notes(tmp_path):
+    root = vault_with_project(tmp_path)
+    (root / "80-thoughts-ideas").mkdir()
+    (root / "80-thoughts-ideas" / "Pricing idea.md").write_text("---\ninclude: true\n---\nx\n", encoding="utf-8")
+    assert decision._resolve_source(root, "[[pricing IDEA]]") == "Pricing idea"
+
+
+def test_non_slug_source_matching_meeting_only_by_case_insensitive_is_refused(tmp_path):
+    root = vault_with_project(tmp_path, "acme-industries-operating-model")
+    add_meeting(root, "2026-03-10-vendor-strategy")
+    # Try to reference the meeting with a non-slug name that matches only case-insensitively
+    with pytest.raises(decision.DecisionError, match="omit 'source'"):
+        decision._resolve_source(root, "[[2026-03-10-Vendor-Strategy]]")
+
+
 # --- #247: a dismissed decision (archived: true) ---------------------------
 
 def test_list_flags_a_dismissed_decision_so_the_evening_run_does_not_recapture_it(tmp_path):
