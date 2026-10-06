@@ -75,12 +75,9 @@ def _bare_stem(raw, *, field: str) -> str:
 
 
 def canonical_stem(raw, *, field: str) -> str:
-    """Reduce any form a model might send to the one canonical note stem.
+    """Extract and validate a note stem in slug format.
 
-    Accepts `stem`, `[[stem]]`, `[[stem|Alias]]` and `stem.md`, in any
-    combination. Refuses anything carrying a path separator: a stem is a
-    filename, and resolving a caller-supplied path would let a write escape its
-    own project's folder. Validates that the stem matches the slug format
+    Calls _bare_stem for parsing, then validates the slug format
     (lowercase alphanumeric with hyphens).
     """
     text = _bare_stem(raw, field=field)
@@ -258,21 +255,17 @@ def _resolve_source(root: Path, raw: Optional[str]) -> Optional[str]:
     if raw is None or not str(raw).strip():
         return None
 
-    # Try strict stem for meetings and logs (must be valid slug format)
+    # Parse once, lenient extraction (allows spaces, mixed case)
+    lenient_stem = _bare_stem(raw, field="source")
+
+    # Try to validate as slug for meetings/logs lookup
     strict_stem = None
     try:
-        strict_stem = canonical_stem(raw, field="source")
-    except DecisionError:
-        # If canonical_stem fails, the input won't match meetings/logs
+        naming.validate_slug(lenient_stem, max_length=naming.MAX_STEM_LENGTH)
+        strict_stem = lenient_stem
+    except ValueError:
+        # Not a valid slug; won't match meetings/logs
         pass
-
-    # Try lenient stem for owner notes (allows spaces, mixed case, etc.)
-    lenient_stem = None
-    try:
-        lenient_stem = _bare_stem(raw, field="source")
-    except DecisionError:
-        # If even basic parsing fails, propagate the error
-        raise
 
     # Search meetings and logs with strict stem (only if we have one)
     found = None

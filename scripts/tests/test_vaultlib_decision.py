@@ -664,7 +664,7 @@ def test_write_stores_owner_note_source_as_wikilink(tmp_path):
     result = decision.write(root, project=PROJECT, date="2026-05-20",
                             payload=note(source="Pricing idea"), reviewed=True)
     text = (root / result["path"]).read_text(encoding="utf-8")
-    assert f'source: "[[Pricing idea]]"' in text
+    assert 'source: "[[Pricing idea]]"' in text
     assert result["source"] == "Pricing idea"
 
 
