@@ -96,9 +96,11 @@ a parallel path.
 2. **Project assignment.** For a note with empty `projects`, the
    orchestrator picks zero or more projects using the meeting signals that
    are available for free text: content keyword match against project
-   `keywords`, and entity/project names. Zero is a valid answer. Such a note
-   is still absorbed (for recap and decision context) and is shown as
-   *Not linked*.
+   `keywords`, and entity/project names. It writes them with
+   `notes assign --path … --projects …`, which only writes when `projects`
+   is empty. This happens before stage 3c so the update queue sees them.
+   Zero projects is a valid answer. Such a note is still absorbed (for recap
+   and decision context) and is shown as *Not linked*.
 3. **Update queue.** `updatequeue.run` takes the harvested notes as an extra
    input. A note assigned to a project queues that project the way a new
    meeting does, so a project with no meetings tonight is still updated. The
@@ -108,9 +110,8 @@ a parallel path.
    source marker `(note · [[stem]])`. Decision capture includes notes. A
    decision from a note carries `source: <note stem>`.
 5. **Write-back, after stage 4.** A new CLI call, `notes mark-absorbed
-   --path … --date <today> [--projects …]`, edits frontmatter only: it sets
-   `include: false` and `absorbed`, and writes `projects` only if it was
-   empty. A note is marked only when every project it was queued for came
+   --path … --date <today>`, edits frontmatter only: it sets
+   `include: false` and `absorbed`. A note is marked only when every project it was queued for came
    back with `stateWritten: true`, or when it had no project. Otherwise
    `include` stays ticked and the note retries tomorrow, which is the same
    failure rule the inbox sweep uses.
