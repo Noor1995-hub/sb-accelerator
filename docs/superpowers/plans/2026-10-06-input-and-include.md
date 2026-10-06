@@ -1504,7 +1504,7 @@ Other skills: change only owner-facing words, e.g. "saved to the inbox" → "sav
 `git fetch origin && git rebase origin/main`, then bump `plugin/.claude-plugin/plugin.json` to the next patch and anything `scripts/check-plugin-version.sh` checks. Add under `## Unreleased` in `CHANGELOG.md`:
 
 ```markdown
-- **Inbox is now Input**: the table shows everything the evening run picks up tonight — files you drop in, and your own notes ticked **Include**. It is empty the morning after; if something could not be processed, the recap says so with a link. Your own notes in **Thoughts & ideas** now have an **Include** tick: the evening run reads the note into its project (and logs any decision in it), then unticks it and stamps the date. The note itself is never changed or moved; **Absorbed** shows them by project. On the daily note, **End of day** is now **Notes** — jot anything there, any time. Needs `/upgrade-vault` (structure 11). (#<issue>)
+- **Inbox is now Input**: the table shows everything the evening run picks up tonight — files you drop in, and your own notes ticked **Include**. It is empty the morning after; if something could not be processed, the recap says so with a link. Your own notes in **Thoughts & ideas** now have an **Include** tick: the evening run reads the note into its project (and logs any decision in it), then unticks it and stamps the date. The note itself is never changed or moved; **Absorbed** shows them by project. On the daily note, **End of day** is now **Notes** — jot anything there, any time. Needs `/upgrade-vault` (structure 11). (#266)
 ```
 
 Run the full checks:
