@@ -480,7 +480,7 @@ required: [date, type]
 optional: []
 enums:
   type: [daily-note]
-body_sections: [Recap, Meetings, End of day]
+body_sections: [Recap, Meetings, Notes]
 ```
 
 - `date` is an unquoted ISO date and MUST equal the filename stem.
@@ -497,7 +497,7 @@ body_sections: [Recap, Meetings, End of day]
   views (the Meetings one was named `Triage` before #240), written once at creation, collapsed by the CSS snippet
   when both are empty. It is not a region and holds no state.
 - **Everything outside the markers is human territory**: jotting bullets
-  under each meeting heading, `## End of day`, anything else. The evening
+  under each meeting heading, `## Notes` (called `## End of day` on notes before structure 11; both are read), anything else. The evening
   harvest reads jottings as input; nothing ever edits or routes them in v1.
 - **Recap v2 is rendered from fields**: `[!glance]` (first line computed by
   the CLI: meeting count, window, theme and decision counts; then 1–4

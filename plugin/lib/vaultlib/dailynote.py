@@ -519,7 +519,7 @@ def _render(root: Path, data: dict, fingerprint: Optional[str]) -> str:
     else:
         parts.append(_region("prep",
                              data["meetings_note"] or NO_MEETINGS_LINE))
-    parts += ["", "## End of day", "- ", ""]
+    parts += ["", "## Notes", "- ", ""]
     return "\n".join(parts)
 
 
@@ -750,7 +750,7 @@ def read(root: Path, date_iso_raw) -> dict:
 
     meetings: List[dict] = []
     meetings_note = None
-    end_of_day: List[str] = []
+    day_notes: List[str] = []
     other_lines: List[str] = []
     current: Optional[dict] = None
     section = ""
@@ -807,8 +807,8 @@ def read(root: Path, date_iso_raw) -> dict:
             "" if stripped == "-" else stripped)
         if not content:
             continue   # the empty '- ' jot affordance
-        if section == "End of day":
-            end_of_day.append(content)
+        if section in ("Notes", "End of day"):     # End of day: before structure 11
+            day_notes.append(content)
         elif section == "Meetings" and current is not None:
             if sub == "prep":
                 continue            # a prep line outside the markers is still prep
@@ -821,6 +821,6 @@ def read(root: Path, date_iso_raw) -> dict:
         "frontmatter": frontmatter, "recap": recap,
         "recap_inputs": recap_inputs, "meetings": meetings,
         "meetings_note": meetings_note,
-        "end_of_day": end_of_day, "other_lines": other_lines,
+        "notes": day_notes, "end_of_day": day_notes, "other_lines": other_lines,
         "warnings": warnings,
     }
