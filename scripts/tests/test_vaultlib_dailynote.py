@@ -725,6 +725,12 @@ def test_fresh_fixture_is_exactly_what_daily_note_write_renders(tmp_path):
 
     target = tmp_path / "vault"
     shutil.copytree(FIXTURE_ROOT, target)
+    # The recap says "Still in Input" when 10-inbox/ holds files. The demo vault
+    # ships unprocessed captures for the sync demo, but the fixture note is a day
+    # the inbox was empty, so the copy renders against an emptied inbox.
+    for stray in (target / "10-inbox").iterdir():
+        if stray.is_file() and stray.name != "README.md":
+            stray.unlink()
     fixture_path = target / "60-daily-notes" / "2026-06-15.md"
     fixture_text = fixture_path.read_text(encoding="utf-8")
     fixture_path.unlink()

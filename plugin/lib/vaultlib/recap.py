@@ -11,14 +11,14 @@ from __future__ import annotations
 from pathlib import Path
 from typing import List, Optional, Tuple
 
-from . import links, markdown
+from . import links, markdown, vault
 
 SIGNALS = {"red": "🔴", "amber": "🟠", "green": "🟢", "quiet": "⚪"}
 LABELS = ("Needs your hand", "Moved", "New", "Decided", "Quiet")
 LEGEND = "🔴 needs your hand · 🟠 watch · 🟢 moving · ⚪ quiet"
 
 _ALLOWED = ("glance", "themes", "pulse", "decisions", "watch",
-            "carried_forward", "sync_notes", "messages")
+            "carried_forward", "sync_notes", "messages", "notes_read")
 _GLANCE_ALLOWED = ("entities", "headlines")
 _LINE_WORDS = 40
 
@@ -82,6 +82,18 @@ def _identity_link(root: Path, kind: str, target: str, label: str,
         warnings.append(f"{label}: [[{target}]] carries no readable {name_key}")
         shown = target
     return f"[[{links.path_target(root, path)}|{shown}]]"
+
+
+def _input_waiting(root: Path) -> int:
+    """Files still in 10-inbox/ when the recap renders. The sync has already
+    run by then, so anything left is something it could not process — a count,
+    computed here, so it cannot be forgotten and needs no state."""
+    folder = Path(root) / vault.INBOX_DIR
+    if not folder.is_dir():
+        return 0
+    return sum(1 for p in folder.rglob("*") if p.is_file()
+               and p.name != "README.md" and p.suffix != ".base"
+               and not p.name.startswith("."))
 
 
 def validate(root: Path, raw) -> Tuple[dict, List[str], List[str]]:
@@ -197,6 +209,19 @@ def validate(root: Path, raw) -> Tuple[dict, List[str], List[str]]:
                         if index_path is not None else None) or project_slug
         decisions.append(f"[[{stem}|{summary}]] · {project_name}")
 
+    notes_read = []
+    for i, item in enumerate(raw.get("notes_read") or []):
+        if not isinstance(item, dict) or set(item) != {"path", "projects"}:
+            raise RecapError(f"recap.notes_read[{i}] needs exactly path and projects")
+        rel = str(item["path"])
+        if not rel.startswith(vault.THOUGHTS_DIR + "/") or not (root / rel).is_file():
+            raise RecapError(f"recap.notes_read[{i}].path {rel!r} is not a note in "
+                             f"{vault.THOUGHTS_DIR}/")
+        notes_read.append([_identity_link(root, "project", str(slug),
+                                          f"recap.notes_read[{i}].projects",
+                                          offenders, warnings)
+                           for slug in item["projects"] or []])
+
     lists = {}
     for key in ("watch", "carried_forward", "sync_notes"):
         lists[key] = [_norm(root, line, f"recap.{key}[{i}]", offenders, warnings)
@@ -242,7 +267,8 @@ def validate(root: Path, raw) -> Tuple[dict, List[str], List[str]]:
                     "decisions_to_confirm": count, "keyword_proposal": proposal}
 
     clean = {"headlines": clean_headlines, "entities": entity_links,
-             "themes": themes, "pulse": pulse, "decisions": decisions, "messages": messages, **lists}
+             "themes": themes, "pulse": pulse, "decisions": decisions, "messages": messages,
+             "notes_read": notes_read, **lists}
     return clean, offenders, warnings
 
 
@@ -262,6 +288,14 @@ def render(root: Path, clean: dict, *, meetings: int, window_label: str) -> str:
     glance += [f"> - **{h['label']}:** {h['text']}" for h in clean["headlines"]]
     if clean["entities"]:
         glance.append("> - **Touched:** " + " · ".join(clean["entities"]))
+    if clean.get("notes_read"):
+        linked = sorted({link for links_ in clean["notes_read"] for link in links_ if link})
+        target = " · ".join(linked) if linked else "not linked to a project"
+        glance.append(f"> - **Your notes:** read {len(clean['notes_read'])} → {target}")
+    waiting = _input_waiting(root)
+    if waiting:
+        glance.append(f"> - **Still in Input:** {_plural(waiting, 'item')} the evening run "
+                      "could not process → [[99-workflow-config/views/Input.base|Input]]")
     parts.append("\n".join(glance))
 
     m = clean.get("messages")
