@@ -432,7 +432,12 @@ def test_thoughts_and_ideas_has_yours_and_absorbed_views():
     views = {v["name"]: v for v in base["views"]}
     assert list(views) == ["Yours", "Absorbed"]
     assert "include" in views["Yours"]["order"]
-    assert views["Absorbed"]["groupBy"] == {"property": "formula.project_group", "direction": "ASC"}
+    # A new note made from the table starts with an empty projects property:
+    # Bases pre-fills the note properties the view shows as columns.
+    assert "projects" in views["Yours"]["order"]
+    assert base["properties"]["note.projects"]["displayName"] == "Project"
+    for name in ("Yours", "Absorbed"):
+        assert views[name]["groupBy"] == {"property": "formula.project_group", "direction": "ASC"}
     assert base["properties"]["note.include"]["displayName"] == "Include"
 
 
