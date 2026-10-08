@@ -12,3 +12,6 @@
 plugin/vendor/** -text linguist-vendored
 plugin/vendor/**/*.js linguist-generated -diff
 plugin/vendor/**/*.css linguist-generated -diff
+
+# Fixture compared byte-for-byte by test_migration_010: keep LF on every checkout.
+scripts/tests/data/*.base -text

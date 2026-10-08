@@ -61,7 +61,7 @@ object; the counts carry the whole story:
 
 - Meetings in the window, and how many still have no project linked.
 - Daily-note coverage over working days in the window.
-- Inbox items pending and the skip-list size.
+- Input items pending and the skip-list size.
 - Projects and entities with no meeting reference in the last 30 days —
   as a count ("2 of 7 projects"), not by name.
 - Decisions by status, and how many frontmatter reads failed to parse
@@ -168,7 +168,7 @@ disclosure to:
 ```
 
 Say exactly that: the report could not be sent automatically, and it has
-been saved to the inbox for the consultant to relay once the channel
+been saved to Input (the `10-inbox/` folder) for the consultant to relay once the channel
 is configured (`feedback.repo` and the token under
 `99-workflow-config/secrets/`). The health report itself already exists at
 `99-workflow-config/health-reports/{generated}.md` regardless of whether

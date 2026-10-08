@@ -151,7 +151,7 @@ then save the approved draft — title and body, disclosure included — to:
 ```
 
 Say exactly that: the report could not be sent automatically, and it has
-been saved to the inbox for the consultant to relay once the channel
+been saved to Input (the `10-inbox/` folder) for the consultant to relay once the channel
 is configured (`feedback.repo` and the token under
 `99-workflow-config/secrets/`). The report still exists somewhere useful —
 it is just waiting on a wire that is not connected yet.

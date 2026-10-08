@@ -4,22 +4,61 @@ filters:
     - file.ext == "md"
 formulas:
   note: link(file.path, file.basename)
+  # Names, not slugs (#240): the project's name, or "Not linked".
+  project_group: if(projects, projects.map(if(file("30-projects/" + value + "/index.md"), file("30-projects/" + value + "/index.md").properties["project-name"], value)).join(" · "), "Not linked")
 properties:
   formula.note:
     displayName: Note
+  formula.project_group:
+    displayName: Project
+  note.include:
+    displayName: Include
+  note.absorbed:
+    displayName: Absorbed
+  note.projects:
+    displayName: Project
   file.mtime:
     displayName: Last edited
   file.ctime:
     displayName: Created
 views:
   - type: table
-    name: All
+    name: Yours
+    # Not absorbed yet, or edited on a later day than it was absorbed.
+    filters:
+      or:
+        - absorbed.isEmpty()
+        - file.mtime >= absorbed + "1d"
+    # Grouped like Absorbed. The Project column is also what gives a note
+    # made with "New" here an empty projects property to fill in.
+    groupBy:
+      property: formula.project_group
+      direction: ASC
     order:
       - formula.note
+      - include
+      - projects
       - file.mtime
       - file.ctime
     sort:
       - property: file.mtime
         direction: DESC
     columnSize:
-      formula.note: 168
+      formula.note: 320
+  - type: table
+    name: Absorbed
+    filters:
+      and:
+        - "!absorbed.isEmpty()"
+    groupBy:
+      property: formula.project_group
+      direction: ASC
+    order:
+      - formula.note
+      - absorbed
+      - include
+    sort:
+      - property: note.absorbed
+        direction: DESC
+    columnSize:
+      formula.note: 320

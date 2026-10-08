@@ -167,6 +167,21 @@ def test_identity_links_in_free_text_are_normalised_and_bad_ones_refused(tmp_pat
         projectstate.write(root, slug=slug, payload=payload, today="2026-06-15")
 
 
+def test_a_plain_text_note_marker_is_accepted(tmp_path):
+    # evening-sync ends a state item taken from an owner note with
+    # `(note · <note title>)` as plain text; titles carry characters a
+    # wikilink target refuses, so the marker must pass validation as is.
+    root, slug = scaffolded(tmp_path)
+    payload = state()
+    payload["owe"][0]["items"] = ["Send the RFP (note · Pricing idea & costs)"]
+    payload["awaiting"] = ["Leo's answer (note · Café, l'idée (v2))"]
+    _, offenders, _ = projectstate.validate(root, slug, payload)
+    assert offenders == []
+    projectstate.write(root, slug=slug, payload=payload, today="2026-06-15")
+    body = (root / "30-projects" / slug / "index.md").read_text(encoding="utf-8")
+    assert "Send the RFP (note · Pricing idea & costs)" in body
+
+
 def test_scaffold_renders_the_v2_body_with_placeholders(tmp_path):
     root, slug = scaffolded(tmp_path)
     body = md.split_frontmatter((root / "30-projects" / slug / "index.md").read_text(encoding="utf-8"))[1]

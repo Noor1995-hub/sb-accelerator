@@ -123,7 +123,7 @@ type: daily-note
 <!-- evening-sync:prep:end -->
 - 
 
-## End of day
+## Notes
 - 
 """
 
@@ -166,8 +166,8 @@ def test_merge_replaces_regions_and_preserves_every_other_byte(tmp_path):
     jotted = jotted.replace(
         "<!-- evening-sync:prep:end -->\n- \n\n### 14:00",
         "<!-- evening-sync:prep:end -->\n- shortlist approved, log it\n\n### 14:00")
-    jotted = jotted.replace("## End of day\n- \n",
-                            "## End of day\n- long day; Meridian steady\n")
+    jotted = jotted.replace("## Notes\n- \n",
+                            "## Notes\n- long day; Meridian steady\n")
     path.write_text(jotted, encoding="utf-8")
 
     updated = payload()
@@ -671,13 +671,13 @@ def test_fresh_fixture_is_exactly_what_daily_note_write_renders(tmp_path):
     2026-06-12 evening run — structure (headings, markers, section order) and
     all machine-generated content must match the renderer byte-for-byte. Only
     the vault owner's own bullets (under `#### Notes`, `#### Actions` and
-    `## End of day`) are permitted to differ, since those are not generated
+    `## Notes`) are permitted to differ, since those are not generated
     by the renderer."""
     # The three headings the renderer hands to the vault owner with an empty
     # affordance under them and never writes into again. Everything else in
     # the note is machine-generated and must match byte-for-byte.
     jot_headings = {"#### notes", "#### actions", "#### your notes",
-                    "#### your actions", "## end of day"}
+                    "#### your actions", "## notes", "## end of day"}
 
     def strip_hand_jottings(text: str) -> str:
         """Blank the vault owner's bullets, keeping every other byte.
@@ -725,6 +725,12 @@ def test_fresh_fixture_is_exactly_what_daily_note_write_renders(tmp_path):
 
     target = tmp_path / "vault"
     shutil.copytree(FIXTURE_ROOT, target)
+    # The recap says "Still in Input" when 10-inbox/ holds files. The demo vault
+    # ships unprocessed captures for the sync demo, but the fixture note is a day
+    # the inbox was empty, so the copy renders against an emptied inbox.
+    for stray in (target / "10-inbox").iterdir():
+        if stray.is_file() and stray.name != "README.md":
+            stray.unlink()
     fixture_path = target / "60-daily-notes" / "2026-06-15.md"
     fixture_text = fixture_path.read_text(encoding="utf-8")
     fixture_path.unlink()
@@ -774,7 +780,10 @@ def test_recap_fingerprint_ignores_line_endings(tmp_path):
     # stamped vault holds must be unchanged by this. Moved once on purpose in
     # #258: migration 008 adds a heading to every meeting note (the fixture
     # included), so each vault's recap regenerates once after that upgrade.
-    assert lf == "6c0bb103fb0aeaf1", (
+    # Moved again when the demo daily notes' `## End of day` became `## Notes`
+    # (fixture text only; the hash code is unchanged, and real notes on disk
+    # are never rewritten).
+    assert lf == "80b7dd83162fce05", (
         f"the LF digest moved to {lf} — every stamped vault would regenerate "
         "its recap once. If that is intended, say so in the PR.")
 
@@ -1385,7 +1394,7 @@ type: daily-note
 #### Your actions
 - [ ] 
 
-## End of day
+## Notes
 - 
 """
 
@@ -1580,3 +1589,18 @@ def test_old_notes_headings_still_read_as_notes_and_actions(tmp_path):
     first = dailynote.read(root, "2026-06-15")["meetings"][0]
     assert first["notes"] == ["old style"]
     assert first["actions"] == [{"text": "old task", "done": False}]
+
+
+def test_read_takes_the_notes_heading_and_the_old_end_of_day_alike(tmp_path):
+    root = make_vault(tmp_path)
+    folder = root / "60-daily-notes"
+    (folder / "2026-10-06.md").write_text(
+        "---\ndate: 2026-10-06\ntype: daily-note\n---\n\n# 2026-10-06 · Tuesday\n\n"
+        "## Notes\n- call Dana about the pilot\n", encoding="utf-8")
+    (folder / "2026-10-05.md").write_text(
+        "---\ndate: 2026-10-05\ntype: daily-note\n---\n\n# 2026-10-05 · Monday\n\n"
+        "## End of day\n- wrap up\n", encoding="utf-8")
+    new = dailynote.read(root, "2026-10-06")
+    old = dailynote.read(root, "2026-10-05")
+    assert new["notes"] == ["call Dana about the pilot"] == new["end_of_day"]
+    assert old["notes"] == ["wrap up"] == old["end_of_day"]

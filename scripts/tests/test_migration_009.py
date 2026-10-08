@@ -121,7 +121,8 @@ def test_the_whole_chain_lands_on_the_shipped_template(tmp_path):
     shipped = {f: read(root, OBS / f) for f in files}
     (root / "60-daily-notes").mkdir()
     for slug in ["003-structure-version-4", "004-structure-version-5", "005-structure-version-6",
-                 "006-structure-version-7", "009-structure-version-10"]:
+                 "006-structure-version-7", "009-structure-version-10",
+                 "010-structure-version-11"]:
         load(slug).apply(root)
     assert not (root / OBS / "plugins" / "notebook-navigator").exists()
     for f in files:
@@ -131,5 +132,5 @@ def test_the_whole_chain_lands_on_the_shipped_template(tmp_path):
 def test_run_through_the_framework_bumps_to_10(tmp_path):
     root = vault_v9(tmp_path)
     result = migrate.run(root, "2026-10-05", stamp="2026-10-05-120000")
-    assert [a["slug"] for a in result["applied"]] == ["structure-version-10"]
-    assert result["structure_version"] == 10
+    assert [a["slug"] for a in result["applied"]] == ["structure-version-10", "structure-version-11"]
+    assert result["structure_version"] == 11

@@ -37,7 +37,7 @@ def test_daily_note_block_is_deliberately_thin():
     block = co.compile_schema()["objects"]["daily-note"]
     assert block["required"] == ["date", "type"]
     assert block["enums"]["type"] == ["daily-note"]
-    assert block["body_sections"] == ["Recap", "Meetings", "End of day"]
+    assert block["body_sections"] == ["Recap", "Meetings", "Notes"]
 
 
 def test_project_type_enum_is_the_two_value_axis():

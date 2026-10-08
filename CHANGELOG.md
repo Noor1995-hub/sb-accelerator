@@ -15,6 +15,8 @@ delivers them.
 
 ## Unreleased
 
+- **Inbox is now Input**: the table shows everything the evening run picks up tonight — files you drop in, and your own notes ticked **Include**. It is empty the morning after; if something could not be processed, the recap says so with a link. Your own notes in **Thoughts & ideas** now have an **Include** tick: the evening run reads the note into its project (and logs any decision in it), then unticks it and stamps the date. The note itself is never changed or moved; **Absorbed** shows them by project. On the daily note, **End of day** is now **Notes** — jot anything there, any time. In the menu, Thoughts & ideas now sits under Daily notes and Input closes the menu. Needs `/upgrade-vault` (structure 11). (#266)
+
 - The assistant's helpers that turn recordings, mail and Teams into notes, and that read your accounts during setup, now run on Sonnet 5.5 instead of Sonnet 5. (#265)
 
 - A vault that has not had its latest update yet keeps working properly. Mail and Teams no longer stop every time a vault update is waiting; they only need the update that hides their notes (structure version 6). **Waiting for you** on the daily note shows the meetings queue under whichever name the vault's Meetings table still uses, instead of an error. And while an update is waiting, the recap's Sync notes say so: "An update for this vault is waiting — ask a consultant to run /upgrade-vault". (#264)

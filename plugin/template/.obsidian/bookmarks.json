@@ -15,8 +15,8 @@
     {
       "type": "file",
       "ctime": 1759000000002,
-      "path": "99-workflow-config/views/Inbox.base",
-      "title": "Inbox"
+      "path": "80-thoughts-ideas/Thoughts & ideas.base",
+      "title": "Thoughts & ideas"
     },
     {
       "type": "file",
@@ -51,8 +51,8 @@
     {
       "type": "file",
       "ctime": 1759000000008,
-      "path": "80-thoughts-ideas/Thoughts & ideas.base",
-      "title": "Thoughts & ideas"
+      "path": "99-workflow-config/views/Input.base",
+      "title": "Input"
     },
     {
       "type": "group",
@@ -62,20 +62,20 @@
         {
           "type": "file",
           "ctime": 1759000000060,
+          "path": "99-workflow-config/views/Recent.base",
+          "title": "Recent"
+        },
+        {
+          "type": "file",
+          "ctime": 1759000000061,
           "path": "99-workflow-config/views/Resources.base",
           "title": "Resources"
         },
         {
           "type": "file",
-          "ctime": 1759000000061,
+          "ctime": 1759000000062,
           "path": "99-workflow-config/views/Heavy assets.base",
           "title": "Heavy assets"
-        },
-        {
-          "type": "file",
-          "ctime": 1759000000062,
-          "path": "99-workflow-config/views/Archive.base",
-          "title": "Archive"
         },
         {
           "type": "file",
@@ -86,8 +86,8 @@
         {
           "type": "file",
           "ctime": 1759000000064,
-          "path": "99-workflow-config/views/Recent.base",
-          "title": "Recent"
+          "path": "99-workflow-config/views/Archive.base",
+          "title": "Archive"
         }
       ]
     }

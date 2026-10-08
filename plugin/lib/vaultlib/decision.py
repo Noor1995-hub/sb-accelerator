@@ -46,13 +46,14 @@ class DecisionError(Exception):
     """A decision argument or vault state the caller must fix."""
 
 
-def canonical_stem(raw, *, field: str) -> str:
-    """Reduce any form a model might send to the one canonical note stem.
+def _bare_stem(raw, *, field: str) -> str:
+    """Extract a note stem from raw input without slug validation.
 
     Accepts `stem`, `[[stem]]`, `[[stem|Alias]]` and `stem.md`, in any
     combination. Refuses anything carrying a path separator: a stem is a
     filename, and resolving a caller-supplied path would let a write escape its
-    own project's folder.
+    own project's folder. Does NOT validate that the stem matches the slug format
+    (lowercase alphanumeric with hyphens) — use canonical_stem for that.
     """
     text = _WS_RUN_RE.sub(" ", "" if raw is None else str(raw)).strip()
     match = _WIKILINK_RE.match(text)
@@ -70,6 +71,16 @@ def canonical_stem(raw, *, field: str) -> str:
             "the filename without its .md extension "
             "(e.g. 2026-03-10-phased-regional-rollout-adopted)"
         )
+    return text
+
+
+def canonical_stem(raw, *, field: str) -> str:
+    """Extract and validate a note stem in slug format.
+
+    Calls _bare_stem for parsing, then validates the slug format
+    (lowercase alphanumeric with hyphens).
+    """
+    text = _bare_stem(raw, field=field)
     try:
         naming.validate_slug(text, max_length=naming.MAX_STEM_LENGTH)
     except ValueError as exc:
@@ -232,24 +243,49 @@ def _title_slug(title: str) -> str:
 
 
 def _resolve_source(root: Path, raw: Optional[str]) -> Optional[str]:
-    """Return the on-disk stem of the meeting this decision came from.
+    """Return the on-disk stem of the meeting, message log or owner note this decision came from.
 
     The ontology types the edge as [[meeting]], and a source pointing at
-    nothing is a silent data-quality defect — so it is verified. Decisions drawn
-    from an inbox transcript or from dictation carry no source; their provenance
-    goes in the Why prose.
+    nothing is a silent data-quality defect — so it is verified. Meetings and
+    logs must use slug format (canonical_stem). Owner notes in 80-thoughts-ideas/
+    are resolved leniently and may contain spaces. Decisions drawn from an inbox
+    transcript or from dictation carry no source; their provenance goes in the
+    Why prose.
     """
     if raw is None or not str(raw).strip():
         return None
-    stem = canonical_stem(raw, field="source")
-    found = _find_note(root / MEETINGS_DIR, stem)
+
+    # Parse once, lenient extraction (allows spaces, mixed case)
+    lenient_stem = _bare_stem(raw, field="source")
+
+    # Try to validate as slug for meetings/logs lookup
+    strict_stem = None
+    try:
+        naming.validate_slug(lenient_stem, max_length=naming.MAX_STEM_LENGTH)
+        strict_stem = lenient_stem
+    except ValueError:
+        # Not a valid slug; won't match meetings/logs
+        pass
+
+    # Search meetings and logs with strict stem (only if we have one)
+    found = None
+    if strict_stem is not None:
+        found = _find_note(root / MEETINGS_DIR, strict_stem)
+        if found is None:
+            found = _find_note(root / vault.MESSAGES_DIR, strict_stem)
+
+    # Search owner notes with lenient stem
     if found is None:
-        found = _find_note(root / vault.MESSAGES_DIR, stem)
+        thoughts = root / vault.THOUGHTS_DIR
+        lowered = lenient_stem.lower()
+        found = next((p for p in sorted(thoughts.rglob("*.md"))
+                      if p.stem.lower() == lowered), None) if thoughts.is_dir() else None
+
     if found is None:
         raise DecisionError(
-            f"source {stem!r} matches no meeting note at {MEETINGS_DIR}/{stem}.md "
-            f"and no log at {vault.MESSAGES_DIR}/{stem}.md — omit 'source' and "
-            "put the provenance in the 'why' text"
+            f"source {lenient_stem!r} matches no meeting note at {MEETINGS_DIR}/{lenient_stem}.md, "
+            f"no log at {vault.MESSAGES_DIR}/{lenient_stem}.md and no note in "
+            f"{vault.THOUGHTS_DIR}/ — omit 'source' and put the provenance in the 'why' text"
         )
     return found.stem
 

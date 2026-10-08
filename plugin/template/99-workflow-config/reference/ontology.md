@@ -269,7 +269,7 @@ enums:
   status: [active, superseded, withdrawn]
 ```
 
-- **Edges:** `supersedes` (`[[decision]]` / null) · `source` (`[[meeting]]` / `[[message log]]`).
+- **Edges:** `supersedes` (`[[decision]]` / null) · `source` (`[[meeting]]` / `[[message log]]` / `[[owner note]]`).
 - Never deleted — status flips only. Supersession is a wikilink edge.
 - `archived: true` is the owner's **Dismiss** tick (#247): the capture was
   not a real decision. Same field and meaning as on a meeting; the file
@@ -294,7 +294,9 @@ enums:
   review state the way project metrics gate on a meeting's `review_status`, so
   ticking the box *is* the confirmation and no sync step folds it further. The
   asymmetry with Meeting is deliberate, not a missing feature.
-- `source` names a note in `20-meetings/` or a message log in `_messages/`. A decision drawn from an inbox
+- `source` names a note in `20-meetings/`, a message log in `_messages/`, or
+  a note of your own in `80-thoughts-ideas/` (any subfolder). A note title
+  may contain spaces and is matched case-insensitively. A decision drawn from an inbox
   transcript, a pasted paragraph or dictation carries no `source`; its
   provenance goes in the **Why** text.
 - Example: `30-projects/acme-industries-operating-model/decisions/2026-05-20-single-vendor-strategy-adopted.md`
@@ -480,7 +482,7 @@ required: [date, type]
 optional: []
 enums:
   type: [daily-note]
-body_sections: [Recap, Meetings, End of day]
+body_sections: [Recap, Meetings, Notes]
 ```
 
 - `date` is an unquoted ISO date and MUST equal the filename stem.
@@ -497,7 +499,7 @@ body_sections: [Recap, Meetings, End of day]
   views (the Meetings one was named `Triage` before #240), written once at creation, collapsed by the CSS snippet
   when both are empty. It is not a region and holds no state.
 - **Everything outside the markers is human territory**: jotting bullets
-  under each meeting heading, `## End of day`, anything else. The evening
+  under each meeting heading, `## Notes` (called `## End of day` on notes before structure 11; both are read), anything else. The evening
   harvest reads jottings as input; nothing ever edits or routes them in v1.
 - **Recap v2 is rendered from fields**: `[!glance]` (first line computed by
   the CLI: meeting count, window, theme and decision counts; then 1–4
@@ -536,6 +538,21 @@ A day in the life of a daily note:
 - proposal on track for September submission   ← hand jotting, untouchable
 ```
 
+### Your note — `80-thoughts-ideas/**.md` · Base: `Thoughts & ideas.base`
+
+The owner's own writing. Not an object the vault creates; the run only reads
+it when asked.
+
+No schema block: every field is optional and the vault never validates these
+notes, so nothing compiles from this section. The fields it reads and writes:
+
+- `include` (checkbox) — the owner's request to read the note tonight.
+- `absorbed` (ISO date) — stamped by the evening run when it read the note;
+  `include` is unticked in the same write.
+- `projects` (project slugs) — set by the owner, or by the run when empty;
+  never overwritten.
+- The body is never edited, and the note is never moved or deleted.
+
 ### Message log — `_messages/{YYYY-MM-DD}-messages.md` · no Base
 
 ```yaml
@@ -571,6 +588,7 @@ enums:
 - `Decision —project→ Project`
 - `Decision —source→ Meeting`
 - `Decision —source→ Message log`
+- `Decision —source→ Owner note`
 - `Decision —supersedes→ Decision`
 - `Message log —projects[]→ Project`
 - `Message log —people[]→ Person`
