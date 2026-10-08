@@ -159,7 +159,8 @@ python3 "$VAULTLIB" actions harvest --vault "$VAULT" --from <recap_from> --to <r
 ```
 
 `closed` lists to-do notes whose line the owner ticked in a daily note
-since; the CLI already marked them done. `new` lists every open `- [ ]` line
+since; the CLI already marked them done. `filled` lists notes made with
+**New** whose empty Done the CLI set to no; nothing to do about either. `new` lists every open `- [ ]` line
 not yet recorded, each with its `source` (the daily note's date), `text`,
 the `meeting` subject and `entity` it sits under (null for a line outside a
 meeting) and `entity_projects`, that entity's active projects. For each,

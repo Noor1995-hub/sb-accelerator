@@ -588,7 +588,9 @@ enums:
 - `done` is the checkbox, in `keys_present` so the Open view's
   `done != true` never misses a row. Ticking it in the table is the whole
   close-out. Ticking the line in the daily note closes it too: the next run
-  sets `done: true`. Nothing unticks.
+  sets `done: true`. Nothing unticks. A note made with **New** starts with
+  Done empty; the next run sets it to `false` (`filled`), and the CSS snippet
+  draws an empty box meanwhile, not a "mixed" dash.
 - `source` is `[[YYYY-MM-DD]]`, the daily note the line came from; absent on
   a to-do made with New or in a session. `source` plus `to-do` is the
   identity the run uses to never record the same line twice.

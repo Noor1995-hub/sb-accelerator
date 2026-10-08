@@ -61,7 +61,7 @@ enums:
   in `type: action` from the filter and lands in `65-to-dos/` even when new
   notes default elsewhere (both verified in Obsidian 1.14).
 - View **Open** (first): `done != true`, grouped by project name, sorted by
-  `due` ascending; columns Action · Done · Due · Overdue · Project · From.
+  `due` ascending; columns To do · Done · Due · Deadline (🔴 Overdue / 🟡 Today / 🟢 In X days, 5+ at most) · Project · From.
   The Project column is also what gives a New note an empty `project` to fill.
 - View **Done**: `done == true`, grouped by project name, last edited first.
 

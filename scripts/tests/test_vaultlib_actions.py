@@ -199,3 +199,20 @@ def test_cli_round_trip(capsys, root, tmp_path):
     code, out = run(capsys, ["actions", "harvest", "--vault", str(root),
                              "--from", "2026-10-09", "--to", "2026-10-07"])
     assert code == 1 and "--from" in out["error"]
+
+
+def test_harvest_fills_an_empty_done_on_a_note_made_with_new(root):
+    """New leaves Done empty, which a table draws as a 'mixed' box; the run
+    makes it a plain no. A ticked or unticked box is never touched."""
+    folder = root / "65-to-dos"
+    folder.mkdir(exist_ok=True)
+    made = folder / "Untitled.md"
+    made.write_text("---\ntype: to-do\ndone:\ndue:\nproject:\nsource:\n---\n", encoding="utf-8")
+    ticked = folder / "ticked.md"
+    ticked.write_text("---\ntype: to-do\ndone: true\n---\n", encoding="utf-8")
+    result = actions.harvest(root, "2026-10-07", "2026-10-07")
+    assert result["filled"] == ["65-to-dos/Untitled.md"]
+    assert frontmatter(made)["done"] is False
+    assert made.read_text(encoding="utf-8").count("\n") == 7      # one line changed, none added
+    assert frontmatter(ticked)["done"] is True
+    assert actions.harvest(root, "2026-10-07", "2026-10-07")["filled"] == []

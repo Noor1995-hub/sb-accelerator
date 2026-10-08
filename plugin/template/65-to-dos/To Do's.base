@@ -8,14 +8,19 @@ formulas:
   todo: link(file.path, if(note["to-do"], note["to-do"], file.basename))
   # Names, not slugs (#240): the project's name, or "Not linked".
   project_group: if(project, if(file("30-projects/" + project + "/index.md"), file("30-projects/" + project + "/index.md").properties["project-name"], project), "Not linked")
-  overdue: if(due && date(due) < today(), "🔴 Overdue", "")
+  # Whole days to the deadline: a helper for Deadline, never a column.
+  # Rounded, because a daylight-saving change makes the raw value 22.04.
+  days_left: if(due.isEmpty(), "", (date(due) - today()).days.round())
+  # How close the deadline is, at a glance (#257). Not `!due`: that reads
+  # a missing deadline as Today.
+  deadline: if(due.isEmpty(), "", if(formula.days_left < 0, "🔴 Overdue", if(formula.days_left == 0, "🟡 Today", if(formula.days_left == 1, "🟢 In 1 day", if(formula.days_left <= 5, "🟢 In " + formula.days_left + " days", "🟢 In 5+ days")))))
 properties:
   formula.todo:
     displayName: To do
   formula.project_group:
     displayName: Project
-  formula.overdue:
-    displayName: " "
+  formula.deadline:
+    displayName: Deadline
   note.done:
     displayName: Done
   note.due:
@@ -42,7 +47,7 @@ views:
       - formula.todo
       - done
       - due
-      - formula.overdue
+      - formula.deadline
       - project
       - source
     sort:

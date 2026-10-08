@@ -127,6 +127,16 @@ def harvest(root: Path, from_iso: str, to_iso: str) -> dict:
             })
         day += timedelta(days=1)
 
+    # New leaves Done empty, which a table draws as a "mixed" box: make it a
+    # plain no. A box that is ticked or unticked is the owner's and stays.
+    filled: List[str] = []
+    for item in recorded:
+        if item["data"].get("done") not in (True, False):
+            item["text"] = markdown.upsert_scalar_field(item["text"], "done", "false")
+            item["data"]["done"] = False
+            vault.atomic_write(item["path"], item["text"])
+            filled.append(item["path"].relative_to(root).as_posix())
+
     # A tick in the daily note closes the note, on whatever day it was given.
     closed: List[str] = []
     ticked_by_day: Dict[str, set] = {}
@@ -141,7 +151,7 @@ def harvest(root: Path, from_iso: str, to_iso: str) -> dict:
             vault.atomic_write(item["path"],
                                markdown.upsert_scalar_field(item["text"], "done", "true"))
             closed.append(item["path"].relative_to(root).as_posix())
-    return {"new": new, "closed": closed, "warnings": []}
+    return {"new": new, "closed": closed, "filled": filled, "warnings": []}
 
 
 def _validated(item, index: int) -> dict:
