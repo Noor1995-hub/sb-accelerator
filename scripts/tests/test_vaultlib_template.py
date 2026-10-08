@@ -2,9 +2,9 @@
 diff and refresh, built on top of provenance.py (#147/D4a).
 
 The status-matrix tests monkeypatch `template.TEMPLATE_ROOT` to a small
-synthetic tree (never the real 45-file template) so each branch of the
+synthetic tree (never the real 46-file template) so each branch of the
 matrix is exercised in isolation, the way #147's own tests isolate
-`record_provision`'s "all 45" behaviour from every other assertion.
+`record_provision`'s "all 46" behaviour from every other assertion.
 """
 import json
 import shutil
@@ -51,8 +51,8 @@ def test_managed_files_all_exist_in_the_shipped_template():
 
 def test_the_shipped_file_count_matches_the_provenance_all_35_fixture():
     # Single source of truth for the count both test files pin, per the
-    # brief's "shared constant" absorb: neither hardcodes 45 independently.
-    assert len(template.ALL_TIERED) == 45
+    # brief's "shared constant" absorb: neither hardcodes 46 independently.
+    assert len(template.ALL_TIERED) == 46
     # MANAGED is status()/refresh()'s surface: silent + consent-always only.
     # SEEDED_ONCE is real classification (tier_of() still names it, and it's
     # still part of ALL_TIERED for the every-file-classified pin above) but

@@ -51,7 +51,7 @@ def test_shipped_menu_is_the_template_menu():
 def test_actions_lands_under_thoughts_and_nothing_else_moves(tmp_path):
     root = vault_v11(tmp_path)
     before = read_items(root)
-    assert load().apply(root) == {"bookmarks": "added"}
+    assert load().apply(root)["bookmarks"] == "added"
     items = read_items(root)
     assert [i["title"] for i in items][:5] == [
         "Start here", "Daily notes", "Thoughts & ideas", "To Do's", "Meetings"]
@@ -83,13 +83,13 @@ def test_apply_is_idempotent_and_respects_an_actions_entry_already_there(tmp_pat
     module = load()
     module.apply(root)
     before = (root / OBS / "bookmarks.json").read_bytes()
-    assert module.apply(root) == {"bookmarks": "unchanged"}
+    assert module.apply(root) == {"bookmarks": "unchanged", "types": "unchanged"}
     assert (root / OBS / "bookmarks.json").read_bytes() == before
     # The owner filed it in a group of their own: it stays there.
     grouped = [{"type": "group", "ctime": 2, "title": "Mine",
                 "items": [dict(module.ACTIONS_ENTRY, title="To do")]}]
     root2 = vault_v11(tmp_path / "two", items=grouped)
-    assert module.apply(root2) == {"bookmarks": "unchanged"}
+    assert module.apply(root2)["bookmarks"] == "unchanged"
 
 
 def test_a_vault_without_bookmarks_gets_the_entry(tmp_path):
@@ -124,3 +124,31 @@ def test_run_through_the_framework_bumps_to_12(tmp_path):
     result = migrate.run(root, "2026-10-08", stamp="2026-10-08-120000")
     assert [a["slug"] for a in result["applied"]] == ["structure-version-12"]
     assert result["structure_version"] == 12
+
+
+def test_property_types_match_the_template():
+    shipped = json.loads((TEMPLATE / OBS / "types.json").read_text(encoding="utf-8"))["types"]
+    assert {k: shipped[k] for k in load().TYPES} == load().TYPES
+
+
+def test_property_types_are_added_and_the_owners_own_kept(tmp_path):
+    """Include came up as a text field on a new note in a vault where no note
+    was ticked yet: Obsidian guesses a type from values it has seen."""
+    root = vault_v11(tmp_path)
+    (root / OBS / "types.json").write_text(json.dumps(
+        {"types": {"tags": "tags", "due": "text", "mine": "number"}}), encoding="utf-8")
+    result = load().apply(root)
+    assert result["types"] == "added absorbed, archived, done, include, reviewed"
+    types = json.loads((root / OBS / "types.json").read_text(encoding="utf-8"))["types"]
+    assert types["include"] == "checkbox" and types["done"] == "checkbox"
+    assert types["due"] == "text" and types["mine"] == "number" and types["tags"] == "tags"
+    load().verify(root)
+    assert load().apply(root)["types"] == "unchanged"
+
+
+def test_unreadable_types_stop_the_migration(tmp_path):
+    root = vault_v11(tmp_path)
+    (root / OBS / "types.json").write_text("{nope", encoding="utf-8")
+    module = load()
+    with pytest.raises(module.MigrationError):
+        module.apply(root)

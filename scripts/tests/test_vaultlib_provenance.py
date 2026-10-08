@@ -1,7 +1,7 @@
 """TDD for plugin/lib/vaultlib/provenance.py — the CLI-owned vault
 provenance record (99-workflow-config/provenance.json).
 
-record_provision's "all 45" test copies the plugin's own shipped template
+record_provision's "all 46" test copies the plugin's own shipped template
 verbatim (the same tree instantiate_vault.instantiate() copies in
 production) rather than a synthetic fixture — the count is a property of
 the real template, and a synthetic tree would prove nothing about it.

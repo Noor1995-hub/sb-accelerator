@@ -13,6 +13,13 @@ they do not know after the menu), so an entry identical to the shipped one
 at the top level is moved back under its anchor. One the owner renamed or
 put in a group of their own is theirs and stays.
 
+It also tells Obsidian which properties are checkboxes and dates, in
+`.obsidian/types.json`: Include, Done, Keep (`reviewed`) and Dismiss
+(`archived`) are ticks, `due` and `absorbed` dates. Without it Obsidian
+guesses each type from the values it has seen, so in a vault where no note
+was ticked yet, Include on a new note came up as a text field. Only types the
+vault does not have yet are added; one the owner set stays theirs.
+
 `To Do's.base`, the menu colour and the wording in Start here, How it works,
 CLAUDE.md and the ontology arrive with the template refresh, like every
 other managed file. No note is touched; the folder appears with the first
@@ -34,6 +41,10 @@ TARGET_VERSION = 12
 LOSSY = None
 
 BOOKMARKS = Path(".obsidian") / "bookmarks.json"
+TYPES_FILE = Path(".obsidian") / "types.json"
+# Kept equal to the template's types.json (a test pins it).
+TYPES = {"absorbed": "date", "archived": "checkbox", "done": "checkbox",
+         "due": "date", "include": "checkbox", "reviewed": "checkbox"}
 CTIME = 1759000000000
 VIEWS = "99-workflow-config/views"
 ACTIONS = ("To Do's", "65-to-dos/To Do's.base")
@@ -119,19 +130,50 @@ def _load_bookmarks(root: Path):
             "(the template refresh writes a fresh one) and re-run") from exc
 
 
+def _load_types(root: Path) -> dict:
+    path = root / TYPES_FILE
+    if not path.is_file():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (ValueError, OSError) as exc:
+        raise MigrationError(
+            f"{TYPES_FILE.as_posix()} is not readable JSON ({exc}) — fix or delete it "
+            "(Obsidian rebuilds it) and re-run") from exc
+    return data if isinstance(data, dict) else {}
+
+
+def _apply_types(root: Path) -> str:
+    data = _load_types(root)
+    types = data.get("types") if isinstance(data.get("types"), dict) else {}
+    missing = {k: v for k, v in TYPES.items() if k not in types}
+    if not missing:
+        return "unchanged"
+    data["types"] = {**types, **missing}
+    vault.atomic_write(root / TYPES_FILE, json.dumps(data, indent=2, ensure_ascii=False) + "\n")
+    return "added " + ", ".join(sorted(missing))
+
+
 def apply(root: Path) -> dict:
     root = Path(root)
     data = _load_bookmarks(root)
     before = (data or {}).get("items") or []
     after = _with_actions(data)
     if after.get("items") == before:
-        return {"bookmarks": "unchanged"}
-    vault.atomic_write(root / BOOKMARKS, json.dumps(after, indent=2, ensure_ascii=False) + "\n")
-    return {"bookmarks": "moved" if _has_actions(before) else "added"}
+        result = {"bookmarks": "unchanged"}
+    else:
+        vault.atomic_write(root / BOOKMARKS, json.dumps(after, indent=2, ensure_ascii=False) + "\n")
+        result = {"bookmarks": "moved" if _has_actions(before) else "added"}
+    result["types"] = _apply_types(root)
+    return result
 
 
 def verify(root: Path) -> dict:
-    items = (_load_bookmarks(Path(root)) or {}).get("items") or []
+    root = Path(root)
+    items = (_load_bookmarks(root) or {}).get("items") or []
     if not _has_actions(items):
         raise MigrationError(f"{BOOKMARKS.as_posix()}: the To Do's entry did not land")
-    return {"checked": ["bookmarks"]}
+    types = _load_types(root).get("types") or {}
+    if any(k not in types for k in TYPES):
+        raise MigrationError(f"{TYPES_FILE.as_posix()}: the property types did not land")
+    return {"checked": ["bookmarks", "types"]}

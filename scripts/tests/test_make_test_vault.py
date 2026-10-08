@@ -45,13 +45,13 @@ def test_fresh_copies_template_only(tmp_path):
     assert not (target / "40-entities" / "nordbridge-components").exists()
 
 
-def test_fresh_records_provenance_for_all_45_template_files(tmp_path):
+def test_fresh_records_provenance_for_all_46_template_files(tmp_path):
     target = tmp_path / "vault"
     build_vault(target, REPO_ROOT, fresh=True)
     data = provenance.read(target)
     assert data is not None
     assert data["events"][-1]["event"] == "provision"
-    assert len(data["template_files"]) == 45
+    assert len(data["template_files"]) == 46
 
 
 def test_default_overlay_still_records_provenance_for_unchanged_files(tmp_path):

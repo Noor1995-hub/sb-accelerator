@@ -18,7 +18,7 @@ them (`test_every_shipped_file_is_classified_exactly_once` is the pin):
   without `--consent`, even when the vault's copy is untouched since the
   last baseline.
 - `SEEDED_ONCE` — laid down once at provision and never refreshed again
-  (`config.json`, `lessons.md`, the five `context/*.md`). The vault's own
+  (`config.json`, `lessons.md`, the five `context/*.md`, `.obsidian/types.json`). The vault's own
   copy is authoritative from the moment it is provisioned, so this tier is
   outside `MANAGED` entirely: `status()` never lists one of these files (a
   consultant would otherwise see `config.json` and every `context/*.md`
@@ -34,7 +34,7 @@ them (`test_every_shipped_file_is_classified_exactly_once` is the pin):
 `MANAGED` (this module's status()/refresh() surface) is `MANAGED_SILENT |
 MANAGED_CONSENT_ALWAYS` — 29 files. `ALL_TIERED` (used only to pin that
 every shipped file is classified exactly once) is `MANAGED | SEEDED_ONCE |
-IGNORED` — all 45.
+IGNORED` — all 46.
 """
 from __future__ import annotations
 
@@ -92,6 +92,9 @@ MANAGED_CONSENT_ALWAYS = frozenset({
 })
 
 SEEDED_ONCE = frozenset({
+    # Obsidian owns it once the vault exists (it writes a type whenever the
+    # owner changes one); migration 011 merges ours into an existing vault.
+    ".obsidian/types.json",
     "99-workflow-config/config.json",
     "99-workflow-config/context/communication-style.md",
     "99-workflow-config/context/identity.md",
