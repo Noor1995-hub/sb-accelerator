@@ -151,7 +151,7 @@
 .workspace-leaf-content[data-type=bookmarks] .tree-item[data-path="Entities"] > .tree-item-self { color: #14b8a6; --sb-menu-color: #14b8a6; --sb-menu-icon: url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27black%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Crect%20width%3D%2716%27%20height%3D%2720%27%20x%3D%274%27%20y%3D%272%27%20rx%3D%272%27/%3E%3Cpath%20d%3D%27M9%2022v-4h6v4M8%206h.01M16%206h.01M12%206h.01M12%2010h.01M12%2014h.01M16%2010h.01M16%2014h.01M8%2010h.01M8%2014h.01%27/%3E%3C/svg%3E"); }
 .workspace-leaf-content[data-type=bookmarks] .tree-item[data-path="Decisions"] > .tree-item-self { color: #3b82f6; --sb-menu-color: #3b82f6; --sb-menu-icon: url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27black%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Ccircle%20cx%3D%2712%27%20cy%3D%2712%27%20r%3D%2710%27/%3E%3Cpath%20d%3D%27m9%2012%202%202%204-4%27/%3E%3C/svg%3E"); }
 .workspace-leaf-content[data-type=bookmarks] .tree-item[data-path="Thoughts & ideas"] > .tree-item-self { color: #6366f1; --sb-menu-color: #6366f1; --sb-menu-icon: url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27black%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Cpath%20d%3D%27M12%2020h9%27/%3E%3Cpath%20d%3D%27M16.5%203.5a2.12%202.12%200%200%201%203%203L7%2019l-4%201%201-4Z%27/%3E%3C/svg%3E"); }
-.workspace-leaf-content[data-type=bookmarks] .tree-item[data-path="Actions"] > .tree-item-self { color: #ec4899; --sb-menu-color: #ec4899; --sb-menu-icon: url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27black%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Cpath%20d%3D%27m3%2017%202%202%204-4%27/%3E%3Cpath%20d%3D%27m3%207%202%202%204-4%27/%3E%3Cpath%20d%3D%27M13%206h8%27/%3E%3Cpath%20d%3D%27M13%2012h8%27/%3E%3Cpath%20d%3D%27M13%2018h8%27/%3E%3C/svg%3E"); }
+.workspace-leaf-content[data-type=bookmarks] .tree-item[data-path="To Do's"] > .tree-item-self { color: #ec4899; --sb-menu-color: #ec4899; --sb-menu-icon: url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27black%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Cpath%20d%3D%27m3%2017%202%202%204-4%27/%3E%3Cpath%20d%3D%27m3%207%202%202%204-4%27/%3E%3Cpath%20d%3D%27M13%206h8%27/%3E%3Cpath%20d%3D%27M13%2012h8%27/%3E%3Cpath%20d%3D%27M13%2018h8%27/%3E%3C/svg%3E"); }
 .workspace-leaf-content[data-type=bookmarks] .tree-item[data-path="Library"] > .tree-item-self { color: #64748b; --sb-menu-color: #64748b; --sb-menu-icon: url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27black%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Cpath%20d%3D%27M4%2019.5v-15A2.5%202.5%200%200%201%206.5%202H20v20H6.5a2.5%202.5%200%200%201%200-5H20%27/%3E%3C/svg%3E"); }
 .workspace-leaf-content[data-type=bookmarks] .tree-item[data-path="Library/Resources"] > .tree-item-self { color: #64748b; --sb-menu-color: #64748b; --sb-menu-icon: url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27black%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Cpath%20d%3D%27m21.44%2011.05-9.19%209.19a6%206%200%200%201-8.49-8.49l8.57-8.57A4%204%200%201%201%2018%208.84l-8.59%208.57a2%202%200%200%201-2.83-2.83l8.49-8.48%27/%3E%3C/svg%3E"); }
 .workspace-leaf-content[data-type=bookmarks] .tree-item[data-path="Library/Heavy assets"] > .tree-item-self { color: #64748b; --sb-menu-color: #64748b; --sb-menu-icon: url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27black%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Cpath%20d%3D%27M2%203h20M21%203v11a2%202%200%200%201-2%202H5a2%202%200%200%201-2-2V3M7%2021l5-5%205%205%27/%3E%3C/svg%3E"); }
@@ -168,7 +168,7 @@
   [data-path="Entities"],
   [data-path="Decisions"],
   [data-path="Thoughts & ideas"],
-  [data-path="Actions"],
+  [data-path="To Do's"],
   [data-path="Library"],
   [data-path="Library/Resources"],
   [data-path="Library/Heavy assets"],
@@ -188,7 +188,7 @@
   [data-path="Entities"],
   [data-path="Decisions"],
   [data-path="Thoughts & ideas"],
-  [data-path="Actions"],
+  [data-path="To Do's"],
   [data-path="Library"],
   [data-path="Library/Resources"],
   [data-path="Library/Heavy assets"],

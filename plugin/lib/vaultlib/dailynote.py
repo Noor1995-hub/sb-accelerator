@@ -25,7 +25,7 @@ PREP_HEADING = "#### Prep"
 # "Your" says whose they are (#238); the reader finds them by position under
 # the meeting heading, so notes written with the old "#### Notes" still read.
 NOTES_BLOCK = "#### Your notes\n- "
-ACTIONS_BLOCK = "#### Your actions\n- [ ] "
+ACTIONS_BLOCK = "#### Your to do's\n- [ ] "
 # The live review queues, at the top of every note the evening run writes
 # (#238). Embedded Bases views, so ticking Keep or Dismiss here works and the
 # rows leave at once; the CSS snippet collapses an empty table, and the whole

@@ -21,7 +21,7 @@ EXPECTED_MENU = [
     ("Start here", "Start here.md"),
     ("Daily notes", "60-daily-notes/Daily notes.base"),
     ("Thoughts & ideas", "80-thoughts-ideas/Thoughts & ideas.base"),
-    ("Actions", "65-actions/Actions.base"),
+    ("To Do's", "65-to-dos/To Do's.base"),
     ("Meetings", "20-meetings/Meetings.base"),
     ("Projects", "30-projects/Projects.base"),
     ("People", "50-people/People.base"),

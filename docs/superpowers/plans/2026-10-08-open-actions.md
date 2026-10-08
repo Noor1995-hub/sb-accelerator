@@ -10,14 +10,14 @@ Executed inline, TDD per task; full suite + lint + template validation at the en
    (`{text, done}` for `- [ ]` lines outside a meeting block). Existing keys
    unchanged. Test in `test_vaultlib_dailynote.py`.
 3. **Action module** — `vaultlib/actions.py`: `harvest(root, from, to)`,
-   `create(root, items, today)`; `vault.ACTIONS_DIR = "65-actions"`.
+   `create(root, items, today)`; `vault.ACTIONS_DIR = "65-to-dos"`.
    Dedup on (source, text); close-on-tick across all open notes.
    Tests in `test_vaultlib_actions.py`.
 4. **CLI** — `actions harvest --from --to`, `actions create --payload`;
    error mapping in `main`. Test in `test_vaultlib_cli.py`.
 5. **Ontology** — Action section + edges; daily-note "never routes" line;
    recompile `schema.json`; fixture harness glob; `dqlrefs` path type.
-6. **Template** — `65-actions/Actions.base`, bookmarks entry, CSS colour +
+6. **Template** — `65-to-dos/To Do's.base`, bookmarks entry, CSS colour +
    icon, `template.py` tier, Start here / How it works / CLAUDE.md wording,
    structure-version 12, feedback scrub folder list.
 7. **Migration 011** — insert the bookmark; idempotent; verify. Tests in

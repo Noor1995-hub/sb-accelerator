@@ -1,19 +1,19 @@
-"""Structure-version 12: the Actions table joins the menu (#257).
+"""Structure-version 12: the To Do's table joins the menu (#257).
 
-Every action the owner writes in a daily note now becomes a note in
-`65-actions/`, followed up in `Actions.base`. In an existing vault this
-migration adds the **Actions** entry to `.obsidian/bookmarks.json`, directly
+Every to do the owner writes in a daily note now becomes a note in
+`65-to-dos/`, followed up in `To Do's.base`. In an existing vault this
+migration adds the **To Do's** entry to `.obsidian/bookmarks.json`, directly
 under Thoughts & ideas — or under Daily notes, or first, when the owner moved
 or removed those. Every other entry stays exactly where it is, which is why
 this is not lossy where 009 and 010 were.
 
 A vault whose template refresh laid down the new menu before 009 or 010 ran
-has the shipped Actions entry pushed to the end by them (they keep entries
+has the shipped To Do's entry pushed to the end by them (they keep entries
 they do not know after the menu), so an entry identical to the shipped one
 at the top level is moved back under its anchor. One the owner renamed or
 put in a group of their own is theirs and stays.
 
-`Actions.base`, the menu colour and the wording in Start here, How it works,
+`To Do's.base`, the menu colour and the wording in Start here, How it works,
 CLAUDE.md and the ontology arrive with the template refresh, like every
 other managed file. No note is touched; the folder appears with the first
 action.
@@ -36,9 +36,9 @@ LOSSY = None
 BOOKMARKS = Path(".obsidian") / "bookmarks.json"
 CTIME = 1759000000000
 VIEWS = "99-workflow-config/views"
-ACTIONS = ("Actions", "65-actions/Actions.base")
+ACTIONS = ("To Do's", "65-to-dos/To Do's.base")
 ACTIONS_ENTRY = {"type": "file", "ctime": CTIME + 9, "path": ACTIONS[1], "title": ACTIONS[0]}
-# Where Actions goes, in order of preference: under the first of these found.
+# Where To Do's goes, in order of preference: under the first of these found.
 ANCHORS = ("80-thoughts-ideas/Thoughts & ideas.base", "60-daily-notes/Daily notes.base",
            "Start here.md")
 MENU = [
@@ -133,5 +133,5 @@ def apply(root: Path) -> dict:
 def verify(root: Path) -> dict:
     items = (_load_bookmarks(Path(root)) or {}).get("items") or []
     if not _has_actions(items):
-        raise MigrationError(f"{BOOKMARKS.as_posix()}: the Actions entry did not land")
+        raise MigrationError(f"{BOOKMARKS.as_posix()}: the To Do's entry did not land")
     return {"checked": ["bookmarks"]}

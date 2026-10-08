@@ -122,9 +122,9 @@ python3 "$VAULTLIB" daily-note read --vault "$VAULT" --date <recap_from>
 collect, per meeting, `notes` (the owner's bullets under `#### Your notes`
 — `#### Notes` on notes written before 0.12.11 — or bullets directly under
 the heading on a note written before v2) and `actions` (`{text, done}` from
-the `- [ ]` / `- [x]` list under `#### Your actions`), plus the `notes` bullets (the day's `## Notes` section — `## End of day` on notes written before structure 11; the CLI reads both). All of it is context for the
-recap (stage 6) and decision candidates (stage 4). An action is also
-followed up in the Actions table — see **Actions** below. The note itself is
+the `- [ ]` / `- [x]` list under `#### Your to do's`), plus the `notes` bullets (the day's `## Notes` section — `## End of day` on notes written before structure 11; the CLI reads both). All of it is context for the
+recap (stage 6) and decision candidates (stage 4). Each `- [ ]` line is also
+followed up in the To Do's table — see **To Do's** below. The note itself is
 the archive of the day — **never modify it**.
 
 **Your notes ticked Include.** Run `python3 "$VAULTLIB" migrate status --vault "$VAULT"`.
@@ -151,14 +151,14 @@ the recap. `assign` only writes an empty `projects` — never second-guess the
 owner's choice. The run never changes a note's text, never moves a note, and
 never reads `95-private/`.
 
-**Actions.** While `structure_version` is below 12, skip this paragraph — the
-vault has no Actions table yet. Otherwise:
+**To Do's.** While `structure_version` is below 12, skip this paragraph — the
+vault has no To Do's table yet. To the owner they are always "to do's", never "actions". Otherwise:
 
 ```bash
 python3 "$VAULTLIB" actions harvest --vault "$VAULT" --from <recap_from> --to <recap_to>
 ```
 
-`closed` lists action notes whose line the owner ticked in a daily note
+`closed` lists to-do notes whose line the owner ticked in a daily note
 since; the CLI already marked them done. `new` lists every open `- [ ]` line
 not yet recorded, each with its `source` (the daily note's date), `text`,
 the `meeting` subject and `entity` it sits under (null for a line outside a
@@ -466,7 +466,7 @@ project with a one-line what-happened, or `none on file`), and `context`
 (one line from the entity dossier and the project's *Where it stands* card,
 or, with no confident match, one line from the event alone and `No tracked
 project.`). Each field is one line; the CLI renders them under `#### Prep`
-and adds empty `#### Your notes` and `#### Your actions` lists for the owner.
+and adds empty `#### Your notes` and `#### Your to do's` lists for the owner.
 It also opens every new note with the `> [!review] Waiting for you` block —
 the live Meetings and Decisions review queues; nothing to pass for it.
 The lookups: match attendee email domains and subject keywords against
@@ -669,7 +669,7 @@ reported "Processed: 0" after writing a meeting correctly):
 **Meetings you ticked Keep on:** {N} now confirmed
 **Possible duplicates:** {N} ({list the stems}) — kept as separate notes; each would have overwritten a meeting you already confirmed
 **Mail and Teams:** {outcome line | off | skipped: no M365 | failed: …}
-**Actions:** {N} new → `65-actions/` ({K} with a project, {D} with a deadline) · {C} closed from ticks in daily notes | skipped: vault below structure 12
+**To Do's:** {N} new → `65-to-dos/` ({K} with a project, {D} with a deadline) · {C} closed from ticks in daily notes | skipped: vault below structure 12
 **Metrics refreshed:** {P} projects · {Q} people
 **Projects updated:** {N} ({slugs}) — {M} decisions captured for review, {K} candidates skipped
 **Next note:** `60-daily-notes/{date}.md` ({DayName}, {tomorrow | today — for-today catch-up}) — {N} meetings prepped | calendar unavailable | calendar REFUSED — signed in as a different account (account-mismatch) | calendar REFUSED — no account bound to this vault yet (no-account-hint) | m365 disabled

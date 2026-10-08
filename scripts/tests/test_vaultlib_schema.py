@@ -7,7 +7,7 @@ from vaultlib import schema
 
 def test_all_eight_objects_are_present():
     assert set(schema.load()["objects"]) == {
-        "meeting", "project", "person", "decision", "entity", "daily-note", "action",
+        "meeting", "project", "person", "decision", "entity", "daily-note", "to-do",
         "message-log",
     }
 

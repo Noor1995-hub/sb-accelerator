@@ -1,8 +1,8 @@
 """Actions (#257): the owner's `- [ ]` lines, followed up as notes.
 
 The daily note is where an action is written and the archive of the day, so
-it is only ever read. Each new line becomes a note in 65-actions/, which is
-what Actions.base lists, groups by project and sorts by deadline. `harvest`
+it is only ever read. Each new line becomes a note in 65-to-dos/, which is
+what To Do's.base lists, groups by project and sorts by deadline. `harvest`
 says which lines are new (with the meeting they sit under, as evidence for
 the project) and closes a note whose line was ticked since. `create` writes
 the notes: the deadline arrives as the owner's phrase and is resolved here
@@ -19,7 +19,7 @@ from . import dailynote, dates, markdown, naming, schema, vault
 
 ACTIONS_DIR = vault.ACTIONS_DIR
 PROJECTS_DIR = vault.PROJECTS_DIR
-QUOTE_KEYS = frozenset({"action", "source"})
+QUOTE_KEYS = frozenset({"to-do", "source"})
 # A recap window is days, a catch-up a few weeks; anything longer is a typo.
 MAX_WINDOW_DAYS = 62
 _WS_RE = re.compile(r"\s+")
@@ -71,11 +71,11 @@ def _recorded(root: Path) -> List[dict]:
             data, _ = markdown.split_frontmatter(text)
         except (ValueError, OSError):
             continue
-        if data.get("type") != "action":
+        if data.get("type") != "to-do":
             continue
         match = _SOURCE_RE.match(str(data.get("source") or ""))
         source = match.group(1) if match else None
-        words = str(data.get("action") or "")
+        words = str(data.get("to-do") or "")
         found.append({"path": path, "text": text, "data": data, "source": source,
                       "key": _key(source, words) if words else None})
     return found
@@ -210,16 +210,16 @@ def create(root: Path, items, today: Optional[str] = None) -> dict:
         try:
             slug = naming.slugify(item["text"])
         except ValueError:
-            slug = "action"
+            slug = "to-do"
         stem = _free_stem(folder, f"{anchor_iso}-{slug}")
-        frontmatter = {"type": "action", "action": item["text"], "project": project,
+        frontmatter = {"type": "to-do", "to-do": item["text"], "project": project,
                        "due": due, "done": False}
         if item["source"]:
             frontmatter["source"] = f"[[{item['source']}]]"
         frontmatter["created"] = today_iso
-        problems = schema.validate("action", frontmatter)
+        problems = schema.validate("to-do", frontmatter)
         if problems:
-            raise ActionsError("refusing to write non-conformant action frontmatter: "
+            raise ActionsError("refusing to write non-conformant to-do frontmatter: "
                                + "; ".join(problems))
         path = folder / f"{stem}.md"
         vault.atomic_create(path, markdown.emit_frontmatter(frontmatter, QUOTE_KEYS))

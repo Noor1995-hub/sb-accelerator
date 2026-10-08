@@ -47,7 +47,7 @@ ALL_MEETINGS = {MEETINGS.format(s) for s in (
     "05-06-26-pipeline-governance-review", "10-03-26-meridian-steerco-01",
     "12-06-26-jordan-1on1", "12-06-26-jordan-1on1-v2", "15-04-26-priya-1on1",
     "20-04-26-commercial-ops-workshop", "20-05-26-meridian-vendor-strategy-brainstorm")}
-ACTIONS = "65-actions/{}.md"
+ACTIONS = "65-to-dos/{}.md"
 ALL_ACTIONS = {ACTIONS.format(s) for s in (
     "2026-06-15-send-benelux-the-shared-stage-definitions",
     "2026-06-15-read-the-draft-commissioning-schedule",
@@ -116,8 +116,8 @@ EXPECTED = [
 
     # #257. "Book the Phase 1 site visit" is a note made with New: no action
     # text and an empty Done, which `done != true` still counts as open.
-    ("65-actions/Actions.base", "Open", ALL_ACTIONS - DONE_ACTIONS),
-    ("65-actions/Actions.base", "Done", DONE_ACTIONS),
+    ("65-to-dos/To Do's.base", "Open", ALL_ACTIONS - DONE_ACTIONS),
+    ("65-to-dos/To Do's.base", "Done", DONE_ACTIONS),
 ]
 
 BASE_FILES = sorted({base for base, _, _ in EXPECTED})
@@ -189,7 +189,7 @@ DEFAULT_VIEWS = [
     # People opens A–Z (#242), not on a review queue.
     ("50-people/People.base", "All"),
     # What is still to do, not the record of what was done (#257).
-    ("65-actions/Actions.base", "Open"),
+    ("65-to-dos/To Do's.base", "Open"),
 ]
 
 
@@ -213,8 +213,8 @@ REQUIRED_COLUMNS = [
     ("20-meetings/Meetings.base", "To review", "conflicts-with"),
     # Ticking Done is the close-out (#257); the Project column is what gives
     # a note made with New an empty project to fill in.
-    ("65-actions/Actions.base", "Open", "done"),
-    ("65-actions/Actions.base", "Open", "project"),
+    ("65-to-dos/To Do's.base", "Open", "done"),
+    ("65-to-dos/To Do's.base", "Open", "project"),
 ]
 
 

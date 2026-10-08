@@ -679,7 +679,7 @@ def build_parser() -> argparse.ArgumentParser:
     _add_vault_argument(daily_read)
     daily_read.add_argument("--date", required=True, help="ISO date of the note")
 
-    actions_group = top.add_parser("actions", help="actions from daily notes, followed up in 65-actions")
+    actions_group = top.add_parser("actions", help="actions from daily notes, followed up in 65-to-dos")
     actions_sub = actions_group.add_subparsers(dest="action", required=True)
     actions_harvest = actions_sub.add_parser(
         "harvest", help="list new action lines in a window; close notes ticked in their daily note")

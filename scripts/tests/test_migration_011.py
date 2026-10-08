@@ -1,4 +1,4 @@
-"""Migration 011: the Actions entry joins the menu under Thoughts & ideas,
+"""Migration 011: the To Do's entry joins the menu under Thoughts & ideas,
 and nothing else moves. Made-up vaults only."""
 import importlib.util
 import json
@@ -54,8 +54,8 @@ def test_actions_lands_under_thoughts_and_nothing_else_moves(tmp_path):
     assert load().apply(root) == {"bookmarks": "added"}
     items = read_items(root)
     assert [i["title"] for i in items][:5] == [
-        "Start here", "Daily notes", "Thoughts & ideas", "Actions", "Meetings"]
-    assert [i for i in items if i.get("title") != "Actions"] == before
+        "Start here", "Daily notes", "Thoughts & ideas", "To Do's", "Meetings"]
+    assert [i for i in items if i.get("title") != "To Do's"] == before
     assert items[-1] == MINE
 
 
@@ -66,9 +66,9 @@ def test_an_upgraded_menu_equals_a_fresh_one(tmp_path):
 
 
 @pytest.mark.parametrize("titles,expected", [
-    (["Daily notes", "Meetings"], ["Daily notes", "Actions", "Meetings"]),
-    (["Meetings", "Thoughts & ideas"], ["Meetings", "Thoughts & ideas", "Actions"]),
-    (["Meetings"], ["Actions", "Meetings"]),
+    (["Daily notes", "Meetings"], ["Daily notes", "To Do's", "Meetings"]),
+    (["Meetings", "Thoughts & ideas"], ["Meetings", "Thoughts & ideas", "To Do's"]),
+    (["Meetings"], ["To Do's", "Meetings"]),
 ])
 def test_a_reordered_menu_gets_actions_next_to_what_is_left(tmp_path, titles, expected):
     menu = {e["title"]: e for e in load("010-structure-version-11").shipped_menu()

@@ -1,17 +1,17 @@
 filters:
   and:
-    - file.inFolder("65-actions")
+    - file.inFolder("65-to-dos")
     - file.ext == "md"
-    - type == "action"
+    - type == "to-do"
 formulas:
-  # The action as written; a note made with "New" shows its file name.
-  action: link(file.path, if(action, action, file.basename))
+  # The to-do as written; a note made with "New" shows its file name.
+  todo: link(file.path, if(note["to-do"], note["to-do"], file.basename))
   # Names, not slugs (#240): the project's name, or "Not linked".
   project_group: if(project, if(file("30-projects/" + project + "/index.md"), file("30-projects/" + project + "/index.md").properties["project-name"], project), "Not linked")
   overdue: if(due && date(due) < today(), "🔴 Overdue", "")
 properties:
-  formula.action:
-    displayName: Action
+  formula.todo:
+    displayName: To do
   formula.project_group:
     displayName: Project
   formula.overdue:
@@ -39,7 +39,7 @@ views:
     # The Project column is also what gives a note made with "New" here an
     # empty project property to fill in. Empty deadlines sort last.
     order:
-      - formula.action
+      - formula.todo
       - done
       - due
       - formula.overdue
@@ -49,7 +49,7 @@ views:
       - property: note.due
         direction: ASC
     columnSize:
-      formula.action: 360
+      formula.todo: 360
   - type: table
     name: Done
     filters:
@@ -59,7 +59,7 @@ views:
       property: formula.project_group
       direction: ASC
     order:
-      - formula.action
+      - formula.todo
       - done
       - due
       - source
@@ -68,4 +68,4 @@ views:
       - property: file.mtime
         direction: DESC
     columnSize:
-      formula.action: 360
+      formula.todo: 360

@@ -1,4 +1,4 @@
-"""Actions (#257): daily-note `- [ ]` lines become notes in 65-actions/.
+"""Actions (#257): daily-note `- [ ]` lines become notes in 65-to-dos/.
 Made-up vaults only."""
 import json
 from pathlib import Path
@@ -31,12 +31,12 @@ def frontmatter(path: Path) -> dict:
 
 DAY = ("## Meetings\n"
        "### 10:00 — Proposal review · [[40-entities/acme/dossier|Acme]]\n"
-       "#### Your actions\n"
+       "#### Your to do's\n"
        "- [ ] send the revised proposal Friday\n"
        "- [x] share the agenda\n"
        "- [ ] send the revised proposal Friday\n"
        "### 14:00 — Pilot sync · [[40-entities/nordbridge/dossier|Nordbridge]]\n"
-       "#### Your actions\n"
+       "#### Your to do's\n"
        "- [ ] ask legal about data residency\n\n"
        "## Notes\n"
        "- [ ] book a follow-up with Sam\n")
@@ -88,14 +88,14 @@ def test_create_fills_project_and_due_and_validates(root):
         "source": "2026-10-07", "text": "send the revised proposal Friday",
         "project": "acme-erp", "due": "Friday"}], today="2026-10-07")
     [made] = result["created"]
-    assert made["path"] == "65-actions/2026-10-07-send-the-revised-proposal-friday.md"
+    assert made["path"] == "65-to-dos/2026-10-07-send-the-revised-proposal-friday.md"
     assert made["due"] == "2026-10-09" and made["project"] == "acme-erp"
     path = root / made["path"]
     data = frontmatter(path)
-    assert data == {"type": "action", "action": "send the revised proposal Friday",
+    assert data == {"type": "to-do", "to-do": "send the revised proposal Friday",
                     "project": "acme-erp", "due": "2026-10-09", "done": False,
                     "source": "[[2026-10-07]]", "created": "2026-10-07"}
-    assert schema.validate("action", data) == []
+    assert schema.validate("to-do", data) == []
     text = path.read_text(encoding="utf-8")
     assert "due: 2026-10-09\n" in text            # unquoted ISO, or Bases misreads it
 
@@ -137,7 +137,7 @@ def test_create_takes_a_new_name_when_the_file_exists(root):
                             today="2026-10-07")
     # Same words after normalising punctuation? No: "call sam!" differs from
     # "Call Sam" as text, so it is a second action with the next free name.
-    assert result["created"][0]["path"] == "65-actions/2026-10-07-call-sam-2.md"
+    assert result["created"][0]["path"] == "65-to-dos/2026-10-07-call-sam-2.md"
 
 
 @pytest.mark.parametrize("item,needle", [
@@ -160,7 +160,7 @@ def test_harvest_closes_an_action_ticked_in_its_daily_note(root):
         "- [ ] ask legal", "- [x] ask legal"), encoding="utf-8")
     # The window is a later day: closing looks at every open action's source.
     result = actions.harvest(root, "2026-10-08", "2026-10-08")
-    assert result["closed"] == ["65-actions/2026-10-07-ask-legal-about-data-residency.md"]
+    assert result["closed"] == ["65-to-dos/2026-10-07-ask-legal-about-data-residency.md"]
     assert frontmatter(root / result["closed"][0])["done"] is True
     assert actions.harvest(root, "2026-10-08", "2026-10-08")["closed"] == []
 

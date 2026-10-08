@@ -28,7 +28,7 @@ def test_check_mode_agrees_with_the_file_on_disk():
 def test_all_eight_objects_compile():
     objects = co.compile_schema()["objects"]
     assert set(objects) == {"meeting", "project", "person", "decision",
-                            "entity", "daily-note", "action", "message-log"}
+                            "entity", "daily-note", "to-do", "message-log"}
     for name, block in objects.items():
         assert block["required"], f"{name}: empty required list"
 

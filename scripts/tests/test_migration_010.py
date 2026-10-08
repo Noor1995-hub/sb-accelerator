@@ -55,9 +55,9 @@ def test_module_contract():
 
 
 def test_shipped_menu_is_the_template_menu_before_actions():
-    """011 (#257) added Actions to the template menu; everything else is 010's."""
+    """011 (#257) added To Do's to the template menu; everything else is 010's."""
     shipped = json.loads((TEMPLATE / OBS / "bookmarks.json").read_text(encoding="utf-8"))["items"]
-    assert load().shipped_menu() == [i for i in shipped if i.get("title") != "Actions"]
+    assert load().shipped_menu() == [i for i in shipped if i.get("title") != "To Do's"]
 
 
 def test_apply_lands_the_new_menu_keeps_the_owners_own_and_removes_inbox_base(tmp_path):

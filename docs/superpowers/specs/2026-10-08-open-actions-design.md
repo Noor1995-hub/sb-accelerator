@@ -1,12 +1,12 @@
 # Open actions — design (#257)
 
-Status: approved by the vault owner in session, 2026-10-08. Plan:
+Status: approved by the vault owner in session, 2026-10-08; renamed from "Actions" to "To Do's" everywhere the owner looks, same day. Plan:
 `docs/superpowers/plans/2026-10-08-open-actions.md`.
 
 ## Why
 
 The owner writes actions in the daily note (`- [ ]` under a meeting's
-`#### Your actions`), and nothing ever follows them up: the reader returns
+`#### Your to do's`), and nothing ever follows them up: the reader returns
 them as context, "nothing routes it anywhere yet" (evening-sync stage 2). An
 action written on Tuesday is invisible by Thursday. The owner wants one
 table of every open action, **grouped per project and sorted by deadline**,
@@ -30,7 +30,7 @@ that looks and works like the other tables in the menu.
 
 ## The Action object
 
-`65-actions/{YYYY-MM-DD}-{slug}.md` · Base: `65-actions/Actions.base`.
+`65-to-dos/{YYYY-MM-DD}-{slug}.md` · Base: `65-to-dos/To Do's.base`.
 A new top-level folder, next to the daily notes the actions come from; inside
 an existing folder the notes would leak into that folder's table.
 
@@ -55,10 +55,10 @@ enums:
   actions made by New or in a session). `created` — ISO date.
 - The note body is empty; the owner may write in it. Nothing rewrites it.
 
-## Actions.base
+## To Do's.base
 
-- Filters: `file.inFolder("65-actions")`, `type == "action"`. **New** fills
-  in `type: action` from the filter and lands in `65-actions/` even when new
+- Filters: `file.inFolder("65-to-dos")`, `type == "action"`. **New** fills
+  in `type: action` from the filter and lands in `65-to-dos/` even when new
   notes default elsewhere (both verified in Obsidian 1.14).
 - View **Open** (first): `done != true`, grouped by project name, sorted by
   `due` ascending; columns Action · Done · Due · Overdue · Project · From.
@@ -96,7 +96,7 @@ note's box; the table is where actions are followed up.
 Migration `011-structure-version-12` inserts the Actions bookmark directly
 after Thoughts & ideas (or after Daily notes / at the end if the owner moved
 those), keeping every other bookmark where it is — not lossy.
-`Actions.base`, the menu colour and the wording arrive with the template
+`To Do's.base`, the menu colour and the wording arrive with the template
 refresh. A vault below 12 skips the actions step; nothing breaks.
 
 ## Out of scope

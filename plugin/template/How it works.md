@@ -16,9 +16,9 @@ A decision is **To review** when it was captured during the evening run rather t
 
 Anything marked `<!-- needs-review -->` in a table on a page is the same idea: a value that was inferred and wants your eye.
 
-## Actions
+## To Do's
 
-Write what you have to do under **Your actions** on the day's note, or as a `- [ ]` line anywhere on it. That evening each new one becomes a row in **Actions**, grouped by project, soonest deadline first. The project is filled in when the meeting or your words make it clear, and the deadline when you wrote one ("Friday", "14/10", "tomorrow"); otherwise they stay empty for you to fill in on the row. **New** in the Actions table adds one by hand, or just ask.
+Write what you have to do under **Your to do's** on the day's note, or as a `- [ ]` line anywhere on it. That evening each new one becomes a row in **To Do's**, grouped by project, soonest deadline first. The project is filled in when the meeting or your words make it clear, and the deadline when you wrote one ("Friday", "14/10", "tomorrow"); otherwise they stay empty for you to fill in on the row. **New** in the To Do's table adds one by hand, or just ask.
 
 Tick **Done** in the table when it is done and the row moves to *Done*. Ticking the line on the day's note works too, from the next evening.
 
@@ -49,7 +49,7 @@ Only two commands talk to delaware: `/report-feedback` and `/health-check`. Betw
 - `10-inbox` — **Input**: drop files here; the evening run picks them up.
 - `20-meetings` · `30-projects` · `40-entities` · `50-people` — the notes behind the tables.
 - `60-daily-notes` — one note per day. Write anything under **Notes** on today's note; it is read that evening.
-- `65-actions` — one note per action, behind the **Actions** table.
+- `65-to-dos` — one note per to do, behind the **To Do's** table.
 - `70-resources` · `80-thoughts-ideas` — reference material and your own notes. Tick **Include** on a note and the evening run reads it into your projects; the note stays where it is.
 - `90-archive` — finished, kept.
 - `95-private` — never read by any command. Yours alone.

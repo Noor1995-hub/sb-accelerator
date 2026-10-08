@@ -1,6 +1,6 @@
 ---
-type: action
-action: "Ask Priya what Meridian's board is actually asking for on contract length."
+type: to-do
+to-do: "Ask Priya what Meridian's board is actually asking for on contract length."
 project: meridian-yard-automation-program
 due: 2026-06-19
 done: false

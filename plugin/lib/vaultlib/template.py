@@ -72,7 +72,7 @@ MANAGED_SILENT = frozenset({
     "40-entities/Entities.base",
     "50-people/People.base",
     "60-daily-notes/Daily notes.base",
-    "65-actions/Actions.base",
+    "65-to-dos/To Do's.base",
     "80-thoughts-ideas/Thoughts & ideas.base",
     "90-archive/README.md",
     "99-workflow-config/secrets/README.md",
