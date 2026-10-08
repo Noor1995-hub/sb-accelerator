@@ -11,9 +11,10 @@ formulas:
   # Whole days to the deadline: a helper for Deadline, never a column.
   # Rounded, because a daylight-saving change makes the raw value 22.04.
   days_left: if(due.isEmpty(), "", (date(due) - today()).days.round())
-  # How close the deadline is, at a glance (#257). Not `!due`: that reads
+  # How close the deadline is, at a glance (#257), in words the CSS snippet
+  # colours: red when late, amber today, green ahead. Not `!due`: that reads
   # a missing deadline as Today.
-  deadline: if(due.isEmpty(), "", if(formula.days_left < 0, "🔴 Overdue", if(formula.days_left == 0, "🟡 Today", if(formula.days_left == 1, "🟢 In 1 day", if(formula.days_left <= 5, "🟢 In " + formula.days_left + " days", "🟢 In 5+ days")))))
+  deadline: if(due.isEmpty(), "", html("<span class='sb-deadline sb-deadline-" + if(formula.days_left < 0, "late", if(formula.days_left == 0, "today", "ahead")) + "'>" + if(formula.days_left < 0, "Overdue", if(formula.days_left == 0, "Today", if(formula.days_left == 1, "In 1 day", if(formula.days_left <= 5, "In " + formula.days_left + " days", "In 5+ days")))) + "</span>"))
 properties:
   formula.todo:
     displayName: To do
