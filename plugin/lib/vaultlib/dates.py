@@ -529,3 +529,63 @@ def plan(root: Path, today: Optional[str] = None, *,
         "recap_detail_from": detail_from.isoformat(),
         "business_days_not_detailed": business_days(recap_from, detail_from),
     }
+
+
+# --- An action's deadline phrase (#257) -------------------------------------
+# The evening run copies the phrase from the owner's words and this resolves
+# it against the daily note's date, so the model never does the arithmetic.
+# Only unambiguous phrases resolve; anything else leaves the deadline open.
+
+_WEEKDAY_WORDS = {
+    word: index
+    for index, words in enumerate((
+        ("monday", "maandag", "lundi"),
+        ("tuesday", "dinsdag", "mardi"),
+        ("wednesday", "woensdag", "mercredi"),
+        ("thursday", "donderdag", "jeudi"),
+        ("friday", "vrijdag", "vendredi"),
+        ("saturday", "zaterdag", "samedi"),
+        ("sunday", "zondag", "dimanche"),
+    ))
+    for word in words
+}
+_DAY_OFFSET_WORDS = {
+    "today": 0, "vandaag": 0, "aujourd'hui": 0, "aujourd’hui": 0,
+    "tomorrow": 1, "morgen": 1, "demain": 1,
+}
+_ISO_DUE_RE = re.compile(r"\A(\d{4})-(\d{2})-(\d{2})\Z")
+# Day first, as written in Belgium: 14/10, 14-10-2026, 14.10.26.
+_DMY_DUE_RE = re.compile(r"\A(\d{1,2})([/.-])(\d{1,2})(?:\2(\d{2}|\d{4}))?\.?\Z")
+
+
+def resolve_due(phrase, anchor: date) -> Optional[date]:
+    """The date a deadline phrase names, written on `anchor`; None if unsure.
+
+    A weekday is the next such day after `anchor`, never `anchor` itself. A
+    day and month without a year is the next one on or after `anchor`.
+    """
+    text = str(phrase or "").strip().lower()
+    if not text:
+        return None
+    if text in _DAY_OFFSET_WORDS:
+        return anchor + timedelta(days=_DAY_OFFSET_WORDS[text])
+    if text in _WEEKDAY_WORDS:
+        ahead = (_WEEKDAY_WORDS[text] - anchor.weekday()) % 7 or 7
+        return anchor + timedelta(days=ahead)
+    iso = _ISO_DUE_RE.match(text)
+    if iso:
+        try:
+            return date(int(iso.group(1)), int(iso.group(2)), int(iso.group(3)))
+        except ValueError:
+            return None
+    dmy = _DMY_DUE_RE.match(text)
+    if not dmy:
+        return None
+    day, month, year = int(dmy.group(1)), int(dmy.group(3)), dmy.group(4)
+    try:
+        if year:
+            return date(int(year) + (2000 if len(year) == 2 else 0), month, day)
+        found = date(anchor.year, month, day)
+        return found if found >= anchor else date(anchor.year + 1, month, day)
+    except ValueError:
+        return None

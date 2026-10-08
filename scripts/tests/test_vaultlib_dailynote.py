@@ -380,6 +380,25 @@ def test_read_extracts_regions_meetings_and_jottings(tmp_path):
     assert result["warnings"] == []
 
 
+def test_read_returns_actions_written_outside_a_meeting(tmp_path):
+    """#257: a task under ## Notes (or anywhere outside a meeting block) is an
+    action too. The meeting's own actions stay where they were."""
+    root = make_vault(tmp_path)
+    (root / "60-daily-notes" / "2026-06-12.md").write_text(
+        "---\ndate: 2026-06-12\ntype: daily-note\n---\n\n"
+        "## Meetings\n### 10:00 — Sync · [[acme-industries]]\n"
+        "#### Your actions\n- [ ] send the deck Friday\n- [x] book the room\n\n"
+        "## Notes\n- a thought\n- [ ] call the bank\n- [x] pay the invoice\n"
+        "- [ ] \n", encoding="utf-8")
+    result = dailynote.read(root, "2026-06-12")
+    assert result["meetings"][0]["actions"] == [
+        {"text": "send the deck Friday", "done": False},
+        {"text": "book the room", "done": True}]
+    assert result["loose_actions"] == [
+        {"text": "call the bank", "done": False},
+        {"text": "pay the invoice", "done": True}]
+
+
 def test_read_surfaces_the_no_meetings_prep_region(tmp_path):
     """A prep region with no meeting heading above it is the no-meetings line
     (or the calendar-unavailable note) — it comes back rather than vanishing."""

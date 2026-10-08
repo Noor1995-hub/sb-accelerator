@@ -8,7 +8,7 @@ tags: [meta, reference, ontology]
 > controlled vocabularies.** Edit here; never let the schema live in prose
 > elsewhere.
 
-Seven object types: **Meeting · Project · Person · Decision · Entity · Daily note · Message log**.
+Eight object types: **Meeting · Project · Person · Decision · Entity · Daily note · Action · Message log**.
 Relationships live in YAML frontmatter (wikilinks / slug joins), not folder
 hierarchy. Curation happens in Bases, not by browsing folders.
 
@@ -500,7 +500,9 @@ body_sections: [Recap, Meetings, Notes]
   when both are empty. It is not a region and holds no state.
 - **Everything outside the markers is human territory**: jotting bullets
   under each meeting heading, `## Notes` (called `## End of day` on notes before structure 11; both are read), anything else. The evening
-  harvest reads jottings as input; nothing ever edits or routes them in v1.
+  harvest reads jottings as input and never edits them. The one thing it
+  routes is an action: each new `- [ ]` line becomes an Action note (below);
+  the line itself stays as written.
 - **Recap v2 is rendered from fields**: `[!glance]` (first line computed by
   the CLI: meeting count, window, theme and decision counts; then 1–4
   labelled headlines and the entities touched), folded `[!theme]-` callouts
@@ -553,6 +555,45 @@ notes, so nothing compiles from this section. The fields it reads and writes:
   never overwritten.
 - The body is never edited, and the note is never moved or deleted.
 
+### Action — `65-actions/{YYYY-MM-DD}-{slug}.md` · Base: `Actions.base`
+
+Something the owner has to do, followed up in the Actions table: open ones
+grouped by project, soonest deadline first (#257).
+
+```yaml
+object: action
+required: [type]
+optional: [action, project, due, source, created]
+keys_present: [done]
+enums:
+  type: [action]
+```
+
+- **Three ways in, one format.** The evening run turns each new `- [ ]` line
+  in a daily note into an action note (`actions harvest` → `actions create`);
+  **New** in `Actions.base` makes an empty one in `65-actions/`; a session
+  makes one with `actions create` when the owner asks.
+- `action` is the action as the owner wrote it, quoted — the Action column.
+  A note made with **New** has none; the table shows its file name instead.
+- `project` is one active project slug, or empty. The run fills it when the
+  meeting's entity has a single active project or the text names one, and
+  otherwise leaves it for the owner. `Actions.base` groups on the project's
+  name, "Not linked" when empty.
+- `due` is an unquoted ISO date, or empty. The run copies the deadline phrase
+  from the owner's words and the CLI resolves it against the daily note's
+  date (`dates.resolve_due`: ISO, `14/10[/2026]`, weekday names in English,
+  Dutch and French, today, tomorrow); a phrase it cannot read stays empty.
+- `done` is the checkbox, in `keys_present` so the Open view's
+  `done != true` never misses a row. Ticking it in the table is the whole
+  close-out. Ticking the line in the daily note closes it too: the next run
+  sets `done: true`. Nothing unticks.
+- `source` is `[[YYYY-MM-DD]]`, the daily note the line came from; absent on
+  an action made with New or in a session. `source` plus `action` is the
+  identity the run uses to never record the same line twice.
+- `created` is the ISO date the note was written. The body is the owner's;
+  nothing writes it. An action note is never deleted by the vault.
+- Example: `65-actions/2026-10-07-send-the-revised-proposal-to-jordan.md`
+
 ### Message log — `_messages/{YYYY-MM-DD}-messages.md` · no Base
 
 ```yaml
@@ -590,5 +631,7 @@ enums:
 - `Decision —source→ Message log`
 - `Decision —source→ Owner note`
 - `Decision —supersedes→ Decision`
+- `Action —project→ Project`
+- `Action —source→ Daily note`
 - `Message log —projects[]→ Project`
 - `Message log —people[]→ Person`

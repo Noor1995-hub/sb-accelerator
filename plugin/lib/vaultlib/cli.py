@@ -32,7 +32,7 @@ if __package__ in (None, ""):
     # the skills invoke it.
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from vaultlib import config, dailynote, dates, decision, discover, entity, feedback, fetcherrors, health, lastsync, m365, meeting, migrate, msglog, msgrows, msgstate, notes, person, plaud, project, projectstate, provenance, runlog, scratch, schema, seenevents, syncjob, template, updatequeue, vault  # noqa: E402
+from vaultlib import actions, config, dailynote, dates, decision, discover, entity, feedback, fetcherrors, health, lastsync, m365, meeting, migrate, msglog, msgrows, msgstate, notes, person, plaud, project, projectstate, provenance, runlog, scratch, schema, seenevents, syncjob, template, updatequeue, vault  # noqa: E402
 
 
 def _emit(payload: dict) -> None:
@@ -679,6 +679,20 @@ def build_parser() -> argparse.ArgumentParser:
     _add_vault_argument(daily_read)
     daily_read.add_argument("--date", required=True, help="ISO date of the note")
 
+    actions_group = top.add_parser("actions", help="actions from daily notes, followed up in 65-actions")
+    actions_sub = actions_group.add_subparsers(dest="action", required=True)
+    actions_harvest = actions_sub.add_parser(
+        "harvest", help="list new action lines in a window; close notes ticked in their daily note")
+    _add_vault_argument(actions_harvest)
+    actions_harvest.add_argument("--from", dest="date_from", required=True, help="ISO date")
+    actions_harvest.add_argument("--to", dest="date_to", required=True, help="ISO date")
+    actions_create = actions_sub.add_parser(
+        "create", help="write action notes from a JSON list; duplicates are skipped")
+    _add_vault_argument(actions_create)
+    actions_create.add_argument("--items", required=True,
+                                help="path to a JSON file, or - to read stdin")
+    actions_create.add_argument("--today", help="ISO date; defaults to today")
+
     notes_group = top.add_parser("notes", help="the owner's own notes: Include and absorbed")
     notes_sub = notes_group.add_subparsers(dest="action", required=True)
     notes_harvest = notes_sub.add_parser("harvest", help="list notes ticked Include")
@@ -1220,6 +1234,12 @@ def _dispatch(args: argparse.Namespace) -> int:
                        else json.loads(Path(args.note).read_text(encoding="utf-8")))
             return _ok(dailynote.write(root, payload))
         return _ok(dailynote.read(root, args.date))
+    if args.group == "actions":
+        if args.action == "harvest":
+            return _ok(actions.harvest(root, args.date_from, args.date_to))
+        items = (json.load(sys.stdin) if args.items == "-"
+                 else json.loads(Path(args.items).read_text(encoding="utf-8")))
+        return _ok(actions.create(root, items, args.today))
     if args.group == "notes":
         if args.action == "harvest":
             return _ok(notes.harvest(root))
@@ -1336,6 +1356,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                      "nothing from this call was shown to the owner.")
     except updatequeue.UpdateQueueError as exc:
         return _fail(str(exc), "Fix the named argument and retry.")
+    except actions.ActionsError as exc:
+        return _fail(str(exc), "Fix the named date or item and retry; nothing "
+                     "was written for a refused call.")
     except notes.NotesError as exc:
         return _fail(str(exc), "Fix the named path, project or date and retry.")
     except dailynote.DailyNoteError as exc:

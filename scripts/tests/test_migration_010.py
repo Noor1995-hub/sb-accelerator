@@ -54,9 +54,10 @@ def test_module_contract():
         "Recent", "Resources", "Heavy assets", "Private", "Archive"]
 
 
-def test_shipped_menu_is_the_template_menu():
+def test_shipped_menu_is_the_template_menu_before_actions():
+    """011 (#257) added Actions to the template menu; everything else is 010's."""
     shipped = json.loads((TEMPLATE / OBS / "bookmarks.json").read_text(encoding="utf-8"))["items"]
-    assert load().shipped_menu() == shipped
+    assert load().shipped_menu() == [i for i in shipped if i.get("title") != "Actions"]
 
 
 def test_apply_lands_the_new_menu_keeps_the_owners_own_and_removes_inbox_base(tmp_path):
@@ -118,11 +119,12 @@ def test_the_whole_chain_lands_on_the_shipped_template(tmp_path):
     shipped = read_items(root)
     load("009-structure-version-10").apply(root)
     load().apply(root)
+    load("011-structure-version-12").apply(root)
     assert read_items(root) == shipped
 
 
-def test_run_through_the_framework_bumps_to_11(tmp_path):
+def test_run_through_the_framework_bumps_to_12(tmp_path):
     root = vault_v10(tmp_path)
     result = migrate.run(root, "2026-10-06", stamp="2026-10-06-120000")
-    assert [a["slug"] for a in result["applied"]] == ["structure-version-11"]
-    assert result["structure_version"] == 11
+    assert [a["slug"] for a in result["applied"]] == ["structure-version-11", "structure-version-12"]
+    assert result["structure_version"] == 12

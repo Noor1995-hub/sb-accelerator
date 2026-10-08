@@ -1,0 +1,71 @@
+filters:
+  and:
+    - file.inFolder("65-actions")
+    - file.ext == "md"
+    - type == "action"
+formulas:
+  # The action as written; a note made with "New" shows its file name.
+  action: link(file.path, if(action, action, file.basename))
+  # Names, not slugs (#240): the project's name, or "Not linked".
+  project_group: if(project, if(file("30-projects/" + project + "/index.md"), file("30-projects/" + project + "/index.md").properties["project-name"], project), "Not linked")
+  overdue: if(due && date(due) < today(), "🔴 Overdue", "")
+properties:
+  formula.action:
+    displayName: Action
+  formula.project_group:
+    displayName: Project
+  formula.overdue:
+    displayName: " "
+  note.done:
+    displayName: Done
+  note.due:
+    displayName: Due
+  note.project:
+    displayName: Project
+  note.source:
+    displayName: From
+  file.mtime:
+    displayName: Last edited
+views:
+  - type: table
+    name: Open
+    # Ticking Done here is the close-out: the row leaves at once (#257).
+    filters:
+      and:
+        - done != true
+    groupBy:
+      property: formula.project_group
+      direction: ASC
+    # The Project column is also what gives a note made with "New" here an
+    # empty project property to fill in. Empty deadlines sort last.
+    order:
+      - formula.action
+      - done
+      - due
+      - formula.overdue
+      - project
+      - source
+    sort:
+      - property: note.due
+        direction: ASC
+    columnSize:
+      formula.action: 360
+  - type: table
+    name: Done
+    filters:
+      and:
+        - done == true
+    groupBy:
+      property: formula.project_group
+      direction: ASC
+    order:
+      - formula.action
+      - done
+      - due
+      - source
+      - file.mtime
+    sort:
+      - property: file.mtime
+        direction: DESC
+    columnSize:
+      formula.action: 360

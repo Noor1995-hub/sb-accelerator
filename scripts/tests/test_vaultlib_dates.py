@@ -976,3 +976,42 @@ def test_minutes_between_exact_minutes():
     start = _dt(2026, 8, 25, 14, 0, 0)
     end = _dt(2026, 8, 25, 15, 0, 0)
     assert dates.minutes_between(start, end) == 60
+
+
+# --- resolve_due: an action's deadline phrase, against its daily note's date (#257)
+
+from datetime import date as _date
+
+_WED = _date(2026, 10, 7)   # a Wednesday
+
+
+@pytest.mark.parametrize("phrase,expected", [
+    ("2026-10-14", _date(2026, 10, 14)),
+    ("14/10", _date(2026, 10, 14)),
+    ("14/10/2026", _date(2026, 10, 14)),
+    ("14-10-2026", _date(2026, 10, 14)),
+    ("14.10", _date(2026, 10, 14)),
+    ("14.10.26", _date(2026, 10, 14)),
+    ("3/1", _date(2027, 1, 3)),           # no year, already past: next year's
+    ("7/10", _date(2026, 10, 7)),         # no year, the note's own day
+    ("Friday", _date(2026, 10, 9)),
+    ("friday", _date(2026, 10, 9)),
+    ("vrijdag", _date(2026, 10, 9)),
+    ("vendredi", _date(2026, 10, 9)),
+    ("Wednesday", _date(2026, 10, 14)),   # the next one, never the note's day
+    ("maandag", _date(2026, 10, 12)),
+    ("today", _WED), ("vandaag", _WED), ("aujourd'hui", _WED),
+    ("tomorrow", _date(2026, 10, 8)), ("morgen", _date(2026, 10, 8)),
+    ("demain", _date(2026, 10, 8)),
+    ("  Friday ", _date(2026, 10, 9)),
+])
+def test_resolve_due_reads_the_phrases_it_knows(phrase, expected):
+    assert dates.resolve_due(phrase, _WED) == expected
+
+
+@pytest.mark.parametrize("phrase", [
+    "", None, "next week", "end of month", "asap", "31/02", "2026-13-01",
+    "32/10", "soon-ish", "fri",
+])
+def test_resolve_due_leaves_anything_else_open(phrase):
+    assert dates.resolve_due(phrase, _WED) is None

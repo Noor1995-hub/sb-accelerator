@@ -32,9 +32,9 @@ them (`test_every_shipped_file_is_classified_exactly_once` is the pin):
   every `.gitkeep`. Never reported, never refreshed.
 
 `MANAGED` (this module's status()/refresh() surface) is `MANAGED_SILENT |
-MANAGED_CONSENT_ALWAYS` — 28 files. `ALL_TIERED` (used only to pin that
+MANAGED_CONSENT_ALWAYS` — 29 files. `ALL_TIERED` (used only to pin that
 every shipped file is classified exactly once) is `MANAGED | SEEDED_ONCE |
-IGNORED` — all 44.
+IGNORED` — all 45.
 """
 from __future__ import annotations
 
@@ -72,6 +72,7 @@ MANAGED_SILENT = frozenset({
     "40-entities/Entities.base",
     "50-people/People.base",
     "60-daily-notes/Daily notes.base",
+    "65-actions/Actions.base",
     "80-thoughts-ideas/Thoughts & ideas.base",
     "90-archive/README.md",
     "99-workflow-config/secrets/README.md",

@@ -2273,10 +2273,24 @@ def test_evening_sync_carries_notes_not_queued_from_the_update_queue():
     assert "`notesNotQueued`" in stage3c
 
 
-def test_evening_sync_stage_2_heading_admits_its_one_write():
+def test_evening_sync_stage_2_heading_admits_its_writes():
     text = read_skill("evening-sync")
-    assert "## Stage 2 — Harvest (read-only, except assigning a note's empty projects)" in text
+    assert ("## Stage 2 — Harvest (read-only, except assigning a note's empty projects "
+            "and recording actions)") in text
     assert "## Stage 2 — Harvest (read-only)\n" not in text
+
+
+def test_evening_sync_records_actions_without_doing_date_arithmetic():
+    """#257: the model copies the deadline phrase; the CLI resolves it. A
+    vault before structure 12 has no Actions table and skips the step."""
+    stage2 = read_skill("evening-sync").split("## Stage 2")[1].split("## Stage 3")[0]
+    flat = " ".join(stage2.split())
+    assert "actions harvest --vault" in flat and "actions create --vault" in flat
+    assert "While `structure_version` is below 12, skip this paragraph" in flat
+    assert "the deadline **phrase exactly as the owner wrote it**" in flat
+    assert "Never turn it into a date yourself" in flat
+    assert "Never guess between two." in flat
+    assert '"$SCRATCH/actions.payload.json"' in flat   # swept by `scratch sweep`
 
 
 def test_evening_sync_harvest_warnings_go_to_sync_notes():

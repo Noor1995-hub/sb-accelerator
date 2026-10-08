@@ -1,6 +1,26 @@
 {
   "generated_from": "plugin/template/99-workflow-config/reference/ontology.md",
   "objects": {
+    "action": {
+      "enums": {
+        "type": [
+          "action"
+        ]
+      },
+      "keys_present": [
+        "done"
+      ],
+      "optional": [
+        "action",
+        "project",
+        "due",
+        "source",
+        "created"
+      ],
+      "required": [
+        "type"
+      ]
+    },
     "daily-note": {
       "body_sections": [
         "Recap",

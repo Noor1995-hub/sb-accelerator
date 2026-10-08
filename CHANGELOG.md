@@ -15,6 +15,8 @@ delivers them.
 
 ## Unreleased
 
+- **Actions**: every action you write on the daily note (`- [ ]` under **Your actions**, or anywhere on the note) now becomes a row in the new **Actions** table, under Thoughts & ideas in the menu. Open actions are grouped per project, soonest deadline first, with overdue ones flagged. The evening run fills in the project when the meeting or your words make it clear, and the deadline when you wrote one ("Friday", "14/10", "tomorrow") — anything it cannot tell stays empty for you to fill in on the row. Tick **Done** in the table to close one (ticking it on the daily note works too, from the next evening); **New** in the table adds one by hand, or just ask. Needs `/upgrade-vault` (structure 12), which adds the menu entry and keeps the rest of your menu as it is. (#257)
+
 - **Inbox is now Input**: the table shows everything the evening run picks up tonight — files you drop in, and your own notes ticked **Include**. It is empty the morning after; if something could not be processed, the recap says so with a link. Your own notes in **Thoughts & ideas** now have an **Include** tick: the evening run reads the note into its project (and logs any decision in it), then unticks it and stamps the date. The note itself is never changed or moved; **Absorbed** shows them by project. On the daily note, **End of day** is now **Notes** — jot anything there, any time. In the menu, Thoughts & ideas now sits under Daily notes and Input closes the menu. Needs `/upgrade-vault` (structure 11). (#266)
 
 - The assistant's helpers that turn recordings, mail and Teams into notes, and that read your accounts during setup, now run on Sonnet 5.5 instead of Sonnet 5. (#265)

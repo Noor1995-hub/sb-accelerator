@@ -90,10 +90,10 @@ def test_a_vault_behind_the_plugin_gets_one_sync_line(tmp_path):
     from vaultlib import migrate
     root = make_vault(tmp_path)
     clean, _, _ = recap.validate(root, full_payload())
-    (root / "structure-version").write_text("10\n", encoding="utf-8")
+    latest = max(m["module"].TARGET_VERSION for m in migrate.discover())
+    (root / "structure-version").write_text(f"{latest - 1}\n", encoding="utf-8")
     text = recap.render(root, clean, meetings=1, window_label="Friday")
     assert "An update for this vault is waiting (1 step) — ask a consultant to run /upgrade-vault" in text
-    latest = max(m["module"].TARGET_VERSION for m in migrate.discover())
     (root / "structure-version").write_text(f"{latest}\n", encoding="utf-8")
     assert recap.render(root, clean, meetings=1, window_label="Friday") == EXPECTED
 

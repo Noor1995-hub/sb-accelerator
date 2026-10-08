@@ -31,6 +31,7 @@ HARNESS = {
     "decision": {"glob": "30-projects/*/decisions/*.md"},
     "meeting": {"glob": "20-meetings/*.md"},
     "daily-note": {"glob": "60-daily-notes/*.md"},
+    "action": {"glob": "65-actions/*.md"},
 }
 
 
@@ -78,7 +79,7 @@ def build_schemas() -> dict:
 SCHEMAS = build_schemas()
 
 MINIMUMS = {"entity": 3, "project": 4, "person": 8, "meeting": 6, "decision": 6,
-            "daily-note": 3}
+            "daily-note": 3, "action": 4}
 
 
 def parse_frontmatter(path: Path) -> dict:

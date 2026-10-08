@@ -116,14 +116,14 @@ def test_existing_empty_target_is_accepted(tmp_path):
     assert result["obsidian_present"] is True
 
 
-def test_happy_path_records_a_provision_event_for_all_44_shipped_files(tmp_path):
+def test_happy_path_records_a_provision_event_for_all_45_shipped_files(tmp_path):
     target = tmp_path / "vault"
     result = instantiate(target)
     assert result["provenance"] == "99-workflow-config/provenance.json"
     data = provenance.read(target)
     assert data["events"][-1]["event"] == "provision"
     assert data["events"][-1]["structure_version"] == EXPECTED_STRUCTURE_VERSION
-    assert len(data["template_files"]) == 44
+    assert len(data["template_files"]) == 45
 
 
 def test_default_template_root_is_this_plugins_own_template(tmp_path):

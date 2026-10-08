@@ -21,6 +21,7 @@ EXPECTED_MENU = [
     ("Start here", "Start here.md"),
     ("Daily notes", "60-daily-notes/Daily notes.base"),
     ("Thoughts & ideas", "80-thoughts-ideas/Thoughts & ideas.base"),
+    ("Actions", "65-actions/Actions.base"),
     ("Meetings", "20-meetings/Meetings.base"),
     ("Projects", "30-projects/Projects.base"),
     ("People", "50-people/People.base"),
@@ -52,14 +53,14 @@ def test_menu_is_the_shipped_entries_in_order_and_every_target_exists():
         assert (TEMPLATE / path).is_file(), f"menu entry points at a missing file: {path}"
 
 
-def test_menu_matches_what_migration_010_writes():
+def test_menu_matches_what_migration_011_writes():
     """A fresh vault and an upgraded one get the same menu bytes."""
     import importlib.util
     spec = importlib.util.spec_from_file_location(
-        "m010", REPO_ROOT / "plugin" / "migrations" / "010-structure-version-11" / "migrate.py")
-    m010 = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(m010)
-    assert _menu() == m010.shipped_menu()
+        "m011", REPO_ROOT / "plugin" / "migrations" / "011-structure-version-12" / "migrate.py")
+    m011 = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m011)
+    assert _menu() == m011.shipped_menu()
 
 
 def test_notebook_navigator_is_not_shipped():
