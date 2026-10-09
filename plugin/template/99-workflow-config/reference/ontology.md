@@ -541,7 +541,7 @@ A day in the life of a daily note:
 - proposal on track for September submission   ← hand jotting, untouchable
 ```
 
-### Your note — `80-thoughts-ideas/**.md` · Base: `Thoughts & ideas.base`
+### Your note — `80-thoughts-ideas/**.md` · Base: `Thoughts and ideas.base`
 
 The owner's own writing. Not an object the vault creates; the run only reads
 it when asked.
@@ -556,7 +556,7 @@ notes, so nothing compiles from this section. The fields it reads and writes:
   never overwritten.
 - The body is never edited, and the note is never moved or deleted.
 
-### To-do — `65-to-dos/{YYYY-MM-DD}-{slug}.md` · Base: `To Do's.base`
+### To-do — `65-to-dos/{YYYY-MM-DD}-{slug}.md` · Base: `To Dos.base`
 
 Something the owner has to do, followed up in the To Do's table: open ones
 grouped by project, soonest deadline first (#257). The owner only ever sees
@@ -573,13 +573,13 @@ enums:
 
 - **Three ways in, one format.** The evening run turns each new `- [ ]` line
   in a daily note into a to-do note (`actions harvest` → `actions create`);
-  **New** in `To Do's.base` makes an empty one in `65-to-dos/`; a session
+  **New** in `To Dos.base` makes an empty one in `65-to-dos/`; a session
   makes one when the owner asks.
 - `to-do` is the to-do as the owner wrote it, quoted — the To do column.
   A note made with **New** has none; the table shows its file name instead.
 - `project` is one active project slug, or empty. The run fills it when the
   meeting's entity has a single active project or the text names one, and
-  otherwise leaves it for the owner. `To Do's.base` groups on the project's
+  otherwise leaves it for the owner. `To Dos.base` groups on the project's
   name, "Not linked" when empty.
 - `due` is an unquoted ISO date, or empty. The run copies the deadline phrase
   from the owner's words and the CLI resolves it against the daily note's

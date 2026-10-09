@@ -66,6 +66,14 @@ BARE_COMMAND_RE = re.compile(r"(?<![\w/`.])/([a-z][a-z0-9]*(?:-[a-z0-9]+)+)(?![\
 
 SHIPPED_TREES = ("plugin", "fixtures")
 
+# Every path inside the plugin zip (the release asset path E uploads) must
+# pass Cowork's upload check. It refused 0.13.10 with "Zip file contains path
+# with invalid characters" over `To Do's.base` and `Thoughts & ideas.base`;
+# the same zip with only those two renamed went through, spaces and all.
+# Letters, digits, space, dot, underscore and hyphen are what has been seen
+# to upload — anything else is refused here rather than at a client's upload.
+ZIP_SAFE_NAME_RE = re.compile(r"[A-Za-z0-9 ._-]+")
+
 # Root-relative path prefix of the vendored third-party tree. Compared against
 # `path.relative_to(root).parts`, so it holds for the source tree (root = repo)
 # and for a built dist tree (root = the dist directory, which build_dist.py's
@@ -279,8 +287,22 @@ def _scan_config_readme(text: str, rel: Path, shipped: set[str],
     return problems
 
 
+def scan_zip_paths(root: Path, tree: str = "plugin") -> list[str]:
+    """Every file and directory name under `tree` (what goes into the plugin
+    zip) must match ZIP_SAFE_NAME_RE, or the zip will not upload."""
+    base = root / tree
+    if not base.is_dir():
+        return []
+    return [f"{path.relative_to(root).as_posix()}: name has a character a "
+            "plugin zip upload refuses — use letters, digits, space, '.', '_' or '-'"
+            for path in sorted(base.rglob("*"))
+            if "__pycache__" not in path.parts
+            and not ZIP_SAFE_NAME_RE.fullmatch(path.name)]
+
+
 def main(root: Path) -> list[str]:
     return (lint_skills(root)
+            + scan_zip_paths(root)
             + scan_cleanroom(root, load_denylist(root))
             + scan_skill_references(root, shipped_skills(root)))
 

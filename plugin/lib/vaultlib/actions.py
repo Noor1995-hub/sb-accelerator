@@ -2,7 +2,7 @@
 
 The daily note is where an action is written and the archive of the day, so
 it is only ever read. Each new line becomes a note in 65-to-dos/, which is
-what To Do's.base lists, groups by project and sorts by deadline. `harvest`
+what To Dos.base lists, groups by project and sorts by deadline. `harvest`
 says which lines are new (with the meeting they sit under, as evidence for
 the project) and closes a note whose line was ticked since. `create` writes
 the notes: the deadline arrives as the owner's phrase and is resolved here

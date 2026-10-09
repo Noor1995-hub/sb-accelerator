@@ -45,7 +45,7 @@ def test_module_contract():
 
 def test_shipped_menu_is_the_template_menu():
     shipped = json.loads((TEMPLATE / OBS / "bookmarks.json").read_text(encoding="utf-8"))["items"]
-    assert load().shipped_menu() == shipped
+    assert load("012-structure-version-13").rename_paths(load().shipped_menu()) == shipped
 
 
 def test_actions_lands_under_thoughts_and_nothing_else_moves(tmp_path):
@@ -116,14 +116,15 @@ def test_the_whole_chain_lands_on_the_shipped_template(tmp_path):
     for slug in ("009-structure-version-10", "010-structure-version-11"):
         load(slug).apply(root)
     load().apply(root)
+    load("012-structure-version-13").apply(root)
     assert read_items(root) == shipped
 
 
 def test_run_through_the_framework_bumps_to_12(tmp_path):
     root = vault_v11(tmp_path)
     result = migrate.run(root, "2026-10-08", stamp="2026-10-08-120000")
-    assert [a["slug"] for a in result["applied"]] == ["structure-version-12"]
-    assert result["structure_version"] == 12
+    assert [a["slug"] for a in result["applied"]] == ["structure-version-12", "structure-version-13"]
+    assert result["structure_version"] == 13
 
 
 def test_property_types_match_the_template():
