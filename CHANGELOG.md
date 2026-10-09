@@ -15,6 +15,8 @@ delivers them.
 
 ## Unreleased
 
+- Two table files are renamed so the plugin uploads to Cowork as a zip, which refuses some characters in file names ("Zip file contains path with invalid characters"): `To Do's.base` is now `To Dos.base` and `Thoughts & ideas.base` is now `Thoughts and ideas.base`. The menu still says To Do's and Thoughts & ideas, and nothing in your notes changes. Needs `/upgrade-vault` (structure 13), which renames the two files in place, so any column you resized comes along, and points the menu at them. (#PR)
+
 - **Include** on your own notes is always a tick box now. In a vault where no note had been ticked yet, a new note's Include could show up as a text field; the same goes for **Done**, **Keep** and **Dismiss**. Comes with `/upgrade-vault` (structure 12), which adds only what is missing. (#269)
 
 - **To Do's**: every to do you write on the daily note (`- [ ]` under **Your to do's**, formerly **Your actions**, or anywhere on the note) now becomes a row in the new **To Do's** table, under Thoughts & ideas in the menu. Open to do's are grouped per project, soonest deadline first; the **Deadline** column says Overdue (red), Today (amber) or In X days (green). The evening run fills in the project when the meeting or your words make it clear, and the deadline when you wrote one ("Friday", "14/10", "tomorrow") — anything it cannot tell stays empty for you to fill in on the row. Tick **Done** in the table to close one (ticking it on the daily note works too, from the next evening); **New** in the table adds one by hand, or just ask. Needs `/upgrade-vault` (structure 12), which adds the menu entry and keeps the rest of your menu as it is. (#269)

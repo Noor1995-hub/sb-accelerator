@@ -366,3 +366,19 @@ def test_a_file_at_the_vendor_root_itself_is_still_scanned(tmp_path):
     # Problem lines carry the OS-native path (backslashes on Windows CI), so
     # match on the filename and line, not on a slash-joined fragment.
     assert any("README.md:1" in p and "michael" in p.lower() for p in main(root))
+
+
+def test_a_shipped_name_a_zip_upload_refuses_fails(tmp_path):
+    """Cowork refused 0.13.10's zip over `To Do's.base` and `Thoughts & ideas.base`."""
+    root = make_repo(tmp_path)
+    for name in ("To Do's.base", "Thoughts & ideas.base", "Start here.md"):
+        (root / "plugin" / "template" / name).write_text("x\n", encoding="utf-8")
+    problems = main(root)
+    assert len(problems) == 2
+    assert any("To Do's.base" in p for p in problems)
+    assert any("Thoughts & ideas.base" in p for p in problems)
+
+
+def test_the_real_plugin_has_only_zip_safe_names():
+    from lint_plugin import scan_zip_paths
+    assert scan_zip_paths(REPO_ROOT) == []

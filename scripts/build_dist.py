@@ -233,10 +233,11 @@ def verify_tree(out: Path, repo_root: Path) -> list[str]:
     Imports lint_plugin here, not at module scope: lint_plugin imports
     PyYAML, and notes() (below) must keep working in a job that never
     installs it — only the lint path needs it."""
-    from lint_plugin import lint_skills, load_denylist, scan_cleanroom
+    from lint_plugin import lint_skills, load_denylist, scan_cleanroom, scan_zip_paths
 
     problems: list[str] = []
     problems.extend(lint_skills(out))
+    problems.extend(scan_zip_paths(out))
     problems.extend(scan_cleanroom(out, load_denylist(repo_root), trees=(".",)))
     problems.extend(_root_file_scan(out))
     problems.extend(_scan_dev_leakage(out))

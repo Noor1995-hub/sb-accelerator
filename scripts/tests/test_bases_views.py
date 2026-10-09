@@ -116,8 +116,8 @@ EXPECTED = [
 
     # #257. "Book the Phase 1 site visit" is a note made with New: no action
     # text and an empty Done, which `done != true` still counts as open.
-    ("65-to-dos/To Do's.base", "Open", ALL_ACTIONS - DONE_ACTIONS),
-    ("65-to-dos/To Do's.base", "Done", DONE_ACTIONS),
+    ("65-to-dos/To Dos.base", "Open", ALL_ACTIONS - DONE_ACTIONS),
+    ("65-to-dos/To Dos.base", "Done", DONE_ACTIONS),
 ]
 
 BASE_FILES = sorted({base for base, _, _ in EXPECTED})
@@ -189,7 +189,7 @@ DEFAULT_VIEWS = [
     # People opens A–Z (#242), not on a review queue.
     ("50-people/People.base", "All"),
     # What is still to do, not the record of what was done (#257).
-    ("65-to-dos/To Do's.base", "Open"),
+    ("65-to-dos/To Dos.base", "Open"),
 ]
 
 
@@ -213,8 +213,8 @@ REQUIRED_COLUMNS = [
     ("20-meetings/Meetings.base", "To review", "conflicts-with"),
     # Ticking Done is the close-out (#257); the Project column is what gives
     # a note made with New an empty project to fill in.
-    ("65-to-dos/To Do's.base", "Open", "done"),
-    ("65-to-dos/To Do's.base", "Open", "project"),
+    ("65-to-dos/To Dos.base", "Open", "done"),
+    ("65-to-dos/To Dos.base", "Open", "project"),
 ]
 
 

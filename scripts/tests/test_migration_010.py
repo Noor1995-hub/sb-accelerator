@@ -55,9 +55,11 @@ def test_module_contract():
 
 
 def test_shipped_menu_is_the_template_menu_before_actions():
-    """011 (#257) added To Do's to the template menu; everything else is 010's."""
+    """011 (#257) added To Do's to the template menu and 012 renamed two of
+    its files; everything else is 010's."""
     shipped = json.loads((TEMPLATE / OBS / "bookmarks.json").read_text(encoding="utf-8"))["items"]
-    assert load().shipped_menu() == [i for i in shipped if i.get("title") != "To Do's"]
+    renamed = load("012-structure-version-13").rename_paths(load().shipped_menu())
+    assert renamed == [i for i in shipped if i.get("title") != "To Do's"]
 
 
 def test_apply_lands_the_new_menu_keeps_the_owners_own_and_removes_inbox_base(tmp_path):
@@ -120,11 +122,12 @@ def test_the_whole_chain_lands_on_the_shipped_template(tmp_path):
     load("009-structure-version-10").apply(root)
     load().apply(root)
     load("011-structure-version-12").apply(root)
+    load("012-structure-version-13").apply(root)
     assert read_items(root) == shipped
 
 
 def test_run_through_the_framework_bumps_to_12(tmp_path):
     root = vault_v10(tmp_path)
     result = migrate.run(root, "2026-10-06", stamp="2026-10-06-120000")
-    assert [a["slug"] for a in result["applied"]] == ["structure-version-11", "structure-version-12"]
-    assert result["structure_version"] == 12
+    assert [a["slug"] for a in result["applied"]] == ["structure-version-11", "structure-version-12", "structure-version-13"]
+    assert result["structure_version"] == 13

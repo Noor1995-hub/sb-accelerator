@@ -20,8 +20,8 @@ CONFIG = TEMPLATE / "99-workflow-config" / "config.json"
 EXPECTED_MENU = [
     ("Start here", "Start here.md"),
     ("Daily notes", "60-daily-notes/Daily notes.base"),
-    ("Thoughts & ideas", "80-thoughts-ideas/Thoughts & ideas.base"),
-    ("To Do's", "65-to-dos/To Do's.base"),
+    ("Thoughts & ideas", "80-thoughts-ideas/Thoughts and ideas.base"),
+    ("To Do's", "65-to-dos/To Dos.base"),
     ("Meetings", "20-meetings/Meetings.base"),
     ("Projects", "30-projects/Projects.base"),
     ("People", "50-people/People.base"),
@@ -53,14 +53,17 @@ def test_menu_is_the_shipped_entries_in_order_and_every_target_exists():
         assert (TEMPLATE / path).is_file(), f"menu entry points at a missing file: {path}"
 
 
-def test_menu_matches_what_migration_011_writes():
+def test_menu_matches_what_migrations_011_and_012_write():
     """A fresh vault and an upgraded one get the same menu bytes."""
     import importlib.util
-    spec = importlib.util.spec_from_file_location(
-        "m011", REPO_ROOT / "plugin" / "migrations" / "011-structure-version-12" / "migrate.py")
-    m011 = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(m011)
-    assert _menu() == m011.shipped_menu()
+    modules = {}
+    for slug in ("011-structure-version-12", "012-structure-version-13"):
+        spec = importlib.util.spec_from_file_location(
+            slug, REPO_ROOT / "plugin" / "migrations" / slug / "migrate.py")
+        modules[slug] = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(modules[slug])
+    m011, m012 = modules.values()
+    assert _menu() == m012.rename_paths(m011.shipped_menu())
 
 
 def test_notebook_navigator_is_not_shipped():
@@ -428,7 +431,7 @@ def test_input_shows_dropped_files_and_notes_ticked_include():
 
 def test_thoughts_and_ideas_has_yours_and_absorbed_views():
     import yaml
-    base = yaml.safe_load((TEMPLATE / "80-thoughts-ideas" / "Thoughts & ideas.base")
+    base = yaml.safe_load((TEMPLATE / "80-thoughts-ideas" / "Thoughts and ideas.base")
                           .read_text(encoding="utf-8"))
     views = {v["name"]: v for v in base["views"]}
     assert list(views) == ["Yours", "Absorbed"]
