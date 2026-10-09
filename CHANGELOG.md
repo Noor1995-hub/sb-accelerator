@@ -15,7 +15,7 @@ delivers them.
 
 ## Unreleased
 
-- Two table files are renamed so the plugin uploads to Cowork as a zip, which refuses some characters in file names ("Zip file contains path with invalid characters"): `To Do's.base` is now `To Dos.base` and `Thoughts & ideas.base` is now `Thoughts and ideas.base`. The menu still says To Do's and Thoughts & ideas, and nothing in your notes changes. Needs `/upgrade-vault` (structure 13), which renames the two files in place, so any column you resized comes along, and points the menu at them. (#PR)
+- Two table files are renamed so the plugin uploads to Cowork as a zip, which refuses some characters in file names ("Zip file contains path with invalid characters"): `To Do's.base` is now `To Dos.base` and `Thoughts & ideas.base` is now `Thoughts and ideas.base`. The menu still says To Do's and Thoughts & ideas, and nothing in your notes changes. Needs `/upgrade-vault` (structure 13), which renames the two files in place, so any column you resized comes along, and points the menu at them. (#270)
 
 - **Include** on your own notes is always a tick box now. In a vault where no note had been ticked yet, a new note's Include could show up as a text field; the same goes for **Done**, **Keep** and **Dismiss**. Comes with `/upgrade-vault` (structure 12), which adds only what is missing. (#269)
 
