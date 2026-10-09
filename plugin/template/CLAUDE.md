@@ -29,6 +29,7 @@ questions, and browses.
 | `40-entities/{slug}/` | Dossiers on organizations you work with — `dossier.md` per entity |
 | `50-people/` | People you work with — one note per person |
 | `60-daily-notes/` | Daily canvas; each day's note is written the evening before |
+| `65-to-dos/` | To do's — one note per to do, worked in the To Do's table |
 | `70-resources/` | Guides, source material, attachments |
 | `80-thoughts-ideas/` | The owner's own notes; read by the evening run when ticked `include` |
 | `90-archive/` | Completed and historical items |
@@ -40,7 +41,7 @@ questions, and browses.
 
 ## Object Model
 
-Seven object types: **Meeting · Project · Person · Decision · Entity · Daily note · Message log**.
+Eight object types: **Meeting · Project · Person · Decision · Entity · Daily note · To-do · Message log**.
 Relationships live in YAML frontmatter (wikilinks and slug joins), not folder
 hierarchy; curation happens in the `.base` views, not by browsing folders.
 The authoritative schemas, enums, and join keys are in
@@ -73,6 +74,19 @@ unattended overnight (`false`). Decisions.base's **To review** view is the
 queue; tick **Keep** there once you have read one, or **Dismiss** when the
 capture was not a real decision (`archived: true`; the file stays, and it is
 never captured again).
+
+### To Do's
+
+Every to do the owner writes as `- [ ]` in a daily note becomes a note in
+`65-to-dos/` at the evening run, with the project and deadline filled in
+where the run can tell, and empty where it cannot. The **To Do's** table
+shows the open ones per project, soonest deadline first; ticking **Done**
+there closes one. Call them "to do's" to the owner, never "actions".
+
+When the owner asks you to add a to do in a session, write
+`65-to-dos/{YYYY-MM-DD}-{kebab-title}.md` with the frontmatter in the
+ontology (`type: to-do`, `to-do`, `project`, `due`, `done: false`,
+`created`) and say the deadline back as a date, so they can correct it.
 
 ### Heavy Assets
 

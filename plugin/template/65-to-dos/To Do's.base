@@ -1,0 +1,77 @@
+filters:
+  and:
+    - file.inFolder("65-to-dos")
+    - file.ext == "md"
+    - type == "to-do"
+formulas:
+  # The to-do as written; a note made with "New" shows its file name.
+  todo: link(file.path, if(note["to-do"], note["to-do"], file.basename))
+  # Names, not slugs (#240): the project's name, or "Not linked".
+  project_group: if(project, if(file("30-projects/" + project + "/index.md"), file("30-projects/" + project + "/index.md").properties["project-name"], project), "Not linked")
+  # Whole days to the deadline: a helper for Deadline, never a column.
+  # Rounded, because a daylight-saving change makes the raw value 22.04.
+  days_left: if(due.isEmpty(), "", (date(due) - today()).days.round())
+  # How close the deadline is, at a glance (#257), in words the CSS snippet
+  # colours: red when late, amber today, green ahead. Not `!due`: that reads
+  # a missing deadline as Today.
+  deadline: if(due.isEmpty(), "", html("<span class='sb-deadline sb-deadline-" + if(formula.days_left < 0, "late", if(formula.days_left == 0, "today", "ahead")) + "'>" + if(formula.days_left < 0, "Overdue", if(formula.days_left == 0, "Today", if(formula.days_left == 1, "In 1 day", if(formula.days_left <= 5, "In " + formula.days_left + " days", "In 5+ days")))) + "</span>"))
+properties:
+  formula.todo:
+    displayName: To do
+  formula.project_group:
+    displayName: Project
+  formula.deadline:
+    displayName: Deadline
+  note.done:
+    displayName: Done
+  note.due:
+    displayName: Due
+  note.project:
+    displayName: Project
+  note.source:
+    displayName: From
+  file.mtime:
+    displayName: Last edited
+views:
+  - type: table
+    name: Open
+    # Ticking Done here is the close-out: the row leaves at once (#257).
+    filters:
+      and:
+        - done != true
+    groupBy:
+      property: formula.project_group
+      direction: ASC
+    # The Project column is also what gives a note made with "New" here an
+    # empty project property to fill in. Empty deadlines sort last.
+    order:
+      - formula.todo
+      - done
+      - due
+      - formula.deadline
+      - project
+      - source
+    sort:
+      - property: note.due
+        direction: ASC
+    columnSize:
+      formula.todo: 360
+  - type: table
+    name: Done
+    filters:
+      and:
+        - done == true
+    groupBy:
+      property: formula.project_group
+      direction: ASC
+    order:
+      - formula.todo
+      - done
+      - due
+      - source
+      - file.mtime
+    sort:
+      - property: file.mtime
+        direction: DESC
+    columnSize:
+      formula.todo: 360

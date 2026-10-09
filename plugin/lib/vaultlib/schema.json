@@ -261,6 +261,26 @@
         "created",
         "last-updated"
       ]
+    },
+    "to-do": {
+      "enums": {
+        "type": [
+          "to-do"
+        ]
+      },
+      "keys_present": [
+        "done"
+      ],
+      "optional": [
+        "to-do",
+        "project",
+        "due",
+        "source",
+        "created"
+      ],
+      "required": [
+        "type"
+      ]
     }
   }
 }

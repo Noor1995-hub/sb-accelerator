@@ -141,5 +141,5 @@ def test_run_through_the_framework_bumps_to_4(tmp_path):
     (root / "20-meetings").mkdir()
     result = migrate.run(root, "2026-10-01", stamp="2026-10-01-120000")
     assert [a["slug"] for a in result["applied"]][:1] == ["structure-version-4"]
-    assert result["structure_version"] == 11
-    assert (root / "structure-version").read_text(encoding="utf-8").strip() == "11"
+    assert result["structure_version"] == 12
+    assert (root / "structure-version").read_text(encoding="utf-8").strip() == "12"

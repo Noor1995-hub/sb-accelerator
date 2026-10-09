@@ -37,7 +37,7 @@ _EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 _WIKILINK_RE = re.compile(r"\[\[")
 _VAULT_PATH_RE = re.compile(
     r"\b(?:10-inbox|20-meetings|30-projects|40-entities|50-people|"
-    r"60-daily-notes|70-resources|80-thoughts-ideas|90-archive|95-private)/\S+")
+    r"60-daily-notes|65-to-dos|70-resources|80-thoughts-ideas|90-archive|95-private)/\S+")
 _MIN_TERM_LEN = 4   # "Jo" as a substring would block the word "major"
 
 

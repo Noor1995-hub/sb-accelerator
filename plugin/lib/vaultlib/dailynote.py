@@ -25,7 +25,7 @@ PREP_HEADING = "#### Prep"
 # "Your" says whose they are (#238); the reader finds them by position under
 # the meeting heading, so notes written with the old "#### Notes" still read.
 NOTES_BLOCK = "#### Your notes\n- "
-ACTIONS_BLOCK = "#### Your actions\n- [ ] "
+ACTIONS_BLOCK = "#### Your to do's\n- [ ] "
 # The live review queues, at the top of every note the evening run writes
 # (#238). Embedded Bases views, so ticking Keep or Dismiss here works and the
 # rows leave at once; the CSS snippet collapses an empty table, and the whole
@@ -752,6 +752,7 @@ def read(root: Path, date_iso_raw) -> dict:
     meetings_note = None
     day_notes: List[str] = []
     other_lines: List[str] = []
+    loose_actions: List[dict] = []
     current: Optional[dict] = None
     section = ""
     sub = ""
@@ -803,6 +804,11 @@ def read(root: Path, date_iso_raw) -> dict:
                 current["actions"].append({"text": text_value, "done": task.group(1) != " "})
                 current["jottings"].append(text_value)
             continue
+        if task and task.group(2).strip():
+            # An action outside any meeting block (#257). The line still
+            # falls through, so the notes it was part of read as before.
+            loose_actions.append({"text": task.group(2).strip(),
+                                  "done": task.group(1) != " "})
         content = stripped[2:].strip() if stripped.startswith("- ") else (
             "" if stripped == "-" else stripped)
         if not content:
@@ -822,5 +828,5 @@ def read(root: Path, date_iso_raw) -> dict:
         "recap_inputs": recap_inputs, "meetings": meetings,
         "meetings_note": meetings_note,
         "notes": day_notes, "end_of_day": day_notes, "other_lines": other_lines,
-        "warnings": warnings,
+        "loose_actions": loose_actions, "warnings": warnings,
     }

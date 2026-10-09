@@ -171,7 +171,7 @@ def test_the_egress_callout_names_every_command_that_can_transmit():
 def test_start_here_names_the_menu_in_its_order():
     text = START_HERE.read_text(encoding="utf-8")
     line = next(l for l in text.splitlines() if l.startswith("One menu"))
-    order = ["**Daily notes**", "**Thoughts & ideas**", "**Meetings**", "**Projects**",
+    order = ["**Daily notes**", "**Thoughts & ideas**", "**To Do's**", "**Meetings**", "**Projects**",
              "**People**", "**Entities**", "**Decisions**", "**Input**", "**Library**"]
     positions = [line.index(entry) for entry in order]
     assert positions == sorted(positions), "Start here lists the menu out of order"

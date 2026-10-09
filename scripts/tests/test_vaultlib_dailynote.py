@@ -380,6 +380,25 @@ def test_read_extracts_regions_meetings_and_jottings(tmp_path):
     assert result["warnings"] == []
 
 
+def test_read_returns_actions_written_outside_a_meeting(tmp_path):
+    """#257: a task under ## Notes (or anywhere outside a meeting block) is an
+    action too. The meeting's own actions stay where they were."""
+    root = make_vault(tmp_path)
+    (root / "60-daily-notes" / "2026-06-12.md").write_text(
+        "---\ndate: 2026-06-12\ntype: daily-note\n---\n\n"
+        "## Meetings\n### 10:00 — Sync · [[acme-industries]]\n"
+        "#### Your to do's\n- [ ] send the deck Friday\n- [x] book the room\n\n"
+        "## Notes\n- a thought\n- [ ] call the bank\n- [x] pay the invoice\n"
+        "- [ ] \n", encoding="utf-8")
+    result = dailynote.read(root, "2026-06-12")
+    assert result["meetings"][0]["actions"] == [
+        {"text": "send the deck Friday", "done": False},
+        {"text": "book the room", "done": True}]
+    assert result["loose_actions"] == [
+        {"text": "call the bank", "done": False},
+        {"text": "pay the invoice", "done": True}]
+
+
 def test_read_surfaces_the_no_meetings_prep_region(tmp_path):
     """A prep region with no meeting heading above it is the no-meetings line
     (or the calendar-unavailable note) — it comes back rather than vanishing."""
@@ -677,7 +696,7 @@ def test_fresh_fixture_is_exactly_what_daily_note_write_renders(tmp_path):
     # affordance under them and never writes into again. Everything else in
     # the note is machine-generated and must match byte-for-byte.
     jot_headings = {"#### notes", "#### actions", "#### your notes",
-                    "#### your actions", "## notes", "## end of day"}
+                    "#### your actions", "#### your to do's", "## notes", "## end of day"}
 
     def strip_hand_jottings(text: str) -> str:
         """Blank the vault owner's bullets, keeping every other byte.
@@ -1377,7 +1396,7 @@ type: daily-note
 #### Your notes
 - 
 
-#### Your actions
+#### Your to do's
 - [ ] 
 
 ### 14:00 — Deep dive — vendor scoring
@@ -1391,7 +1410,7 @@ type: daily-note
 #### Your notes
 - 
 
-#### Your actions
+#### Your to do's
 - [ ] 
 
 ## Notes
@@ -1480,9 +1499,9 @@ def test_read_splits_notes_and_actions_under_a_v2_meeting(tmp_path):
     dailynote.write(root, v2_payload())
     note = root / "60-daily-notes" / "2026-06-15.md"
     text = note.read_text(encoding="utf-8")
-    filled = text.replace("#### Your notes\n- \n\n#### Your actions\n- [ ] \n\n### 14:00",
+    filled = text.replace("#### Your notes\n- \n\n#### Your to do's\n- [ ] \n\n### 14:00",
                           "#### Your notes\n- shortlist looks final\n- Sam wants a demo\n\n"
-                          "#### Your actions\n- [ ] send the scoring sheet\n- [x] book the demo\n\n### 14:00")
+                          "#### Your to do's\n- [ ] send the scoring sheet\n- [x] book the demo\n\n### 14:00")
     assert filled != text
     text = filled
     note.write_text(text, encoding="utf-8")
@@ -1583,7 +1602,7 @@ def test_old_notes_headings_still_read_as_notes_and_actions(tmp_path):
     root = v2_vault(tmp_path)
     dailynote.write(root, v2_payload())
     note = root / "60-daily-notes" / "2026-06-15.md"
-    text = note.read_text(encoding="utf-8").replace("#### Your notes\n- \n\n#### Your actions\n- [ ] \n\n### 14:00",
+    text = note.read_text(encoding="utf-8").replace("#### Your notes\n- \n\n#### Your to do's\n- [ ] \n\n### 14:00",
                                                     "#### Notes\n- old style\n\n#### Actions\n- [ ] old task\n\n### 14:00")
     note.write_text(text, encoding="utf-8")
     first = dailynote.read(root, "2026-06-15")["meetings"][0]
