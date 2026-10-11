@@ -591,13 +591,46 @@ python3 "$VAULTLIB" dates window --vault "$VAULT" --start 2026-08-20T16:42 --tim
 Pass its `utc_from`/`utc_to` values as the tool's
 `afterDateTime`/`beforeDateTime`. The window around one recording is narrow,
 but if the response carries `nextOffset`, page through (`offset` set to it)
-before scoring. Score candidates: title-keyword overlap and
-attendee-name matches beat same-day-only. A match pre-fills
-`calendar-subject`, `organizer`, `location`, `recurring`, `attendee-emails`.
+before scoring. Write every page you got to `$SCRATCH/calendar.<id>.json`
+as returned, then let the CLI apply the clock rule — never judge "one event
+starting a minute apart" by eye:
+
+```bash
+python3 "$VAULTLIB" m365 calendar-match --vault "$VAULT" --events "$SCRATCH/calendar.<id>.json" --start 2026-08-20T16:42 --duration-min 21 --timezone <tz>
+```
+
+(`--start` is the recording's owner-local start, `--duration-min` its
+length in minutes — the plaud listing's `duration` over 60000, rounded.) It answers
+`match`:
+
+- `single` — exactly one live event overlaps the recording and starts
+  within 5 minutes of it. **That is a match even with zero title or
+  attendee overlap**: a Plaud auto-title shares no word with the meeting's
+  subject, and its speakers are `Speaker 2` / `Speaker 4`, so neither
+  signal exists to be found (an 11:01 call against an 11:00 weekly was
+  once stamped `no-calendar-match` for exactly this reason). Stamp
+  `calendar_match: true` with `calendar-match-medium` — never `-high`: the
+  clock corroborates *when*, not *what*.
+- `ambiguous` — two or more events share the slot. Never auto-match on
+  time. Fall back to scoring: title-keyword overlap and attendee-name
+  matches beat same-day-only; a clear winner is `calendar-match-medium`
+  (or `-high` when the title and attendees both agree), a tie is a
+  no-match.
+- `none` — nothing overlaps, or the one event that does starts too far
+  from the recording to say it is the meeting. Stamp `no-calendar-match`.
+
+A match pre-fills `calendar-subject`, `organizer`, `location`, `recurring`,
+`attendee-emails` from the `single` result's `event` (or the scored
+winner). Merge the calendar's attendees into the meeting's: a `single`
+result's `known_attendees` are person slugs already in the vault, so add
+them to `attendees` beside the vault owner. Its `unknown_attendee_emails`
+are bare addresses the listing gives no name for — keep them in
+`attendee-emails`, and never invent a `person ensure --name` for one; say
+in the debrief how many were left unresolved.
 
 **Stamp honestly — these are different facts, never collapse them:**
 
-- searched, nothing matched → reason `no-calendar-match`
+- searched, nothing matched (`none`, or `ambiguous` with no winner) → reason `no-calendar-match`
 - tool missing or errored → reason `calendar-tool-unavailable`
 
 (Upstream, collapsing them hid a six-day connector outage.)
@@ -681,6 +714,9 @@ per group (vocabulary: ontology §Meeting):
 | `high` | calendar-match-high AND a strong link (`entity-domain-match` or `calendar-subject-match`) AND `all-attendees-known` |
 | `medium` | calendar match high or medium AND any project link AND at most one new attendee — but not qualifying for high |
 | `low` | everything else |
+
+A time-only calendar match (step 2's `single`) stamps `calendar-match-medium`
+and so can never reach `high`, whatever else lines up.
 
 A **capture** (`type: note`) is rated on a different axis, because it has no
 calendar to match: `medium` when the project link is `entity-domain-match`

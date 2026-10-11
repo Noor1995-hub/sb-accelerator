@@ -373,6 +373,103 @@ def agenda(events, *, timezone: Optional[str] = None,
     return {"date": date, "meetings": [item[2] for item in keyed], "dropped": dropped}
 
 
+# A recording's start and its calendar event's start agree to within this many
+# minutes when the owner pressed record at the top of the meeting. Plaud and
+# a human both run a few minutes either side of the scheduled clock.
+START_MATCH_MINUTES = 5
+
+
+def calendar_match(events, *, start_local: str, duration_min: int = 0,
+                   timezone: Optional[str] = None,
+                   utc_offset: Optional[str] = None,
+                   address_book: Optional[dict] = None) -> dict:
+    """The time-only calendar match for one recording: the deterministic
+    half of /sync-recordings step 2.
+
+    Title keywords and attendee names are the model's judgment, and a
+    recording whose auto-title shares no word with its event and whose
+    speakers are `Speaker 2` / `Speaker 4` gives that judgment nothing to
+    hold (2026-10-09: an 11:01 call against an 11:00 weekly was stamped
+    `no-calendar-match`). When the clock alone is unambiguous it is enough.
+
+    The slot is every live event (not cancelled, not all-day) that overlaps
+    the recording's own span. Exactly one, starting within
+    `START_MATCH_MINUTES` of the recording start (either side), is a
+    `single` match. Two or more is `ambiguous` — never auto-matched on time,
+    the caller keeps its keyword/attendee scoring. None is `none`. A single
+    overlapping event that starts further away than the tolerance is also
+    `none`: a bare overlap says someone was in a meeting, not which one.
+
+    The listing carries attendees as bare addresses, so a match also returns
+    `known_attendees` — the person slugs whose note already holds one of
+    those addresses (`address_book`: lowercased email -> slug) — and
+    `unknown_attendee_emails` for the rest, which the caller cannot turn
+    into a person note without a name it does not have.
+    """
+    if not isinstance(events, list):
+        raise M365Error("--events must hold a JSON array of calendar-search results")
+    if duration_min < 0:
+        raise M365Error("--duration-min must be >= 0")
+    try:
+        local, had_time = dates._parse_local(start_local)
+        offset_minutes, _ = dates.resolve_offset_minutes(local, timezone, utc_offset)
+    except dates.DatesError as exc:
+        raise M365Error(str(exc)) from exc
+    if not had_time:
+        raise M365Error("--start must carry a time (YYYY-MM-DDTHH:MM)")
+    rec_start = local - timedelta(minutes=offset_minutes)
+    rec_end = rec_start + timedelta(minutes=duration_min)
+    tolerance = timedelta(minutes=START_MATCH_MINUTES)
+    slot = []
+    for event in events:
+        if not isinstance(event, dict):
+            raise M365Error(
+                f"--events entries must be objects, got {type(event).__name__}")
+        if not (event.get("start") or {}).get("dateTime"):
+            continue
+        if event.get("isCancelled") or event.get("isAllDay"):
+            continue
+        ev_start = _event_start(event)
+        ev_end = _event_end(event) or ev_start
+        # Overlap, with the tolerance letting a recording that began a hair
+        # before a meeting (or after it ended) still count as in its slot.
+        if ev_start < rec_end + tolerance and ev_end > rec_start - tolerance:
+            slot.append((ev_start, event))
+    slot.sort(key=lambda item: item[0])
+    result = {"slot_size": len(slot), "tolerance_min": START_MATCH_MINUTES}
+    if len(slot) == 1 and abs(slot[0][0] - rec_start) <= tolerance:
+        ev_start, event = slot[0]
+        local_ev, _ = dates.utc_to_local(ev_start, timezone, utc_offset)
+        book = address_book or {}
+        known, unknown = [], []
+        for attendee in event.get("attendees") or []:
+            address = str(attendee.get("address") if isinstance(attendee, dict)
+                          else attendee or "").strip().casefold()
+            if "@" not in address:
+                continue
+            slug = book.get(address)
+            if slug and slug not in known:
+                known.append(slug)
+            elif not slug and address not in unknown:
+                unknown.append(address)
+        result.update(match="single", known_attendees=known,
+                      unknown_attendee_emails=unknown, event={
+            "subject": str(event.get("subject") or "").strip(),
+            "organizer": event.get("organizer"),
+            "location": event.get("location"),
+            "attendees": (list(event["attendees"])
+                          if isinstance(event.get("attendees"), list) else []),
+            "recurring": bool(event.get("recurrence")),
+            "start_local": local_ev.strftime("%Y-%m-%dT%H:%M"),
+            "start_offset_min": round((ev_start - rec_start).total_seconds() / 60),
+            "id": event.get("id"),
+            "uri": event.get("uri"),
+        })
+        return result
+    result["match"] = "ambiguous" if len(slot) > 1 else "none"
+    return result
+
+
 def ids(events, *, timezone: Optional[str] = None,
        utc_offset: Optional[str] = None) -> dict:
     """Batch id derivation over event reads (the trimmed event file — id,
