@@ -1,7 +1,7 @@
 ---
 name: sync-worker-m365
 description: Per-recording sync worker for M365 recordings, dispatched by /sync-recordings step 6 with a full briefing. Not for direct invocation — without a briefing it has nothing to act on.
-model: sonnet
+model: claude-sonnet-5-5
 color: cyan
 disallowedTools: Agent, Workflow, WebFetch, WebSearch, NotebookEdit, Skill, SlashCommand, TodoWrite, Artifact, ListAgents, ReportFindings, ShareOnboardingGuide, Monitor, SendMessage, PushNotification, RemoteTrigger, TaskStop, CronCreate, CronDelete, CronList
 ---

@@ -20,20 +20,21 @@ CONFIG = TEMPLATE / "99-workflow-config" / "config.json"
 EXPECTED_MENU = [
     ("Start here", "Start here.md"),
     ("Daily notes", "60-daily-notes/Daily notes.base"),
-    ("Inbox", "99-workflow-config/views/Inbox.base"),
+    ("Thoughts & ideas", "80-thoughts-ideas/Thoughts and ideas.base"),
+    ("To Do's", "65-to-dos/To Dos.base"),
     ("Meetings", "20-meetings/Meetings.base"),
     ("Projects", "30-projects/Projects.base"),
     ("People", "50-people/People.base"),
     ("Entities", "40-entities/Entities.base"),
     ("Decisions", "30-projects/Decisions.base"),
-    ("Thoughts & ideas", "80-thoughts-ideas/Thoughts & ideas.base"),
+    ("Input", "99-workflow-config/views/Input.base"),
 ]
 EXPECTED_LIBRARY = [
+    ("Recent", "99-workflow-config/views/Recent.base"),
     ("Resources", "99-workflow-config/views/Resources.base"),
     ("Heavy assets", "99-workflow-config/views/Heavy assets.base"),
-    ("Archive", "99-workflow-config/views/Archive.base"),
     ("Private", "99-workflow-config/views/Private.base"),
-    ("Recent", "99-workflow-config/views/Recent.base"),
+    ("Archive", "99-workflow-config/views/Archive.base"),
 ]
 
 
@@ -52,14 +53,17 @@ def test_menu_is_the_shipped_entries_in_order_and_every_target_exists():
         assert (TEMPLATE / path).is_file(), f"menu entry points at a missing file: {path}"
 
 
-def test_menu_matches_what_migration_009_writes():
+def test_menu_matches_what_migrations_011_and_012_write():
     """A fresh vault and an upgraded one get the same menu bytes."""
     import importlib.util
-    spec = importlib.util.spec_from_file_location(
-        "m009", REPO_ROOT / "plugin" / "migrations" / "009-structure-version-10" / "migrate.py")
-    m009 = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(m009)
-    assert _menu() == m009.shipped_menu()
+    modules = {}
+    for slug in ("011-structure-version-12", "012-structure-version-13"):
+        spec = importlib.util.spec_from_file_location(
+            slug, REPO_ROOT / "plugin" / "migrations" / slug / "migrate.py")
+        modules[slug] = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(modules[slug])
+    m011, m012 = modules.values()
+    assert _menu() == m012.rename_paths(m011.shipped_menu())
 
 
 def test_notebook_navigator_is_not_shipped():
@@ -411,3 +415,37 @@ def test_entities_table_keeps_teams_under_their_parent_without_headings():
         assert view["sort"][:2] == [{"property": "formula.group", "direction": "ASC"},
                                     {"property": "formula.team-order", "direction": "ASC"}]
         assert view["order"][1:3] == ["formula.name", "formula.part-of"]
+
+def test_input_shows_dropped_files_and_notes_ticked_include():
+    import yaml
+    base = yaml.safe_load((TEMPLATE / "99-workflow-config" / "views" / "Input.base")
+                          .read_text(encoding="utf-8"))
+    branches = base["filters"]["or"]
+    flat = [" ".join(b["and"]) for b in branches]
+    assert any('file.inFolder("10-inbox")' in f and 'file.name != "README"' in f for f in flat)
+    assert any('file.inFolder("80-thoughts-ideas")' in f and "include == true" in f
+               and 'file.ext == "md"' in f for f in flat)
+    assert [v["name"] for v in base["views"]] == ["Tonight"]
+    assert base["properties"]["formula.item"]["displayName"] == "Picked up tonight"
+
+
+def test_thoughts_and_ideas_has_yours_and_absorbed_views():
+    import yaml
+    base = yaml.safe_load((TEMPLATE / "80-thoughts-ideas" / "Thoughts and ideas.base")
+                          .read_text(encoding="utf-8"))
+    views = {v["name"]: v for v in base["views"]}
+    assert list(views) == ["Yours", "Absorbed"]
+    assert "include" in views["Yours"]["order"]
+    # A new note made from the table starts with an empty projects property:
+    # Bases pre-fills the note properties the view shows as columns.
+    assert "projects" in views["Yours"]["order"]
+    assert base["properties"]["note.projects"]["displayName"] == "Project"
+    for name in ("Yours", "Absorbed"):
+        assert views[name]["groupBy"] == {"property": "formula.project_group", "direction": "ASC"}
+    assert base["properties"]["note.include"]["displayName"] == "Include"
+
+
+def test_no_owner_facing_template_text_calls_it_the_inbox():
+    for rel in ["Start here.md", "How it works.md", "10-inbox/README.md"]:
+        text = (TEMPLATE / rel).read_text(encoding="utf-8")
+        assert "**Inbox**" not in text and "# Inbox" not in text, rel

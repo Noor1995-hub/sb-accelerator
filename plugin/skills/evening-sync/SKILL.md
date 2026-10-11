@@ -112,7 +112,7 @@ days, you are re-introducing the bug `dates plan` exists to prevent.
 The vault owner's **person slug** is `owner` from the config — a slug,
 used as-is. Stage 3 needs it.
 
-## Stage 2 — Harvest (read-only)
+## Stage 2 — Harvest (read-only, except assigning a note's empty projects and recording actions)
 
 ```bash
 python3 "$VAULTLIB" daily-note read --vault "$VAULT" --date <recap_from>
@@ -122,10 +122,71 @@ python3 "$VAULTLIB" daily-note read --vault "$VAULT" --date <recap_from>
 collect, per meeting, `notes` (the owner's bullets under `#### Your notes`
 — `#### Notes` on notes written before 0.12.11 — or bullets directly under
 the heading on a note written before v2) and `actions` (`{text, done}` from
-the `- [ ]` / `- [x]` list under `#### Your actions`), plus the `end_of_day` bullets. All of it is context for the
-recap (stage 6) and decision candidates (stage 4); an action is a jotting
-the owner marked as a task, nothing routes it anywhere yet. The note itself
-is the archive of the day — **never modify it**.
+the `- [ ]` / `- [x]` list under `#### Your to do's`), plus the `notes` bullets (the day's `## Notes` section — `## End of day` on notes written before structure 11; the CLI reads both). All of it is context for the
+recap (stage 6) and decision candidates (stage 4). Each `- [ ]` line is also
+followed up in the To Do's table — see **To Do's** below. The note itself is
+the archive of the day — **never modify it**.
+
+**Your notes ticked Include.** Run `python3 "$VAULTLIB" migrate status --vault "$VAULT"`.
+While `structure_version` is below 11, skip this paragraph — the vault has no
+Include yet. Otherwise:
+
+```bash
+python3 "$VAULTLIB" notes harvest --vault "$VAULT"
+```
+
+Each listed note with a `body` is input tonight, read like a jotting but
+longer; a `body: null` note is over the size cap and its warning goes to
+`sync_notes`. All `notes harvest` warnings, and a failed `notes harvest` call,
+go to `sync_notes`, never to `watch`. For a note whose `projects` is empty, pick zero or more active
+projects it is about — the same signals as for a meeting that are available
+in free text: the project `keywords`, the project and entity names. Then:
+
+```bash
+python3 "$VAULTLIB" notes assign --vault "$VAULT" --path "<path>" --projects "<slug>[,<slug>]"
+```
+
+Zero projects is a valid answer: skip `assign`, and the note still informs
+the recap. `assign` only writes an empty `projects` — never second-guess the
+owner's choice. The run never changes a note's text, never moves a note, and
+never reads `95-private/`.
+
+**To Do's.** While `structure_version` is below 12, skip this paragraph — the
+vault has no To Do's table yet. To the owner they are always "to do's", never "actions". Otherwise:
+
+```bash
+python3 "$VAULTLIB" actions harvest --vault "$VAULT" --from <recap_from> --to <recap_to>
+```
+
+`closed` lists to-do notes whose line the owner ticked in a daily note
+since; the CLI already marked them done. `filled` lists notes made with
+**New** whose empty Done the CLI set to no; nothing to do about either. `new` lists every open `- [ ]` line
+not yet recorded, each with its `source` (the daily note's date), `text`,
+the `meeting` subject and `entity` it sits under (null for a line outside a
+meeting) and `entity_projects`, that entity's active projects. For each,
+fill in what you can tell and leave the rest open — the owner fills it in on
+the row:
+
+- `project` — the entity's project when `entity_projects` holds exactly one;
+  otherwise the active project the text names (its name, its `keywords`).
+  Unsure → omit it. Never guess between two.
+- `due` — the deadline **phrase exactly as the owner wrote it** ("Friday",
+  "14/10", "tomorrow", "2026-10-14"). Never turn it into a date yourself:
+  the CLI resolves it against the daily note's date and leaves `due` empty
+  when it cannot. No phrase → omit it.
+
+Write every item to one JSON list (`source`, `text` verbatim, then `project`
+and `due` when known) and:
+
+```bash
+python3 "$VAULTLIB" actions create --vault "$VAULT" --items "$SCRATCH/actions.payload.json"
+```
+
+A line already recorded comes back under `skipped`; that is the normal
+second run, not an error. `warnings` (a project that is not active, a
+deadline the CLI could not read) go to `sync_notes`. Count `created` and
+`closed` for the summary. Unattended runs do exactly the same — nothing
+here asks.
 
 ## Stage 3 — Sync, refresh
 
@@ -181,12 +242,16 @@ This writes `meetings-7d` / `meetings-30d` / `key-people` on active projects
 and `meetings-7d` / `meetings-30d` on people (confirmed meetings only — the
 review queue is the quality gate), and returns `projectsNeedingUpdate`: each
 entry carries `indexPath`, `decisionsDir`, `lastUpdated`, `stateUpdated`,
-`newFiles`, and the `existingDecisions` projection. Carry `warnings` — especially `SELF-CHECK`
+`newFiles`, `newNotes` (owner notes ticked Include that belong to the project), and the `existingDecisions` projection. Next to the queue it returns
+`notesNotQueued`: harvested notes with projects that no queue entry carries
+(their project could not be queued) — the write-back in stage 4 never marks
+them. Carry `warnings` — especially `SELF-CHECK`
 lines — into the final summary verbatim.
 
 ## Stage 4 — Project-state updates
 
-If the queue is empty, record "no projects to update" and skip to stage 6.
+If the queue is empty, record "no projects to update", run the write-back for
+your notes below (a note with no project is still marked), then go to stage 6.
 Otherwise, dispatch one subagent per queued project (each with `model:
 sonnet`), each carrying the queue entry, the harvest jottings that mention
 the project, today's date, and these instructions.
@@ -216,6 +281,11 @@ The instructions each subagent gets:
    the item short enough to carry it. When the entry has `removedSources`, drop
    every current item whose marker links one of those logs unless a meeting or
    a remaining group still supports it.
+   When the entry has `newNotes`, read each note end-to-end next to the
+   meetings. Every state item you take from one ends with
+   `(note · <note title>)` — plain text, no wikilink: a note is not a vault
+   object the state writer resolves, and its title may hold characters a
+   link refuses.
 2. Compose the project's **state** as JSON and write it to
    `$SCRATCH/project-state-<slug>.json`. The CLI renders the whole index body
    from it and refuses anything over its caps, naming the field:
@@ -264,11 +334,11 @@ python3 "$VAULTLIB" project state write --vault "$VAULT" --slug <slug> \
    a hand edit is overwritten on the next run; the owner's own `## Notes`
    section at the bottom, if present, is the one thing the CLI preserves.
 4. Decision capture: extract candidates from the new meetings, the
-   harvest jottings AND the message log groups read in step 1, then follow
+   harvest jottings, the message log groups AND the `newNotes` read in step 1, then follow
    `${CLAUDE_PLUGIN_ROOT}/skills/log-decision/SKILL.md` in **background mode**
    (`/log-decision <slug> --background`) with those candidates as the
    source. A decision from a message log group carries `source: <log stem>`, where `<log stem>` is the
-   group's `log` field.
+   group's `log` field. A decision from a note carries `source: <note stem>`.
    Its rules apply unchanged: the material-decision test (commits
    the engagement AND changes a stakeholder's behaviour), dedup against
    `existingDecisions` (a `dismissed` one included — the owner rejected it,
@@ -315,6 +385,21 @@ is the only patience judgment stage 4 makes.
 
 Projects with only `needs-review` meetings never reach the queue — do not
 "help" one by confirming meetings yourself.
+
+**Write-back for your notes.** After every stage-4 batch has returned, take
+each harvested note with a `body` and mark a note only when it appears in at
+least one queue entry's `newNotes` and every such entry came back
+`stateWritten: true`, or when its harvested `projects` is empty. A note in
+`notesNotQueued` is never marked: it keeps `include` ticked and gets one
+`sync_notes` line.
+
+```bash
+python3 "$VAULTLIB" notes mark-absorbed --vault "$VAULT" --path "<path>" --date <today>
+```
+
+A note whose project failed keeps `include` ticked and is read again tomorrow;
+say so in `sync_notes`. `missing` (the owner deleted or moved it during the run)
+is not an error.
 
 ## Stage 5 — Tomorrow's calendar and prep
 
@@ -382,7 +467,7 @@ project with a one-line what-happened, or `none on file`), and `context`
 (one line from the entity dossier and the project's *Where it stands* card,
 or, with no confident match, one line from the event alone and `No tracked
 project.`). Each field is one line; the CLI renders them under `#### Prep`
-and adds empty `#### Your notes` and `#### Your actions` lists for the owner.
+and adds empty `#### Your notes` and `#### Your to do's` lists for the owner.
 It also opens every new note with the `> [!review] Waiting for you` block —
 the live Meetings and Decisions review queues; nothing to pass for it.
 The lookups: match attendee email domains and subject keywords against
@@ -449,6 +534,7 @@ names the field, so one retry always suffices.
   `sync_notes`, which renders folded, and never in `watch`.
 - `carried_forward` — jottings worth carrying, one line each.
 - `sync_notes` — the mechanics, one line each; also in the run summary.
+- `notes_read` — one `{path, projects}` per note whose `mark-absorbed` returned `marked` tonight (never `unchanged` or `missing`; a path that no longer exists by render time is dropped with a warning); the CLI renders the line. Omit it when none were.
 - `messages` — whenever `messages.enabled` is true in `config read`,
   whatever stage 3b did (ran, skipped or failed): a feed that keeps failing
   must still say so in the note. Omit the field only when the feed is off.
@@ -584,6 +670,7 @@ reported "Processed: 0" after writing a meeting correctly):
 **Meetings you ticked Keep on:** {N} now confirmed
 **Possible duplicates:** {N} ({list the stems}) — kept as separate notes; each would have overwritten a meeting you already confirmed
 **Mail and Teams:** {outcome line | off | skipped: no M365 | failed: …}
+**To Do's:** {N} new → `65-to-dos/` ({K} with a project, {D} with a deadline) · {C} closed from ticks in daily notes | skipped: vault below structure 12
 **Metrics refreshed:** {P} projects · {Q} people
 **Projects updated:** {N} ({slugs}) — {M} decisions captured for review, {K} candidates skipped
 **Next note:** `60-daily-notes/{date}.md` ({DayName}, {tomorrow | today — for-today catch-up}) — {N} meetings prepped | calendar unavailable | calendar REFUSED — signed in as a different account (account-mismatch) | calendar REFUSED — no account bound to this vault yet (no-account-hint) | m365 disabled
@@ -640,7 +727,8 @@ python3 "$VAULTLIB" runlog append --vault "$VAULT" --routine evening-sync \
 2. **Harvest is read-only.** Today's note is never modified.
 3. **Only confirmed meetings drive metrics and project updates.**
 4. **Frontmatter is never model-authored.** `project touch`, `decision
-   write`, `meeting write`, `daily-note write` — those are the writers.
+   write`, `meeting write`, `daily-note write`, `actions create` — those are
+   the writers.
 5. **Bytes outside daily-note markers are the user's.** The CLI enforces
    it; never work around a structure error.
 6. **Supersession needs explicit conflict language; never delete a

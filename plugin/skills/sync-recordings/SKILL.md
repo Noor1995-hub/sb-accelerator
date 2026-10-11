@@ -994,7 +994,7 @@ is only one** (rule 7) — dispatch a worker as the plugin's own agent type:
 connector's tool names differ per deployment, so that worker's tool
 surface stays open where the other's is pinned). No M365 worker is ever
 dispatched for an entry a probe has not promoted — the probe wave above
-is the only route in. Both agent definitions pin `model: sonnet`
+is the only route in. Both agent definitions pin `model: claude-sonnet-5-5`
 structurally — the model is never a per-dispatch decision. On a harness
 where the plugin agent types do not resolve, fall back to a generic
 subagent spawned with `model: sonnet` passed explicitly — a live cost
@@ -1311,7 +1311,7 @@ Count what exists, not what you intended (a lab run once reported
 **Processed:** {N} meetings → `20-meetings/` ({list the stems})
 **Captures:** {N} → `20-meetings/` as `type: note` ({list the stems})
 **Parked:** {N} → `90-archive/inbox/` ({filenames, each with why it was not a capture})
-**Inbox swept:** {N} files → `90-archive/inbox/{YYYY-MM}/` · {N} left pending in `10-inbox/`
+**Input swept:** {N} files → `90-archive/inbox/{YYYY-MM}/` · {N} left pending in `10-inbox/`
 **New people:** {N} created in `50-people/`
 **Meetings you ticked Keep on:** {N} now confirmed
 **Possible duplicates:** {N} ({list the stems}) — kept as separate notes; each landed on a meeting that already had a note (one you confirmed, or one written from another source this run), so nothing was overwritten; also includes any imprecise or weak-overlap collision warning appended to a worker's `written:` outcome line this run
@@ -1327,7 +1327,7 @@ Count what exists, not what you intended (a lab run once reported
 **Warnings:** {verbatim} | none
 ```
 
-`Inbox swept` counts every file moved this run — processed meetings,
+`Input swept` counts every file moved this run — processed meetings,
 captures and parks alike, plus anything already synced — and reports the
 pending remainder — that remainder is the number the vault owner actually
 cares about. Count it from disk like everything else in this step.

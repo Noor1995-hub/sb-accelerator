@@ -90,10 +90,10 @@ def test_a_vault_behind_the_plugin_gets_one_sync_line(tmp_path):
     from vaultlib import migrate
     root = make_vault(tmp_path)
     clean, _, _ = recap.validate(root, full_payload())
-    (root / "structure-version").write_text("9\n", encoding="utf-8")
+    latest = max(m["module"].TARGET_VERSION for m in migrate.discover())
+    (root / "structure-version").write_text(f"{latest - 1}\n", encoding="utf-8")
     text = recap.render(root, clean, meetings=1, window_label="Friday")
     assert "An update for this vault is waiting (1 step) — ask a consultant to run /upgrade-vault" in text
-    latest = max(m["module"].TARGET_VERSION for m in migrate.discover())
     (root / "structure-version").write_text(f"{latest}\n", encoding="utf-8")
     assert recap.render(root, clean, meetings=1, window_label="Friday") == EXPECTED
 
@@ -302,3 +302,98 @@ def test_an_empty_messages_field_renders_no_block(tmp_path):
     root = make_vault(tmp_path)
     clean, _, _ = recap.validate(root, {**_glance_only(), "messages": _messages()})
     assert "Mail and Teams" not in recap.render(root, clean, meetings=0, window_label="today")
+
+
+# --- lines the CLI computes: notes read, items still in Input ---------------
+
+def _note(root, name="idea.md"):
+    folder = root / "80-thoughts-ideas"
+    folder.mkdir(exist_ok=True)
+    (folder / name).write_text("x", encoding="utf-8")
+    return f"80-thoughts-ideas/{name}"
+
+
+def _rendered(root, raw):
+    clean, offenders, _ = recap.validate(root, raw)
+    assert offenders == []
+    return recap.render(root, clean, meetings=0, window_label="on Monday")
+
+
+def test_notes_read_line_names_the_projects(tmp_path):
+    root = make_vault(tmp_path)
+    rel = _note(root)
+    out = _rendered(root, {**_glance_only(),
+                           "notes_read": [{"path": rel, "projects": ["yard-automation"]}]})
+    line = next(l for l in out.splitlines() if "**Your notes:**" in l)
+    assert "read 1" in line and "Yard Automation Program" in line
+
+
+def test_notes_read_without_projects_says_not_linked(tmp_path):
+    root = make_vault(tmp_path)
+    rel = _note(root)
+    out = _rendered(root, {**_glance_only(), "notes_read": [{"path": rel, "projects": []}]})
+    assert "not linked to a project" in out
+
+
+def test_notes_read_unknown_project_is_an_offender(tmp_path):
+    root = make_vault(tmp_path)
+    rel = _note(root)
+    _, offenders, _ = recap.validate(
+        root, {**_glance_only(), "notes_read": [{"path": rel, "projects": ["no-such"]}]})
+    assert offenders and "notes_read[0].projects" in offenders[0]
+
+
+def test_notes_read_refuses_a_path_outside_the_folder(tmp_path):
+    root = make_vault(tmp_path)
+    with pytest.raises(recap.RecapError, match="80-thoughts-ideas"):
+        recap.validate(root, {**_glance_only(),
+                              "notes_read": [{"path": "95-private/x.md", "projects": []}]})
+
+
+def test_notes_read_drops_a_missing_file_with_a_warning(tmp_path):
+    # The owner may rename a note mid-run: one stale path must not sink the recap.
+    root = make_vault(tmp_path)
+    rel = _note(root)
+    clean, offenders, warnings = recap.validate(
+        root, {**_glance_only(), "notes_read": [
+            {"path": "80-thoughts-ideas/gone.md", "projects": []},
+            {"path": rel, "projects": []}]})
+    assert offenders == [] and len(clean["notes_read"]) == 1
+    assert any("gone.md" in w for w in warnings)
+
+
+def test_notes_read_refuses_a_path_that_climbs_out_of_the_folder(tmp_path):
+    root = make_vault(tmp_path)
+    (root / "95-private").mkdir(exist_ok=True)
+    (root / "95-private" / "x.md").write_text("x", encoding="utf-8")
+    with pytest.raises(recap.RecapError, match="80-thoughts-ideas"):
+        recap.validate(root, {**_glance_only(), "notes_read": [
+            {"path": "80-thoughts-ideas/../95-private/x.md", "projects": []}]})
+
+
+def test_notes_read_refuses_a_non_markdown_path(tmp_path):
+    root = make_vault(tmp_path)
+    (root / "80-thoughts-ideas").mkdir(exist_ok=True)
+    (root / "80-thoughts-ideas" / "photo.png").write_bytes(b"x")
+    with pytest.raises(recap.RecapError, match="80-thoughts-ideas"):
+        recap.validate(root, {**_glance_only(), "notes_read": [
+            {"path": "80-thoughts-ideas/photo.png", "projects": []}]})
+
+
+def test_no_notes_no_line(tmp_path):
+    root = make_vault(tmp_path)
+    assert "**Your notes:**" not in _rendered(root, _glance_only())
+
+
+def test_still_in_input_counts_real_files_only(tmp_path):
+    root = make_vault(tmp_path)
+    inbox = root / "10-inbox"
+    inbox.mkdir(exist_ok=True)
+    (inbox / "README.md").write_text("x", encoding="utf-8")
+    (inbox / "Input.base").write_text("x", encoding="utf-8")
+    (inbox / ".DS_Store").write_bytes(b"\x00")
+    assert "Still in Input" not in _rendered(root, _glance_only())
+    (inbox / "call.txt").write_text("x", encoding="utf-8")
+    (inbox / "deck.pdf").write_bytes(b"%PDF")
+    line = next(l for l in _rendered(root, _glance_only()).splitlines() if "Still in Input" in l)
+    assert "2 items" in line and "Input.base|Input" in line

@@ -25,10 +25,10 @@ def test_check_mode_agrees_with_the_file_on_disk():
     assert co.main(["--check"]) == 0
 
 
-def test_all_seven_objects_compile():
+def test_all_eight_objects_compile():
     objects = co.compile_schema()["objects"]
     assert set(objects) == {"meeting", "project", "person", "decision",
-                            "entity", "daily-note", "message-log"}
+                            "entity", "daily-note", "to-do", "message-log"}
     for name, block in objects.items():
         assert block["required"], f"{name}: empty required list"
 
@@ -37,7 +37,7 @@ def test_daily_note_block_is_deliberately_thin():
     block = co.compile_schema()["objects"]["daily-note"]
     assert block["required"] == ["date", "type"]
     assert block["enums"]["type"] == ["daily-note"]
-    assert block["body_sections"] == ["Recap", "Meetings", "End of day"]
+    assert block["body_sections"] == ["Recap", "Meetings", "Notes"]
 
 
 def test_project_type_enum_is_the_two_value_axis():

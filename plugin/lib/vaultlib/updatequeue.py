@@ -34,7 +34,7 @@ from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple
 
-from . import decision, markdown, msglog, msgstate, naming, vault
+from . import decision, markdown, msglog, msgstate, naming, notes, vault
 
 MEETINGS_DIR = vault.MEETINGS_DIR
 PROJECTS_DIR = vault.PROJECTS_DIR
@@ -293,6 +293,9 @@ def run(root: Path, today: str, owner: str) -> dict:
     meetings, warnings = _index_meetings(root)
     logs, log_warnings = _index_logs(root)
     warnings.extend(log_warnings)
+    # Notes the owner ticked Include. Harvest warnings are not repeated here:
+    # stage 2 already ran `notes harvest` and carries them into the run.
+    included = [n for n in notes.harvest(root)["notes"] if n["body"] is not None]
     # Requeue entries are read, never taken: an entry stays until the
     # project's `state-updated` is strictly later than the entry's `at`. Both
     # are the owner's local wall clock (YYYY-MM-DDTHH:MM), so they compare
@@ -392,13 +395,14 @@ def run(root: Path, today: str, owner: str) -> dict:
         new_logs = [d["stem"] for d in logs
                     if slug in d["strong"] and d["updated"] is not None
                     and d["updated"] >= threshold]
+        new_notes = [n["path"] for n in included if slug in n["projects"]]
         removed: List[str] = []
         for log, at, entry in requeued.get(slug, []):
             if state_updated is not None and state_updated > at:
                 prune.append(entry)
             elif log not in removed:
                 removed.append(log)
-        if new_meetings or new_logs or removed:
+        if new_meetings or new_logs or removed or new_notes:
             queue.append({
                 "slug": slug,
                 "indexPath": rel,
@@ -406,9 +410,10 @@ def run(root: Path, today: str, owner: str) -> dict:
                 "lastUpdated": last_updated.isoformat(),
                 "stateUpdated": (state_updated.isoformat(timespec="minutes")
                                  if state_updated is not None else None),
-                "newCount": len(new_meetings) + len(new_logs),
+                "newCount": len(new_meetings) + len(new_logs) + len(new_notes),
                 "newFiles": [m["file"] for m in new_meetings],
                 "newLogs": new_logs,
+                "newNotes": new_notes,
                 "removedSources": removed,
                 "existingDecisions":
                     decision.list_decisions(root, slug)["decisions"],
@@ -473,12 +478,18 @@ def run(root: Path, today: str, owner: str) -> dict:
 
     warnings.extend(self_check(confirmed, {entry["slug"] for entry in queue},
                                active_stamps))
+    # A linked note no queue entry carries (its project's last-updated does
+    # not parse) must not be marked absorbed: nothing read it for a project.
+    queued_notes = {path for entry in queue for path in entry["newNotes"]}
+    not_queued = [n["path"] for n in included
+                  if n["projects"] and n["path"] not in queued_notes]
     return {
         "today": today_date.isoformat(),
         "owner": owner_slug,
         "meetingsIndexed": len(meetings),
         "confirmedMeetings": len(confirmed),
         "projectsNeedingUpdate": queue,
+        "notesNotQueued": not_queued,
         "metricsWritten": {"projects": projects_written,
                            "people": people_written},
         "warnings": warnings,

@@ -166,6 +166,23 @@ def rebaseline(root: Path, relpaths) -> dict:
     return {"baselined": baselined, "skipped": skipped}
 
 
+def rename_template_file(root: Path, old: str, new: str) -> bool:
+    """Move a recorded baseline from `old` to `new` when a shipped template
+    file is renamed and the vault's copy with it, so the next template status
+    sees the same file under its new name instead of one `missing` and one
+    unknown. The digest is of the bytes, not the name, so it carries over. A
+    vault without provenance or without a record for `old` is left alone; a
+    record already under `new` wins. Returns whether anything was written.
+    """
+    data = read(root)
+    if data is None or old not in data["template_files"]:
+        return False
+    recorded = data["template_files"].pop(old)
+    data["template_files"].setdefault(new, recorded)
+    _write(root, data)
+    return True
+
+
 def record_provision(root: Path, template_root, at: Optional[str] = None) -> str:
     """Called in-process right after instantiate()'s structure-version
     check, and by make_test_vault.build_vault(). Walks every file under

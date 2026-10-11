@@ -179,6 +179,9 @@ Group `files[]` into three lists and present them in this order:
    consultant decides.
 3. **Missing** (`state: missing`) — offer to restore each from the shipped
    template; treat it the same as a needs-consent item for the gate below.
+   On the update to structure 11, `99-workflow-config/views/Input.base`
+   arrives here as missing: recommend accepting it, because the menu's
+   **Input** entry opens it.
 
 If `baseline` is `"unknown"`, say so explicitly: this vault predates
 provenance, so **every** differing managed file needs consent — there is

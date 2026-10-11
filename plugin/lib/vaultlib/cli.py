@@ -32,7 +32,7 @@ if __package__ in (None, ""):
     # the skills invoke it.
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from vaultlib import config, dailynote, dates, decision, discover, entity, feedback, fetcherrors, health, lastsync, m365, meeting, migrate, msglog, msgrows, msgstate, person, plaud, project, projectstate, provenance, runlog, scratch, schema, seenevents, syncjob, template, updatequeue, vault  # noqa: E402
+from vaultlib import actions, config, dailynote, dates, decision, discover, entity, feedback, fetcherrors, health, lastsync, m365, meeting, migrate, msglog, msgrows, msgstate, notes, person, plaud, project, projectstate, provenance, runlog, scratch, schema, seenevents, syncjob, template, updatequeue, vault  # noqa: E402
 
 
 def _emit(payload: dict) -> None:
@@ -698,6 +698,35 @@ def build_parser() -> argparse.ArgumentParser:
     _add_vault_argument(daily_read)
     daily_read.add_argument("--date", required=True, help="ISO date of the note")
 
+    actions_group = top.add_parser("actions", help="actions from daily notes, followed up in 65-to-dos")
+    actions_sub = actions_group.add_subparsers(dest="action", required=True)
+    actions_harvest = actions_sub.add_parser(
+        "harvest", help="list new action lines in a window; close notes ticked in their daily note")
+    _add_vault_argument(actions_harvest)
+    actions_harvest.add_argument("--from", dest="date_from", required=True, help="ISO date")
+    actions_harvest.add_argument("--to", dest="date_to", required=True, help="ISO date")
+    actions_create = actions_sub.add_parser(
+        "create", help="write action notes from a JSON list; duplicates are skipped")
+    _add_vault_argument(actions_create)
+    actions_create.add_argument("--items", required=True,
+                                help="path to a JSON file, or - to read stdin")
+    actions_create.add_argument("--today", help="ISO date; defaults to today")
+
+    notes_group = top.add_parser("notes", help="the owner's own notes: Include and absorbed")
+    notes_sub = notes_group.add_subparsers(dest="action", required=True)
+    notes_harvest = notes_sub.add_parser("harvest", help="list notes ticked Include")
+    _add_vault_argument(notes_harvest)
+    notes_assign = notes_sub.add_parser(
+        "assign", help="write projects on a note whose projects is empty")
+    _add_vault_argument(notes_assign)
+    notes_assign.add_argument("--path", required=True)
+    notes_assign.add_argument("--projects", required=True, help="comma-separated slugs")
+    notes_mark = notes_sub.add_parser(
+        "mark-absorbed", help="untick Include and stamp absorbed: <date>")
+    _add_vault_argument(notes_mark)
+    notes_mark.add_argument("--path", required=True)
+    notes_mark.add_argument("--date", required=True)
+
     migrate_group = top.add_parser(
         "migrate", help="vault structure migrations: snapshot, apply, verify")
     migrate_sub = migrate_group.add_subparsers(dest="action", required=True)
@@ -1233,6 +1262,19 @@ def _dispatch(args: argparse.Namespace) -> int:
                        else json.loads(Path(args.note).read_text(encoding="utf-8")))
             return _ok(dailynote.write(root, payload))
         return _ok(dailynote.read(root, args.date))
+    if args.group == "actions":
+        if args.action == "harvest":
+            return _ok(actions.harvest(root, args.date_from, args.date_to))
+        items = (json.load(sys.stdin) if args.items == "-"
+                 else json.loads(Path(args.items).read_text(encoding="utf-8")))
+        return _ok(actions.create(root, items, args.today))
+    if args.group == "notes":
+        if args.action == "harvest":
+            return _ok(notes.harvest(root))
+        if args.action == "assign":
+            slugs = [s.strip() for s in args.projects.split(",") if s.strip()]
+            return _ok(notes.assign(root, args.path, slugs))
+        return _ok(notes.mark_absorbed(root, args.path, args.date))
     if args.group == "migrate":
         if args.action == "status":
             return _ok(migrate.status(root))
@@ -1342,6 +1384,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                      "nothing from this call was shown to the owner.")
     except updatequeue.UpdateQueueError as exc:
         return _fail(str(exc), "Fix the named argument and retry.")
+    except actions.ActionsError as exc:
+        return _fail(str(exc), "Fix the named date or item and retry; nothing "
+                     "was written for a refused call.")
+    except notes.NotesError as exc:
+        return _fail(str(exc), "Fix the named path, project or date and retry.")
     except dailynote.DailyNoteError as exc:
         return _fail(str(exc), "Fix the named payload field or note state and retry.")
     except feedback.FeedbackError as exc:

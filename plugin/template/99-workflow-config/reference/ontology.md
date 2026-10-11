@@ -8,7 +8,7 @@ tags: [meta, reference, ontology]
 > controlled vocabularies.** Edit here; never let the schema live in prose
 > elsewhere.
 
-Seven object types: **Meeting · Project · Person · Decision · Entity · Daily note · Message log**.
+Eight object types: **Meeting · Project · Person · Decision · Entity · Daily note · To-do · Message log**.
 Relationships live in YAML frontmatter (wikilinks / slug joins), not folder
 hierarchy. Curation happens in Bases, not by browsing folders.
 
@@ -269,7 +269,7 @@ enums:
   status: [active, superseded, withdrawn]
 ```
 
-- **Edges:** `supersedes` (`[[decision]]` / null) · `source` (`[[meeting]]` / `[[message log]]`).
+- **Edges:** `supersedes` (`[[decision]]` / null) · `source` (`[[meeting]]` / `[[message log]]` / `[[owner note]]`).
 - Never deleted — status flips only. Supersession is a wikilink edge.
 - `archived: true` is the owner's **Dismiss** tick (#247): the capture was
   not a real decision. Same field and meaning as on a meeting; the file
@@ -294,7 +294,9 @@ enums:
   review state the way project metrics gate on a meeting's `review_status`, so
   ticking the box *is* the confirmation and no sync step folds it further. The
   asymmetry with Meeting is deliberate, not a missing feature.
-- `source` names a note in `20-meetings/` or a message log in `_messages/`. A decision drawn from an inbox
+- `source` names a note in `20-meetings/`, a message log in `_messages/`, or
+  a note of your own in `80-thoughts-ideas/` (any subfolder). A note title
+  may contain spaces and is matched case-insensitively. A decision drawn from an inbox
   transcript, a pasted paragraph or dictation carries no `source`; its
   provenance goes in the **Why** text.
 - Example: `30-projects/acme-industries-operating-model/decisions/2026-05-20-single-vendor-strategy-adopted.md`
@@ -480,7 +482,7 @@ required: [date, type]
 optional: []
 enums:
   type: [daily-note]
-body_sections: [Recap, Meetings, End of day]
+body_sections: [Recap, Meetings, Notes]
 ```
 
 - `date` is an unquoted ISO date and MUST equal the filename stem.
@@ -497,8 +499,10 @@ body_sections: [Recap, Meetings, End of day]
   views (the Meetings one was named `Triage` before #240), written once at creation, collapsed by the CSS snippet
   when both are empty. It is not a region and holds no state.
 - **Everything outside the markers is human territory**: jotting bullets
-  under each meeting heading, `## End of day`, anything else. The evening
-  harvest reads jottings as input; nothing ever edits or routes them in v1.
+  under each meeting heading, `## Notes` (called `## End of day` on notes before structure 11; both are read), anything else. The evening
+  harvest reads jottings as input and never edits them. The one thing it
+  routes is a to-do: each new `- [ ]` line becomes a To-do note (below);
+  the line itself stays as written.
 - **Recap v2 is rendered from fields**: `[!glance]` (first line computed by
   the CLI: meeting count, window, theme and decision counts; then 1–4
   labelled headlines and the entities touched), folded `[!theme]-` callouts
@@ -516,9 +520,10 @@ body_sections: [Recap, Meetings, End of day]
 - **Meeting blocks v2**: `### {HH:MM} — {Subject}[ · [[40-entities/{slug}/dossier|{Entity name}]]]`,
   then `#### Prep` holding the prep region (three lines: **Attendees**,
   **Last meeting**, **Context**), then `#### Your notes` (`- `) and
-  `#### Your actions` (`- [ ] `) — `#### Notes`/`#### Actions` on notes
-  written before 0.12.11. Notes and Actions are written once at creation and never
-  regenerated; the harvest returns them separately, actions with done state.
+  `#### Your to do's` (`- [ ] `) — `#### Your actions` on notes written
+  before 0.13.10, `#### Notes`/`#### Actions` before 0.12.11; the reader
+  finds them by position, so every form reads. Both lists are written once at creation and never
+  regenerated; the harvest returns them separately, to-dos with done state.
 - **Identity links are path links.** Entities and projects are folders, and
   Obsidian resolves `[[name]]` by file name only, so writers emit
   `[[40-entities/{slug}/dossier|{Name}]]` / `[[30-projects/{slug}/index|{Name}]]`;
@@ -535,6 +540,63 @@ A day in the life of a daily note:
 <!-- evening-sync:prep:end -->
 - proposal on track for September submission   ← hand jotting, untouchable
 ```
+
+### Your note — `80-thoughts-ideas/**.md` · Base: `Thoughts and ideas.base`
+
+The owner's own writing. Not an object the vault creates; the run only reads
+it when asked.
+
+No schema block: every field is optional and the vault never validates these
+notes, so nothing compiles from this section. The fields it reads and writes:
+
+- `include` (checkbox) — the owner's request to read the note tonight.
+- `absorbed` (ISO date) — stamped by the evening run when it read the note;
+  `include` is unticked in the same write.
+- `projects` (project slugs) — set by the owner, or by the run when empty;
+  never overwritten.
+- The body is never edited, and the note is never moved or deleted.
+
+### To-do — `65-to-dos/{YYYY-MM-DD}-{slug}.md` · Base: `To Dos.base`
+
+Something the owner has to do, followed up in the To Do's table: open ones
+grouped by project, soonest deadline first (#257). The owner only ever sees
+"to do"; the CLI group and module that write them are called `actions`.
+
+```yaml
+object: to-do
+required: [type]
+optional: [to-do, project, due, source, created]
+keys_present: [done]
+enums:
+  type: [to-do]
+```
+
+- **Three ways in, one format.** The evening run turns each new `- [ ]` line
+  in a daily note into a to-do note (`actions harvest` → `actions create`);
+  **New** in `To Dos.base` makes an empty one in `65-to-dos/`; a session
+  makes one when the owner asks.
+- `to-do` is the to-do as the owner wrote it, quoted — the To do column.
+  A note made with **New** has none; the table shows its file name instead.
+- `project` is one active project slug, or empty. The run fills it when the
+  meeting's entity has a single active project or the text names one, and
+  otherwise leaves it for the owner. `To Dos.base` groups on the project's
+  name, "Not linked" when empty.
+- `due` is an unquoted ISO date, or empty. The run copies the deadline phrase
+  from the owner's words and the CLI resolves it against the daily note's
+  date (`dates.resolve_due`: ISO, `14/10[/2026]`, weekday names in English,
+  Dutch and French, today, tomorrow); a phrase it cannot read stays empty.
+- `done` is the checkbox, in `keys_present` so the Open view's
+  `done != true` never misses a row. Ticking it in the table is the whole
+  close-out. Ticking the line in the daily note closes it too: the next run
+  sets `done: true`. Nothing unticks. A note made with **New** starts with
+  Done empty; the next run sets it to `false` (`filled`), and the CSS snippet
+  draws an empty box meanwhile, not a "mixed" dash.
+- `source` is `[[YYYY-MM-DD]]`, the daily note the line came from; absent on
+  a to-do made with New or in a session. `source` plus `to-do` is the
+  identity the run uses to never record the same line twice.
+- `created` is the ISO date the note was written. The body is the owner's;
+  nothing writes it. A to-do note is never deleted by the vault.
+- Example: `65-to-dos/2026-10-07-send-the-revised-proposal-to-jordan.md`
 
 ### Message log — `_messages/{YYYY-MM-DD}-messages.md` · no Base
 
@@ -571,6 +633,9 @@ enums:
 - `Decision —project→ Project`
 - `Decision —source→ Meeting`
 - `Decision —source→ Message log`
+- `Decision —source→ Owner note`
 - `Decision —supersedes→ Decision`
+- `To-do —project→ Project`
+- `To-do —source→ Daily note`
 - `Message log —projects[]→ Project`
 - `Message log —people[]→ Person`

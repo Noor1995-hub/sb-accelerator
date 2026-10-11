@@ -68,6 +68,7 @@ _PATH_TYPES = [
     (re.compile(r"\A30-projects/[^/]+/decisions/[^/]+\.md\Z"), "decision"),
     (re.compile(r"\A50-people/[^/]+\.md\Z"), "person"),
     (re.compile(r"\A20-meetings/[^/]+\.md\Z"), "meeting"),
+    (re.compile(r"\A65-to-dos/[^/]+\.md\Z"), "to-do"),
 ]
 
 

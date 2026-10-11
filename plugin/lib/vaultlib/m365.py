@@ -443,8 +443,11 @@ def calendar_match(events, *, start_local: str, duration_min: int = 0,
         book = address_book or {}
         known, unknown = [], []
         for attendee in event.get("attendees") or []:
-            address = str(attendee.get("address") if isinstance(attendee, dict)
-                          else attendee or "").strip().casefold()
+            if isinstance(attendee, dict):
+                # `{address}` or Graph's `{emailAddress: {address}}`
+                attendee = (attendee.get("address")
+                            or (attendee.get("emailAddress") or {}).get("address"))
+            address = str(attendee or "").strip().casefold()
             if "@" not in address:
                 continue
             slug = book.get(address)

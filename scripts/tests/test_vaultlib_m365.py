@@ -868,3 +868,13 @@ def test_calendar_match_resolves_attendee_addresses_through_the_address_book():
                                  address_book={"known@example.com": "kim-known"})
     assert result["known_attendees"] == ["kim-known"]
     assert result["unknown_attendee_emails"] == ["stranger@client.com"]
+
+
+def test_calendar_match_reads_graph_shaped_attendees():
+    event = _weekly(attendees=[{"emailAddress": {"name": "K", "address": "known@example.com"}},
+                               {"address": "other@client.com"}])
+    result = m365.calendar_match([event], start_local="2026-10-09T11:01",
+                                 duration_min=21, utc_offset="+02:00",
+                                 address_book={"known@example.com": "kim-known"})
+    assert result["known_attendees"] == ["kim-known"]
+    assert result["unknown_attendee_emails"] == ["other@client.com"]

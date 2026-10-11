@@ -1,0 +1,34 @@
+# Input: everything tonight's evening run picks up — files dropped in
+# 10-inbox/ and your own notes ticked Include. Empty the morning after.
+filters:
+  or:
+    - and:
+        - file.inFolder("10-inbox")
+        - file.name != "README"
+        - file.ext != "base"
+    - and:
+        - file.inFolder("80-thoughts-ideas")
+        - file.ext == "md"
+        - include == true
+formulas:
+  item: link(file.path, file.basename)
+  kind: if(file.inFolder("80-thoughts-ideas"), "Your note", if(file.ext == "txt", "Text", if(file.ext == "md", "Note", file.ext.upper())))
+properties:
+  formula.item:
+    displayName: Picked up tonight
+  formula.kind:
+    displayName: Kind
+  file.ctime:
+    displayName: Added
+views:
+  - type: table
+    name: Tonight
+    order:
+      - formula.item
+      - formula.kind
+      - file.ctime
+    sort:
+      - property: file.ctime
+        direction: DESC
+    columnSize:
+      formula.item: 460

@@ -828,3 +828,74 @@ def test_adding_a_project_keeps_hand_entries_that_need_quoting(tmp_path):
     assert person_fm(root, "ana-fields")["projects"] == parsed["projects"]
     # plain slugs stay bare
     assert ", alpha, zeta]" in text
+
+
+def write_owner_note(root: Path, name: str, frontmatter: str) -> None:
+    folder = root / "80-thoughts-ideas"
+    folder.mkdir(exist_ok=True)
+    (folder / name).write_text(f"---\n{frontmatter}---\nthought\n", encoding="utf-8")
+
+
+def test_an_included_note_queues_a_project_with_no_new_meetings(tmp_path):
+    root = make_vault(tmp_path)
+    write_project(root, "acme-crm", last_updated="2026-06-20",
+                  state_updated="2026-06-20T18:00")
+    write_owner_note(root, "idea.md", "include: true\nprojects: [acme-crm]\n")
+    result = updatequeue.run(root, "2026-06-21", "owner-morgan")
+    [entry] = result["projectsNeedingUpdate"]
+    assert entry["slug"] == "acme-crm"
+    assert entry["newNotes"] == ["80-thoughts-ideas/idea.md"]
+    assert entry["newFiles"] == [] and entry["newCount"] == 1
+
+
+def test_unticked_unlinked_and_inactive_notes_queue_nothing(tmp_path):
+    root = make_vault(tmp_path)
+    write_project(root, "acme-crm", last_updated="2026-06-20",
+                  state_updated="2026-06-20T18:00")
+    write_project(root, "acme-old", status="closed")
+    write_owner_note(root, "a.md", "include: false\nprojects: [acme-crm]\n")
+    write_owner_note(root, "b.md", "include: true\n")
+    write_owner_note(root, "c.md", "include: true\nprojects: [acme-old]\n")
+    assert updatequeue.run(root, "2026-06-21", "owner-morgan")["projectsNeedingUpdate"] == []
+
+
+def test_an_oversized_note_does_not_queue(tmp_path):
+    from vaultlib import notes
+    root = make_vault(tmp_path)
+    write_project(root, "acme-crm", last_updated="2026-06-20",
+                  state_updated="2026-06-20T18:00")
+    folder = root / "80-thoughts-ideas"
+    folder.mkdir()
+    (folder / "long.md").write_text(
+        "---\ninclude: true\nprojects: [acme-crm]\n---\n" + "x" * (notes.MAX_BODY_CHARS + 1),
+        encoding="utf-8")
+    assert updatequeue.run(root, "2026-06-21", "owner-morgan")["projectsNeedingUpdate"] == []
+
+
+def test_every_queue_entry_carries_new_notes(tmp_path):
+    root = make_vault(tmp_path)
+    write_project(root, "acme-crm")
+    write_meeting(root, "10-06-26-x", projects=["acme-crm"])
+    [entry] = updatequeue.run(root, "2026-06-21", "owner-morgan")["projectsNeedingUpdate"]
+    assert entry["newNotes"] == []
+
+
+def test_a_note_whose_project_cannot_queue_is_listed_as_not_queued(tmp_path):
+    # An unparseable last-updated keeps the project out of the queue, so the
+    # note's projects are non-empty but it appears in no entry's newNotes:
+    # the write-back must not mark it absorbed.
+    root = make_vault(tmp_path)
+    write_project(root, "acme-crm", last_updated="someday")
+    write_project(root, "beta", last_updated="2026-06-20",
+                  state_updated="2026-06-20T18:00")
+    write_owner_note(root, "stuck.md", "include: true\nprojects: [acme-crm]\n")
+    write_owner_note(root, "fine.md", "include: true\nprojects: [beta]\n")
+    write_owner_note(root, "loose.md", "include: true\n")
+    result = updatequeue.run(root, "2026-06-21", "owner-morgan")
+    assert result["notesNotQueued"] == ["80-thoughts-ideas/stuck.md"]
+    assert [e["slug"] for e in result["projectsNeedingUpdate"]] == ["beta"]
+
+
+def test_notes_not_queued_is_empty_when_every_note_queued(tmp_path):
+    root = make_vault(tmp_path)
+    assert updatequeue.run(root, "2026-06-21", "owner-morgan")["notesNotQueued"] == []

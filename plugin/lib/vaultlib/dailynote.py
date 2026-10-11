@@ -25,7 +25,7 @@ PREP_HEADING = "#### Prep"
 # "Your" says whose they are (#238); the reader finds them by position under
 # the meeting heading, so notes written with the old "#### Notes" still read.
 NOTES_BLOCK = "#### Your notes\n- "
-ACTIONS_BLOCK = "#### Your actions\n- [ ] "
+ACTIONS_BLOCK = "#### Your to do's\n- [ ] "
 # The live review queues, at the top of every note the evening run writes
 # (#238). Embedded Bases views, so ticking Keep or Dismiss here works and the
 # rows leave at once; the CSS snippet collapses an empty table, and the whole
@@ -519,7 +519,7 @@ def _render(root: Path, data: dict, fingerprint: Optional[str]) -> str:
     else:
         parts.append(_region("prep",
                              data["meetings_note"] or NO_MEETINGS_LINE))
-    parts += ["", "## End of day", "- ", ""]
+    parts += ["", "## Notes", "- ", ""]
     return "\n".join(parts)
 
 
@@ -750,8 +750,9 @@ def read(root: Path, date_iso_raw) -> dict:
 
     meetings: List[dict] = []
     meetings_note = None
-    end_of_day: List[str] = []
+    day_notes: List[str] = []
     other_lines: List[str] = []
+    loose_actions: List[dict] = []
     current: Optional[dict] = None
     section = ""
     sub = ""
@@ -803,12 +804,17 @@ def read(root: Path, date_iso_raw) -> dict:
                 current["actions"].append({"text": text_value, "done": task.group(1) != " "})
                 current["jottings"].append(text_value)
             continue
+        if task and task.group(2).strip():
+            # An action outside any meeting block (#257). The line still
+            # falls through, so the notes it was part of read as before.
+            loose_actions.append({"text": task.group(2).strip(),
+                                  "done": task.group(1) != " "})
         content = stripped[2:].strip() if stripped.startswith("- ") else (
             "" if stripped == "-" else stripped)
         if not content:
             continue   # the empty '- ' jot affordance
-        if section == "End of day":
-            end_of_day.append(content)
+        if section in ("Notes", "End of day"):     # End of day: before structure 11
+            day_notes.append(content)
         elif section == "Meetings" and current is not None:
             if sub == "prep":
                 continue            # a prep line outside the markers is still prep
@@ -821,6 +827,6 @@ def read(root: Path, date_iso_raw) -> dict:
         "frontmatter": frontmatter, "recap": recap,
         "recap_inputs": recap_inputs, "meetings": meetings,
         "meetings_note": meetings_note,
-        "end_of_day": end_of_day, "other_lines": other_lines,
-        "warnings": warnings,
+        "notes": day_notes, "end_of_day": day_notes, "other_lines": other_lines,
+        "loose_actions": loose_actions, "warnings": warnings,
     }
