@@ -620,13 +620,35 @@ length in minutes — the plaud listing's `duration` over 60000, rounded.) It an
   from the recording to say it is the meeting. Stamp `no-calendar-match`.
 
 A match pre-fills `calendar-subject`, `organizer`, `location`, `recurring`,
-`attendee-emails` from the `single` result's `event` (or the scored
-winner). Merge the calendar's attendees into the meeting's: a `single`
-result's `known_attendees` are person slugs already in the vault, so add
-them to `attendees` beside the vault owner. Its `unknown_attendee_emails`
-are bare addresses the listing gives no name for — keep them in
-`attendee-emails`, and never invent a `person ensure --name` for one; say
-in the debrief how many were left unresolved.
+`attendee-emails` from the `single` result's `event` (or the scored winner
+among the `ambiguous` result's `candidates`).
+
+**Then resolve the matched meeting's people from the event itself.** The
+listing carries attendees as bare addresses; the full event read carries
+their names too. Read the matched event — `read_resource` with the `uri`
+from the `calendar-match` result (`event.uri`, or the winning candidate's
+`uri`), copied exactly; never build one from an `id` — and write the result
+as returned to `$SCRATCH/calendar.<id>.event.json`. Issue every matched
+recording's read in one batch of parallel calls, then resolve each in one
+Bash call:
+
+```bash
+python3 "$VAULTLIB" m365 resolve-attendees --vault "$VAULT" --event "$SCRATCH/calendar.<id>.event.json" --owner-slug <owner-slug>
+```
+
+(`<owner-slug>` is `config read`'s `owner`.) Its `attendees` are the
+meeting's person slugs, the vault owner first — use them as-is. It runs the
+same `person ensure` as the M365 worker, but matches an address already on
+a person note first, so a differently spelt display name never forks a
+second person; rooms are skipped. `new_attendees` is the count of people
+it created, for the attendees-group confidence reason. Any
+`unresolved_emails` (an address with no name) stay out of `attendees` —
+never invent a name for one; mention the count in the debrief.
+
+If the read fails, or `read_resource` is not available, the match still
+stands — the search answered, so this is never `calendar-tool-unavailable`.
+Fall back to the owner plus the `single` result's `known_attendees` (people
+already in the vault, matched by address), with no new people created.
 
 **Stamp honestly — these are different facts, never collapse them:**
 
@@ -681,16 +703,18 @@ with a prospect, for instance. That is the *only* way such a meeting reaches
 its entity's dossier, since the dossier's Meeting Log is a Dataview query
 over this field and Dataview sees just what the meeting note itself says.
 
-Attendees are **person slugs**. For plaud, inbox, and capture recordings —
-where the calendar match (if any) or the transcript names people — ensure
-each attendee's note exists:
+Attendees are **person slugs**. A calendar-matched plaud or inbox recording
+already has them: step 2's `m365 resolve-attendees` ensured every calendar
+attendee — use its `attendees` and add no one to them by hand. For the rest
+(no calendar match, or a capture) — where a forwarded item or the
+transcript names people — ensure each attendee's note exists:
 
 ```bash
 python3 "$VAULTLIB" person ensure --vault "$VAULT" --name "<Full Name>"
 ```
 
-When the calendar match gives that attendee's address alongside the name,
-add `--email "<address>"` — it fills an empty email and never overwrites one.
+When the item gives that attendee's address alongside the name, add
+`--email "<address>"` — it fills an empty email and never overwrites one.
 Never pair a name with an address by guessing.
 
 Use the returned slugs. The vault owner attends their own meetings — include

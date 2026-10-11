@@ -805,7 +805,7 @@ def test_reassemble_reports_blob_size_for_paged_reading(tmp_path):
 # --- calendar-match: the time-only match (2026-10-09, 11:01 call vs 11:00 weekly) ---
 
 def _weekly(**extra):
-    return _listing_event("AI Exco enablement journey - weekly call",
+    return _listing_event("Leadership enablement - weekly call",
                           "2026-10-09T09:00:00.0000000", "2026-10-09T09:30:00.0000000",
                           **extra)
 
@@ -814,7 +814,7 @@ def test_calendar_match_single_near_start_event_matches_without_word_overlap():
     result = m365.calendar_match([_weekly()], start_local="2026-10-09T11:01",
                                  duration_min=21, utc_offset="+02:00")
     assert result["match"] == "single"
-    assert result["event"]["subject"] == "AI Exco enablement journey - weekly call"
+    assert result["event"]["subject"] == "Leadership enablement - weekly call"
     assert result["event"]["attendees"] == ["a@example.com"]
     assert result["event"]["start_offset_min"] == -1
     assert result["event"]["start_local"] == "2026-10-09T11:00"
@@ -867,7 +867,6 @@ def test_calendar_match_resolves_attendee_addresses_through_the_address_book():
                                  duration_min=21, utc_offset="+02:00",
                                  address_book={"known@example.com": "kim-known"})
     assert result["known_attendees"] == ["kim-known"]
-    assert result["unknown_attendee_emails"] == ["stranger@client.com"]
 
 
 def test_calendar_match_reads_graph_shaped_attendees():
@@ -877,4 +876,66 @@ def test_calendar_match_reads_graph_shaped_attendees():
                                  duration_min=21, utc_offset="+02:00",
                                  address_book={"known@example.com": "kim-known"})
     assert result["known_attendees"] == ["kim-known"]
-    assert result["unknown_attendee_emails"] == ["other@client.com"]
+
+
+def test_calendar_match_derives_the_uri_and_never_copies_the_listings():
+    event = _weekly(id="AAMk-a_b=", uri="calendar:///events/WRONG")
+    result = m365.calendar_match([event], start_local="2026-10-09T11:01",
+                                 duration_min=21, utc_offset="+02:00")
+    assert result["event"]["uri"] == m365.event_uri("AAMk-a_b=")
+
+
+def test_calendar_match_ambiguous_lists_candidates_with_derived_uris():
+    other = _listing_event("Pipeline sync", "2026-10-09T09:05:00.0000000",
+                           "2026-10-09T09:45:00.0000000", id="BBB")
+    result = m365.calendar_match([_weekly(id="AAA"), other], start_local="2026-10-09T11:01",
+                                 duration_min=21, utc_offset="+02:00")
+    assert [c["uri"] for c in result["candidates"]] == [m365.event_uri("AAA"),
+                                                         m365.event_uri("BBB")]
+    assert [c["start_local"] for c in result["candidates"]] == ["2026-10-09T11:00",
+                                                                "2026-10-09T11:05"]
+
+
+FULL_EVENT = {
+    "subject": "Leadership enablement - weekly call",
+    "organizer": {"name": "Sam Okafor", "address": "sam@client.example"},
+    "attendees": [
+        {"name": "Owner Person", "address": "owner@vendor.example", "type": "required"},
+        {"name": "Sam Okafor", "address": "sam@client.example", "type": "required"},
+        {"name": "Jo Client", "address": "jo@client.example", "type": "optional"},
+        {"name": "Room 4.12", "address": "room412@client.example", "type": "resource"},
+        {"name": "", "address": "nameless@client.example", "type": "required"},
+    ],
+}
+
+
+def test_resolve_attendees_ensures_named_people_and_skips_rooms(tmp_path):
+    from test_vaultlib_vault import make_vault
+    from vaultlib import person
+    root = make_vault(tmp_path)
+    person.ensure(root, "Owner Person", "2026-10-01", email="owner@vendor.example")
+    result = m365.resolve_attendees(root, FULL_EVENT, owner_slug="owner-person",
+                                    today="2026-10-09")
+    assert result["attendees"] == ["owner-person", "sam-okafor", "jo-client"]
+    assert result["created"] == ["sam-okafor", "jo-client"]
+    assert result["new_attendees"] == 2
+    assert result["unresolved_emails"] == ["nameless@client.example"]
+    assert not (root / "50-people" / "room-4-12.md").exists()
+    assert "sam@client.example" in (root / "50-people" / "sam-okafor.md").read_text()
+
+
+def test_resolve_attendees_matches_by_address_before_name(tmp_path):
+    """A display name spelt unlike the note's must not fork a second person."""
+    from test_vaultlib_vault import make_vault
+    from vaultlib import person
+    root = make_vault(tmp_path)
+    person.ensure(root, "Owner Person", "2026-10-01", email="owner@vendor.example")
+    person.ensure(root, "Jo Client", "2026-10-01", email="jo@client.example")
+    event = {"attendees": [{"name": "Person, Owner", "address": "OWNER@vendor.example"},
+                           {"name": "Johanna Client", "address": "jo@client.example"}]}
+    result = m365.resolve_attendees(root, event, owner_slug="owner-person",
+                                    today="2026-10-09")
+    assert result["attendees"] == ["owner-person", "jo-client"]
+    assert result["created"] == []
+    assert sorted(p.name for p in (root / "50-people").glob("*.md")) == [
+        "jo-client.md", "owner-person.md"]

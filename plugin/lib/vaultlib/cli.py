@@ -599,6 +599,16 @@ def build_parser() -> argparse.ArgumentParser:
     m365_cm.add_argument("--timezone", help="IANA timezone name")
     m365_cm.add_argument("--utc-offset", dest="utc_offset",
                          help="explicit offset like +02:00 — same effect as --timezone")
+    m365_ra = m365_sub.add_parser(
+        "resolve-attendees",
+        help="person slugs for a calendar-matched plaud/inbox recording, from "
+             "the matched event's full read (ensures new people)")
+    _add_vault_argument(m365_ra)
+    m365_ra.add_argument("--event", required=True,
+                         help="the read_resource result for the matched event, as saved")
+    m365_ra.add_argument("--owner-slug", dest="owner_slug", required=True,
+                         help="the vault owner's person slug (config read's owner)")
+    m365_ra.add_argument("--today", help="ISO date override (tests)")
     m365_re = m365_sub.add_parser(
         "reassemble",
         help="render an event read + transcript read into one capture-bundle blob")
@@ -1226,6 +1236,11 @@ def _dispatch(args: argparse.Namespace) -> int:
                 utc_offset=args.utc_offset,
                 address_book=(person.address_book(root)
                               if root is not None else None)))
+        if args.action == "resolve-attendees":
+            event = json.loads(Path(args.event).read_text(encoding="utf-8-sig"))
+            return _ok(m365.resolve_attendees(
+                root, event, owner_slug=args.owner_slug,
+                today=vault.today_iso(args.today)))
         if args.action == "capture":
             return _ok(m365.capture(args.source, args.out, event_path=args.event))
         return _ok(m365.reassemble(

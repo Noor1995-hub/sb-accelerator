@@ -400,11 +400,11 @@ def calendar_match(events, *, start_local: str, duration_min: int = 0,
     overlapping event that starts further away than the tolerance is also
     `none`: a bare overlap says someone was in a meeting, not which one.
 
-    The listing carries attendees as bare addresses, so a match also returns
-    `known_attendees` — the person slugs whose note already holds one of
-    those addresses (`address_book`: lowercased email -> slug) — and
-    `unknown_attendee_emails` for the rest, which the caller cannot turn
-    into a person note without a name it does not have.
+    The listing carries attendees as bare addresses; names need the full
+    event read, which `resolve_attendees` turns into slugs. `known_attendees`
+    (addresses already on a person note, via `address_book`) is the fallback
+    for when that read fails. The event `uri` is derived from its id by
+    `event_uri`, never copied from the listing.
     """
     if not isinstance(events, list):
         raise M365Error("--events must hold a JSON array of calendar-search results")
@@ -441,22 +441,12 @@ def calendar_match(events, *, start_local: str, duration_min: int = 0,
         ev_start, event = slot[0]
         local_ev, _ = dates.utc_to_local(ev_start, timezone, utc_offset)
         book = address_book or {}
-        known, unknown = [], []
+        known = []
         for attendee in event.get("attendees") or []:
-            if isinstance(attendee, dict):
-                # `{address}` or Graph's `{emailAddress: {address}}`
-                attendee = (attendee.get("address")
-                            or (attendee.get("emailAddress") or {}).get("address"))
-            address = str(attendee or "").strip().casefold()
-            if "@" not in address:
-                continue
-            slug = book.get(address)
+            slug = book.get(_attendee_address(attendee))
             if slug and slug not in known:
                 known.append(slug)
-            elif not slug and address not in unknown:
-                unknown.append(address)
-        result.update(match="single", known_attendees=known,
-                      unknown_attendee_emails=unknown, event={
+        result.update(match="single", known_attendees=known, event={
             "subject": str(event.get("subject") or "").strip(),
             "organizer": event.get("organizer"),
             "location": event.get("location"),
@@ -466,11 +456,95 @@ def calendar_match(events, *, start_local: str, duration_min: int = 0,
             "start_local": local_ev.strftime("%Y-%m-%dT%H:%M"),
             "start_offset_min": round((ev_start - rec_start).total_seconds() / 60),
             "id": event.get("id"),
-            "uri": event.get("uri"),
+            "uri": _derived_uri(event),
         })
         return result
     result["match"] = "ambiguous" if len(slot) > 1 else "none"
+    if len(slot) > 1:
+        # The scoring fallback picks among these; each carries its derived
+        # uri so a scored winner's full read never needs a hand-built one.
+        result["candidates"] = [{
+            "subject": str(event.get("subject") or "").strip(),
+            "start_local": dates.utc_to_local(ev_start, timezone, utc_offset)[0]
+                                .strftime("%Y-%m-%dT%H:%M"),
+            "attendees": (list(event["attendees"])
+                          if isinstance(event.get("attendees"), list) else []),
+            "id": event.get("id"),
+            "uri": _derived_uri(event),
+        } for ev_start, event in slot]
     return result
+
+
+def _derived_uri(event: dict) -> Optional[str]:
+    """`event_uri` of a listing entry's id, or None for an entry with none —
+    the listing's own `uri` is never copied (#205)."""
+    event_id = event.get("id")
+    return event_uri(event_id) if isinstance(event_id, str) and event_id.strip() else None
+
+
+def _attendee_address(attendee) -> str:
+    """The lowercased address of one attendee entry: a bare string, an
+    `{address}` object, or Graph's `{emailAddress: {address}}`."""
+    if isinstance(attendee, dict):
+        attendee = (attendee.get("address")
+                    or (attendee.get("emailAddress") or {}).get("address"))
+    return str(attendee or "").strip().casefold()
+
+
+def _attendee_name(attendee) -> str:
+    if not isinstance(attendee, dict):
+        return ""
+    name = attendee.get("name") or (attendee.get("emailAddress") or {}).get("name")
+    return str(name or "").strip()
+
+
+def resolve_attendees(root, event: dict, *, owner_slug: str, today: str) -> dict:
+    """The person slugs for a calendar-matched plaud/inbox recording, from
+    the matched event's full read — the listing carries addresses only, the
+    full read carries `attendees[].name` too.
+
+    The same resolution the M365 worker runs (`person ensure` per name, with
+    that entry's address), with one guard first: an address already on a
+    person note resolves to that note, so a display name spelt differently
+    from the note's (`Reyes, Jordan`) never forks a second person. The
+    owner is pre-resolved and never ensured. Rooms and other `resource`
+    entries are not people. An entry with an address but no name cannot be
+    ensured without inventing a name, so it is returned unresolved.
+    """
+    from . import person
+    if not isinstance(event, dict):
+        raise M365Error("--event must hold one calendar event object")
+    entries = list(event.get("attendees") or [])
+    organizer = event.get("organizer")
+    if organizer:
+        entries.insert(0, organizer)
+    book = person.address_book(root)
+    slugs = [owner_slug]
+    created, unresolved = [], []
+    seen = set()
+    for entry in entries:
+        if isinstance(entry, dict) and str(entry.get("type") or "").casefold() == "resource":
+            continue
+        address = _attendee_address(entry)
+        name = _attendee_name(entry)
+        key = address or name.casefold()
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        slug = book.get(address) if address else None
+        if slug is None:
+            if not name:
+                unresolved.append(address)
+                continue
+            result = person.ensure(root, name, today,
+                                   email=address if "@" in address else None)
+            slug = result["slug"]
+            if result["created"]:
+                created.append(slug)
+        if slug not in slugs:
+            slugs.append(slug)
+    return {"attendees": slugs, "created": created,
+            "new_attendees": len(created), "unresolved_emails": unresolved}
 
 
 def ids(events, *, timezone: Optional[str] = None,

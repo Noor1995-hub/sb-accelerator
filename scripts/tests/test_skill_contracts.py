@@ -1413,6 +1413,7 @@ def fenced_dates_window_invocations(text: str):
 
 
 @pytest.mark.parametrize("subcommand", ["dates window", "m365 agenda", "m365 calendar-match",
+                                        "m365 resolve-attendees",
                                         "discover window",
                                         "discover build", "discover answer",
                                         "discover check", "discover clock-start",
@@ -2354,3 +2355,14 @@ def test_sync_recordings_step2_leaves_the_clock_match_to_the_cli():
         "step 2 must prescribe a fenced `m365 calendar-match` invocation")
     assert "`ambiguous`" in step2 and "Never auto-match on time" in " ".join(step2.split())
     assert "calendar-match-medium" in step2 and "never `-high`" in step2
+
+
+def test_sync_recordings_step2_names_people_from_the_full_event_read():
+    """The listing has addresses only, so a matched plaud/inbox meeting
+    used to end up with the owner as its only attendee."""
+    text = (SKILLS_DIR / "sync-recordings" / "SKILL.md").read_text(encoding="utf-8")
+    step2 = text[text.index("### 2. Calendar enrichment"):text.index("### 3. Route")]
+    flat = " ".join(step2.split())
+    assert fenced_invocations(step2, "m365 resolve-attendees")
+    assert "never build one from an `id`" in flat
+    assert "this is never `calendar-tool-unavailable`" in flat
