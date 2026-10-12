@@ -443,3 +443,14 @@ def test_write_facts_refuses_when_the_section_has_an_open_code_fence(tmp_path):
                                 [{"date": "2026-10-08", "fact": f"X. {M}"}], "2026-10-12")
     assert result["written"] == 0 and "code block" in result["skipped"][0]
     assert path.read_bytes() == before
+
+
+def test_write_facts_reuses_the_section_in_any_case(tmp_path):
+    # The structure-15 upgrade reuses "## What I Know"; the writer must too,
+    # or the page grows a second section.
+    start = DANA.replace("# Dana Whitfield\n\n", "# Dana Whitfield\n\n## What I Know\n\n- mine\n\n")
+    root, path = _dana(tmp_path, start)
+    person.write_facts(root, "dana-whitfield",
+                       [{"date": "2026-10-08", "fact": f"X. {M}"}], "2026-10-12")
+    text = path.read_text(encoding="utf-8")
+    assert text.count("## What I") == 1 and f"- mine\n- 2026-10-08 — X. {M}\n" in text

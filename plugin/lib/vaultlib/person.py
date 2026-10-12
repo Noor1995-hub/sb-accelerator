@@ -257,7 +257,7 @@ def insert_section_after_preamble(body: str, heading: str, lines: List[str]) -> 
     when it is missing. Nothing else in the body changes."""
     sections = markdown.split_sections(body)
     for i, (title, content) in enumerate(sections):
-        if title == heading:
+        if title.strip().lower() == heading.lower():
             kept = content.rstrip("\n")
             last = kept.split("\n")[-1].strip() if kept.strip() else ""
             gap = "\n" if (not last or last.startswith("- ")) else "\n\n"
@@ -291,7 +291,7 @@ def write_facts(root: Path, slug: str, facts, today: str) -> dict:
     sections = markdown.split_sections(body)
     target = sections[0][1]          # the preamble, when the section is new
     for title, content in sections:
-        if title == FACTS_HEADING:
+        if title.strip().lower() == FACTS_HEADING.lower():
             existing = {line.strip() for line in content.split("\n") if line.strip()}
             target = content
             break
