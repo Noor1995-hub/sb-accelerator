@@ -1360,6 +1360,21 @@ Use `title`, `when` exactly as given (never work out a weekday yourself),
 one short question back. "Not now" or no answer → `scratch sweep` and end;
 everything stays in triage.
 
+**A meeting with no project** (`projects` empty — an informal recording with
+no calendar event, typically): before showing the list, read the note
+(title, Key Takeaways, Debrief) and suggest **at most one** active project,
+from the same signals as routing in step 3 (project names, `keywords`,
+entity names, the people on it). Only when one project clearly fits;
+otherwise the line keeps "no project". Show it with a question mark:
+
+`3. Hallway chat · Mon 12 Oct 14:20 · no project — Acme ERP rollout? · Jan Peeters`
+
+Accept on that line takes the suggestion: write it as
+`{"path": …, "action": "change", "projects": ["<suggested slug>"]}`. The owner
+can say otherwise in the same answer ("3 accept, no project", "3 project is
+finance close"). A suggestion taken counts as a change for the one-line
+read-back below.
+
 Translate the answer into a list of `{path, action[, projects][, attendees][, accept]}`.
 Projects and people are slugs: match the owner's words to existing project and
 people names. Never invent a slug. If a name matches nothing, or matches two,

@@ -2495,3 +2495,15 @@ def test_add_review_fixes_are_pinned():
     assert "Never derive a date from" in text
     sync = read_skill("sync-recordings").split("---", 2)[1]
     assert "/add" in sync.split("description:", 1)[1].split(chr(10), 1)[0]
+
+
+def test_triage_suggests_a_project_for_a_meeting_with_none():
+    """#267: an informal recording lands with no project; the chat triage
+    proposes one, and accept takes it."""
+    text = read_skill("sync-recordings")
+    step8 = text[text.index("### 8. Triage in the chat"):text.index("### 9. Process")]
+    flat = " ".join(step8.split()).lower()
+    assert "no project — acme erp rollout?" in flat
+    assert "at most one" in flat
+    assert "accept on that line takes the suggestion" in flat
+    assert "a suggestion taken counts as a change" in flat
