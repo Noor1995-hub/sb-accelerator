@@ -760,3 +760,29 @@ def test_unknown_source_still_refuses_with_sessions_present(tmp_path):
     with pytest.raises(decision.DecisionError, match="matches no meeting"):
         decision.write(root, project=PROJECT, date="2026-10-12",
                        payload=note(source="2026-10-12-nothing"), reviewed=False)
+
+
+# --- withdraw (review 2026-10-12) --------------------------------------------
+
+def test_withdraw_flips_an_active_decision_and_says_why(tmp_path):
+    root, note = _decision_vault(tmp_path)
+    rel = note.relative_to(root).as_posix()
+    result = decision.withdraw(root, rel, date="2026-10-20", why="Steerco reversed it")
+    text = note.read_text(encoding="utf-8")
+    assert result["status"] == "withdrawn" and "status: withdrawn" in text
+    assert text.rstrip().endswith("**Withdrawn** — 2026-10-20 · Steerco reversed it.")
+    assert "# Go-live moves to 3 Nov" in text          # nothing else is touched
+    with pytest.raises(decision.DecisionError, match="only an active"):
+        decision.withdraw(root, rel, date="2026-10-21", why="again")
+
+
+def test_withdraw_refuses_without_a_reason_a_dismissed_note_or_an_earlier_date(tmp_path):
+    root, note = _decision_vault(tmp_path)
+    rel = note.relative_to(root).as_posix()
+    with pytest.raises(decision.DecisionError, match="--why"):
+        decision.withdraw(root, rel, date="2026-10-20", why="  ")
+    with pytest.raises(decision.DecisionError, match="after"):
+        decision.withdraw(root, rel, date="2026-10-01", why="too early")
+    decision.review(root, rel, keep=False)
+    with pytest.raises(decision.DecisionError, match="dismissed"):
+        decision.withdraw(root, rel, date="2026-10-20", why="x")

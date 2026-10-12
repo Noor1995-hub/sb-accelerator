@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Tuple
 
 from . import markdown, naming, schema, vault
 
@@ -40,6 +40,7 @@ OPTIONAL_NOTE_FIELDS = ("status", "source", "supersedes")
 # direction, appended so a reader of the old note sees what replaced it without
 # running a query. Append-only — the prior note's prose is never rewritten.
 SUPERSEDED_FOOTER = "**Superseded** — {date} · replaced by [[{stem}]]."
+WITHDRAWN_FOOTER = "**Withdrawn** — {date} · {why}"
 
 
 class DecisionError(Exception):
@@ -474,14 +475,8 @@ def write(root: Path, *, project: str, date: str, payload: dict,
     return result
 
 
-def review(root: Path, path: str, *, keep: bool) -> dict:
-    """The owner's Keep or Dismiss on one decision, given in the chat (#271).
-
-    The same two ticks as Decisions.base: Keep is `reviewed: true`, Dismiss is
-    `archived: true`. Dismissing never touches a decision this one superseded
-    — that one stays `superseded`, as with Dismiss in Obsidian — so the result
-    names it for the caller to tell the owner.
-    """
+def _decision_note(root: Path, path: str) -> Tuple[Path, str, dict]:
+    """A decision note by vault-relative path: (file, text, frontmatter)."""
     target = (root / path).resolve()
     projects = (root / vault.PROJECTS_DIR).resolve()
     if (target.suffix != ".md" or target.parent.name != "decisions"
@@ -495,6 +490,46 @@ def review(root: Path, path: str, *, keep: bool) -> dict:
     if data.get("type") != "decision":
         raise DecisionError(f"{path!r} is not a decision note (type is "
                             f"{data.get('type')!r})")
+    return target, text, data
+
+
+def withdraw(root: Path, path: str, *, date: str, why: str) -> dict:
+    """A decision that was reversed rather than replaced: `active` becomes
+    `withdrawn`, and a footer says when and why. Nothing is deleted — the
+    trace is the point (review 2026-10-12: the ontology named this status,
+    but no command could set it on an existing note)."""
+    why = " ".join(str(why or "").split())
+    if not why:
+        raise DecisionError("--why is required: one line on what reversed it")
+    target, text, data = _decision_note(root, path)
+    if data.get("archived") is True:
+        raise DecisionError(f"{path!r} was dismissed as not a real decision — "
+                            "there is nothing in force to withdraw")
+    if data.get("status") != "active":
+        raise DecisionError(f"{path!r} has status {data.get('status')!r} — only an "
+                            "active decision can be withdrawn")
+    if data.get("date") is not None and str(date) < str(data.get("date"))[:10]:
+        raise DecisionError(f"{path!r} is dated {data.get('date')}, after {date}")
+    try:
+        updated = markdown.replace_scalar_field(text, "status", "withdrawn")
+    except ValueError as exc:
+        raise DecisionError(f"{path!r} cannot be updated: {exc}") from exc
+    footer = WITHDRAWN_FOOTER.format(date=date, why=why.rstrip(".") + ".")
+    vault.atomic_write(target, updated.rstrip("\n") + "\n\n" + footer + "\n")
+    return {"path": target.relative_to(root.resolve()).as_posix(),
+            "project": data.get("project"), "summary": data.get("summary"),
+            "status": "withdrawn", "date": date}
+
+
+def review(root: Path, path: str, *, keep: bool) -> dict:
+    """The owner's Keep or Dismiss on one decision, given in the chat (#271).
+
+    The same two ticks as Decisions.base: Keep is `reviewed: true`, Dismiss is
+    `archived: true`. Dismissing never touches a decision this one superseded
+    — that one stays `superseded`, as with Dismiss in Obsidian — so the result
+    names it for the caller to tell the owner.
+    """
+    target, text, data = _decision_note(root, path)
     field = "reviewed" if keep else "archived"
     updated = markdown.upsert_scalar_field(text, field, "true")
     if updated != text:

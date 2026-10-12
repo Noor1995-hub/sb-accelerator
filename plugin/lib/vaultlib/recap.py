@@ -353,11 +353,11 @@ def render(root: Path, clean: dict, *, meetings: int, window_label: str) -> str:
     watch = clean["watch"] or ["nothing needs your hand this window"]
     parts.append(_callout_list("hot", "Watch", watch, folded=False))
     if clean["carried_forward"]:
-        parts.append(_callout_list("quote", "Carried forward — your jottings",
+        parts.append(_callout_list("quote", "Carried forward — from your notes",
                                    clean["carried_forward"], folded=True))
     sync_notes = list(clean["sync_notes"]) + _upgrade_waiting(root)
     if sync_notes:
-        title = f"Sync notes — {_plural(len(sync_notes), 'item')}, also in the run log"
+        title = f"Sync notes — {_plural(len(sync_notes), 'item')}"
         parts.append(_callout_list("sync", title, sync_notes, folded=True))
     return "\n\n".join(parts)
 

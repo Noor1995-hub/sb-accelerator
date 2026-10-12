@@ -1,6 +1,6 @@
 # Processing (shared)
 
-Followed by `/evening-sync` (after stage 3b), and on demand by `/sync-recordings` step 9 and `/add` step 6, sections A to E. Everything here runs the same for every caller. Only the inputs differ — see Inputs.
+Followed by `/evening-sync` (section A in stage 2, B to E after stage 3b), and on demand by `/sync-recordings` step 9 and `/add` step 6, sections A to E. Everything here runs the same for every caller. Only the inputs differ — see Inputs.
 
 ## Inputs
 
@@ -58,8 +58,9 @@ python3 "$VAULTLIB" sync reconcile-reviews --vault "$VAULT"
 python3 "$VAULTLIB" sync update-queue --vault "$VAULT" --today <today> --owner <owner-slug>
 ```
 
-The second `reconcile-reviews` is deliberate, and it is the only place this
-pipeline repeats a step: a sync with recordings to process can run for the
+In the evening run this is the second `reconcile-reviews` (the sync's
+step 1 ran the first); `/add` runs only this one. The repeat is deliberate,
+and it is the only place this pipeline repeats a step: a sync with recordings to process can run for the
 better part of an hour, and a tick placed in Meetings.base during that window
 would otherwise fold tomorrow evening instead of tonight. It is one cheap
 read of `20-meetings/`; add anything it `flipped` to the folded-ticks count

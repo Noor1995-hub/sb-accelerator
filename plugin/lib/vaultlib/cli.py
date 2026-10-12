@@ -324,6 +324,13 @@ def build_parser() -> argparse.ArgumentParser:
     verdict.add_argument("--keep", action="store_true")
     verdict.add_argument("--dismiss", action="store_true")
 
+    dec_withdraw = decisions_sub.add_parser(
+        "withdraw", help="mark an active decision as reversed, not replaced")
+    _add_vault_argument(dec_withdraw)
+    dec_withdraw.add_argument("--path", required=True, help="vault-relative path")
+    dec_withdraw.add_argument("--why", required=True, help="one line: what reversed it")
+    dec_withdraw.add_argument("--date", help="ISO date it was reversed; defaults to today")
+
     dec_write = decisions_sub.add_parser(
         "write", help="write a decision note, applying any supersession edge")
     _add_vault_argument(dec_write)
@@ -1212,6 +1219,9 @@ def _dispatch(args: argparse.Namespace) -> int:
             return _ok(decision.list_decisions(root, args.project))
         if args.action == "review":
             return _ok(decision.review(root, args.path, keep=args.keep))
+        if args.action == "withdraw":
+            return _ok(decision.withdraw(root, args.path, date=vault.today_iso(args.date),
+                                         why=args.why))
         payload = (json.load(sys.stdin) if args.note == "-"
                    else json.loads(Path(args.note).read_text(encoding="utf-8")))
         return _ok(decision.write(

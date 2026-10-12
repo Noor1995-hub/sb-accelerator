@@ -500,7 +500,9 @@ already read. Carry any `warnings` from the result into stage 7 verbatim.
 Counts come from what exists, not from what you intended (a lab run once
 reported "Processed: 0" after writing a meeting correctly):
 
-- tomorrow's note exists at `note_to_write` with a fresh mtime;
+- tomorrow's note exists at `note_to_write`, and `daily-note write` returned
+  `ok` (a re-run with nothing new returns `changed: false` and leaves the
+  file's date alone — that is not a failure);
 - every project reported updated shows today's `last-updated` **and a fresh
   `state-updated`** in its frontmatter;
 - every recording reported synced has its stem in `20-meetings/`.

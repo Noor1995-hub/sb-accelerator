@@ -1379,7 +1379,7 @@ type: daily-note
 > [!hot] Watch
 > - nothing needs your hand this window
 
-> [!sync]- Sync notes — 1 item, also in the run log
+> [!sync]- Sync notes — 1 item
 > - One duplicate flagged.
 <!-- evening-sync:recap:end -->
 

@@ -70,10 +70,10 @@ EXPECTED = """> [!glance] At a glance
 > [!hot] Watch
 > - Vendor scoring has no owner past Friday.
 
-> [!quote]- Carried forward — your jottings
+> [!quote]- Carried forward — from your notes
 > - Follow up with Dana on rollout scope.
 
-> [!sync]- Sync notes — 1 item, also in the run log
+> [!sync]- Sync notes — 1 item
 > - One duplicate recorder capture flagged in triage."""
 
 
@@ -118,7 +118,7 @@ def test_plurals(tmp_path):
         {"label": "Moved", "text": "x"}]}, "sync_notes": ["a", "b"]})
     text = recap.render(root, clean, meetings=3, window_label="Friday")
     assert "**3 meetings** Friday · 1 entity · 0 themes · 0 decisions logged" in text
-    assert "Sync notes — 2 items, also in the run log" in text
+    assert "Sync notes — 2 items" in text
 
 
 @pytest.mark.parametrize("mutate, message", [

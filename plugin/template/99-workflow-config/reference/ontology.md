@@ -388,8 +388,9 @@ Only an `active` decision can be superseded: `superseded` and `withdrawn`
 decisions were not in force, so replacing one is a category error — and in
 practice that is what a stale or mistyped stem looks like. A decision also
 cannot supersede one dated after it — the edge always points backward in
-time. A decision that was reversed rather than replaced is written
-`withdrawn` instead. **Never delete a decision note** — the trace is the
+time. A decision that was reversed rather than replaced is withdrawn instead:
+`decision withdraw` flips it to `withdrawn` and adds a dated
+`**Withdrawn** —` footer. **Never delete a decision note** — the trace is the
 point.
 
 ### Entity — `40-entities/{slug}/dossier.md` · Base: `Entities.base`
