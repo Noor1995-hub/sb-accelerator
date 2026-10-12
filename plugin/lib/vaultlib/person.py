@@ -94,8 +94,10 @@ def ensure(root: Path, name: str, today: str,
             # entity for certain, and a set link is the owner's.
             linked = str(existing.get("entity") or "").strip()
             if not linked:
+                # `entity` replaces the legacy free-text `company` (#273).
                 text = found.read_text(encoding="utf-8")
-                vault.atomic_write(found, markdown.upsert_scalar_field(text, "entity", entity))
+                vault.atomic_write(found, markdown.remove_field(
+                    markdown.upsert_scalar_field(text, "entity", entity), "company"))
                 result.setdefault("updated", []).append("entity")
             elif linked != entity:
                 ignored.append("entity")
@@ -175,27 +177,39 @@ def set_fields(root: Path, slug: str, *, entity: Optional[str] = None,
                role: Optional[str] = None, decision_role: Optional[str] = None,
                stance: Optional[str] = None) -> dict:
     """Write a person's entity link and stakeholder fields (#273). `None`
-    leaves a field alone; an empty string clears it."""
+    leaves a field alone; an empty string clears it. Vocabulary words are
+    matched case-insensitively and stored lowercase. Setting an entity drops
+    the legacy free-text `company` it replaces.
+
+    The result's `was` maps each changed field to its previous value (""
+    when it had none), so a caller can say "moved from acme-finance"."""
     found = _existing_note(root, slug)
     if found is None:
         raise ValueError(f"no person {slug!r} in {PEOPLE_DIR}/")
     text = found.read_text(encoding="utf-8")
     current, _ = markdown.split_frontmatter(text)
     wanted = {"entity": entity, "role": role, "decision-role": decision_role, "stance": stance}
-    changed = []
+    changed, was = [], {}
     for prop, value in wanted.items():
         if value is None:
             continue
         value = str(value).strip()
         if value and prop == "entity":
             value = _require_entity(root, value)
-        if value and prop in _ENUMS and value not in _ENUMS[prop]:
-            raise ValueError(f"{prop} {value!r} is not one of {list(_ENUMS[prop])}")
-        if str(current.get(prop) or "") == value:
+        if prop in _ENUMS:
+            value = value.lower()
+            if value and value not in _ENUMS[prop]:
+                raise ValueError(f"{prop} {value!r} is not one of {list(_ENUMS[prop])}")
+        previous = "" if current.get(prop) is None else str(current.get(prop)).strip()
+        if previous == value:
             continue
         rendered = markdown.emit_scalar(value, prop in PERSON_QUOTE_KEYS) if value else ""
         text = markdown.upsert_scalar_field(text, prop, rendered)
+        if prop == "entity" and value:
+            text = markdown.remove_field(text, "company")
         changed.append(prop)
+        was[prop] = previous
     if changed:
         vault.atomic_write(found, text)
-    return {"slug": found.stem, "path": found.relative_to(root).as_posix(), "changed": changed}
+    return {"slug": found.stem, "path": found.relative_to(root).as_posix(),
+            "changed": changed, "was": was}

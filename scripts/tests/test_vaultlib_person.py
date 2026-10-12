@@ -218,3 +218,44 @@ def test_set_fields_writes_and_validates(tmp_path):
         person.set_fields(root, "jan-peeters", stance="hostile")
     with pytest.raises(ValueError, match="entity"):
         person.set_fields(root, "jan-peeters", entity="nobody")
+
+
+def test_set_fields_says_what_each_changed_field_was(tmp_path):
+    root = make_vault(tmp_path)
+    _entity(root)
+    _entity(root, "acme-finance")
+    person.ensure(root, "Jan Peeters", "2026-10-12", entity="acme-finance")
+    got = person.set_fields(root, "jan-peeters", entity="acme", role="CFO")
+    assert got["was"] == {"entity": "acme-finance", "role": ""}
+    assert person.set_fields(root, "jan-peeters", entity="acme")["was"] == {}
+
+
+def test_set_fields_lowercases_the_vocabulary_words(tmp_path):
+    root = make_vault(tmp_path)
+    person.ensure(root, "Jan Peeters", "2026-10-12")
+    got = person.set_fields(root, "jan-peeters", decision_role="Champion", stance=" Neutral ")
+    assert got["changed"] == ["decision-role", "stance"]
+    text = (root / "50-people/jan-peeters.md").read_text(encoding="utf-8")
+    assert "decision-role: champion" in text and "stance: neutral" in text
+
+
+def test_set_fields_entity_removes_the_legacy_company(tmp_path):
+    root = make_vault(tmp_path)
+    _entity(root)
+    path = root / "50-people/jan-peeters.md"
+    path.write_text('---\nperson-name: "Jan Peeters"\nslug: jan-peeters\ncompany: "LLBG"\n'
+                    'role:\n---\n\n# Jan Peeters\n', encoding="utf-8")
+    person.set_fields(root, "jan-peeters", entity="acme")
+    data, _ = md.split_frontmatter(path.read_text(encoding="utf-8"))
+    assert data["entity"] == "acme" and "company" not in data
+
+
+def test_ensure_filling_an_entity_removes_the_legacy_company(tmp_path):
+    root = make_vault(tmp_path)
+    _entity(root)
+    path = root / "50-people/jan-peeters.md"
+    path.write_text('---\nperson-name: "Jan Peeters"\nslug: jan-peeters\ncompany: "LLBG"\n'
+                    'role:\n---\n\n# Jan Peeters\n', encoding="utf-8")
+    person.ensure(root, "Jan Peeters", "2026-10-12", entity="acme")
+    data, _ = md.split_frontmatter(path.read_text(encoding="utf-8"))
+    assert data["entity"] == "acme" and "company" not in data

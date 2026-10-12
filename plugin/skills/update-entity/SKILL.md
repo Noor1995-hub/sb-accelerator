@@ -190,22 +190,48 @@ bullet. Dates are ISO `YYYY-MM-DD`.
 People are written on the person, not on the dossier. For each person the
 input names:
 
-1. If they are new, create them: `person ensure --vault "$VAULT" --name
-   "<Full Name>"` (add `--entity <this slug>` only when you know for certain
-   where they work, as here).
+1. Make sure they exist and are linked here:
+
+```bash
+python3 "$VAULTLIB" person ensure --vault "$VAULT" --name "<Full Name>" \
+  --entity <this entity's slug>
+```
+
+   This creates a new person already linked to this entity, and fills an
+   empty `entity` on someone the vault knows. It never moves anyone: when
+   the result's `ignored` lists `entity`, the person is linked to another
+   entity (often a team of this one). Leave that link alone, and say so in
+   the summary.
 2. Then set what you learned, using the person's `slug` from the result:
 
 ```bash
-python3 "$VAULTLIB" person set --vault "$VAULT" --slug <slug>   --entity <this entity's slug> [--role "<title>"]   [--decision-role <sponsor|champion|evaluator|influencer|blocker>]   [--stance <champion|neutral|blocker>]
+python3 "$VAULTLIB" person set --vault "$VAULT" --slug <slug> \
+  [--role "<title>"] \
+  [--decision-role <sponsor|champion|evaluator|influencer|blocker>] \
+  [--stance <champion|neutral|blocker>]
 ```
 
-Pass only the flags you know. The vocabularies are closed: role in decision
-is sponsor · champion · evaluator · influencer · blocker, stance is champion ·
-neutral · blocker. The CLI refuses anything else, so pick the nearest rather
-than inventing. A note about a person ("wants numbers, not narrative") goes
-onto the person's page under `## Notes from <entity name>` (a later piece
-adds a "What I know" section for it). The entity's Stakeholders list then
-shows them on its own.
+Pass only the flags you know. Add `--entity <this entity's slug>` to
+`person set` only when the owner says they moved here — a person linked
+elsewhere is otherwise left where they are. The result's `was` gives each
+changed field's previous value; say it ("Jan Peeters moved from Acme
+Finance to Acme", "title: COO → Group COO").
+
+The vocabularies are closed: role in decision is sponsor · champion ·
+evaluator · influencer · blocker, stance is champion · neutral · blocker.
+The CLI refuses anything else, so pick the nearest rather than inventing.
+
+A note about a person ("wants numbers, not narrative") goes onto the
+person's page, one bullet under `## Notes from <entity name>` (add the
+heading at the end of the page when it is missing):
+
+```markdown
+## Notes from <entity name>
+
+- <note> (from /update-entity, <today>)
+```
+
+The entity's Stakeholders list then shows them on its own.
 
 **Engagements:** nothing to write; the page lists the entity's projects
 itself.

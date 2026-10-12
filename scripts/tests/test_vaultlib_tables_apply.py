@@ -95,3 +95,34 @@ def test_a_new_entity_row_never_updates_an_existing_entity(tmp_path):
     assert "already exists" in result["plan"]["refused"][0]["reason"]
     assert result["created"] == [] and result["failed"] == []
     assert fm(root, "40-entities/acme/dossier.md")[0]["status"] == "active"
+
+
+def _legacy(root):
+    (root / "50-people/sofie-maes.md").write_text(
+        '---\nperson-name: "Sofie Maes"\nslug: sofie-maes\nrelationship: external\n'
+        'company: "LLBG"\nrole:\n---\n# Sofie Maes\n', encoding="utf-8")
+
+
+def _row(book, key):
+    return next(r for r in book["People"] if r[0] == key)
+
+
+def test_the_entity_cell_shows_a_legacy_company_and_an_unchanged_one_is_skipped(tmp_path):
+    root = make_vault(tmp_path)
+    _legacy(root)
+    rel, book = exported(root)
+    assert _row(book, "50-people/sofie-maes.md")[col(book, "People", "Entity")] == "LLBG"
+    assert tables.plan(root, rel)["counts"]["updates"] == 0
+    assert tables.plan(root, rel)["counts"]["conflicts"] == 0
+
+
+def test_resolving_a_legacy_company_sets_the_entity_and_drops_company(tmp_path):
+    root = make_vault(tmp_path)
+    _legacy(root)
+    rel, book = exported(root)
+    _row(book, "50-people/sofie-maes.md")[col(book, "People", "Entity")] = "Acme"
+    save(root, rel, book)
+    result = tables.apply(root, rel, today="2026-10-12")
+    assert result["written"] == [{"key": "50-people/sofie-maes.md", "prop": "entity"}]
+    data, _ = fm(root, "50-people/sofie-maes.md")
+    assert data["entity"] == "acme" and "company" not in data

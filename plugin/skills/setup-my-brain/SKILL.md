@@ -461,6 +461,14 @@ python3 "$VAULTLIB" entity ensure --vault "$VAULT" --slug meridian-freight-holdi
 The slug is the name they gave, lowercase and hyphenated
 (`meridian-freight-holdings`).
 
+When their own company is one of the entities they ticked, link them to it,
+so their own page sits on that entity's Stakeholders list (`alex-rivera` is
+the owner slug from step 2):
+
+```bash
+python3 "$VAULTLIB" person set --vault "$VAULT" --slug alex-rivera --entity <own company slug>
+```
+
 ## Step 5 — your work
 
 The read has just gone through their chats and mail: open with what it

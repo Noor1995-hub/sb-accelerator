@@ -21,7 +21,9 @@ In an existing vault this migration:
   person's page under `## Notes from <Entity>` (marked "unconfirmed" when the
   cell also carried the `<!-- needs-review -->` marker). A person the row
   links who had no entity gets this one, and loses a leftover `company`;
-- moves every Engagements one-liner to its project's `## Notes`;
+- moves every Engagements one-liner to its project's `## Notes`, and lists
+  a project the live list will not show on this page (its `entity` is not
+  this entity or one of its teams, or it is not `type: project`);
 - replaces both tables with the live lists, keeping any text the owner wrote
   around them, and drops the Teams section's project list (Engagements shows
   those projects now).
@@ -346,6 +348,7 @@ def _entities(root: Path, run: Optional["_Run"] = None) -> Dict[str, dict]:
                 run.unreadable(path, exc)
             continue
         out[path.parent.name] = {"name": str(data.get("entity-name") or path.parent.name),
+                                 "parent": str(data.get("parent") or "").strip(),
                                  "path": path, "text": text}
     return out
 
@@ -360,6 +363,7 @@ class _Run:
                        "dossiers": 0, "needs_human": []}
         self._unreadable = set()
         self.linked_by_table = set()
+        self.entities: Dict[str, dict] = {}
 
     # --- reporting
 
@@ -507,26 +511,42 @@ class _Run:
 
     # --- projects
 
-    def engagement(self, name: str, rel: str, row: str) -> bool:
+    def engagement(self, entity: str, name: str, rel: str, row: str) -> bool:
+        """Move one Engagements row's one-liner to its project's Notes. The
+        project is resolved first: a row naming no project stays on the page
+        whatever its one-liner, since the row itself is the owner's record."""
         project_cell, _, one_liner = _row_cells(row, len(ENGAGEMENT_HEADER))
         one_liner = one_liner.strip()
-        if not one_liner:
-            return True  # nothing to move: the project's own page holds its status
         slug = _project_slug(project_cell)
         index = self.root / vault.PROJECTS_DIR / slug / "index.md" if slug else None
         if index is None or not index.is_file():
+            said = f"one-liner {one_liner!r}" if one_liner else "row"
             item = (f"{rel}: Engagements row {project_cell!r} names no project, so its "
-                    f"one-liner {one_liner!r} stays on the page")
+                    f"{said} stays on the page")
             self.result["unresolved"].append(item)
             self.flag(item)
             return False
         try:
             text = _read(index)
             head, body = _split_head(text)
+            data, _ = markdown.split_frontmatter(text)
         except (ValueError, OSError) as exc:
             self.unreadable(index, exc)
             self.skip(rel, "Engagements", row, f"{_rel(self.root, index)} will not parse")
             return False
+        if not one_liner:
+            return True  # nothing to move: the project's own page holds its status
+        owner = str(data.get("entity") or "").strip()
+        listed = (str(data.get("type") or "").strip() == "project"
+                  and (owner == entity
+                       or (owner in self.entities
+                           and self.entities[owner]["parent"] == entity)))
+        if not listed:
+            self.flag(f"{_rel(self.root, index)}: the one-liner from {name}'s Engagements "
+                      f"moved to its Notes, but the project won't show on {name}'s page "
+                      f"(its entity is {owner or 'empty'!r}, its type "
+                      f"{str(data.get('type') or 'empty')!r}) — set its entity if it "
+                      f"belongs to {name}")
         start, end = f"- Engagement note (moved from the {name} page, ", f"): {one_liner}"
         updated = _append_under(
             body, "Notes", f"{start}{self.today}{end}",
@@ -564,7 +584,7 @@ class _Run:
             else:
                 header = ENGAGEMENT_HEADER
                 rebuilt, foreign = _rebuild(content, header, ENGAGEMENTS_QUERY,
-                                            lambda row: self.engagement(name, rel, row))
+                                            lambda row: self.engagement(slug, name, rel, row))
             if _has_canonical(content, header, callouts=True):
                 self.flag(f"{rel}: the {title} table sits inside a callout and was left as "
                           "it is — move its rows out by hand")
@@ -585,6 +605,7 @@ def apply(root: Path) -> dict:
     run = _Run(root, date.today().isoformat())
     result = run.result
     entities = _entities(root, run)
+    run.entities = entities
     run.link_companies(entities)
     for slug, info in entities.items():
         try:

@@ -460,6 +460,50 @@ def test_one_liner_dedupe_compares_the_whole_bullet(tmp_path):
     assert "page, " in text(root, "30-projects/acme-erp/index.md").split("Go-live in Q1")[1]
 
 
+def test_an_unresolved_engagement_with_no_one_liner_is_kept_and_reported(tmp_path):
+    root = mini(tmp_path, dossier(engagements=EH + "| Big Project | Active | |\n"))
+    module = load()
+    result = module.apply(root)
+    assert flagged(result, "Big Project")
+    assert any("Big Project" in u for u in result["unresolved"])
+    assert "- | Big Project | Active | |" in section(root, "Engagements")
+    module.verify(root)
+
+
+def test_an_empty_one_liner_on_a_resolved_project_is_nothing_to_move(tmp_path):
+    root = mini(tmp_path, dossier(engagements=EH + "| [[acme-erp]] | Active | |\n"))
+    result = load().apply(root)
+    assert not flagged(result, "acme-erp") and result["one_liners_moved"] == 0
+    assert "acme-erp" not in section(root, "Engagements")
+
+
+def test_a_project_of_another_entity_moves_but_is_flagged(tmp_path):
+    other = PROJECT.replace("slug: acme-erp", "slug: beta-erp").replace("entity: acme", "entity: beta")
+    root = mini(tmp_path, dossier(engagements=EH + "| [[beta-erp]] | Active | Not ours |\n"),
+                projects={"beta-erp": other})
+    result = load().apply(root)
+    assert "Not ours" in text(root, "30-projects/beta-erp/index.md")
+    assert flagged(result, "beta-erp", "won't show")
+
+
+def test_a_project_of_a_team_moves_and_is_not_flagged(tmp_path):
+    team = '---\ntype: entity\nentity-name: "Finance"\nslug: acme-finance\nparent: acme\n---\n# Finance\n'
+    proj = PROJECT.replace("entity: acme", "entity: acme-finance")
+    root = mini(tmp_path, dossier(engagements=EH + "| [[acme-erp]] | Active | Team's |\n"),
+                projects={"acme-erp": proj}, entities={"acme-finance": team})
+    result = load().apply(root)
+    assert "Team's" in text(root, "30-projects/acme-erp/index.md")
+    assert not flagged(result, "won't show")
+
+
+def test_a_project_that_is_not_type_project_is_flagged(tmp_path):
+    area = PROJECT.replace("type: project", "type: area")
+    root = mini(tmp_path, dossier(engagements=EH + "| [[acme-erp]] | Active | Area |\n"),
+                projects={"acme-erp": area})
+    result = load().apply(root)
+    assert flagged(result, "acme-erp", "won't show")
+
+
 # --- I7: tables that are not where they should be ------------------------------------
 
 def test_a_typed_table_under_a_renamed_heading_is_reported(tmp_path):
@@ -563,8 +607,11 @@ def test_the_demo_vault_migrates_once(tmp_path, crlf):
             path.write_bytes(path.read_bytes().replace(b"\r\n", b"\n").replace(b"\n", b"\r\n"))
     module = load()
     # The shipped demo vault is already at structure 14 (migrated with this
-    # module); a run over it must find nothing to move and still verify.
+    # module); a run over it must find nothing to move, change no byte and
+    # still verify.
+    before = files(root)
     result = module.apply(root)
+    assert files(root) == before
     assert result["stakeholders_moved"] == 0 and result["one_liners_moved"] == 0
     module.verify(root)
     snapshot = files(root)

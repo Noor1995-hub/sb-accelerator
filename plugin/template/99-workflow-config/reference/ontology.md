@@ -250,9 +250,10 @@ enums:
   what People.base's "Uncurated" view filters on. `keys_present` means the
   key itself must exist even when its value is null.
 - `relationship: direct-report` is what places a person in People.base's
-  "Direct reports" view. `company` and `role` are expected to be filled for a
-  direct report — the sync creates people with all three empty, so that view
-  stays empty until someone curates.
+  "Direct reports" view. `entity` (which replaces `company`) and `role` are
+  expected to be filled for a direct report — the sync creates people with
+  `relationship` and `role` empty, so that view stays empty until someone
+  curates.
 - Optional body convention for direct-report notes: a `## Development`
   section with `### Feedback History` (a dated table) and `### Growth Areas`.
   Nothing in the plugin reads or writes it; it is a place, not a pipeline.
@@ -269,8 +270,10 @@ enums:
 - `email` is stored when the M365 sync (or the message feed) creates the
   person, and filled into an existing note whose `email` is empty; a set
   email is never overwritten.
-- `relationship`, `company` and `role` stay hand-curated — nothing writes
-  them. `last-updated` is the creation day and is not a recency signal; sort
+- `relationship` stays hand-curated — nothing writes it. `role`,
+  `decision-role` and `stance` are written by `person set` (as
+  /update-entity uses it), by /update-tables and by the structure-14
+  upgrade. `last-updated` is the creation day and is not a recency signal; sort
   on `last-met` for that.
 - Example: `50-people/jordan-reyes.md`
 
