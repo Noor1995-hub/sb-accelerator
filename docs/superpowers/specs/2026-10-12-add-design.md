@@ -138,7 +138,7 @@ python3 "$VAULTLIB" session write --vault "$VAULT" --note "$SCRATCH/session.payl
 The payload has `title`, `date` (from `dates plan`, never computed),
 `projects`, `people`, `summary` (bullets), `decisions` (candidate lines, may
 be empty) and `scope` (`whole` or the owner's words for the part kept). The
-CLI writes `_messages/<date>-session-<title-slug>.md`:
+CLI writes `_messages/sessions/<date>-<title-slug>.md`:
 
 ```yaml
 ---
@@ -153,11 +153,15 @@ scope: "what we decided about pricing"
 - …
 ```
 
-Why `_messages/`: it is already hidden in Obsidian (`app.json`), already a
-place `decision write` resolves a `source` in, and already linkable
-(`links.py`). Every existing reader there globs `*-messages.md`, so a
-`*-session-*.md` file is invisible to mail and Teams code. No new folder, no
-migration. The CLI refuses unknown project or people slugs (as
+Why `_messages/sessions/`: `_messages/` is already hidden in Obsidian
+(`app.json` ignores the whole folder, subfolders included), and a subfolder
+keeps the sessions apart from the mail and Teams day logs (owner, 2026-10-12).
+Every existing reader in `_messages/` globs `*-messages.md` in the folder
+itself, never recursively, so sessions are invisible to mail and Teams code.
+Two readers must learn the subfolder: `decision write`'s source lookup
+(`decision._resolve_source`, which today searches `_messages/` only) and
+`links.py`'s object kinds (which today accepts `_messages/<file>` only). The
+CLI creates `sessions/` on first write; no migration. The CLI refuses unknown project or people slugs (as
 `triage-apply` does) and refuses a payload with an empty summary.
 
 ### Step 6: Process
@@ -225,12 +229,14 @@ The same `runlock` as #277, routine `add`. A Plaud recording added with
   - `session write`: writes to `_messages/` with the frontmatter above;
     refuses unknown slugs and an empty summary; the title slug is safe; a
     second call with the same title on the same day gets a suffix, never an
-    overwrite.
+    overwrite; `sessions/` is created on first write.
   - `update-queue`: a session after `state-updated` queues its project under
     `newSessions`; one before does not; sessions do not change any metric;
-    a `*-session-*.md` file is ignored by the mail/Teams readers (`msglog`,
-    `health`, `dailynote` recap).
-  - `decision write`: `source: <session stem>` resolves.
+    a file in `_messages/sessions/` is ignored by the mail/Teams readers
+    (`msglog`, `health`, `dailynote` recap).
+  - `decision write`: `source: <session stem>` resolves to the file in
+    `_messages/sessions/`.
+  - `links.py`: a `_messages/sessions/<file>` link resolves as a session.
 - **Skill contracts:**
   - `/add` points at `process.md` and at `/sync-recordings`' adapter and
     worker sections (no second Plaud implementation).
@@ -255,6 +261,6 @@ The same `runlock` as #277, routine `add`. A Plaud recording added with
 ## Release
 
 New skill, CLI and `update-queue` change, tests. No vault structure change
-(sessions live in the existing hidden `_messages/`), so no migration.
+(sessions live in `_messages/sessions/`, inside the existing hidden folder), so no migration.
 `Start here.md` gets one line about `/add` (template refresh). Version bump
 and CHANGELOG entry as usual.
