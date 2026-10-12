@@ -169,6 +169,17 @@ def build_parser() -> argparse.ArgumentParser:
     person_ensure.add_argument(
         "--email", help="the attendee's address; stored on creation, and "
                         "filled into an existing note whose email is empty")
+    person_ensure.add_argument(
+        "--entity", help="entity slug the person belongs to; only when known for "
+                         "certain — filled into an existing note whose entity is empty")
+    person_set = people_sub.add_parser(
+        "set", help="write a person's entity link and stakeholder fields (#273)")
+    _add_vault_argument(person_set)
+    person_set.add_argument("--slug", required=True)
+    person_set.add_argument("--entity")
+    person_set.add_argument("--role", help="the person's title")
+    person_set.add_argument("--decision-role", dest="decision_role")
+    person_set.add_argument("--stance")
 
     projects = top.add_parser("project", help="project folders")
     projects_sub = projects.add_subparsers(dest="action", required=True)
@@ -1029,8 +1040,12 @@ def _dispatch(args: argparse.Namespace) -> int:
                    else json.loads(Path(args.identity).read_text(encoding="utf-8")))
         return _ok(config.verify_account(root, args.adapter, payload))
     if args.group == "person":
+        if args.action == "set":
+            return _ok(person.set_fields(root, args.slug, entity=args.entity, role=args.role,
+                                         decision_role=args.decision_role, stance=args.stance))
         today = vault.today_iso(getattr(args, "today", None))
-        return _ok(person.ensure(root, args.name, today, email=args.email))
+        return _ok(person.ensure(root, args.name, today, email=args.email,
+                                 entity=args.entity))
     if args.group == "messages":
         if args.action == "cursor":
             return _ok(msgstate.cursor(root, now=args.now, timezone=args.timezone,

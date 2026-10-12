@@ -179,3 +179,42 @@ def test_ensure_refuses_a_malformed_email(tmp_path, bad):
     with pytest.raises(ValueError, match="email"):
         person.ensure(root, "Ana Fields", "2026-06-12", email=bad)
     assert not (root / "50-people" / "ana-fields.md").exists()
+
+
+def _entity(root, slug="acme"):
+    (root / "40-entities" / slug).mkdir(parents=True, exist_ok=True)
+    (root / "40-entities" / slug / "dossier.md").write_text(
+        f'---\ntype: entity\nentity-name: "Acme"\nslug: {slug}\nstatus: active\n---\n', encoding="utf-8")
+
+
+def test_ensure_links_a_new_person_and_writes_no_company(tmp_path):
+    root = make_vault(tmp_path)
+    _entity(root)
+    made = person.ensure(root, "Jan Peeters", "2026-10-12", entity="acme")
+    text = (root / made["path"]).read_text(encoding="utf-8")
+    assert "entity: acme" in text and "company" not in text
+
+
+def test_ensure_fills_an_empty_entity_only(tmp_path):
+    root = make_vault(tmp_path)
+    _entity(root)
+    _entity(root, "beta")
+    person.ensure(root, "Jan Peeters", "2026-10-12")
+    assert "entity" in person.ensure(root, "Jan Peeters", "2026-10-12", entity="acme")["updated"]
+    again = person.ensure(root, "Jan Peeters", "2026-10-12", entity="beta")
+    assert "entity" in again["ignored"]
+
+
+def test_set_fields_writes_and_validates(tmp_path):
+    root = make_vault(tmp_path)
+    _entity(root)
+    person.ensure(root, "Jan Peeters", "2026-10-12")
+    got = person.set_fields(root, "jan-peeters", entity="acme", role="CFO",
+                            decision_role="sponsor", stance="champion")
+    assert got["changed"] == ["entity", "role", "decision-role", "stance"]
+    text = (root / "50-people/jan-peeters.md").read_text(encoding="utf-8")
+    assert 'role: "CFO"' in text and "decision-role: sponsor" in text
+    with pytest.raises(ValueError, match="stance"):
+        person.set_fields(root, "jan-peeters", stance="hostile")
+    with pytest.raises(ValueError, match="entity"):
+        person.set_fields(root, "jan-peeters", entity="nobody")
