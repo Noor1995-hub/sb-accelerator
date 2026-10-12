@@ -47,10 +47,11 @@ separate follow-up and not part of this spec.
 | 7 | Summarize the sync | unchanged |
 | **8** | **Triage in the chat** | new |
 | **9** | **Process** (follow the shared part) | new |
-| **10** | **Summary of what changed in the brain** | new |
+| **10** | **Decisions in the chat** | new |
+| **11** | **Summary of what changed in the brain** | new |
 
 Under `--unattended` (scheduled runs, and `/evening-sync` stage 3) the skill
-behaves exactly as today: no step 8, 9 or 10.
+behaves exactly as today: no steps 8–11.
 
 **One question round.** Today interactive mode asks once before extraction
 (step 5: proceed / edit / skip, on provisional titles). With step 8 added,
@@ -61,8 +62,8 @@ like unattended mode (no plan shown, ambiguous routing becomes
 A recording the owner never wants to see again is dismissed in step 8
 (`archived: true`), which hides it, the same as Dismiss in Obsidian.
 
-> **Open for review:** this removes the chance to stop a long extraction
-> before it starts. If the owner wants to keep step 5, the skill asks twice.
+Approved by the owner 2026-10-12, accepting that a long extraction can no
+longer be stopped before it starts.
 
 ### Step 8: Triage in the chat
 
@@ -132,7 +133,30 @@ and each log's `updated-at` against the project's `state-updated`.
 - Notes absorbed at noon are unticked (`absorbed` stamped) and are not read
   again in the evening.
 
-### Step 10: Summary
+### Step 10: Decisions in the chat
+
+Decisions captured in step 9 are written `reviewed: false` (background
+mode, unchanged). The owner is in the chat anyway, so the skill shows them
+the same way as the meetings, one line each
+(`1. Acme ERP rollout · Go-live moved to 3 Nov`), and asks once: *keep or
+dismiss?*
+
+- keep → `reviewed: true`
+- dismiss → `archived: true` (the same as Dismiss in Decisions.base)
+
+Both are written by a new CLI, `decision review --path <p> --keep|--dismiss`.
+It refuses a path that is not a decision note. "Not now" leaves them in
+Decisions › To review.
+
+This is a second question, after the work. The decisions only exist once
+step 9 has run, so they cannot be part of step 8.
+
+Dismissing a decision that superseded an earlier one leaves the earlier one
+`superseded`, exactly as Dismiss in Obsidian does today. The skill names the
+earlier decision so the owner can restore it by hand. Reversing the edge
+automatically is out of scope.
+
+### Step 11: Summary
 
 Short, counted from disk:
 
@@ -141,14 +165,11 @@ Short, counted from disk:
 **Meetings:** {N} accepted · {N} dismissed · {N} changed · {N} left in triage
 **Your notes:** {N} absorbed ({titles}) · {N} kept for tonight ({why})
 **Project pages rewritten:** {project names}
-**Decisions captured:** {N} ({project: title}) — waiting in Decisions › To review
+**Decisions:** {N} kept · {N} dismissed · {N} left in Decisions › To review
 **Not done now:** mail and Teams (tonight's run) · daily note (tonight's run)
 **Warnings:** {verbatim} | none
 ```
 
-Decisions captured here land `reviewed: false`, as in the evening run. The
-owner already reviewed the meeting. The decision is a new claim and keeps
-its own review.
 
 ### Not running twice at once
 
@@ -177,7 +198,7 @@ lock is reported stale and is taken over.
 - **This skill never creates, writes or edits anything under
   `60-daily-notes/`.** The daily note belongs to `/evening-sync` stage 6.
   Safe to run any number of times a day.
-- Steps 8–10 run only in interactive mode. `--unattended` never asks and
+- Steps 8–11 run only in interactive mode. `--unattended` never asks and
   never processes.
 - It never reads mail or Teams.
 
@@ -187,6 +208,8 @@ lock is reported stale and is taken over.
   - `meeting triage list`: filters, and fields including `conflicts-with`.
   - `meeting triage apply`: accept / dismiss / change, unknown slug refused,
     conflicted note refused, and an idempotent re-apply.
+  - `decision review`: keep, dismiss, refused non-decision path,
+    superseding decision named on dismiss.
   - `runlock`: acquire, refuse, stale takeover, release.
 - **Skill contracts (`test_skill_contracts.py`):**
   - `daily-note write` appears only in `evening-sync`.
