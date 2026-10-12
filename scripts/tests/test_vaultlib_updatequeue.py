@@ -926,3 +926,42 @@ def test_mail_read_in_the_evening_requeues_a_project_written_at_noon(tmp_path):
         "projectsNeedingUpdate"]
     assert [e["slug"] for e in queue] == ["acme-industries-rollout"]
     assert queue[0]["newLogs"] == ["2026-10-12-messages"]
+
+
+def write_session(root, stem, projects, updated_at):
+    folder = root / "_messages" / "sessions"
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / f"{stem}.md").write_text(
+        "---\ntype: session\ndate: 2026-10-12\n"
+        f"updated-at: {updated_at}\nprojects: [{', '.join(projects)}]\n"
+        "people: []\nscope: whole\n---\n# x\n", encoding="utf-8")
+
+
+def test_a_session_after_state_updated_queues_its_project(tmp_path):
+    root = make_vault(tmp_path)
+    write_project(root, "alpha", last_updated="2026-10-12",
+                  state_updated="2026-10-12T12:00")
+    write_session(root, "2026-10-12-pricing", ["alpha"], "2026-10-12T15:42")
+    queue = updatequeue.run(root, "2026-10-12", "owner-morgan")["projectsNeedingUpdate"]
+    assert [e["slug"] for e in queue] == ["alpha"]
+    assert queue[0]["newSessions"] == ["_messages/sessions/2026-10-12-pricing.md"]
+    assert queue[0]["newCount"] == 1
+
+
+def test_a_session_before_state_updated_does_not_requeue(tmp_path):
+    """#267: /add wrote the session, then section C wrote state — the
+    evening run must not take it again."""
+    root = make_vault(tmp_path)
+    write_project(root, "alpha", last_updated="2026-10-12",
+                  state_updated="2026-10-12T15:45")
+    write_session(root, "2026-10-12-pricing", ["alpha"], "2026-10-12T15:42")
+    assert updatequeue.run(root, "2026-10-12", "owner-morgan")["projectsNeedingUpdate"] == []
+
+
+def test_sessions_change_no_metric_and_are_not_message_logs(tmp_path):
+    root = vault_with_project_and_owner(tmp_path, "acme-industries-rollout", "2026-10-12T12:00")
+    write_session(root, "2026-10-12-pricing", ["acme-industries-rollout"], "2026-10-12T15:42")
+    result = updatequeue.run(root, "2026-10-12", "morgan-ellery")
+    entry = result["projectsNeedingUpdate"][0]
+    assert entry["newLogs"] == [] and entry["newFiles"] == []
+    assert not [w for w in result["warnings"] if "session" in w]

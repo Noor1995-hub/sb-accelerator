@@ -32,7 +32,7 @@ if __package__ in (None, ""):
     # the skills invoke it.
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from vaultlib import actions, config, dailynote, dates, decision, discover, entity, feedback, fetcherrors, health, lastsync, m365, meeting, migrate, msglog, msgrows, msgstate, notes, person, plaud, project, projectstate, provenance, runlock, runlog, scratch, schema, seenevents, syncjob, template, triage, updatequeue, vault  # noqa: E402
+from vaultlib import actions, config, dailynote, dates, decision, discover, entity, feedback, fetcherrors, health, lastsync, m365, meeting, migrate, msglog, msgrows, msgstate, notes, person, plaud, project, projectstate, provenance, runlock, runlog, scratch, schema, session, seenevents, syncjob, template, triage, updatequeue, vault  # noqa: E402
 
 
 def _emit(payload: dict) -> None:
@@ -302,6 +302,15 @@ def build_parser() -> argparse.ArgumentParser:
                       help="a human validated this inline; writes reviewed: true")
     mode.add_argument("--background", action="store_true",
                       help="unattended capture; writes reviewed: false")
+
+    sessions = top.add_parser("session", help="hidden session records (#267)")
+    sessions_sub = sessions.add_subparsers(dest="action", required=True)
+    session_write = sessions_sub.add_parser(
+        "write", help="write one session record from a JSON payload")
+    _add_vault_argument(session_write)
+    session_write.add_argument("--note", required=True,
+                               help="path to a JSON file, or - to read stdin")
+    session_write.add_argument("--now", help="ISO datetime override (tests)")
 
     sync = top.add_parser("sync", help="recording-sync ledger operations")
     sync_sub = sync.add_subparsers(dest="action", required=True)
@@ -1121,6 +1130,11 @@ def _dispatch(args: argparse.Namespace) -> int:
             root, project=args.project, date=vault.today_iso(args.date),
             payload=payload, reviewed=args.foreground,
         ))
+    if args.group == "session":
+        payload = (json.load(sys.stdin) if args.note == "-"
+                   else json.loads(Path(args.note).read_text(encoding="utf-8")))
+        now = datetime.fromisoformat(args.now) if args.now else None
+        return _ok(session.write(root, payload, now=now))
     if args.group == "sync":
         if args.action == "scan":
             return _ok(syncjob.scan(root))
@@ -1380,6 +1394,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         return _fail(str(exc), "Fix the named constraint and retry.")
     except decision.DecisionError as exc:
         return _fail(str(exc), "Fix the named constraint and retry.")
+    except session.SessionError as exc:
+        return _fail(str(exc), "Fix the named payload field and retry.")
     except meeting.MeetingError as exc:
         return _fail(str(exc), "Fix the named payload field and retry.")
     except triage.TriageError as exc:

@@ -53,7 +53,7 @@ def known_subcommands() -> set:
 
 
 NET_NEW = {"report-feedback", "health-check", "upgrade-vault", "setup-my-brain",
-           "schedule-daily-loop", "provision-vault", "sync-messages"}
+           "schedule-daily-loop", "provision-vault", "sync-messages", "add"}
 
 
 def test_expected_skills_exist():
@@ -64,7 +64,7 @@ def test_expected_skills_exist():
             "sync-recordings", "evening-sync", "report-feedback",
             "health-check", "upgrade-vault", "setup-my-brain",
             "schedule-daily-loop", "provision-vault",
-            "sync-messages"} <= names
+            "sync-messages", "add"} <= names
 
 
 @pytest.mark.parametrize("path", SKILL_FILES, ids=lambda p: p.parent.name)
@@ -2285,8 +2285,9 @@ def test_log_decision_source_may_be_an_owner_note():
 def test_ontology_types_decision_source_as_meeting_log_or_owner_note():
     text = (REPO_ROOT / "plugin" / "template" / "99-workflow-config" / "reference"
             / "ontology.md").read_text(encoding="utf-8")
-    assert "`source` (`[[meeting]]` / `[[message log]]` / `[[owner note]]`)" in text
+    assert "`source` (`[[meeting]]` / `[[message log]]` / `[[session]]` / `[[owner note]]`)" in text
     assert "- `Decision —source→ Owner note`" in text
+    assert "- `Decision —source→ Session`" in text
     assert "a note of your own in `80-thoughts-ideas/`" in text
 
 
@@ -2437,3 +2438,73 @@ def test_on_demand_lock_is_taken_only_after_the_owner_answered():
     assert (step8.index("Accept, dismiss or change?")
             < step8.index('runlock acquire --vault "$VAULT" --routine sync-recordings')
             < step8.index("meeting triage-apply"))
+
+
+def test_process_reads_session_records_with_their_marker():
+    c = read_ref("evening-sync", "process.md").split("## C.", 1)[1].split("## Returns", 1)[0]
+    assert "newSessions" in c
+    assert "(session · " in c
+    assert "source: <session stem>" in c
+
+
+def test_add_skill_shape():
+    """#267: one item, owner's OK first, processed now, never a daily note."""
+    text = read_skill("add")
+    for heading in ("## Rules", "### 1. What was handed over", "### 2. Get the content",
+                    "### 3. Understand", "### 4. One line, one OK", "### 5. Write",
+                    "### 6. Process", "### 7. Decisions in the chat", "### 8. Summary"):
+        assert heading in text, heading
+    for cli in ("session write", "meeting triage-apply", "sync reconcile-reviews",
+                "sync archive", "decision review",
+                'runlock acquire --vault "$VAULT" --routine add',
+                'runlock release --vault "$VAULT" --routine add', "dates plan"):
+        assert cli in text, cli
+    assert "skills/evening-sync/references/process.md" in text
+    assert "skills/sync-recordings/SKILL.md" in text
+    assert "60-daily-notes" not in text.replace(
+        "never creates, writes or edits anything under `60-daily-notes/`", "")
+    assert "daily-note write" not in text
+    assert "plaud" not in text.lower(), "Plaud belongs to /sync-recordings"
+
+
+def test_add_writes_only_after_the_ok():
+    text = read_skill("add")
+    assert text.index("### 4. One line, one OK") < text.index('runlock acquire --vault "$VAULT" --routine add')
+    assert text.index('runlock acquire --vault "$VAULT" --routine add') < text.index("session write")
+
+
+def test_add_and_sync_recordings_split_their_triggers():
+    add = read_skill("add").split("---", 2)[1]
+    assert "remember this" in add and "add this to my second brain" in add
+    assert "sync" not in add.split("description:", 1)[1].split("\n", 1)[0].lower().replace("/sync-recordings", "")
+
+
+def test_add_review_fixes_are_pinned():
+    text = read_skill("add")
+    # I2: honest calendar for a meeting
+    assert "calendar enrichment" in text.lower() and "step 2" in text
+    assert "calendar-not-applicable" in text and "recording-duration" in text
+    assert "calendar_match" in text
+    # I1: source is the arrival channel, not read from sync scan
+    assert "`manual`" in text and "`email`" in text
+    # I4 / M4: originals and already-synced
+    assert "already inside `10-inbox/`" in text
+    assert "already_synced" in text
+    # M2 / M5 / M7
+    assert "$SCRATCH` is the session scratch directory" in text
+    assert "Another run is busy (the evening run or another sync)" in text
+    assert "Never derive a date from" in text
+    sync = read_skill("sync-recordings").split("---", 2)[1]
+    assert "/add" in sync.split("description:", 1)[1].split(chr(10), 1)[0]
+
+
+def test_triage_suggests_a_project_for_a_meeting_with_none():
+    """#267: an informal recording lands with no project; the chat triage
+    proposes one, and accept takes it."""
+    text = read_skill("sync-recordings")
+    step8 = text[text.index("### 8. Triage in the chat"):text.index("### 9. Process")]
+    flat = " ".join(step8.split()).lower()
+    assert "no project — acme erp rollout?" in flat
+    assert "at most one" in flat
+    assert "accept on that line takes the suggestion" in flat
+    assert "a suggestion taken counts as a change" in flat

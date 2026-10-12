@@ -1,6 +1,6 @@
 ---
 name: sync-recordings
-description: Sync new meeting transcripts into the vault — from files dropped in the inbox, from a Plaud recorder connector, or from Microsoft 365. Triggers when the user invokes /sync-recordings or asks to sync recordings, process transcripts, or pull in what's in the inbox.
+description: Sync new meeting transcripts into the vault — from files dropped in the inbox, from a Plaud recorder connector, or from Microsoft 365. Triggers when the user invokes /sync-recordings or asks to sync recordings, process transcripts, or pull in what's in the inbox. One pasted text, a file, or this conversation ("add this to my second brain") is /add.
 user_invocable: true
 upstreamed-from: busdev@ccc27b8
 ---
@@ -1359,6 +1359,22 @@ Use `title`, `when` exactly as given (never work out a weekday yourself),
 "1 3 accept, 2 dismiss, 4 project is finance close"). An unclear answer gets
 one short question back. "Not now" or no answer → `scratch sweep` and end;
 everything stays in triage.
+
+**A meeting with no project** (`projects` empty — an informal recording with
+no calendar event, typically): before showing the list, read the note
+(title, Key Takeaways, Debrief) and suggest **at most one** active project,
+from the same signals as routing in step 3 (project names, entity names,
+the people on it — run `sync routing-signals` if step 3 did not run in this
+call). Only when one project clearly fits;
+otherwise the line keeps "no project". Show it with a question mark:
+
+`3. Hallway chat · Mon 12 Oct 14:20 · no project — Acme ERP rollout? · Jan Peeters`
+
+Accept on that line takes the suggestion: write it as
+`{"path": …, "action": "change", "projects": ["<suggested slug>"]}`. The owner
+can say otherwise in the same answer ("3 accept, no project", "3 project is
+finance close"). A suggestion taken counts as a change for the one-line
+read-back below.
 
 Translate the answer into a list of `{path, action[, projects][, attendees][, accept]}`.
 Projects and people are slugs: match the owner's words to existing project and

@@ -45,6 +45,9 @@ def _classify(root: Path, path: Path) -> Tuple[Optional[str], Optional[str]]:
         return "daily note", None
     if parts[0] == vault.MESSAGES_DIR and len(parts) == 2:
         return "message log", None
+    if (parts[0] == vault.MESSAGES_DIR and len(parts) == 3
+            and parts[1] == "sessions"):
+        return "session", None
     return None, None
 
 
@@ -74,6 +77,7 @@ def resolve(root: Path, target: str):
         ("meeting", root / vault.MEETINGS_DIR / f"{target}.md", None),
         ("daily note", root / vault.DAILY_NOTES_DIR / f"{target}.md", None),
         ("message log", root / vault.MESSAGES_DIR / f"{target}.md", None),
+        ("session", root / vault.MESSAGES_DIR / "sessions" / f"{target}.md", None),
     )
     for kind, path, name_key in candidates:
         if path.is_file():

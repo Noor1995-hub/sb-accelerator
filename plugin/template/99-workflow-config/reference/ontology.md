@@ -269,7 +269,7 @@ enums:
   status: [active, superseded, withdrawn]
 ```
 
-- **Edges:** `supersedes` (`[[decision]]` / null) · `source` (`[[meeting]]` / `[[message log]]` / `[[owner note]]`).
+- **Edges:** `supersedes` (`[[decision]]` / null) · `source` (`[[meeting]]` / `[[message log]]` / `[[session]]` / `[[owner note]]`).
 - Never deleted — status flips only. Supersession is a wikilink edge.
 - `archived: true` is the owner's **Dismiss** tick (#247): the capture was
   not a real decision. Same field and meaning as on a meeting; the file
@@ -294,8 +294,9 @@ enums:
   review state the way project metrics gate on a meeting's `review_status`, so
   ticking the box *is* the confirmation and no sync step folds it further. The
   asymmetry with Meeting is deliberate, not a missing feature.
-- `source` names a note in `20-meetings/`, a message log in `_messages/`, or
-  a note of your own in `80-thoughts-ideas/` (any subfolder). A note title
+- `source` names a note in `20-meetings/`, a message log in `_messages/`, a
+  session record in `_messages/sessions/` (a conversation added with `/add`),
+  or a note of your own in `80-thoughts-ideas/` (any subfolder). A note title
   may contain spaces and is matched case-insensitively. A decision drawn from an inbox
   transcript, a pasted paragraph or dictation carries no `source`; its
   provenance goes in the **Why** text.
@@ -633,6 +634,7 @@ enums:
 - `Decision —project→ Project`
 - `Decision —source→ Meeting`
 - `Decision —source→ Message log`
+- `Decision —source→ Session` (a conversation added with `/add`, in `_messages/sessions/`)
 - `Decision —source→ Owner note`
 - `Decision —supersedes→ Decision`
 - `To-do —project→ Project`

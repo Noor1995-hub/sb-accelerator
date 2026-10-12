@@ -273,6 +273,8 @@ def _resolve_source(root: Path, raw: Optional[str]) -> Optional[str]:
         found = _find_note(root / MEETINGS_DIR, strict_stem)
         if found is None:
             found = _find_note(root / vault.MESSAGES_DIR, strict_stem)
+        if found is None:
+            found = _find_note(root / vault.MESSAGES_DIR / "sessions", strict_stem)
 
     # Search owner notes with lenient stem
     if found is None:
@@ -284,7 +286,8 @@ def _resolve_source(root: Path, raw: Optional[str]) -> Optional[str]:
     if found is None:
         raise DecisionError(
             f"source {lenient_stem!r} matches no meeting note at {MEETINGS_DIR}/{lenient_stem}.md, "
-            f"no log at {vault.MESSAGES_DIR}/{lenient_stem}.md and no note in "
+            f"no log at {vault.MESSAGES_DIR}/{lenient_stem}.md, no session at "
+            f"{vault.MESSAGES_DIR}/sessions/{lenient_stem}.md and no note in "
             f"{vault.THOUGHTS_DIR}/ — omit 'source' and put the provenance in the 'why' text"
         )
     return found.stem
