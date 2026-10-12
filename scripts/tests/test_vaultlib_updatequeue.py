@@ -1077,19 +1077,20 @@ def test_unconfirmed_meetings_and_note_captures_do_not_queue(tmp_path):
 
 # --- #273 final review: bounded, exact entity queue ------------------------
 
-def test_first_run_without_a_stamp_looks_back_at_most_14_days(tmp_path):
+def test_first_run_without_a_stamp_looks_back_at_most_3_working_days(tmp_path):
+    # Monday 2026-10-12: Thu, Fri and Mon are the three working days.
     root = make_vault(tmp_path)
     write_entity(root, "acme", "Acme", last_updated="2025-10-01")
-    write_meeting(root, "old", date_value="2026-09-20T10:00", entities=["acme"])
-    write_meeting(root, "recent", date_value="2026-10-05T10:00", entities=["acme"])
+    write_meeting(root, "old", date_value="2026-10-07T10:00", entities=["acme"])
+    write_meeting(root, "recent", date_value="2026-10-08T10:00", entities=["acme"])
     assert entity_queue(root)["acme"]["newFiles"] == ["20-meetings/recent.md"]
 
 
-def test_unparseable_last_updated_warns_and_uses_the_14_day_window(tmp_path):
+def test_unparseable_last_updated_warns_and_uses_the_3_working_day_window(tmp_path):
     root = make_vault(tmp_path)
     write_entity(root, "acme", "Acme", last_updated="someday")
-    write_meeting(root, "old", date_value="2026-09-20T10:00", entities=["acme"])
-    write_meeting(root, "recent", date_value="2026-10-05T10:00", entities=["acme"])
+    write_meeting(root, "old", date_value="2026-10-07T10:00", entities=["acme"])
+    write_meeting(root, "recent", date_value="2026-10-08T10:00", entities=["acme"])
     result = updatequeue.run(root, "2026-10-12", "owner-morgan")
     [entry] = result["entitiesNeedingUpdate"]
     assert entry["newFiles"] == ["20-meetings/recent.md"]
@@ -1101,8 +1102,8 @@ def test_unparseable_entity_updated_warns_and_falls_back(tmp_path):
     root = make_vault(tmp_path)
     write_entity(root, "acme", "Acme", last_updated="2025-10-01",
                  entity_updated="yesterday-ish")
-    write_meeting(root, "old", date_value="2026-09-20T10:00", entities=["acme"])
-    write_meeting(root, "recent", date_value="2026-10-05T10:00", entities=["acme"])
+    write_meeting(root, "old", date_value="2026-10-07T10:00", entities=["acme"])
+    write_meeting(root, "recent", date_value="2026-10-08T10:00", entities=["acme"])
     result = updatequeue.run(root, "2026-10-12", "owner-morgan")
     assert result["entitiesNeedingUpdate"][0]["newFiles"] == ["20-meetings/recent.md"]
     assert [w for w in result["warnings"]
@@ -1224,17 +1225,26 @@ def test_created_is_the_start_point_without_a_stamp(tmp_path):
     assert [w["path"] for w in work] == ["20-meetings/new.md"]
 
 
-def test_no_stamp_and_no_created_starts_today_without_a_warning(tmp_path):
-    # A hand-made page has neither: it starts from today (section E's stamp
-    # takes over after that), never with a nightly warning.
+def test_no_stamp_and_no_created_reads_3_working_days_without_a_warning(tmp_path):
+    # A hand-made page has neither: it reads back 3 working days (section E's
+    # stamp takes over after that), never with a nightly warning.
     root = make_vault(tmp_path)
     write_person(root, "dana")                       # no created, no stamp
-    write_meeting(root, "old", date_value="2026-10-11T10:00", attendees=["dana"])
+    write_meeting(root, "old", date_value="2026-10-07T10:00", attendees=["dana"])
     write_meeting(root, "new", date_value="2026-10-12T10:00", attendees=["dana"])
     queued, work, warnings = people_run(root, today="2026-10-12")
     assert [p["slug"] for p in queued] == ["dana"]
     assert [w["path"] for w in work] == ["20-meetings/new.md"]
     assert not any("dana" in w for w in warnings)
+
+
+def test_an_old_created_day_is_bounded_to_3_working_days(tmp_path):
+    root = make_vault(tmp_path)
+    write_person_full(root, "dana", created="2026-01-05")
+    write_meeting(root, "old", date_value="2026-10-07T10:00", attendees=["dana"])
+    write_meeting(root, "new", date_value="2026-10-08T10:00", attendees=["dana"])
+    _, work, _ = people_run(root)
+    assert [w["path"] for w in work] == ["20-meetings/new.md"]
 
 
 def test_unparseable_stamp_warns_and_falls_back_to_created(tmp_path):
@@ -1296,3 +1306,41 @@ def test_people_queue_writes_nothing(tmp_path):
     updatequeue.run(root, "2026-10-12", "owner-morgan")
     text = (root / "50-people" / "dana.md").read_text(encoding="utf-8")
     assert "person-updated: 2026-10-10T20:00" in text
+
+
+# --- structure gate: D and E wait for /upgrade-vault -------------------------
+
+def test_people_and_entities_wait_for_the_upgrade(tmp_path):
+    root = make_vault(tmp_path)
+    write_entity(root, "acme", "Acme", entity_updated="2026-10-12T09:00")
+    write_person_full(root, "dana", created="2026-01-05")
+    write_meeting(root, "m1", date_value="2026-10-12T10:00", entities=["acme"],
+                  attendees=["dana"])
+    (root / "structure-version").write_text("3\n", encoding="utf-8")
+    result = updatequeue.run(root, "2026-10-12", "owner-morgan")
+    assert result["entitiesNeedingUpdate"] == []
+    assert result["peopleNeedingUpdate"] == [] and result["peopleWork"] == []
+    assert result["waitingForUpgrade"] == ["entities", "people"]
+
+
+def test_structure_14_runs_entities_but_not_people(tmp_path):
+    root = make_vault(tmp_path)
+    write_entity(root, "acme", "Acme", entity_updated="2026-10-12T09:00")
+    write_person_full(root, "dana", created="2026-01-05")
+    write_meeting(root, "m1", date_value="2026-10-12T10:00", entities=["acme"],
+                  attendees=["dana"])
+    (root / "structure-version").write_text("14\n", encoding="utf-8")
+    result = updatequeue.run(root, "2026-10-12", "owner-morgan")
+    assert [e["slug"] for e in result["entitiesNeedingUpdate"]] == ["acme"]
+    assert result["peopleWork"] == []
+    assert result["waitingForUpgrade"] == ["people"]
+
+
+def test_structure_15_runs_both(tmp_path):
+    root = make_vault(tmp_path)
+    write_person_full(root, "dana", stamp="2026-10-10T20:00")
+    write_meeting(root, "m1", date_value="2026-10-11T10:00", attendees=["dana"])
+    (root / "structure-version").write_text("15\n", encoding="utf-8")
+    result = updatequeue.run(root, "2026-10-12", "owner-morgan")
+    assert [p["slug"] for p in result["peopleNeedingUpdate"]] == ["dana"]
+    assert result["waitingForUpgrade"] == []

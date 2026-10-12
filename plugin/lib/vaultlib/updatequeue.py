@@ -34,7 +34,7 @@ from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple
 
-from . import decision, markdown, msglog, msgstate, naming, notes, vault
+from . import dates, decision, markdown, msglog, msgstate, naming, notes, vault
 
 MEETINGS_DIR = vault.MEETINGS_DIR
 PROJECTS_DIR = vault.PROJECTS_DIR
@@ -221,7 +221,33 @@ def _index_sessions(root: Path) -> Tuple[List[dict], List[str]]:
 ENTITY_STATUSES = ("active", "prospect")
 
 
-ENTITY_FIRST_LOOKBACK_DAYS = 14
+# Without a usable stamp a page reads back at most this many working days,
+# today included — a page untouched for a year must not pull a year of
+# material into one unattended night (entities and people alike).
+FIRST_LOOKBACK_BUSINESS_DAYS = 3
+
+# The plugin updates itself; the vault only changes at /upgrade-vault. Sections
+# D and E write page shapes a vault has only from these structure versions on,
+# and E's start points are the `person-updated` stamps migration 014 lays down.
+# Below the version the queue stays empty.
+ENTITY_MIN_STRUCTURE = 14
+PEOPLE_MIN_STRUCTURE = 15
+
+
+def _structure_version(root: Path) -> Optional[int]:
+    """The vault's structure version, or None when the marker is missing or
+    unreadable — no gate then: every provisioned vault carries one."""
+    try:
+        return int(vault.structure_version(root))
+    except (vault.VaultError, ValueError, OSError):
+        return None
+
+
+def _lookback_floor(today: date) -> datetime:
+    """00:00 on the first of the last FIRST_LOOKBACK_BUSINESS_DAYS working
+    days, today included: on a Monday, the Thursday before."""
+    return datetime.combine(
+        dates._walk_back_business_days(today, FIRST_LOOKBACK_BUSINESS_DAYS), time.min)
 
 
 def _entity_queue(root: Path, confirmed: List[dict], logs: List[dict],
@@ -234,13 +260,11 @@ def _entity_queue(root: Path, confirmed: List[dict], logs: List[dict],
     events. Dormant entities are never queued.
 
     Without a usable stamp the first run is bounded: it reads back to the
-    `last-updated` day, but never further than ENTITY_FIRST_LOOKBACK_DAYS —
-    a dossier untouched for a year must not pull a year of material into one
-    unattended night. A ticked note counts only when a project queue entry
+    `last-updated` day, but never further than FIRST_LOOKBACK_BUSINESS_DAYS
+    working days. A ticked note counts only when a project queue entry
     carries it (`queued_notes`), so a note no project could read never
     queues its entity either."""
-    floor = datetime.combine(today - timedelta(days=ENTITY_FIRST_LOOKBACK_DAYS),
-                             time.min)
+    floor = _lookback_floor(today)
     project_entity: Dict[str, str] = {}
     projects_dir = root / PROJECTS_DIR
     for index_path in (sorted(projects_dir.glob("*/index.md")) if projects_dir.is_dir() else []):
@@ -270,7 +294,7 @@ def _entity_queue(root: Path, confirmed: List[dict], logs: List[dict],
         if raw_stamp is not None and stamp is None:
             warnings.append(
                 f"{rel}: unparseable entity-updated {raw_stamp!r} — reading "
-                f"at most the last {ENTITY_FIRST_LOOKBACK_DAYS} days; rewrite "
+                f"at most the last {FIRST_LOOKBACK_BUSINESS_DAYS} working days; rewrite "
                 "it as YYYY-MM-DDTHH:MM or delete it")
         if stamp is None:
             day = _parse_first_iso_date(data.get("last-updated"))
@@ -278,7 +302,7 @@ def _entity_queue(root: Path, confirmed: List[dict], logs: List[dict],
                 warnings.append(
                     f"{rel}: unparseable last-updated "
                     f"{data.get('last-updated')!r} and no entity-updated — "
-                    f"reading the last {ENTITY_FIRST_LOOKBACK_DAYS} days")
+                    f"reading the last {FIRST_LOOKBACK_BUSINESS_DAYS} working days")
                 stamp = floor
             else:
                 stamp = max(datetime.combine(day, time.min), floor)
@@ -353,12 +377,14 @@ def _people_queue(root: Path, confirmed: List[dict], logs: List[dict],
     piece 4), and that material grouped per meeting and per day log so one
     reader handles everyone in it.
 
-    No look-back: without a stamp the start point is the `created` day at
-    00:00 (a person created tonight still gets tonight's meeting); without
-    either — a page made by hand — it is today at 00:00, and section E's
-    stamp takes over from the first run. Session records are
+    Without a stamp the start point is the `created` day at 00:00 (a person
+    created tonight still gets tonight's meeting), but never further back
+    than FIRST_LOOKBACK_BUSINESS_DAYS working days; a page made by hand,
+    with neither, starts there too. Section E's stamp takes over from the
+    first run. Session records are
     not a source — /add writes session facts on the spot. Confirmed meetings
     of every type count, `type: note` captures included."""
+    floor = _lookback_floor(today)
     starts: Dict[str, datetime] = {}
     names: Dict[str, Tuple[str, str]] = {}
     folder = root / PEOPLE_DIR
@@ -377,8 +403,8 @@ def _people_queue(root: Path, confirmed: List[dict], logs: List[dict],
             warnings.append(f"{rel}: unparseable person-updated {raw!r} — falling "
                             "back to created; rewrite it as YYYY-MM-DDTHH:MM or delete it")
         if stamp is None:
-            day = _parse_first_iso_date(data.get("created")) or today
-            stamp = datetime.combine(day, time.min)
+            day = _parse_first_iso_date(data.get("created"))
+            stamp = (max(datetime.combine(day, time.min), floor) if day else floor)
         starts[slug] = stamp
         names[slug] = (rel, str(data.get("person-name") or slug))
 
@@ -710,11 +736,22 @@ def run(root: Path, today: str, owner: str) -> dict:
     queued_notes = {path for entry in queue for path in entry["newNotes"]}
     not_queued = [n["path"] for n in included
                   if n["projects"] and n["path"] not in queued_notes]
-    entities_queue = _entity_queue(root, confirmed, logs, sessions, included,
-                                   warnings, today=today_date,
-                                   queued_notes=queued_notes)
-    people_queue, people_work = _people_queue(root, confirmed, logs, owner_slug,
-                                              warnings, today=today_date)
+    structure = _structure_version(root)
+    waiting_for_upgrade: List[str] = []
+    if structure is not None and structure < ENTITY_MIN_STRUCTURE:
+        entities_queue: List[dict] = []
+        waiting_for_upgrade.append("entities")
+    else:
+        entities_queue = _entity_queue(root, confirmed, logs, sessions, included,
+                                       warnings, today=today_date,
+                                       queued_notes=queued_notes)
+    if structure is not None and structure < PEOPLE_MIN_STRUCTURE:
+        people_queue: List[dict] = []
+        people_work: List[dict] = []
+        waiting_for_upgrade.append("people")
+    else:
+        people_queue, people_work = _people_queue(root, confirmed, logs, owner_slug,
+                                                  warnings, today=today_date)
     return {
         "today": today_date.isoformat(),
         # The minute this queue was built. Sections D and E stamp
@@ -728,6 +765,9 @@ def run(root: Path, today: str, owner: str) -> dict:
         "entitiesNeedingUpdate": entities_queue,
         "peopleNeedingUpdate": people_queue,
         "peopleWork": people_work,
+        # Sections whose queue stayed empty because the vault is below the
+        # structure version they need ("entities", "people").
+        "waitingForUpgrade": waiting_for_upgrade,
         "notesNotQueued": not_queued,
         "metricsWritten": {"projects": projects_written,
                            "people": people_written},

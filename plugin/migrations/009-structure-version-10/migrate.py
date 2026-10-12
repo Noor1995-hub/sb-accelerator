@@ -9,10 +9,10 @@ an existing vault this migration:
   Inbox, Meetings, Projects, People, Entities, Decisions, Thoughts & ideas,
   and a Library group (Resources, Heavy assets, Archive, Private, Recent). A
   bookmark the owner made themselves is kept, after the menu;
-- has Obsidian open today's daily note on startup (`daily-notes.json`
-  `autorun`). Obsidian creates the note, empty, when it does not exist yet;
-  the daily-note code treats a blank note as absent, so the evening run
-  writes the real one over it;
+- sets the Daily notes folder and format (`daily-notes.json`), with
+  `autorun` off: opening today's note on startup created it, empty, on a
+  morning after a missed run, and a line typed into it hid the missed day
+  from the catch-up (review 2026-10-12, owner's call);
 - files new notes in `80-thoughts-ideas` (`app.json`);
 - makes the Bookmarks tab the open one in the left sidebar, drops the
   Navigator tab and narrows the sidebar to 280px (`workspace.json`).
@@ -79,7 +79,7 @@ LIBRARY = [
     ("Private", f"{VIEWS}/Private.base"),
     ("Recent", f"{VIEWS}/Recent.base"),
 ]
-DAILY_SETTINGS = {"folder": "60-daily-notes", "format": "YYYY-MM-DD", "autorun": True}
+DAILY_SETTINGS = {"folder": "60-daily-notes", "format": "YYYY-MM-DD", "autorun": False}
 APP_SETTINGS = {"newFileLocation": "folder", "newFileFolderPath": "80-thoughts-ideas"}
 SIDEBAR_WIDTH = 280
 
@@ -210,7 +210,7 @@ def verify(root: Path) -> dict:
         raise MigrationError(f"{BOOKMARKS.as_posix()}: the menu did not land")
     daily = _load(root / DAILY, {})
     if any(daily.get(k) != v for k, v in DAILY_SETTINGS.items()):
-        raise MigrationError(f"{DAILY.as_posix()}: today's note does not open on startup")
+        raise MigrationError(f"{DAILY.as_posix()}: daily-note settings did not land")
     app = _load(root / APP, None)
     if isinstance(app, dict) and any(app.get(k) != v for k, v in APP_SETTINGS.items()):
         raise MigrationError(f"{APP.as_posix()}: new notes do not go to 80-thoughts-ideas")

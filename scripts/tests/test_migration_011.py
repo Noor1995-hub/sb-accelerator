@@ -139,7 +139,7 @@ def test_property_types_are_added_and_the_owners_own_kept(tmp_path):
     (root / OBS / "types.json").write_text(json.dumps(
         {"types": {"tags": "tags", "due": "text", "mine": "number"}}), encoding="utf-8")
     result = load().apply(root)
-    assert result["types"] == "added absorbed, archived, done, include, reviewed"
+    assert result["types"] == "added absorbed, archived, done, include, projects, reviewed"
     types = json.loads((root / OBS / "types.json").read_text(encoding="utf-8"))["types"]
     assert types["include"] == "checkbox" and types["done"] == "checkbox"
     assert types["due"] == "text" and types["mine"] == "number" and types["tags"] == "tags"

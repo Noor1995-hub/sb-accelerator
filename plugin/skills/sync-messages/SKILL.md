@@ -63,14 +63,15 @@ here: they change how the vault looks, not where the notes are kept.
    python3 "$VAULTLIB" config write --vault "$VAULT" --field messages.consented-at --value "<now, YYYY-MM-DDTHH:MM local>"
    python3 "$VAULTLIB" config write --vault "$VAULT" --field messages.scope --value "teams-chats,inbox,sent-items"
    ```
-   `messages reset` makes tonight a first evening: switching back on after a
-   pause starts from today and never reports the pause as missed mail.
+   `messages reset` makes tonight a first evening: the first run reads from
+   yesterday 00:00, so switching back on after a pause never reports the
+   pause as missed mail.
 3. Ask: *"Is there anyone or anything I should never read? For example HR
    matters or a private chat. You can also tell me later."* For each answer,
    resolve it and add it as under **What to skip** (below). No answer means
    none.
 4. Read back: *"From tonight I'll read your mail and Teams, starting with
-   today's messages."* plus the read-back of each exclusion from **What to
+   yesterday's messages."* plus the read-back of each exclusion from **What to
    skip**.
 
 ## Switching off

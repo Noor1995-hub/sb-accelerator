@@ -213,6 +213,11 @@ def reassemble(meta_path: str, transcript_paths, note_path: Optional[str],
                 f"transcript page carries file_id {page['file_id']!r} but "
                 f"the meta is recording {rec_id!r} — wrong meta/transcript "
                 "pairing")
+    # The note is optional enrichment (worker contract: "on failure proceed
+    # without"), and the reassemble command always names its file — a fetch
+    # that failed leaves no file, which must not fail the recording.
+    if note_path is not None and not Path(note_path).is_file():
+        note_path = None
     note = _load(note_path, "note")
 
     try:

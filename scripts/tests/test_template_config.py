@@ -371,13 +371,12 @@ def test_base_groupby_uses_the_object_form():
                 f"{where}: groupBy needs both property and direction, got {sorted(group)}")
 
 
-def test_vault_opens_on_todays_daily_note():
-    """#263: Obsidian's own Daily notes plugin opens today's note on startup
-    (Navigator's homepage did it in #238). It creates the note, empty, when
-    there is none; the daily-note code treats a blank note as absent, so the
-    catch-up run writes the real one over it (test_vaultlib_dailynote)."""
+def test_daily_notes_do_not_open_on_startup():
+    """#263 had Obsidian open (and so create) today's note on startup. Undone
+    after the 2026-10-12 review: an empty note created on a morning after a
+    missed run, once typed into, hid the missed day from the catch-up."""
     daily = json.loads((TEMPLATE / ".obsidian" / "daily-notes.json").read_text(encoding="utf-8"))
-    assert daily == {"folder": "60-daily-notes", "format": "YYYY-MM-DD", "autorun": True}
+    assert daily == {"folder": "60-daily-notes", "format": "YYYY-MM-DD", "autorun": False}
 
 
 def test_review_callout_collapses_when_empty_and_spans_the_pane():

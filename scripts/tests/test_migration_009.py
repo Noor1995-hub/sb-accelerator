@@ -71,7 +71,7 @@ def test_apply_lands_the_menu_and_keeps_the_owners_own(tmp_path):
     assert items[len(module.shipped_menu()):] == [
         {"type": "file", "ctime": 1, "path": "70-resources/mine.md", "title": "Mine"}]
     daily = read(root, OBS / "daily-notes.json")
-    assert daily["autorun"] is True and daily["template"] == "tpl.md"
+    assert daily["autorun"] is False and daily["template"] == "tpl.md"
     app = read(root, OBS / "app.json")
     assert app["newFileFolderPath"] == "80-thoughts-ideas" and app["userIgnoreFilters"] == ["_messages/"]
     ws = read(root, OBS / "workspace.json")

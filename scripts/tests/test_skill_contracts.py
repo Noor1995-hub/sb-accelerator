@@ -2292,9 +2292,14 @@ def test_ontology_types_decision_source_as_meeting_log_or_owner_note():
     assert "a note of your own in `80-thoughts-ideas/`" in text
 
 
-def test_upgrade_vault_accepts_the_input_view_on_structure_11():
+def test_upgrade_vault_restores_every_missing_table_the_menu_opens():
+    # Review 2026-10-12: from structure 3, ten menu tables arrive as missing;
+    # recommending only Input.base left menu entries that open nothing.
     flat = " ".join(read_skill("upgrade-vault").split())
-    assert "`99-workflow-config/views/Input.base`" in flat and "structure 11" in flat
+    assert "every missing `.base` file" in flat
+    for table in ("Daily notes", "Thoughts and ideas", "To Dos", "Input", "Recent",
+                  "Resources", "Heavy assets", "Private", "Archive"):
+        assert table in flat
 
 
 def test_evening_sync_reads_the_notes_section_of_the_daily_note():

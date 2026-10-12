@@ -246,10 +246,12 @@ After every section C batch has returned (D reads the projects' fresh
 "Where it stands"). `update-queue`'s result from B carries
 `entitiesNeedingUpdate`: one entry per active or prospect entity with
 material newer than its `entity-updated` stamp (on a first run, at most the
-last 14 days) — `slug`, `dossierPath`, `entityName`, `parent` and
+last 3 working days) — `slug`, `dossierPath`, `entityName`, `parent` and
 `parentName` (a team's parent, else null), `newFiles` (meetings), `newLogs`,
 `newSessions`, `newNotes`, `parentMode` and `teamFiles` (a team's material,
-for its parent). Empty → record "no entity pages to update" and go on.
+for its parent). Empty → record "no entity pages to update" and go on. If
+B's `waitingForUpgrade` lists `entities`, the vault is below structure 14:
+record "entity pages wait for /upgrade-vault" instead and go on.
 
 Otherwise dispatch one subagent per entry (`model: sonnet`), in the same
 blocking batches of at most 3 as section C — the rule written there applies
@@ -330,8 +332,10 @@ After section D has returned. `update-queue`'s result from B carries
 `peopleNeedingUpdate` (`slug`, `path`, `personName`) and `peopleWork`: one
 item per meeting (`kind: meeting`, `path`, `date`, `people`) and per day log
 (`kind: log`, `path`, `stem`, `date`, `groups`, `people`) that names someone
-with material newer than their `person-updated` stamp. `peopleWork` empty →
-record "no people pages to update" and go on.
+with material newer than their `person-updated` stamp (without one, at most
+the last 3 working days). `peopleWork` empty → record "no people pages to
+update" and go on. If B's `waitingForUpgrade` lists `people`, the vault is
+below structure 15: record "people pages wait for /upgrade-vault" instead.
 
 Otherwise dispatch one subagent per item (`model: sonnet`), in the same
 blocking batches of at most 3 as section C — the rule written there applies

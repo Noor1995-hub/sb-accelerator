@@ -816,8 +816,8 @@ until every entry on the list has a probe. There is no background mode
 for this fan-out. Pass each probe: the
 `references/probe-contract.md` path (`references/worker-contract.md` too —
 the probe contract defers to it), `$VAULT`, `$SCRATCH`, `$VAULTLIB`, the
-vault timezone, the entry's `uri` (verbatim, from the calendar-search pages
-step 1 still holds), and its scratch stem, `m365_probe_<n>`. A probe never
+vault timezone, the entry's `event_uri` from the `sync m365-triage` result
+(verbatim — never the listing's `uri`; see issue #205 above), and its scratch stem, `m365_probe_<n>`. A probe never
 gets routing, confidence, or attendee data — it has not earned that cost
 yet.
 
@@ -1518,8 +1518,9 @@ reaches disk.)
 rules, not negotiable:
 
 1. **Never ask a question.** A blocked prompt means the run exits having
-   done nothing. Ambiguity in *extraction or routing* → skip that recording
-   and report it; it retries next run. Classification is not covered by this
+   done nothing. Ambiguity in *extraction* → skip that recording and report
+   it; it retries next run. Ambiguous *routing* is not skipped: rule 2
+   writes it with `projects: []` and low confidence. Classification is not covered by this
    rule: the three-outcome call in step 1 is decided in both modes, and its
    own ambiguity rule resolves toward writing the `note`. Note also that
    "skip" here means *defer to the next run* — unrelated to `sync skip` and

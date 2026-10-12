@@ -83,8 +83,8 @@ confidence_reasons:
   root) and blocks the entity derivation below. The evening fold's
   `sync rederive-entities` unwraps a wikilink whose target resolves and
   repairs the note; one that still doesn't resolve is reported, not fixed.
-  Click-through in `Meetings.base` is the read-only `↗ Project` formula
-  column, not the editable `projects` cells.
+  In `Meetings.base` the read-only **Projects** column (names, in *All
+  Meetings*) is the click-through, not the editable `projects` cells.
 - `entities[]` holds entity slugs: the organizations the meeting was
   **about** — not only the ones in the room. An internal 1:1 reviewing a
   client account carries that client, the same way the daily note's prep
@@ -287,8 +287,8 @@ enums:
 - `relationship` stays hand-curated — nothing writes it. `role`,
   `decision-role` and `stance` are written by `person set` (as
   /update-entity uses it), by /update-tables and by the structure-14
-  upgrade. `last-updated` is the creation day and is not a recency signal; sort
-  on `last-met` for that.
+  upgrade. `last-updated` moves only when a writer touches the page (creation,
+  What I know) and is not a recency signal; sort on `last-met` for that.
 - Example: `50-people/jordan-reyes.md`
 
 ### Decision — `30-projects/{slug}/decisions/YYYY-MM-DD-{title}.md` · Base: `Decisions.base`
@@ -446,9 +446,15 @@ last-updated: 2026-04-01
 The body opens with `# {entity-name}` — every dossier file is named
 `dossier.md`, so without it the only title Obsidian shows is the word
 "dossier" — and then carries exactly the six H2 sections in `body_sections`
-above, in that order. Two skills write it — `/new-project` creates a
-baseline, `/update-entity` maintains it — so this is the shared contract, not
-a per-skill template.
+above, in that order. `entity ensure` creates it (from /new-project,
+/update-entity, /update-tables or setup); `/update-entity` maintains it on
+demand, and the evening run, `/sync-recordings` and `/add` update it
+automatically — so this is the shared contract, not a per-skill template.
+
+Automatic writes end every item in a source marker, e.g. `(meeting · …)`,
+and may replace only items that carry one. An item without a marker is the
+owner's and is never replaced; deleting the marker makes an item the
+owner's.
 
 | Section | Shape | Merge rule |
 |---|---|---|
@@ -507,9 +513,9 @@ context, because `/setup-my-brain` will.
   it is the join key.
 - Dates written **unquoted ISO** (`2026-02-07`) — quoted dates silently break
   Bases/Dataview date handling. This convention applies to every object type.
-- Per-entity project lists come free by grouping `Projects.base` on `entity`.
+- Per-entity project lists are the dossier's live `## Engagements` query.
 
-### Daily note — `60-daily-notes/{YYYY-MM-DD}.md` · no Base
+### Daily note — `60-daily-notes/{YYYY-MM-DD}.md` · `Daily notes.base`
 
 One note per working day, written the evening before by `/evening-sync`,
 jotted in by hand during the day, harvested (read-only) that evening. It is
