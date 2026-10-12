@@ -154,8 +154,12 @@ the archive of the day — **never modify it**.
 vault has no To Do's table yet. To the owner they are always "to do's", never "actions". Otherwise:
 
 ```bash
-python3 "$VAULTLIB" actions harvest --vault "$VAULT" --from <recap_from> --to <recap_to>
+python3 "$VAULTLIB" actions harvest --vault "$VAULT" --from <harvest_from> --to <recap_to>
 ```
+
+`harvest_from` (from `dates plan`) is one daily note further back than
+`recap_from`, so a to do written in a note after that evening's run is still
+picked up; lines already made into to dos are skipped, so nothing doubles.
 
 `closed` lists to-do notes whose line the owner ticked in a daily note
 since; the CLI already marked them done. `filled` lists notes made with
@@ -373,8 +377,12 @@ names the field, so one retry always suffices.
   The CLI renders it as the *Mail and Teams* block right after *At a
   glance*, inside the recap (below the *Waiting for you* queues). Build it
   in this order:
-  1. `python3 "$VAULTLIB" messages status --vault "$VAULT" --now <now UTC> [--first-run-since <since from stage 3b, first run only>] [--auth-error]`
+  1. `python3 "$VAULTLIB" messages status --vault "$VAULT" --now <now UTC> [--first-run-since <since from stage 3b, first run only>] [--auth-error] --peek`
      gives `{"lines": [...]}`; use those lines verbatim as `status` (at most 3).
+     `--peek` changes nothing. Once `daily-note write` has succeeded **and**
+     its `recap_skipped` is false, run the exact same command once more
+     without `--peek`: that is what drops the shown lines, so a refused
+     write or a skipped recap keeps them for the next note.
      Pass `--auth-error` when stage 3b's outcome line was `auth-error`: the
      CLI then adds the one line asking the owner to reconnect Microsoft 365;
      never write that line yourself.
@@ -394,9 +402,10 @@ names the field, so one retry always suffices.
      no internal terms.
 
   Run steps 1 and 2 exactly once per evening and reuse their results on any
-  retry of the daily-note payload — never run them again: `messages status`
-  clears the closed-unread state and `messages keywords-propose` records the
-  proposal, so a second run would lose or double what the first one did.
+  retry of the daily-note payload — never run them again (apart from the
+  one `messages status` without `--peek` after a successful write):
+  `messages keywords-propose` records the proposal, so a second run would
+  double it.
 
 The catch-up banner is the CLI's: `dates plan`'s `is_catchup` becomes the
 callout on write, and a banner you put in a payload is stripped with a

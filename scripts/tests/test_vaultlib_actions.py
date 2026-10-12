@@ -131,6 +131,19 @@ def test_create_without_a_source_is_a_session_action(root):
     assert data["created"] == "2026-10-08" and data["due"] == "2026-10-09"
 
 
+def test_a_session_to_do_is_new_again_once_the_old_one_is_done(root):
+    # Review 2026-10-12: a done "call Jordan" from March silently swallowed
+    # the same request in October.
+    [first] = actions.create(root, [{"text": "call the bank"}], today="2026-03-02")["created"]
+    again = actions.create(root, [{"text": "Call the bank"}], today="2026-03-03")
+    assert again["created"] == [] and len(again["skipped"]) == 1   # still open
+    path = root / first["path"]
+    path.write_text(path.read_text(encoding="utf-8").replace("done: false", "done: true"),
+                    encoding="utf-8")
+    later = actions.create(root, [{"text": "call the bank"}], today="2026-10-08")
+    assert len(later["created"]) == 1 and later["skipped"] == []
+
+
 def test_create_takes_a_new_name_when_the_file_exists(root):
     actions.create(root, [{"source": "2026-10-07", "text": "Call Sam"}], today="2026-10-07")
     result = actions.create(root, [{"source": "2026-10-07", "text": "call sam!"}],

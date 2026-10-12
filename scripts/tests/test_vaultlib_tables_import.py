@@ -159,3 +159,72 @@ def test_a_deleted_row_deletes_nothing_and_a_stale_key_is_refused(tmp_path):
     save(root, rel, book)
     p = tables.plan(root, rel)
     assert p["counts"]["updates"] == 0 and "no longer in the vault" in p["refused"][0]["reason"]
+
+
+# --- review 2026-10-12: owner words and per-entity project names ------------
+
+def _second_entity_with_same_project_name(root):
+    (root / "40-entities/beta").mkdir(parents=True)
+    (root / "40-entities/beta/dossier.md").write_text(
+        '---\ntype: entity\nentity-name: "Beta"\nslug: beta\nstatus: active\n---\n# Beta\n',
+        encoding="utf-8")
+    (root / "30-projects/beta-erp").mkdir(parents=True)
+    (root / "30-projects/beta-erp/index.md").write_text(
+        '---\ntype: project\nproject-name: "ERP rollout"\nslug: beta-erp\nstatus: active\n'
+        'project-type: initiative\nentity: beta\nowner: jan-peeters\nstakeholders: []\n---\n',
+        encoding="utf-8")
+
+
+def test_project_type_and_status_show_the_tables_words(tmp_path):
+    root = make_vault(tmp_path)
+    rel, book = exported(root, "projects")
+    row = book["Projects"][1]
+    assert row[col(book, "Projects", "Type")] == "Project"
+    assert row[col(book, "Projects", "Status")] == "Active"
+    assert any("Responsibility" in r for r in book["_lists"])
+    row[col(book, "Projects", "Type")] = "Responsibility"
+    save(root, rel, book)
+    [update] = tables.plan(root, rel)["updates"]
+    assert (update["prop"], update["value"]) == ("project-type", "area-of-responsibility")
+
+
+def test_the_raw_value_is_still_accepted(tmp_path):
+    root = make_vault(tmp_path)
+    rel, book = exported(root, "projects")
+    book["Projects"][1][col(book, "Projects", "Status")] = "paused"
+    save(root, rel, book)
+    [update] = tables.plan(root, rel)["updates"]
+    assert update["value"] == "paused"
+
+
+def test_the_same_project_name_under_another_entity_is_allowed(tmp_path):
+    root = make_vault(tmp_path)
+    (root / "40-entities/beta").mkdir(parents=True)
+    (root / "40-entities/beta/dossier.md").write_text(
+        '---\ntype: entity\nentity-name: "Beta"\nslug: beta\nstatus: active\n---\n# Beta\n',
+        encoding="utf-8")
+    rel, book = exported(root, "projects")
+    new = [""] * len(book["Projects"][0])
+    for header, value in (("Project", "ERP rollout"), ("Status", "Active"), ("Type", "Project"),
+                          ("Entity", "Beta"), ("Owner", "Jan Peeters")):
+        new[col(book, "Projects", header)] = value
+    book["Projects"].append(new)
+    save(root, rel, book)
+    p = tables.plan(root, rel)
+    assert p["counts"]["refused"] == 0 and len(p["new"]) == 1
+    # ...but not twice under the same entity.
+    book["Projects"][-1][col(book, "Projects", "Entity")] = "Acme"
+    save(root, rel, book)
+    assert tables.plan(root, rel)["counts"]["refused"] == 1
+
+
+def test_shared_project_names_are_told_apart_by_entity(tmp_path):
+    root = make_vault(tmp_path)
+    _second_entity_with_same_project_name(root)
+    shown = tables.names(root)["project"]
+    assert shown == {"acme-erp": "ERP rollout (Acme)", "beta-erp": "ERP rollout (Beta)"}
+    rel, book = exported(root, "people")
+    book["People"][1][col(book, "People", "Projects")] = "ERP rollout (Beta)"
+    save(root, rel, book)
+    [update] = tables.plan(root, rel)["updates"]
+    assert update["value"] == ["beta-erp"]

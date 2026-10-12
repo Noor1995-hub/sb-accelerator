@@ -379,6 +379,19 @@ def test_status_reports_a_clamped_cursor_once(tmp_path):
         "I'm 7 days behind on your mail and Teams; I'll catch up tonight."]
 
 
+def test_status_peek_keeps_the_catch_up_line_until_a_real_run(tmp_path):
+    # Review 2026-10-12: the line was dropped before the note was written, so
+    # a refused write or a skipped recap lost it for good.
+    root = make_vault(tmp_path)
+    msgstate.advance(root, newest="2026-09-20T18:00:00Z", filled=[], now="2026-09-20T18:50:00Z", new_gaps=[])
+    msgstate.cursor(root, now="2026-10-01T19:00:00Z", timezone=None, utc_offset="+00:00")
+    line = "I couldn't catch up on your mail and Teams from 20 September to 24 September."
+    for _ in range(2):
+        assert line in msglog.status(root, now="2026-10-01T19:00:00Z", first_run_since=None, peek=True)
+    assert line in msglog.status(root, now="2026-10-01T19:00:00Z", first_run_since=None)
+    assert line not in msglog.status(root, now="2026-10-01T19:00:00Z", first_run_since=None, peek=True)
+
+
 def test_status_first_morning_line(tmp_path):
     root = make_vault(tmp_path)
     assert msglog.status(root, now="2026-09-30T19:00:00Z", first_run_since="2026-09-28T22:00:00Z") == [

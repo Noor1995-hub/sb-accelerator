@@ -30,7 +30,9 @@ once: the `today` field of
 ### 1. Which table
 
 People, Projects or Entities. Not clear → ask once. The owner may name a
-view ("the Active view"); otherwise the table's first view is used.
+view ("the Active view"); otherwise the table's first view is used. The view
+sets the columns and their order only: every row of the table is in the
+file, finished and paused ones too — say so when the owner names a view.
 
 ### 2. Export
 
