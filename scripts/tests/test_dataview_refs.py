@@ -199,7 +199,13 @@ def test_every_property_reference_resolves(root, note):
     for index, block in enumerate(dqlrefs.dataview_blocks(note.read_text(encoding="utf-8"))):
         refs = dqlrefs.extract_refs(block)
         assert len(refs.from_paths) == 1, f"{note_rel} block {index}: expected one FROM"
-        queried_type = dqlrefs.folder_object_type(next(iter(refs.from_paths)))
+        from_path = next(iter(refs.from_paths))
+        # 30-projects holds projects and their decisions; a `type = "project"`
+        # filter says which one the query reads (#273's Engagements).
+        if from_path == "30-projects" and 'type = "project"' in block:
+            queried_type = "project"
+        else:
+            queried_type = dqlrefs.folder_object_type(from_path)
 
         unknown = refs.properties - dqlrefs.known_fields(queried_type)
         assert not unknown, (

@@ -299,7 +299,12 @@ def test_body_sections_present_in_every_fixture(object_type):
     files = iter_fixture_files(SCHEMAS[object_type]["glob"])
     assert files, f"no {object_type} fixtures found"
     for path in files:
-        assert h2_titles(path.read_text(encoding="utf-8")) == expected, (
+        titles = h2_titles(path.read_text(encoding="utf-8"))
+        # A project's trailing `## Notes` is the owner's own area, preserved by
+        # every state write; the structure-14 upgrade adds engagement notes there.
+        if object_type == "project" and titles and titles[-1] == "Notes":
+            titles = titles[:-1]
+        assert titles == expected, (
             f"{path}: H2 sections do not match ontology body_sections for "
             f"{object_type}"
         )
@@ -702,11 +707,17 @@ def test_curated_person_fixtures_carry_context_and_recent_meetings():
         target.append(path)
     assert curated, "no curated person fixtures found"
     for path in curated:
-        assert h2_titles(path.read_text(encoding="utf-8")) == PERSON_BODY_SECTIONS, (
+        # `## Notes from <entity>` is where the structure-14 upgrade moved a
+        # stakeholder row's notes (#273); it comes after the two sections.
+        titles = [t for t in h2_titles(path.read_text(encoding="utf-8"))
+                  if not t.startswith("Notes from ")]
+        assert titles == PERSON_BODY_SECTIONS, (
             f"{path}: curated person notes carry Context + Recent Meetings"
         )
     for path in uncurated:
-        assert h2_titles(path.read_text(encoding="utf-8")) == [], (
+        titles = [t for t in h2_titles(path.read_text(encoding="utf-8"))
+                  if not t.startswith("Notes from ")]
+        assert titles == [], (
             f"{path}: uncurated person notes model the auto-created empty body"
         )
 

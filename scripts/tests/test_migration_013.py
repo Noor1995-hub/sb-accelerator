@@ -562,8 +562,10 @@ def test_the_demo_vault_migrates_once(tmp_path, crlf):
         for path in root.rglob("*.md"):
             path.write_bytes(path.read_bytes().replace(b"\r\n", b"\n").replace(b"\n", b"\r\n"))
     module = load()
+    # The shipped demo vault is already at structure 14 (migrated with this
+    # module); a run over it must find nothing to move and still verify.
     result = module.apply(root)
-    assert result["stakeholders_moved"] > 0
+    assert result["stakeholders_moved"] == 0 and result["one_liners_moved"] == 0
     module.verify(root)
     snapshot = files(root)
     module.apply(root)

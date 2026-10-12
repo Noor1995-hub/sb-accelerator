@@ -3,7 +3,6 @@ person-name: "Taylor Brooks"
 slug: taylor-brooks
 email: taylor.brooks@cascadia-intermodal.example
 relationship: colleague
-company: "Cascadia Intermodal Group"
 role: "Chief of Staff"
 projects: [commercial-ops-pipeline-governance]
 created: 2025-06-01
@@ -13,6 +12,9 @@ meetings-30d: 1
 last-met: 2026-06-05
 messages-7d: 0
 messages-30d: 0
+decision-role: influencer
+stance: neutral
+entity: commercial-operations
 ---
 
 # Taylor Brooks
@@ -34,3 +36,7 @@ WHERE econtains(attendees, this.slug)
 SORT date DESC
 LIMIT 10
 ```
+
+## Notes from Commercial Operations
+
+- Runs the forecast call and the governance cadence. Can triage and draft on Morgan's behalf; owns neither workstream. (moved from the Commercial Operations page, 2026-10-12)
