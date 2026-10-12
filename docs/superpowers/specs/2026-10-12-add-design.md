@@ -211,7 +211,9 @@ The same `runlock` as #277, routine `add`. A Plaud recording added with
 
 - Never writes, creates or edits anything under `60-daily-notes/`.
 - Never reads mail or Teams.
-- One item per call. Several items: call it again.
+- One item per call: one Plaud recording, one pasted text or file, or this
+  one conversation. Several items: call it again. (Owner, 2026-10-12: start
+  with one at a time; a multi-item list with one OK is a possible follow-up.)
 - Never written without the owner's OK on the step-4 line.
 
 ## Testing
