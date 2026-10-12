@@ -1162,3 +1162,133 @@ def test_entries_name_their_parent(tmp_path):
     queue = entity_queue(root)
     assert (queue["acme-finance"]["parent"], queue["acme-finance"]["parentName"]) == ("acme", "Acme")
     assert (queue["acme"]["parent"], queue["acme"]["parentName"]) == (None, None)
+
+
+# --- people queue (#273 piece 4) --------------------------------------------
+
+def write_person_full(root, slug, *, created="2026-09-01", stamp=None):
+    lines = ["---", f'person-name: "{slug.title()}"', f"slug: {slug}", "relationship:",
+             f"created: {created}"]
+    if stamp:
+        lines.append(f"person-updated: {stamp}")
+    (root / "50-people" / f"{slug}.md").write_text("\n".join(lines + ["---", ""]),
+                                                    encoding="utf-8")
+
+
+def people_run(root, today="2026-10-12"):
+    result = updatequeue.run(root, today, "owner-morgan")
+    return result["peopleNeedingUpdate"], result["peopleWork"], result["warnings"]
+
+
+def test_a_meeting_after_the_stamp_queues_its_attendees(tmp_path):
+    root = make_vault(tmp_path)
+    write_person_full(root, "dana", stamp="2026-10-10T20:00")
+    write_person_full(root, "sam", stamp="2026-10-12T09:00")
+    write_meeting(root, "11-10-26-weekly", date_value="2026-10-11T10:00",
+                  attendees=["dana", "sam", "owner-morgan"])
+    queued, work, _ = people_run(root)
+    assert [p["slug"] for p in queued] == ["dana"]
+    assert work == [{"kind": "meeting", "path": "20-meetings/11-10-26-weekly.md",
+                     "date": "2026-10-11", "people": ["dana"]}]
+
+
+def test_the_owner_is_never_queued(tmp_path):
+    root = make_vault(tmp_path)
+    write_meeting(root, "m", date_value="2026-10-11T10:00", attendees=["owner-morgan"])
+    queued, work, _ = people_run(root)
+    assert queued == [] and work == []
+
+
+def test_a_note_capture_with_attendees_counts(tmp_path):
+    root = make_vault(tmp_path)
+    write_person_full(root, "dana", stamp="2026-10-10T20:00")
+    write_meeting(root, "fwd", date_value="2026-10-11T10:00", type_value="note",
+                  attendees=["dana"])
+    assert [w["path"] for w in people_run(root)[1]] == ["20-meetings/fwd.md"]
+
+
+def test_unconfirmed_meetings_do_not_count(tmp_path):
+    root = make_vault(tmp_path)
+    write_person_full(root, "dana", stamp="2026-10-10T20:00")
+    write_meeting(root, "m", date_value="2026-10-11T10:00", review_status="pending",
+                  attendees=["dana"])
+    assert people_run(root)[0] == []
+
+
+def test_created_is_the_start_point_without_a_stamp(tmp_path):
+    root = make_vault(tmp_path)
+    write_person_full(root, "dana", created="2026-10-11")
+    write_meeting(root, "old", date_value="2026-10-01T10:00", attendees=["dana"])
+    write_meeting(root, "new", date_value="2026-10-11T10:00", attendees=["dana"])
+    _, work, _ = people_run(root)
+    assert [w["path"] for w in work] == ["20-meetings/new.md"]
+
+
+def test_no_stamp_and_no_created_warns_and_skips(tmp_path):
+    root = make_vault(tmp_path)
+    write_person(root, "dana")                       # no created, no stamp
+    write_meeting(root, "m", date_value="2026-10-11T10:00", attendees=["dana"])
+    queued, _, warnings = people_run(root)
+    assert queued == []
+    assert any("50-people/dana.md" in w and "person-updated" in w for w in warnings)
+
+
+def test_unparseable_stamp_warns_and_falls_back_to_created(tmp_path):
+    root = make_vault(tmp_path)
+    write_person_full(root, "dana", created="2026-10-11", stamp="yesterday")
+    write_meeting(root, "m", date_value="2026-10-11T10:00", attendees=["dana"])
+    queued, _, warnings = people_run(root)
+    assert [p["slug"] for p in queued] == ["dana"]
+    assert any("person-updated" in w and "dana" in w for w in warnings)
+
+
+def test_a_log_group_naming_a_person_queues_them_with_its_gid(tmp_path):
+    root = make_vault(tmp_path)
+    write_person_full(root, "dana", stamp="2026-10-10T20:00")
+    write_person_full(root, "sam", stamp="2026-10-10T20:00")
+    write_log(root, "2026-10-11", [g("a1", people=["dana"]), g("a2", people=["sam"]),
+                                   g("a3", people=["nobody"])], "2026-10-11T18:52")
+    queued, work, _ = people_run(root)
+    assert [p["slug"] for p in queued] == ["dana", "sam"]
+    assert work == [{"kind": "log", "path": "_messages/2026-10-11-messages.md",
+                     "stem": "2026-10-11-messages", "date": "2026-10-11",
+                     "groups": ["a1", "a2"], "people": ["dana", "sam"]}]
+
+
+def test_a_log_older_than_the_stamp_does_not_queue(tmp_path):
+    root = make_vault(tmp_path)
+    write_person_full(root, "dana", stamp="2026-10-12T09:00")
+    write_log(root, "2026-10-11", [g("a1", people=["dana"])], "2026-10-11T18:52")
+    assert people_run(root)[0] == []
+
+
+def test_start_points_are_per_person_within_one_meeting(tmp_path):
+    root = make_vault(tmp_path)
+    write_person_full(root, "dana", stamp="2026-10-01T00:00")
+    write_person_full(root, "sam", stamp="2026-10-12T09:00")
+    write_meeting(root, "a", date_value="2026-10-05T10:00", attendees=["dana", "sam"])
+    write_meeting(root, "b", date_value="2026-10-11T10:00", attendees=["sam"])
+    queued, work, _ = people_run(root)
+    assert [p["slug"] for p in queued] == ["dana"]
+    assert work == [{"kind": "meeting", "path": "20-meetings/a.md", "date": "2026-10-05",
+                     "people": ["dana"]}]
+
+
+def test_session_records_are_not_a_people_source(tmp_path):
+    root = make_vault(tmp_path)
+    write_person_full(root, "dana", stamp="2026-10-10T20:00")
+    folder = root / "_messages" / "sessions"
+    folder.mkdir(parents=True)
+    (folder / "s.md").write_text(
+        "---\ntitle: \"x\"\ndate: 2026-10-11\nprojects: [p]\npeople: [dana]\n"
+        "updated-at: 2026-10-11T12:00\n---\n- x\n", encoding="utf-8")
+    assert people_run(root)[0] == []
+
+
+def test_people_queue_writes_nothing(tmp_path):
+    root = make_vault(tmp_path)
+    write_person_full(root, "dana", stamp="2026-10-10T20:00")
+    write_meeting(root, "m", date_value="2026-10-11T10:00", attendees=["dana"])
+    updatequeue.run(root, "2026-10-12", "owner-morgan")
+    text = (root / "50-people" / "dana.md").read_text(encoding="utf-8")
+    assert "person-updated: 2026-10-10T20:00" in text
