@@ -1,6 +1,6 @@
 ---
 name: new-project
-description: Create a project or a responsibility (an area of responsibility) with a structured index, and link it into its entity's dossier. Triggers when the user invokes /new-project or asks to start a new project, initiative, engagement, opportunity, responsibility, or area of responsibility.
+description: Create a project or a responsibility (an area of responsibility) with a structured index; it shows up on its entity's page by itself. Triggers when the user invokes /new-project or asks to start a new project, initiative, engagement, opportunity, responsibility, or area of responsibility.
 user_invocable: true
 upstreamed-from: busdev@ccc27b8
 ---
@@ -8,7 +8,8 @@ upstreamed-from: busdev@ccc27b8
 # New Project
 
 Create `30-projects/{slug}/` with a queryable `index.md` and an empty
-`decisions/` log, then link the project into its entity's dossier.
+`decisions/` log. The entity's page lists the project by itself; there is
+nothing to link.
 
 ## Requirements
 
@@ -152,35 +153,13 @@ several of its errors name the exact command that fixes them. A name that
 already starts with the entity is not double-prefixed. `--slug` overrides the
 composition entirely; use it only on the user's explicit ask.
 
-### 5. Link it into the dossier
-
-Add the project to its entity's `Engagements` table. Write the edits to a file
-and pass it, so quoting cannot mangle the payload:
-
-```bash
-cat > /tmp/engagement.json <<'JSON'
-{"engagements": [{"project": "meridian-freight-holdings-yard-automation-program",
-                  "status": "Active",
-                  "one_liner": "Three-yard automation rollout"}]}
-JSON
-python3 "$VAULTLIB" entity write --vault "$VAULT" \
-  --slug meridian-freight-holdings --edits /tmp/engagement.json
-```
-
-The one-liner is one sentence, drawn from the context you gathered.
-
-**This step is non-blocking.** If it fails, the project still exists — say
-"dossier link skipped" in your summary and move on. Never unwind the project
-because the dossier update failed.
-
-### 6. Summarise
+### 5. Summarise
 
 Report, briefly:
 
 - name, slug, type, entity, owner
 - the path to `index.md`
 - what you extracted from the supplied context, and what you could not find
-- whether the dossier link succeeded
 - one suggested next step — usually recording the first decision, or feeding a
   transcript in
 
@@ -196,4 +175,3 @@ Report, briefly:
 4. **Do not put the entity name in the project name** — it is already a field
    and a column. The *slug* is the opposite: the CLI prefixes it with the
    entity on its own, and you never counteract that.
-5. **Dossier failures never fail the project.**

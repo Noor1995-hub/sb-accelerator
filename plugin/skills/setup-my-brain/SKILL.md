@@ -504,6 +504,10 @@ missing. For each ticked person:
 python3 "$VAULTLIB" person ensure --vault "$VAULT" --name "Priya Nathan"
 ```
 
+When the owner said where this person works and that entity exists (step 4
+made it), add `--entity <entity slug>`. If they named a company that is not an
+entity yet, leave `--entity` off rather than guessing a slug.
+
 ## Step 7 — how you write
 
 Propose from the `sent-mail` entries: length, how they open and close,

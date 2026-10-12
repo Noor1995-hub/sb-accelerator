@@ -2543,3 +2543,18 @@ def test_ontology_says_dismiss_on_a_kept_meeting_only_hides_it():
             / "ontology.md").read_text(encoding="utf-8")
     flat = " ".join(text.split())
     assert "Dismiss on an accepted meeting only hides it" in flat
+
+
+def test_update_entity_writes_stakeholders_onto_the_person():
+    text = read_skill("update-entity")
+    assert "person set" in text and "--decision-role" in text
+    assert '"stakeholders"' not in text and '"engagements"' not in text
+
+
+def test_new_project_no_longer_writes_an_engagements_row():
+    assert "engagements" not in read_skill("new-project").lower()
+
+
+def test_person_ensure_passes_the_entity_only_when_routing_knows_it():
+    flat = " ".join(read_skill("sync-recordings").split())
+    assert "--entity" in flat and "never a guess" in flat.lower()

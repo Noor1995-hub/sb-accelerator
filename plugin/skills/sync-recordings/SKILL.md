@@ -668,6 +668,12 @@ When the calendar match gives that attendee's address alongside the name,
 add `--email "<address>"` — it fills an empty email and never overwrites one.
 Never pair a name with an address by guessing.
 
+Add `--entity <slug>` only when that attendee's email domain matched exactly
+one entity in routing (signal 1 above): the person is then linked to that
+entity. Never a guess: when the domain matched no entity or more than one,
+or there is no address, omit `--entity`. It fills an empty `entity` and never
+overwrites one.
+
 Use the returned slugs. The vault owner attends their own meetings — include
 them. Names only guessed from transcript audio are unreliable: leave them
 out of `attendees` and mention them in the debrief instead.

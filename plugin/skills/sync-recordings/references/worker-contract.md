@@ -214,6 +214,11 @@ The address is stored on a new person and filled into an existing one whose
 email is empty; a set email is never overwritten. Leave `--email` off for an
 entry with no address — never guess one.
 
+Add `--entity <slug>` for an attendee only when your briefing's routing
+shows that attendee's email domain matched exactly one entity (routing signal
+1). Never a guess: otherwise omit it. It fills an empty `entity` on the
+person and never overwrites one.
+
 Use each result's `slug`, plus the vault owner's person slug your prompt
 already carries, for the payload's `attendees` — the owner's slug arrives
 pre-resolved (the orchestrator read it from `config read`'s `owner`), so
