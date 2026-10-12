@@ -54,12 +54,14 @@ def write_project(root: Path, slug: str, *, status="active",
 
 def write_meeting(root: Path, stem: str, *, date_value="2026-06-10T10:00",
                   review_status="confirmed", projects=(), attendees=(),
-                  type_value="meeting", confirmed_at=None) -> None:
+                  type_value="meeting", confirmed_at=None, entities=()) -> None:
     proj = ", ".join(projects)
     att = ", ".join(attendees)
     lines = ["---", f"date: {date_value}", f"type: {type_value}",
              f"review_status: {review_status}",
              f"projects: [{proj}]", f"attendees: [{att}]"]
+    if entities:
+        lines += [f"entities: [{', '.join(entities)}]"]
     if confirmed_at is not None:
         lines += [f"confirmed-at: {confirmed_at}"]
     lines += ["---", "", "- x", ""]
@@ -965,3 +967,109 @@ def test_sessions_change_no_metric_and_are_not_message_logs(tmp_path):
     entry = result["projectsNeedingUpdate"][0]
     assert entry["newLogs"] == [] and entry["newFiles"] == []
     assert not [w for w in result["warnings"] if "session" in w]
+
+
+
+# --- #273 piece 3: the entity queue ------------------------------------------
+
+def write_entity(root, slug, name, *, status="active", parent=None,
+                 entity_updated=None, last_updated="2026-10-01"):
+    folder = root / "40-entities" / slug
+    folder.mkdir(parents=True, exist_ok=True)
+    lines = ["---", "type: entity", f'entity-name: "{name}"', f"slug: {slug}",
+             f"status: {status}", f"last-updated: {last_updated}"]
+    if parent:
+        lines.append(f"parent: {parent}")
+    if entity_updated:
+        lines.append(f"entity-updated: {entity_updated}")
+    lines += ["---", f"# {name}", ""]
+    (folder / "dossier.md").write_text("\n".join(lines), encoding="utf-8")
+
+
+def entity_queue(root, today="2026-10-12"):
+    result = updatequeue.run(root, today, "owner-morgan")
+    return {e["slug"]: e for e in result["entitiesNeedingUpdate"]}
+
+
+def test_a_meeting_after_the_stamp_queues_its_entity(tmp_path):
+    root = make_vault(tmp_path)
+    write_entity(root, "acme", "Acme", entity_updated="2026-10-12T09:00")
+    write_meeting(root, "m1", date_value="2026-10-12T10:00", entities=["acme"])
+    write_meeting(root, "m0", date_value="2026-10-11T10:00", entities=["acme"])
+    queue = entity_queue(root)
+    assert queue["acme"]["newFiles"] == ["20-meetings/m1.md"]
+    assert queue["acme"]["parentMode"] is False and queue["acme"]["entityName"] == "Acme"
+
+
+def test_a_meeting_confirmed_after_the_stamp_queues_even_if_old(tmp_path):
+    root = make_vault(tmp_path)
+    write_entity(root, "acme", "Acme", entity_updated="2026-10-12T09:00")
+    write_meeting(root, "old", date_value="2026-10-01T10:00", entities=["acme"],
+                  confirmed_at="2026-10-12T11:00")
+    assert entity_queue(root)["acme"]["newFiles"] == ["20-meetings/old.md"]
+
+
+def test_no_stamp_falls_back_to_the_last_updated_day(tmp_path):
+    root = make_vault(tmp_path)
+    write_entity(root, "acme", "Acme", last_updated="2026-10-10")
+    write_meeting(root, "before", date_value="2026-10-05T10:00", entities=["acme"])
+    write_meeting(root, "after", date_value="2026-10-11T10:00", entities=["acme"])
+    assert entity_queue(root)["acme"]["newFiles"] == ["20-meetings/after.md"]
+
+
+def test_a_meeting_through_its_projects_entity_queues(tmp_path):
+    root = make_vault(tmp_path)
+    write_entity(root, "acme", "Acme", entity_updated="2026-10-12T09:00")
+    write_project(root, "acme-erp")                      # entity: acme
+    write_meeting(root, "m1", date_value="2026-10-12T10:00", projects=["acme-erp"])
+    assert entity_queue(root)["acme"]["newFiles"] == ["20-meetings/m1.md"]
+
+
+def test_logs_and_sessions_queue_by_entity_or_project(tmp_path):
+    root = make_vault(tmp_path)
+    write_entity(root, "acme", "Acme", entity_updated="2026-10-12T09:00")
+    write_project(root, "acme-erp")
+    write_log(root, "2026-10-12", [g("a1", projects=["acme-erp"])], "2026-10-12T21:00")
+    write_session(root, "2026-10-12-session-x", ["acme-erp"], "2026-10-12T15:00")
+    entry = entity_queue(root)["acme"]
+    assert entry["newLogs"] == ["2026-10-12-messages"]
+    assert entry["newSessions"] == ["_messages/sessions/2026-10-12-session-x.md"]
+
+
+def test_a_team_queues_itself_and_feeds_its_parent_in_parent_mode(tmp_path):
+    root = make_vault(tmp_path)
+    write_entity(root, "acme", "Acme", entity_updated="2026-10-12T09:00")
+    write_entity(root, "acme-finance", "Finance", parent="acme", entity_updated="2026-10-12T09:00")
+    write_meeting(root, "m1", date_value="2026-10-12T10:00", entities=["acme-finance"])
+    queue = entity_queue(root)
+    assert queue["acme-finance"]["newFiles"] == ["20-meetings/m1.md"]
+    assert queue["acme-finance"]["parentMode"] is False
+    parent = queue["acme"]
+    assert parent["parentMode"] is True and parent["newFiles"] == []
+    assert parent["teamFiles"][0]["team"] == "acme-finance"
+    assert parent["teamFiles"][0]["teamName"] == "Finance"
+    assert parent["teamFiles"][0]["files"] == ["20-meetings/m1.md"]
+
+
+def test_a_dormant_parent_is_not_queued_by_its_team(tmp_path):
+    root = make_vault(tmp_path)
+    write_entity(root, "acme", "Acme", status="dormant", entity_updated="2026-10-12T09:00")
+    write_entity(root, "acme-finance", "Finance", parent="acme", entity_updated="2026-10-12T09:00")
+    write_meeting(root, "m1", date_value="2026-10-12T10:00", entities=["acme-finance"])
+    assert set(entity_queue(root)) == {"acme-finance"}
+
+
+def test_dormant_entities_and_missing_dossiers_are_skipped(tmp_path):
+    root = make_vault(tmp_path)
+    write_entity(root, "old", "Old", status="dormant")
+    write_meeting(root, "m1", date_value="2026-10-12T10:00", entities=["old", "ghost"])
+    assert entity_queue(root) == {}
+
+
+def test_unconfirmed_meetings_and_note_captures_do_not_queue(tmp_path):
+    root = make_vault(tmp_path)
+    write_entity(root, "acme", "Acme", entity_updated="2026-10-12T09:00")
+    write_meeting(root, "m1", date_value="2026-10-12T10:00", entities=["acme"],
+                  review_status="needs-review")
+    write_meeting(root, "n1", date_value="2026-10-12T10:00", entities=["acme"], type_value="note")
+    assert entity_queue(root) == {}
