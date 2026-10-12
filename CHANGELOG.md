@@ -15,7 +15,7 @@ delivers them.
 
 ## Unreleased
 
-- **Person pages get What I know**: facts people said about themselves — personal or about work — are added every evening from meetings, mail and Teams, and right away when you tell Claude with `/add`. Each line is dated and says where it came from; delete a line to remove it. These facts never leave the vault and never appear in the daily note. Needs `/upgrade-vault` (structure 15): it moves your existing "Notes from …" lines into What I know, and reads nothing older than the upgrade. (#273, #PR)
+- **Person pages get What I know**: facts people said about themselves — personal or about work — are added every evening from meetings, mail and Teams, and right away when you tell Claude with `/add`. Each line is dated and says where it came from; delete a line to remove it. These facts never leave the vault and never appear in the daily note. Needs `/upgrade-vault` (structure 15): it moves your existing "Notes from …" lines into What I know, and reads nothing older than the upgrade. (#273, #283)
 
 - **Entity pages update themselves**: every evening, and right away when you call the meeting sync or `/add`, each active entity with new meetings, mail, sessions or notes gets its Context, Relationship History, Dynamics and Sensitivities brought up to date — every line says where it came from, and nothing you wrote is removed. A team's page is updated in full; its parent's history gets the team's big events. (#273, #282)
 
