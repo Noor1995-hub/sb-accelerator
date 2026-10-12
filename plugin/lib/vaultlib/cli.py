@@ -180,6 +180,22 @@ def build_parser() -> argparse.ArgumentParser:
     person_set.add_argument("--role", help="the person's title")
     person_set.add_argument("--decision-role", dest="decision_role")
     person_set.add_argument("--stance")
+    person_write = people_sub.add_parser(
+        "write", help="append dated, sourced facts under ## What I know (#273)")
+    _add_vault_argument(person_write)
+    person_write.add_argument("--slug", required=True)
+    person_write.add_argument("--facts", required=True,
+                              help="path to a JSON file {\"facts\": [...]}, or - for stdin")
+    person_write.add_argument("--today", help="ISO date; defaults to today")
+    person_write.add_argument(
+        "--automatic", action="store_true",
+        help="required: the unattended writer — appends only, every fact ends "
+             "in a source marker")
+    person_touch = people_sub.add_parser(
+        "touch", help="stamp person-updated after the automatic update read new material")
+    _add_vault_argument(person_touch)
+    person_touch.add_argument("--slug", required=True)
+    person_touch.add_argument("--timestamp", help="YYYY-MM-DDTHH:MM; defaults to now")
 
     projects = top.add_parser("project", help="project folders")
     projects_sub = projects.add_subparsers(dest="action", required=True)
@@ -1056,6 +1072,17 @@ def _dispatch(args: argparse.Namespace) -> int:
                    else json.loads(Path(args.identity).read_text(encoding="utf-8")))
         return _ok(config.verify_account(root, args.adapter, payload))
     if args.group == "person":
+        if args.action == "touch":
+            return _ok(person.touch(root, args.slug, timestamp=args.timestamp))
+        if args.action == "write":
+            if not args.automatic:
+                return _fail("person write needs --automatic",
+                             "It is the unattended writer; the owner edits the page by hand.")
+            payload = (json.load(sys.stdin) if args.facts == "-"
+                       else json.loads(Path(args.facts).read_text(encoding="utf-8")))
+            facts = payload.get("facts") if isinstance(payload, dict) else payload
+            return _ok(person.write_facts(root, args.slug, facts,
+                                          vault.today_iso(args.today)))
         if args.action == "set":
             return _ok(person.set_fields(root, args.slug, entity=args.entity, role=args.role,
                                          decision_role=args.decision_role, stance=args.stance))
