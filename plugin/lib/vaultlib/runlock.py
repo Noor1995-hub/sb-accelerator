@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import re
 import socket
+import time
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
@@ -22,6 +23,9 @@ from . import vault
 
 LOCK_RELPATH = Path("99-workflow-config") / "sync-state" / "run.lock.json"
 MAX_AGE = timedelta(hours=2)
+# A waiting acquire is one CLI call: it must finish well inside the host's
+# default Bash timeout (2 minutes in Claude Code).
+MAX_WAIT_SECONDS = 90
 _ROUTINE_RE = re.compile(r"\A[a-z][a-z0-9]*(-[a-z0-9]+)*\Z")
 
 
@@ -46,8 +50,22 @@ def _read(root: Path) -> Optional[dict]:
         return {"routine": None, "started_at": None, "host": None}
 
 
-def acquire(root: Path, routine: str, *, now: Optional[datetime] = None) -> dict:
+def acquire(root: Path, routine: str, *, now: Optional[datetime] = None,
+            wait: int = 0) -> dict:
+    """Take the lock. With `wait`, a refused acquire sleeps that many seconds
+    inside this call and tries once more — so a scheduled run waits with the
+    one CLI prefix it is allowed to run, never a separate sleep command."""
     _check(routine)
+    if not 0 <= wait <= MAX_WAIT_SECONDS:
+        raise RunLockError(f"--wait must be 0..{MAX_WAIT_SECONDS} seconds")
+    result = _try(root, routine, now)
+    if result["acquired"] or not wait:
+        return result
+    time.sleep(wait)
+    return _try(root, routine, now)
+
+
+def _try(root: Path, routine: str, now: Optional[datetime]) -> dict:
     now = now or datetime.now()
     holder = _read(root)
     stale = False

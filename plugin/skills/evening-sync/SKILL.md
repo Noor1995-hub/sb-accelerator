@@ -50,12 +50,18 @@ Take the run lock:
 python3 "$VAULTLIB" runlock acquire --vault "$VAULT" --routine evening-sync
 ```
 
-`acquired: false` means the owner's on-demand processing is running. Retry
-once a minute, up to 10 times (a CLI call each, never a model check-in): one
-call per retry, `python3 -c "import time; time.sleep(60)"` followed by the
-acquire again, or the host's own wait. Never a loop the model polls. Then
-continue anyway and add to the warnings: "ran while the meeting sync held the
-lock (since <started_at>)".
+`acquired: false` means the owner's on-demand processing is running. Wait
+with the CLI itself — up to 10 more calls, each one waiting 60 seconds inside
+the call and trying once more:
+
+```bash
+python3 "$VAULTLIB" runlock acquire --vault "$VAULT" --routine evening-sync --wait 60
+```
+
+Never a separate sleep command (a scheduled run is only allowed the CLI) and
+never a loop the model polls. Still `acquired: false` after the 10th → continue
+anyway and add to the warnings: "ran while the meeting sync held the lock
+(since <started_at>)".
 
 Release it on every early exit as well as at stage 7 (below).
 
@@ -487,7 +493,8 @@ reported "Processed: 0" after writing a meeting correctly):
   `state-updated`** in its frontmatter;
 - every recording reported synced has its stem in `20-meetings/`.
 
-Then release the run lock, before the summary:
+Then release the run lock, before the summary (`released: false` is expected
+when stage 1 carried on without it — not a failure):
 
 ```bash
 python3 "$VAULTLIB" runlock release --vault "$VAULT" --routine evening-sync

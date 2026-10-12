@@ -752,6 +752,9 @@ def build_parser() -> argparse.ArgumentParser:
     _add_vault_argument(lock_acquire)
     lock_acquire.add_argument("--routine", required=True)
     lock_acquire.add_argument("--now", help="ISO datetime override (tests)")
+    lock_acquire.add_argument(
+        "--wait", type=int, default=0,
+        help="when refused, sleep this many seconds (max 90) and try once more")
     lock_release = lock_sub.add_parser("release", help="drop this routine's lock")
     _add_vault_argument(lock_release)
     lock_release.add_argument("--routine", required=True)
@@ -1291,7 +1294,8 @@ def _dispatch(args: argparse.Namespace) -> int:
     if args.group == "runlock":
         if args.action == "acquire":
             now = datetime.fromisoformat(args.now) if args.now else None
-            return _ok(runlock.acquire(root, args.routine, now=now))
+            return _ok(runlock.acquire(root, args.routine, now=now,
+                                      wait=args.wait))
         return _ok(runlock.release(root, args.routine))
     if args.group == "runlog":
         return _ok(runlog.append(root, args.routine, args.outcome))

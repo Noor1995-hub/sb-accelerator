@@ -77,7 +77,7 @@ lines — into the final summary verbatim.
 ## C. Project-state updates
 
 If the queue is empty, record "no projects to update", run the write-back for
-your notes below (a note with no project is still marked), then go to the caller's next step (evening: stage 6, the recap; on demand: step 10).
+your notes below (evening: a note with no project is still marked; on demand it stays ticked — see below), then go to the caller's next step (evening: stage 6, the recap; on demand: step 10).
 Otherwise, dispatch one subagent per queued project (each with `model:
 sonnet`), each carrying the queue entry, the harvest jottings (evening only; on demand there are none) that mention
 the project, today's date, and these instructions.
@@ -223,7 +223,7 @@ least one queue entry's `newNotes` and every such entry came back
 python3 "$VAULTLIB" notes mark-absorbed --vault "$VAULT" --path "<path>" --date <today>
 ```
 
-On demand, skip this for a note whose harvested `projects` is empty: it stays ticked for tonight's recap, its only reader.
+On demand, skip this for a note still without a project after A (you chose zero projects): it stays ticked for tonight's recap, its only reader.
 
 A note whose project failed keeps `include` ticked and is read again tomorrow;
 say so in `sync_notes`. `missing` (the owner deleted or moved it during the run)

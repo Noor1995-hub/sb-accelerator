@@ -8,6 +8,7 @@ only sets the tick, exactly as Obsidian would, so there is one confirm path.
 """
 from __future__ import annotations
 
+from datetime import date, datetime
 from pathlib import Path
 from typing import List, Optional
 
@@ -34,6 +35,20 @@ def _title(data: dict, body: str, stem: str) -> str:
         if line.startswith("# ") and line[2:].strip():
             return line[2:].strip()
     return str(data.get("calendar-subject") or stem)
+
+
+def _when(value) -> str:
+    """'Mon 12 Oct 09:00' (or 'Mon 12 Oct' for a date-only meeting), built
+    here so the model never works out a weekday itself."""
+    text = str(value or "")
+    try:
+        if "T" in text:
+            moment = datetime.fromisoformat(text[:16])
+            return f"{moment:%a} {moment.day} {moment:%b %H:%M}"
+        day = date.fromisoformat(text[:10])
+    except ValueError:
+        return text
+    return f"{day:%a} {day.day} {day:%b}"
 
 
 def _project_index(root: Path, slug: str) -> Path:
@@ -71,6 +86,7 @@ def list_queue(root: Path) -> dict:
             "path": rel,
             "title": _title(data, body, path.stem),
             "date": str(data.get("date") or ""),
+            "when": _when(data.get("date")),
             "type": data.get("type"),
             "projects": projects,
             "project_names": [_name(_project_index(root, s), "project-name", s)

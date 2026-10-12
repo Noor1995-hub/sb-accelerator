@@ -2404,3 +2404,26 @@ def test_on_demand_zero_project_notes_stay_ticked():
 def test_evening_sync_stage3_skips_on_demand_steps():
     text = read_skill("evening-sync")
     assert "steps 8–11" in text
+
+
+def test_evening_lock_wait_stays_inside_the_cli():
+    """#271 review: a scheduled run may only call the CLI — a sleep command
+    would stop at a permission prompt the first night the lock is held."""
+    text = read_skill("evening-sync")
+    assert '--routine evening-sync --wait 60' in text
+    assert "time.sleep" not in text
+
+
+def test_on_demand_lock_is_released_before_the_decision_question():
+    text = read_skill("sync-recordings")
+    step9, step10 = text.index("### 9. Process"), text.index("### 10. Decisions in the chat")
+    assert 'runlock release --vault "$VAULT" --routine sync-recordings' in text[step9:step10]
+    step8 = text.index("### 8. Triage in the chat")
+    assert "every exit releases the lock first" in text[step8:step9]
+    assert "never from `/evening-sync` stage 3" in text[step8:step9]
+
+
+def test_triage_list_shows_the_cli_when_label():
+    text = read_skill("sync-recordings")
+    step8 = text[text.index("### 8. Triage in the chat"):text.index("### 9. Process")]
+    assert "`when` exactly as given" in step8

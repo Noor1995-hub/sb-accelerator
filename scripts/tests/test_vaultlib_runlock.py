@@ -53,3 +53,31 @@ def test_unreadable_lock_counts_as_stale(tmp_path):
 def test_routine_name_is_validated(tmp_path):
     with pytest.raises(runlock.RunLockError):
         runlock.acquire(tmp_path, "Evening Sync", now=T0)
+
+
+def test_wait_retries_once_after_sleeping(tmp_path, monkeypatch):
+    """#271: the evening run waits inside the CLI — one allowlisted call per
+    retry, never a sleep command a scheduled run would be prompted for."""
+    runlock.acquire(tmp_path, "sync-recordings", now=T0)
+    slept = []
+
+    def fake_sleep(seconds):
+        slept.append(seconds)
+        runlock.release(tmp_path, "sync-recordings")
+
+    monkeypatch.setattr(runlock.time, "sleep", fake_sleep)
+    result = runlock.acquire(tmp_path, "evening-sync", now=T0, wait=60)
+    assert slept == [60] and result["acquired"] is True
+
+
+def test_wait_still_refused_reports_holder(tmp_path, monkeypatch):
+    runlock.acquire(tmp_path, "sync-recordings", now=T0)
+    monkeypatch.setattr(runlock.time, "sleep", lambda s: None)
+    result = runlock.acquire(tmp_path, "evening-sync", now=T0, wait=60)
+    assert result["acquired"] is False
+    assert result["holder"]["routine"] == "sync-recordings"
+
+
+def test_wait_is_capped_below_the_bash_timeout(tmp_path):
+    with pytest.raises(runlock.RunLockError):
+        runlock.acquire(tmp_path, "evening-sync", now=T0, wait=300)

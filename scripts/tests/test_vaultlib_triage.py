@@ -160,3 +160,26 @@ def test_cli_round_trip(tmp_path):
         [sys.executable, str(CLI), "meeting", "triage-apply", "--vault", str(root),
          "--items", str(payload)], capture_output=True, text=True, check=True).stdout)
     assert applied["result"]["applied"] == [{"path": "20-meetings/a.md", "action": "accept"}]
+
+
+def test_list_gives_a_ready_made_when_label(tmp_path):
+    """#271: the model never works out a weekday itself."""
+    root = make_vault(tmp_path)
+    write_meeting(root, "a")
+    assert triage.list_queue(root)["items"][0]["when"] == "Mon 12 Oct 09:00"
+
+
+def test_when_label_for_a_date_only_meeting(tmp_path):
+    root = make_vault(tmp_path)
+    path = write_meeting(root, "a")
+    path.write_text(path.read_text(encoding="utf-8").replace(
+        "date: 2026-10-12T09:00", "date: 2026-10-12"), encoding="utf-8")
+    assert triage.list_queue(root)["items"][0]["when"] == "Mon 12 Oct"
+
+
+def test_when_label_has_no_leading_zero(tmp_path):
+    root = make_vault(tmp_path)
+    path = write_meeting(root, "a")
+    path.write_text(path.read_text(encoding="utf-8").replace(
+        "date: 2026-10-12T09:00", "date: 2026-10-05T14:30"), encoding="utf-8")
+    assert triage.list_queue(root)["items"][0]["when"] == "Mon 5 Oct 14:30"

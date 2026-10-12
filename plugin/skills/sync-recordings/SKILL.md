@@ -720,8 +720,9 @@ a future calibration needs — write it accurately, not optimistically.
 
 **No plan is shown — in either mode (#271).** Interactive mode extracts like
 unattended mode: ambiguous routing becomes `projects: []` and low confidence,
-and the owner settles every note in step 8 on the real titles. The drop
-mechanics below are still how step 8 and the summary undo a recording.
+and the owner settles every note in step 8 on the real titles. A step-8
+dismiss is `archived: true` on the note. The drop mechanics below are only
+for a recording the owner explicitly asks never to fetch again.
 
 For a recording the user says to permanently drop:
 
@@ -1142,8 +1143,7 @@ and settles it as already synced.
 Then write the batch's settled lines — `written` (with each
 `recording_id`, including any `already-synced`-derived entries),
 `no-transcript`, `no-access`, `forbidden`, `skipped` (including any
-`skip-listed`-derived entries, plus the step-5 drop-mechanics entries described
-above) — one entry per occurrence, keyed by the `id` and `start_utc` the
+`skip-listed`-derived entries) — one entry per occurrence, keyed by the `id` and `start_utc` the
 triage result carried, to `$SCRATCH/m365_outcomes_batch.json`, and bank
 them before dispatching the next batch:
 
@@ -1338,14 +1338,24 @@ count has to come from the worker.
 
 ### 8. Triage in the chat
 
-Interactive mode only. Take the run lock first:
+Only when the owner called `/sync-recordings` directly — never under
+`--unattended` and never from `/evening-sync` stage 3; there the run ends
+after step 7. Take the run lock first:
 
 ```bash
 python3 "$VAULTLIB" runlock acquire --vault "$VAULT" --routine sync-recordings
 ```
 
-`acquired: false` → stop here, say: *"Your evening run is busy; your meetings
-stay in triage and that run picks up what you tick."* Then scratch sweep and end.
+`acquired: false` → nothing was taken; stop here and say: *"Your evening run
+is busy; your meetings stay in triage and that run picks up what you tick."*
+Then `scratch sweep` and end.
+
+**From here until the end of step 9, every exit releases the lock first** —
+"not now", an error from any command in steps 8–9, a failed step 9:
+
+```bash
+python3 "$VAULTLIB" runlock release --vault "$VAULT" --routine sync-recordings
+```
 
 ```bash
 python3 "$VAULTLIB" meeting triage-list --vault "$VAULT"
@@ -1357,12 +1367,13 @@ item, dry, no commentary:
 
 `1. Weekly with Acme · Mon 12 Oct 09:00 · Acme ERP rollout · Jan Peeters, Sofie Maes`
 
-Use `title`, `date` (weekday, day, month, time), `project_names` (or "no
-project") and `attendee_names`. Add ` · ⚠ possible duplicate` when
-`conflicts_with` is set. Ask once: **"Accept, dismiss or change?"** Accept
-any free-text answer ("all accept", "1 3 accept, 2 dismiss, 4 project is
-finance close"). "Not now" or no clear answer → release the lock and end;
-everything stays in triage.
+Use `title`, `when` exactly as given (never work out a weekday yourself),
+`project_names` (or "no project") and `attendee_names`. Add
+` · ⚠ possible duplicate` when `conflicts_with` is set. Ask once:
+**"Accept, dismiss or change?"** Accept any free-text answer ("all accept",
+"1 3 accept, 2 dismiss, 4 project is finance close"). An unclear answer gets
+one short question back. "Not now" or no answer → release the lock, `scratch
+sweep`, and end; everything stays in triage.
 
 Translate the answer into a list of `{path, action[, projects][, attendees][, accept]}`.
 Projects and people are slugs: match the owner's words to existing project and
@@ -1380,13 +1391,15 @@ python3 "$VAULTLIB" sync rederive-entities --vault "$VAULT"
 ```
 
 Report each `refused` item with its reason, in one line each. A duplicate is
-settled in Obsidian, as the reason says.
+settled in Obsidian, as the reason says. Dismiss here is `archived: true` —
+the note is hidden, the recording is not skip-listed.
 
 ### 9. Process
 
 Follow `${CLAUDE_PLUGIN_ROOT}/skills/evening-sync/references/process.md`
-with the **On demand** column of its Inputs table: sections A, B and C, no
-the daily-note harvest left out, no mail or Teams. Keep its Returns for steps 10 and 11.
+with the **On demand** column of its Inputs table: sections A, B and C —
+without daily-note content, To Do's, or mail and Teams. Keep its Returns for
+steps 10 and 11.
 
 Its inputs on demand:
 
@@ -1399,16 +1412,24 @@ On demand there is no recap: wherever process.md says "the recap", "tonight"
 or "tomorrow", it means the evening run. The `sync_notes` lines from A and C
 go to step 11's **Warnings** line.
 
+When section C has returned, release the lock — the pages are written, and
+the questions that follow must not hold up the evening run:
+
+```bash
+python3 "$VAULTLIB" runlock release --vault "$VAULT" --routine sync-recordings
+```
+
 ### 10. Decisions in the chat
 
 From C's returns, list every `decisionsWritten` stem (read each note's
 `summary`), one line each: `1. Acme ERP rollout · Go-live moves to 3 Nov`.
-None → skip to step 11. Ask once: **"Keep or dismiss?"** "Not now" → they
-stay in Decisions › To review. For each answer:
+The note's path is `<decisionsDir>/<stem>.md`, `decisionsDir` from that
+project's queue entry. None → skip to step 11. Ask once: **"Keep or
+dismiss?"** "Not now" → they stay in Decisions › To review. For each answer:
 
 ```bash
-python3 "$VAULTLIB" decision review --vault "$VAULT" --path "<path>" --keep
-python3 "$VAULTLIB" decision review --vault "$VAULT" --path "<path>" --dismiss
+python3 "$VAULTLIB" decision review --vault "$VAULT" --path "<decisionsDir>/<stem>.md" --keep
+python3 "$VAULTLIB" decision review --vault "$VAULT" --path "<decisionsDir>/<stem>.md" --dismiss
 ```
 
 A dismissed decision whose result has `supersedes` set: say *"It had replaced
@@ -1417,11 +1438,7 @@ still holds."*
 
 ### 11. Summary
 
-Release the lock, then summarize from disk:
-
-```bash
-python3 "$VAULTLIB" runlock release --vault "$VAULT" --routine sync-recordings
-```
+Summarize from disk, then `scratch sweep`:
 
 ```
 ## Brain updated
@@ -1432,9 +1449,6 @@ python3 "$VAULTLIB" runlock release --vault "$VAULT" --routine sync-recordings
 **Not done now:** mail and Teams, and tomorrow's daily note — tonight's run
 **Warnings:** {verbatim, `sync_notes` lines included} | none
 ```
-
-Release the lock on every exit after step 8 took it: refusal, "not now", or an
-error.
 
 ## Scratch hygiene
 
