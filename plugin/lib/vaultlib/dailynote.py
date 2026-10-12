@@ -699,8 +699,18 @@ def write(root: Path, payload) -> dict:
     fingerprint = recap_fingerprint(root, window) if window else None
     path = root / DAILY_NOTES_DIR / f"{data['date']}.md"
     # A blank note is the one Obsidian creates on opening today (#263): write
-    # the real note over it, as if it were not there.
-    if path.is_file() and not vault.is_blank_note(path):
+    # the real note over it, as if it were not there. One the owner typed
+    # into first gets the real note too, with their words kept under Notes.
+    owner_text = (path.read_text(encoding="utf-8")
+                  if vault.is_owner_only_daily_note(path) else None)
+    if owner_text is not None:
+        merged = _render(root, data, fingerprint)
+        merged = merged.replace("\n## Notes\n- \n",
+                                "\n## Notes\n" + owner_text.strip("\n") + "\n", 1)
+        replaced = 1 + (len(data["meetings"]) or 1)
+        changed, created, recap_skipped = True, True, False
+        vault.atomic_write(path, merged)
+    elif path.is_file() and not vault.is_blank_note(path):
         original = path.read_text(encoding="utf-8")
         merged, replaced, recap_skipped = _merge(
             root, original, data, fingerprint)

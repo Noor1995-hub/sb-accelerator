@@ -143,3 +143,19 @@ def test_renaming_an_entity_in_excel_moves_its_teams_links(tmp_path):
     assert "# Acme Group" in body
     _, team = fm(root, "40-entities/acme-finance/dossier.md")
     assert "**Part of** [[40-entities/acme/dossier|Acme Group]]" in team
+
+
+def test_a_fully_applied_export_is_deleted_and_a_partial_one_kept(tmp_path):
+    # Review 2026-10-12: exports hold every person's stance and role in
+    # decisions; they piled up in _heavy-assets.
+    root = make_vault(tmp_path)
+    rel, book = exported(root)
+    book["People"][1][col(book, "People", "Role")] = "CEO"
+    save(root, rel, book)
+    assert tables.apply(root, rel, today="2026-10-12")["workbook_deleted"] is True
+    assert not (root / rel).exists()
+    rel, book = exported(root)
+    book["People"][1][col(book, "People", "Entity")] = "LLBG"     # unknown: refused
+    save(root, rel, book)
+    assert tables.apply(root, rel, today="2026-10-12")["workbook_deleted"] is False
+    assert (root / rel).exists()

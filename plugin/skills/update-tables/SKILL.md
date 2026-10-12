@@ -71,5 +71,9 @@ or was saved under another name: say so. Wait for the owner's OK.
 python3 "$VAULTLIB" table import --vault "$VAULT" --file "<path>" --apply --today <today>
 ```
 
-Summarize: written, created, failed (with the reason). "Another run is busy"
+Summarize: written, created, failed (with the reason). `workbook_deleted:
+true` → say the Excel file was removed, since everything in it is now in the
+vault (it held people's stance and role in decisions). False → it stays in
+Heavy assets so the owner can fix what was left and import again; once that
+is done the file goes. "Another run is busy"
 → say so; nothing was written; try again in a few minutes.

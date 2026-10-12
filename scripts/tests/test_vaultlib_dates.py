@@ -1048,3 +1048,20 @@ def test_harvest_window_never_exceeds_the_harvest_limit(tmp_path):
     span = (date.fromisoformat(result["recap_to"])
             - date.fromisoformat(result["harvest_from"])).days
     assert span == actions.MAX_WINDOW_DAYS
+
+
+# --- a note the owner typed into before any run (review 2026-10-12) --------
+
+def test_a_typed_into_empty_note_does_not_count_as_a_run(tmp_path):
+    # Mon and Tue notes exist; Tuesday evening's run was missed; on
+    # Wednesday morning the owner opened today's note (the calendar icon
+    # creates it) and typed a line. That is not proof a run happened.
+    root = make_vault(tmp_path)
+    for d in ("2026-10-05", "2026-10-06"):
+        note(root, d)
+    (root / "60-daily-notes" / "2026-10-07.md").write_text("call Jan back\n", encoding="utf-8")
+    plan = dates.plan(root, "2026-10-07")
+    assert plan["business_days_missed"] == 1 and plan["is_catchup"] is True
+    assert plan["today_note_exists"] is False
+    today = dates.plan(root, "2026-10-07", for_today=True)
+    assert today["note_to_write"] == "60-daily-notes/2026-10-07.md"
