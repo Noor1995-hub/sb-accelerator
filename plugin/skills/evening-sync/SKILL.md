@@ -106,7 +106,9 @@ morning, sees no note for today, and triggers the sync by hand. Running the
 standard plan then writes *tomorrow's* note and today never gets one (a live
 catch-up at 10:28 did exactly that: the skipped day's meetings were never
 prepped). `dates plan` reports the state instead of leaving it to you:
-`for_today_available` — today is a business day, today's note is missing,
+`for_today_available` — today is a business day, today's note is missing
+(an empty note Obsidian made, or one the owner typed into before any run,
+counts as missing: `daily-note write` keeps their text under **Notes**),
 and at least one daily note exists (a brand-new vault has nothing to catch
 up, so Session-1's first run never sees this offer) — and
 `for_today_suggested`, which adds "and it is before noon local". When

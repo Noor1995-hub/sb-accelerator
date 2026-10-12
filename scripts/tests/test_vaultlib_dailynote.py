@@ -475,14 +475,18 @@ def test_a_vault_whose_meetings_table_still_says_triage_embeds_triage(tmp_path):
     assert (root / "60-daily-notes" / "2026-06-15.md").read_text(encoding="utf-8") == EXPECTED_FRESH
 
 
-def test_a_note_with_anything_in_it_is_still_merged_not_replaced(tmp_path):
+def test_a_daily_note_without_regions_is_still_merged_not_replaced(tmp_path):
+    # A note that says it is a daily note but lost its regions is merged, so
+    # it is refused rather than guessed at. (Owner-typed text with no
+    # `type: daily-note` is wrapped instead — see the test at the end.)
     root = make_vault(tmp_path)
     note = root / "60-daily-notes" / "2026-06-15.md"
     note.parent.mkdir(parents=True, exist_ok=True)
-    note.write_text("- a thought I typed before the run\n", encoding="utf-8")
+    original = "---\ndate: 2026-06-15\ntype: daily-note\n---\n- a thought I typed\n"
+    note.write_text(original, encoding="utf-8")
     with pytest.raises(dailynote.DailyNoteError):
         dailynote.write(root, payload())
-    assert note.read_text(encoding="utf-8") == "- a thought I typed before the run\n"
+    assert note.read_text(encoding="utf-8") == original
 
 
 def test_read_tolerates_a_hand_written_note_without_markers(tmp_path):
@@ -1664,3 +1668,20 @@ def test_a_vault_whose_decisions_table_still_says_needs_review_embeds_it(tmp_pat
                         "> ![[30-projects/Decisions.base#To review]]") == EXPECTED_FRESH
     # and the legacy line is the machine's, never read back as the owner's
     assert "Needs review" not in str(dailynote.read(root, "2026-06-15"))
+
+
+def test_the_real_note_is_written_around_the_owners_typed_text(tmp_path):
+    # Review 2026-10-12: the owner typed into the empty note Obsidian made;
+    # the run used to refuse it ("expected exactly one recap region").
+    root = make_vault(tmp_path)
+    note = root / "60-daily-notes" / "2026-06-15.md"
+    note.write_text("call Jan back\n- [ ] send the deck\n", encoding="utf-8")
+    result = dailynote.write(root, payload())
+    text = note.read_text(encoding="utf-8")
+    assert result["created"] is True
+    assert "type: daily-note" in text and "<!-- evening-sync:recap:begin" in text
+    assert text.endswith("## Notes\ncall Jan back\n- [ ] send the deck\n")
+    # and from now on it is an ordinary note: a re-run merges
+    again = dailynote.write(root, payload())
+    assert again["created"] is False
+    assert "call Jan back" in note.read_text(encoding="utf-8")

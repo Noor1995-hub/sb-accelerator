@@ -665,4 +665,26 @@ def apply(root: Path, file_rel: str, *, today: str) -> dict:
         except (TablesError, entity.EntityError, project.ProjectError,
                 ValueError, OSError) as exc:
             result["failed"].append({"row": new["row"], "reason": str(exc)})
+    result["workbook_deleted"] = _delete_if_done(root, file_rel, planned, result)
     return result
+
+
+def _delete_if_done(root: Path, file_rel: str, planned: dict, result: dict) -> bool:
+    """Remove an export once everything in it has landed (review 2026-10-12:
+    every export holds each person's stance and role in decisions, and they
+    piled up in _heavy-assets). Kept while anything still needs the owner —
+    a conflict, refusal, unknown name or failed write — so they can fix the
+    file and import again. Only this skill's own exports are ever removed."""
+    path = root / file_rel
+    counts = planned.get("counts", {})
+    if (result["failed"] or counts.get("conflicts") or counts.get("refused")
+            or counts.get("unknown")):
+        return False
+    if path.parent.resolve() != (root / "_heavy-assets").resolve() \
+            or path.suffix != ".xlsx" or "-update-" not in path.name:
+        return False
+    try:
+        path.unlink()
+    except OSError:
+        return False
+    return True
