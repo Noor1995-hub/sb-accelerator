@@ -71,7 +71,7 @@ The queue is every meeting note with `review_status: needs-review` and no
 `archived: true`. That covers the new ones from step 6 and any left from earlier runs
 (last night's evening run included).
 
-1. `meeting triage list` (new CLI, read-only) returns, per note: path, title,
+1. `meeting triage-list` (new CLI, read-only) returns, per note: path, title,
    date and time, `projects`, `attendees` (names), confidence, and
    `conflicts-with` when set.
 2. Show one numbered list, one line per meeting:
@@ -81,7 +81,7 @@ The queue is every meeting note with `review_status: needs-review` and no
 3. Translate the answer into one payload, and **read the interpretation back
    in one line before writing** when anything was changed (not for plain
    accept/dismiss).
-4. `meeting triage apply --items <payload>` (new CLI) writes, per note:
+4. `meeting triage-apply --items <payload>` (new CLI) writes, per note:
    - accept → `reviewed: true`
    - dismiss → `archived: true`
    - change → `projects` / `attendees` (slugs that must resolve, as in
@@ -205,8 +205,8 @@ lock is reported stale and is taken over.
 ## Testing
 
 - **CLI (pytest):**
-  - `meeting triage list`: filters, and fields including `conflicts-with`.
-  - `meeting triage apply`: accept / dismiss / change, unknown slug refused,
+  - `meeting triage-list`: filters, and fields including `conflicts-with`.
+  - `meeting triage-apply`: accept / dismiss / change, unknown slug refused,
     conflicted note refused, and an idempotent re-apply.
   - `decision review`: keep, dismiss, refused non-decision path,
     superseding decision named on dismiss.
