@@ -4,11 +4,13 @@
 
 Two kinds of input have no good way in today:
 
-- **Informal recordings and transcripts.** A Plaud recording of a hallway
-  conversation has no calendar event behind it, so the sync cannot tell which
-  project or people it belongs to: it lands in triage with `projects: []`. A
-  transcript or notes from another app can be dropped in Input, but it waits
-  for a sync, and nobody tells the sync what it is about.
+- **Transcripts and notes without a source.** A transcript or notes from
+  another app can be dropped in Input, but it waits for a sync, and nobody
+  tells the sync what it is about.
+- **Informal Plaud recordings** (no calendar event) are already fetched by
+  `/sync-recordings`, but land in its triage list as "no project". That is
+  solved in `/sync-recordings`, not in `/add` (see "Project suggestion in the
+  meeting sync").
 - **A conversation with Claude itself.** A useful working session (a pricing
   discussion, a plan for a client) is lost when the session ends.
 
@@ -21,13 +23,19 @@ Builds on #277 (on-demand processing in `/sync-recordings`: `process.md`,
 
 ## Decisions (vault owner, 2026-10-12)
 
-- **Inputs:** a Plaud recording without a calendar event; text the owner has
-  (pasted, or a file: transcript, notes); this conversation with Claude.
-  Audio files that need transcription are out of scope.
+- **Inputs:** text the owner has (pasted, or a file: transcript, notes); this
+  conversation with Claude. **Not Plaud** (owner, 2026-10-12):
+  `/sync-recordings` already fetches every Plaud recording and its triage can
+  set project and people, so `/add` would be a second way to do the same.
+  `/sync-recordings` handles everything that comes from a source; `/add`
+  handles what has none. Audio files that need transcription are out of scope.
+- **Project suggestion in the meeting sync** (owner, 2026-10-12): in
+  `/sync-recordings`' chat triage, a meeting with no project gets a suggested
+  project from its content. Built on this branch, next to `/add`.
 - **Claude asks only what it cannot tell** (type, project, people), then
   shows one line for the owner's OK.
 - **Always processed right away.** No "now or tonight" question.
-- **A recording or transcript becomes a normal meeting note**, written as
+- **A transcript or notes become a normal meeting note** (or a `note`), written as
   already accepted (the owner confirmed it in the chat), so it never sits in
   triage.
 - **A conversation does not become a visible note.** Its summary is kept as a
@@ -46,7 +54,7 @@ Builds on #277 (on-demand processing in `/sync-recordings`: `process.md`,
 
 | Step | What |
 |---|---|
-| 1 | Work out what was handed over: a Plaud recording, text or a file, or this conversation |
+| 1 | Work out what was handed over: text or a file, or this conversation |
 | 2 | Get the content |
 | 3 | Understand: type (meeting or context), projects, people. Ask only what is unclear |
 | 4 | Show one line, wait for OK |
@@ -61,14 +69,6 @@ as the skill for "sync my meetings": `/add` is for **one** item the owner hands
 over.
 
 ### Step 1–2: Getting the content
-
-**Plaud recording.** List the owner's recent recordings that are not yet in
-the vault: the same Plaud adapter, account-binding gate and `sync dedup` that
-`/sync-recordings` uses (follow its "The three adapters" and "Account
-binding" sections; never a second implementation). Show at most 10, newest
-first: `1. Today 14:20 · 32 min · "Hallway chat"`. The owner picks one. If the
-owner already described it ("this afternoon's recording"), and exactly one
-matches, take it without the list.
 
 **Text or a file.** Pasted text, or a file path the owner gives. The text is
 written to `10-inbox/` as a file, with an **intent header** in the owner's
@@ -111,11 +111,10 @@ Take the run lock first (`runlock acquire --routine add`). Refused → nothing
 written; say *"Your evening run is busy; try again in a few minutes"* and end.
 From here, every exit releases the lock first, up to the end of step 6.
 
-**Plaud recording, or text/file (meeting or note).** Dispatch **one**
+**Text or a file (meeting or note).** Dispatch **one** inbox
 `sync-worker` with the same briefing `/sync-recordings` step 6 gives it,
 plus the routing the owner just confirmed (projects, attendees, type). It
-writes the meeting note (`meeting write`, `needs-review`). For text or a
-file, `/add` then moves the inbox file out with `sync archive` once the note
+writes the meeting note (`meeting write`, `needs-review`). `/add` then moves the inbox file out with `sync archive` once the note
 is verified on disk, as `/sync-recordings` does: Input is only a stop on the
 way and is empty again when `/add` ends. If no note was written, the file
 stays in Input and the evening run retries it; the summary says so. Then mark it accepted with the #277 commands:
@@ -210,18 +209,35 @@ The owner sees the summary before it is written (step 4).
 
 ### Not running twice
 
-The same `runlock` as #277, routine `add`. A Plaud recording added with
-`/add` is not fetched again by the evening run: `sync dedup` finds its
-`source-recording-id` in the written meeting note (existing behaviour).
+The same `runlock` as #277, routine `add`. A text added with `/add` is not
+taken again by the evening run: its inbox file is archived, and its content
+hash is in the written meeting note (existing `sync scan` behaviour).
 
 ### Rules added to `/add`
 
 - Never writes, creates or edits anything under `60-daily-notes/`.
 - Never reads mail or Teams.
-- One item per call: one Plaud recording, one pasted text or file, or this
+- One item per call: one pasted text or file, or this
   one conversation. Several items: call it again. (Owner, 2026-10-12: start
   with one at a time; a multi-item list with one OK is a possible follow-up.)
 - Never written without the owner's OK on the step-4 line.
+
+## Project suggestion in the meeting sync
+
+In `/sync-recordings` step 8 (#277), a meeting with no project today shows
+"no project". New: for each such item, read the note (title, Key Takeaways,
+Debrief) and suggest **at most one** active project, from the same signals as
+routing (project names, `keywords`, entity names, the people on it). Only
+when one project clearly fits; otherwise it stays "no project". The line
+shows the suggestion with a question mark:
+
+`3. Hallway chat · Mon 12 Oct 14:20 · no project — Acme ERP rollout? · Jan Peeters`
+
+**Accept on that line takes the suggestion**: it is applied as a change
+(`projects: [<suggested>]`, accepted). The owner can say otherwise in the same
+answer ("3 accept, no project", "3 project is finance close"). The
+interpretation read-back (#277) covers it: a suggestion taken counts as a
+change. Skill text only: `triage-apply` already writes a project change.
 
 ## Testing
 
@@ -238,8 +254,10 @@ The same `runlock` as #277, routine `add`. A Plaud recording added with
     `_messages/sessions/`.
   - `links.py`: a `_messages/sessions/<file>` link resolves as a session.
 - **Skill contracts:**
-  - `/add` points at `process.md` and at `/sync-recordings`' adapter and
-    worker sections (no second Plaud implementation).
+  - `/sync-recordings` step 8 suggests a project for a meeting with none, shows
+    it with a question mark, and says that accept takes the suggestion.
+  - `/add` points at `process.md` and at `/sync-recordings`' worker step
+    (no second extraction); it never mentions Plaud.
   - It never names `60-daily-notes` and never calls `daily-note write`.
   - It takes and releases `runlock` with routine `add`.
   - `process.md` section C handles `newSessions` with the `(session · …)`
