@@ -79,14 +79,15 @@ Payload: `{"facts": [{"date": "YYYY-MM-DD", "fact": "… (meeting · [[…]])"}]
   in the section) and lists it in `duplicates`.
 - Creates `## What I know` after the H1 when missing; when the page has no
   H1, at the top of the body.
-- Frontmatter: only `last-updated` changes. CRLF files keep their line
-  endings. Unknown slug → error naming the slug.
+- Frontmatter: only `last-updated` changes. A CRLF file is read correctly
+  and written back with LF, like every vault writer. Unknown slug → error
+  naming the slug.
 - `--automatic` is required (the flag states intent; there is no manual
   mode — the owner edits by hand).
 - Result JSON: `{"slug", "written", "skipped": [...], "duplicates": [...]}`.
 
 `python3 "$VAULTLIB" person touch --vault V --slug S --timestamp <ISO>`
-sets `person-updated` (idempotent; never moves a stamp backwards).
+sets `person-updated` (idempotent, like `entity touch`).
 
 ### Queue: `update-queue` gains `peopleNeedingUpdate` and `peopleWork`
 
@@ -179,8 +180,8 @@ Test-first for every CLI part.
 - `person write`: append; section creation (after H1, no-H1 case); marker
   refusal → `skipped`; bad date/empty fact refused; exact duplicate →
   `duplicates`; owner lines and other sections unchanged byte-for-byte;
-  CRLF kept; frontmatter only `last-updated`; unknown slug error.
-- `person touch`: sets, idempotent, never backwards.
+  CRLF input handled; frontmatter only `last-updated`; unknown slug error.
+- `person touch`: sets, idempotent, rejects a malformed timestamp.
 - `update-queue`: meeting and `type: note` attendees; log group `people`;
   stamp excludes older material; `created` fallback; neither → `warnings`;
   owner excluded; sessions excluded; `peopleWork` grouping with per-person
