@@ -7,7 +7,8 @@ type: note
 1. **The vault opens on today's note**, written the evening before: a recap, then each meeting today with who's coming and what happened last time. The calendar icon at the far left brings you back to it.
 2. **Waiting for you**, at the top, lists meetings and decisions filed without certainty. Tick **Keep** when a row looks right, **Dismiss** when it is noise.
 3. **During the day**, write under **Your notes**, and what you have to do under **Your to do's**. Free text is fine; "Friday" or "14/10" in a to do becomes its deadline.
-4. **In the evening** your notes are read, new to do's go to **To Do's**, and tomorrow's note is written, on its own — or now, with **`/evening-sync`**. With mail and Teams switched on, a **Mail and Teams** box adds what needs you.
+4. **Need a meeting in now?** Ask for **`/sync-recordings`**: it fetches new meetings, asks you per meeting — accept, dismiss or change — then updates your project pages, with your notes ticked **Include**, and asks about the decisions it found. Mail and Teams, and tomorrow's note, still come in the evening.
+5. **In the evening** your notes are read, new to do's go to **To Do's**, and tomorrow's note is written, on its own — or now, with **`/evening-sync`**. With mail and Teams switched on, a **Mail and Teams** box adds what needs you.
 
 ## The sidebar
 

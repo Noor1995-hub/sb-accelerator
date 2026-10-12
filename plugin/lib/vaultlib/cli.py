@@ -32,7 +32,7 @@ if __package__ in (None, ""):
     # the skills invoke it.
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from vaultlib import actions, config, dailynote, dates, decision, discover, entity, feedback, fetcherrors, health, lastsync, m365, meeting, migrate, msglog, msgrows, msgstate, notes, person, plaud, project, projectstate, provenance, runlog, scratch, schema, seenevents, syncjob, template, updatequeue, vault  # noqa: E402
+from vaultlib import actions, config, dailynote, dates, decision, discover, entity, feedback, fetcherrors, health, lastsync, m365, meeting, migrate, msglog, msgrows, msgstate, notes, person, plaud, project, projectstate, provenance, runlock, runlog, scratch, schema, seenevents, syncjob, template, triage, updatequeue, vault  # noqa: E402
 
 
 def _emit(payload: dict) -> None:
@@ -278,6 +278,14 @@ def build_parser() -> argparse.ArgumentParser:
         "list", help="print a project's decisions as JSON")
     _add_vault_argument(dec_list)
     dec_list.add_argument("--project", required=True, help="project slug")
+
+    dec_review = decisions_sub.add_parser(
+        "review", help="Keep or Dismiss one decision, as the owner answered (#271)")
+    _add_vault_argument(dec_review)
+    dec_review.add_argument("--path", required=True, help="vault-relative path")
+    verdict = dec_review.add_mutually_exclusive_group(required=True)
+    verdict.add_argument("--keep", action="store_true")
+    verdict.add_argument("--dismiss", action="store_true")
 
     dec_write = decisions_sub.add_parser(
         "write", help="write a decision note, applying any supersession edge")
@@ -537,6 +545,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="write anyway despite a strong, non-imprecise cross-adapter "
              "time-window collision from another adapter — the "
              "interactive 'write it anyway' re-dispatch")
+    triage_list = meetings_sub.add_parser(
+        "triage-list", help="meetings waiting for review, with names (#271)")
+    _add_vault_argument(triage_list)
+    triage_apply = meetings_sub.add_parser(
+        "triage-apply", help="apply the owner's accept / dismiss / change answers")
+    _add_vault_argument(triage_apply)
+    triage_apply.add_argument("--items", required=True,
+                              help="path to a JSON array, or - to read stdin")
 
     plaud_group = top.add_parser("plaud", help="Plaud MCP adapter helpers")
     plaud_sub = plaud_group.add_subparsers(dest="action", required=True)
@@ -729,6 +745,19 @@ def build_parser() -> argparse.ArgumentParser:
     scratch_sweep.add_argument(
         "--dir", required=True,
         help="the session scratch directory to sweep — never the vault")
+
+    lock = top.add_parser("runlock", help="one run at a time (#271)")
+    lock_sub = lock.add_subparsers(dest="action", required=True)
+    lock_acquire = lock_sub.add_parser("acquire", help="take the run lock")
+    _add_vault_argument(lock_acquire)
+    lock_acquire.add_argument("--routine", required=True)
+    lock_acquire.add_argument("--now", help="ISO datetime override (tests)")
+    lock_acquire.add_argument(
+        "--wait", type=int, default=0,
+        help="when refused, sleep this many seconds (max 90) and try once more")
+    lock_release = lock_sub.add_parser("release", help="drop this routine's lock")
+    _add_vault_argument(lock_release)
+    lock_release.add_argument("--routine", required=True)
 
     runlog_group = top.add_parser(
         "runlog", help="append-only one-line-per-run log for unattended routines")
@@ -1084,6 +1113,8 @@ def _dispatch(args: argparse.Namespace) -> int:
     if args.group == "decision":
         if args.action == "list":
             return _ok(decision.list_decisions(root, args.project))
+        if args.action == "review":
+            return _ok(decision.review(root, args.path, keep=args.keep))
         payload = (json.load(sys.stdin) if args.note == "-"
                    else json.loads(Path(args.note).read_text(encoding="utf-8")))
         return _ok(decision.write(
@@ -1179,6 +1210,12 @@ def _dispatch(args: argparse.Namespace) -> int:
             return _ok(fetcherrors.record(
                 root, payload, fetcherrors.parse_now(args.now)))
     if args.group == "meeting":
+        if args.action == "triage-list":
+            return _ok(triage.list_queue(root))
+        if args.action == "triage-apply":
+            items = (json.load(sys.stdin) if args.items == "-"
+                     else json.loads(Path(args.items).read_text(encoding="utf-8")))
+            return _ok(triage.apply(root, items))
         payload = (json.load(sys.stdin) if args.note == "-"
                    else json.loads(Path(args.note).read_text(encoding="utf-8")))
         return _ok(meeting.write(root, payload,
@@ -1254,6 +1291,12 @@ def _dispatch(args: argparse.Namespace) -> int:
                                stamp=args.stamp))
     if args.group == "scratch":
         return _ok(scratch.sweep(args.dir))
+    if args.group == "runlock":
+        if args.action == "acquire":
+            now = datetime.fromisoformat(args.now) if args.now else None
+            return _ok(runlock.acquire(root, args.routine, now=now,
+                                      wait=args.wait))
+        return _ok(runlock.release(root, args.routine))
     if args.group == "runlog":
         return _ok(runlog.append(root, args.routine, args.outcome))
     if args.group == "provenance":
@@ -1339,6 +1382,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         return _fail(str(exc), "Fix the named constraint and retry.")
     except meeting.MeetingError as exc:
         return _fail(str(exc), "Fix the named payload field and retry.")
+    except triage.TriageError as exc:
+        return _fail(str(exc), "Pass a JSON array of {path, action} items.")
     except syncjob.SyncError as exc:
         return _fail(str(exc), "Fix the named id or argument and retry.")
     except seenevents.SeenEventsError as exc:
@@ -1368,6 +1413,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     except scratch.ScratchError as exc:
         return _fail(str(exc), "Check --dir points at the session scratch "
                      "directory and retry.")
+    except runlock.RunLockError as exc:
+        return _fail(str(exc), "Pass the routine's slug, e.g. sync-recordings.")
     except runlog.RunLogError as exc:
         return _fail(str(exc), "Fix --routine or --outcome and retry.")
     except health.HealthError as exc:

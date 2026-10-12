@@ -704,3 +704,39 @@ def test_a_dismissed_decision_cannot_be_superseded(tmp_path):
     # nothing was written for the refused supersession
     stems = [e["stem"] for e in decision.list_decisions(root, PROJECT)["decisions"]]
     assert stems == ["2026-03-10-noise"]
+
+
+def _decision_vault(tmp_path):
+    folder = tmp_path / "30-projects" / "acme-erp" / "decisions"
+    folder.mkdir(parents=True)
+    (tmp_path / "30-projects" / "acme-erp" / "index.md").write_text(
+        "---\ntype: project\nslug: acme-erp\n---\n", encoding="utf-8")
+    note = folder / "2026-10-12-go-live-moves.md"
+    note.write_text(
+        '---\ntype: decision\nproject: acme-erp\ndate: 2026-10-12\nstatus: active\n'
+        'summary: "Go-live moves to 3 Nov"\nsupersedes: "2026-09-01-go-live-oct"\n'
+        'reviewed: false\n---\n# Go-live moves to 3 Nov\n', encoding="utf-8")
+    return tmp_path, note
+
+
+def test_review_keep_sets_reviewed(tmp_path):
+    root, note = _decision_vault(tmp_path)
+    result = decision.review(root, note.relative_to(root).as_posix(), keep=True)
+    assert result["reviewed"] is True and result["dismissed"] is False
+    assert "reviewed: true" in note.read_text(encoding="utf-8")
+
+
+def test_review_dismiss_sets_archived_and_names_what_it_replaced(tmp_path):
+    root, note = _decision_vault(tmp_path)
+    result = decision.review(root, note.relative_to(root).as_posix(), keep=False)
+    text = note.read_text(encoding="utf-8")
+    assert "archived: true" in text and "reviewed: false" in text
+    assert result["supersedes"] == "2026-09-01-go-live-oct"
+
+
+def test_review_refuses_a_non_decision(tmp_path):
+    root, _ = _decision_vault(tmp_path)
+    with pytest.raises(decision.DecisionError):
+        decision.review(root, "30-projects/acme-erp/index.md", keep=True)
+    with pytest.raises(decision.DecisionError):
+        decision.review(root, "../elsewhere.md", keep=True)
