@@ -2427,3 +2427,13 @@ def test_triage_list_shows_the_cli_when_label():
     text = read_skill("sync-recordings")
     step8 = text[text.index("### 8. Triage in the chat"):text.index("### 9. Process")]
     assert "`when` exactly as given" in step8
+
+
+def test_on_demand_lock_is_taken_only_after_the_owner_answered():
+    """Final review: holding the lock while the chat waits for the owner lets
+    the evening run time out and run alongside the owner's writes."""
+    text = read_skill("sync-recordings")
+    step8 = text[text.index("### 8. Triage in the chat"):text.index("### 9. Process")]
+    assert (step8.index("Accept, dismiss or change?")
+            < step8.index('runlock acquire --vault "$VAULT" --routine sync-recordings')
+            < step8.index("meeting triage-apply"))

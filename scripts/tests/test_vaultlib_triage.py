@@ -183,3 +183,36 @@ def test_when_label_has_no_leading_zero(tmp_path):
     path.write_text(path.read_text(encoding="utf-8").replace(
         "date: 2026-10-12T09:00", "date: 2026-10-05T14:30"), encoding="utf-8")
     assert triage.list_queue(root)["items"][0]["when"] == "Mon 5 Oct 14:30"
+
+
+def test_accept_must_be_a_real_boolean(tmp_path):
+    """Final review: a string "false" is truthy — it must not accept."""
+    root = make_vault(tmp_path)
+    a = write_meeting(root, "a")
+    result = triage.apply(root, [{"path": "20-meetings/a.md", "action": "change",
+                                  "attendees": ["jan-peeters"], "accept": "false"}])
+    assert "true or false" in result["refused"][0]["reason"]
+    assert "reviewed: false" in a.read_text(encoding="utf-8")
+
+
+def test_a_dismissed_note_cannot_be_accepted(tmp_path):
+    root = make_vault(tmp_path)
+    write_meeting(root, "a", archived=True)
+    result = triage.apply(root, [{"path": "20-meetings/a.md", "action": "accept"}])
+    assert "already dismissed" in result["refused"][0]["reason"]
+
+
+def test_duplicate_refusal_names_the_other_note_and_the_chat_way_out(tmp_path):
+    root = make_vault(tmp_path)
+    write_meeting(root, "a", conflicts="b-other")
+    reason = triage.apply(root, [{"path": "20-meetings/a.md",
+                                  "action": "accept"}])["refused"][0]["reason"]
+    assert "b-other" in reason and "dismiss one of the two" in reason
+
+
+def test_when_label_accepts_a_space_separator(tmp_path):
+    root = make_vault(tmp_path)
+    path = write_meeting(root, "a")
+    path.write_text(path.read_text(encoding="utf-8").replace(
+        "date: 2026-10-12T09:00", "date: 2026-10-12 09:00"), encoding="utf-8")
+    assert triage.list_queue(root)["items"][0]["when"] == "Mon 12 Oct 09:00"

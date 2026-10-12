@@ -23,6 +23,7 @@ from . import vault
 
 LOCK_RELPATH = Path("99-workflow-config") / "sync-state" / "run.lock.json"
 MAX_AGE = timedelta(hours=2)
+FUTURE_SLACK = timedelta(minutes=10)
 # A waiting acquire is one CLI call: it must finish well inside the host's
 # default Bash timeout (2 minutes in Claude Code).
 MAX_WAIT_SECONDS = 90
@@ -44,7 +45,8 @@ def _read(root: Path) -> Optional[dict]:
         return None
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
-        datetime.fromisoformat(data["started_at"])
+        if datetime.fromisoformat(data["started_at"]).tzinfo is not None:
+            raise ValueError("started_at must be local time without an offset")
         return data
     except (ValueError, KeyError, TypeError, OSError):
         return {"routine": None, "started_at": None, "host": None}
@@ -71,7 +73,10 @@ def _try(root: Path, routine: str, now: Optional[datetime]) -> dict:
     stale = False
     if holder is not None:
         started = holder.get("started_at")
-        stale = started is None or now - datetime.fromisoformat(started) > MAX_AGE
+        age = None if started is None else now - datetime.fromisoformat(started)
+        # A lock from the future (clock skew between hosts, the autumn DST
+        # fall-back) would otherwise block for its whole skew plus MAX_AGE.
+        stale = age is None or age > MAX_AGE or age < -FUTURE_SLACK
         if not stale and holder.get("routine") != routine:
             return {"acquired": False, "took_over": False, "stale": False,
                     "holder": holder}

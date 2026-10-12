@@ -41,6 +41,8 @@ def _when(value) -> str:
     """'Mon 12 Oct 09:00' (or 'Mon 12 Oct' for a date-only meeting), built
     here so the model never works out a weekday itself."""
     text = str(value or "")
+    if len(text) >= 16 and text[10] == " ":
+        text = text[:10] + "T" + text[11:]
     try:
         if "T" in text:
             moment = datetime.fromisoformat(text[:16])
@@ -136,10 +138,16 @@ def _apply_one(root: Path, item) -> Optional[str]:
     data, _ = markdown.split_frontmatter(text)
     if data.get("review_status") != "needs-review":
         return f"{raw!r} is not waiting for review"
-    accept = action == "accept" or (action == "change" and item.get("accept", True))
+    flag = item.get("accept", True)
+    if not isinstance(flag, bool):
+        return "accept must be true or false"
+    accept = action == "accept" or (action == "change" and flag)
+    if accept and data.get("archived") is True:
+        return f"{raw!r} is already dismissed"
     if accept and data.get("conflicts-with"):
-        return ("possible Duplicate of another note — merge or delete one of "
-                "the two, clear '⚠ Duplicate of' in Obsidian, then accept")
+        return (f"possible Duplicate of {data.get('conflicts-with')} — dismiss "
+                "one of the two here, or merge them, clear '⚠ Duplicate of' "
+                "in Obsidian, then accept")
     updated = text
     if action == "change":
         if "projects" not in item and "attendees" not in item:

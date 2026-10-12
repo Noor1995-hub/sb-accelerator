@@ -1340,29 +1340,14 @@ count has to come from the worker.
 
 Only when the owner called `/sync-recordings` directly — never under
 `--unattended` and never from `/evening-sync` stage 3; there the run ends
-after step 7. Take the run lock first:
-
-```bash
-python3 "$VAULTLIB" runlock acquire --vault "$VAULT" --routine sync-recordings
-```
-
-`acquired: false` → nothing was taken; stop here and say: *"Your evening run
-is busy; your meetings stay in triage and that run picks up what you tick."*
-Then `scratch sweep` and end.
-
-**From here until the end of step 9, every exit releases the lock first** —
-"not now", an error from any command in steps 8–9, a failed step 9:
-
-```bash
-python3 "$VAULTLIB" runlock release --vault "$VAULT" --routine sync-recordings
-```
+after step 7.
 
 ```bash
 python3 "$VAULTLIB" meeting triage-list --vault "$VAULT"
 ```
 
-Empty `items` → say "nothing waiting for you", go to step 9 (notes ticked
-Include may still be waiting). Otherwise show ONE numbered list, one line per
+Empty `items` → say "nothing waiting for you", take the run lock as below,
+and go to step 9 (notes ticked Include may still be waiting). Otherwise show ONE numbered list, one line per
 item, dry, no commentary:
 
 `1. Weekly with Acme · Mon 12 Oct 09:00 · Acme ERP rollout · Jan Peeters, Sofie Maes`
@@ -1372,14 +1357,34 @@ Use `title`, `when` exactly as given (never work out a weekday yourself),
 ` · ⚠ possible duplicate` when `conflicts_with` is set. Ask once:
 **"Accept, dismiss or change?"** Accept any free-text answer ("all accept",
 "1 3 accept, 2 dismiss, 4 project is finance close"). An unclear answer gets
-one short question back. "Not now" or no answer → release the lock, `scratch
-sweep`, and end; everything stays in triage.
+one short question back. "Not now" or no answer → `scratch sweep` and end;
+everything stays in triage.
 
 Translate the answer into a list of `{path, action[, projects][, attendees][, accept]}`.
 Projects and people are slugs: match the owner's words to existing project and
 people names. Never invent a slug. If a name matches nothing, or matches two,
 ask about that one item. When the answer changed a project or attendees, read
-your interpretation back in one line and wait for a yes. Then:
+your interpretation back in one line and wait for a yes.
+
+Only now take the run lock — never while a question is open, so the evening
+run is not held up by an answer that has not come yet:
+
+```bash
+python3 "$VAULTLIB" runlock acquire --vault "$VAULT" --routine sync-recordings
+```
+
+`acquired: false` → nothing was written; stop and say: *"Your evening run is
+busy; your meetings stay in triage and that run picks up what you tick."*
+Then `scratch sweep` and end.
+
+**From here until the end of step 9, every exit releases the lock first** —
+an error from any command in steps 8–9, a failed step 9:
+
+```bash
+python3 "$VAULTLIB" runlock release --vault "$VAULT" --routine sync-recordings
+```
+
+Then:
 
 ```bash
 cat > "$SCRATCH/triage.payload.json" <<'JSON'

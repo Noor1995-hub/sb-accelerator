@@ -81,3 +81,19 @@ def test_wait_still_refused_reports_holder(tmp_path, monkeypatch):
 def test_wait_is_capped_below_the_bash_timeout(tmp_path):
     with pytest.raises(runlock.RunLockError):
         runlock.acquire(tmp_path, "evening-sync", now=T0, wait=300)
+
+
+def test_timezone_aware_lock_counts_as_unreadable(tmp_path):
+    path = tmp_path / runlock.LOCK_RELPATH
+    path.parent.mkdir(parents=True)
+    path.write_text('{"routine": "evening-sync", "started_at": "2026-10-12T12:00+02:00", "host": "x"}',
+                    encoding="utf-8")
+    result = runlock.acquire(tmp_path, "sync-recordings", now=T0)
+    assert result["acquired"] and result["stale"]
+
+
+def test_lock_dated_in_the_future_is_stale(tmp_path):
+    """Clock skew between two hosts, or the October DST fall-back."""
+    runlock.acquire(tmp_path, "evening-sync", now=T0 + timedelta(hours=1))
+    result = runlock.acquire(tmp_path, "sync-recordings", now=T0)
+    assert result["acquired"] and result["stale"]
