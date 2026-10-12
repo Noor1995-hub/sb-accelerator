@@ -38,9 +38,15 @@ REVIEW_BLOCK = ("> [!review] Waiting for you\n"
 # The Meetings view was named Triage until #240. A note that migration 006
 # has not rewritten still carries this line, and it is not a jotting.
 LEGACY_TRIAGE_EMBED = "> ![[20-meetings/Meetings.base#Triage]]"
-_REVIEW_LINES = frozenset(REVIEW_BLOCK.split("\n")) | {LEGACY_TRIAGE_EMBED}
+# The Decisions view was named Needs review until #244 — the name a 0.12.x
+# vault still carries until its tables are refreshed.
+LEGACY_DECISIONS_EMBED = "> ![[30-projects/Decisions.base#Needs review]]"
+_REVIEW_LINES = (frozenset(REVIEW_BLOCK.split("\n"))
+                 | {LEGACY_TRIAGE_EMBED, LEGACY_DECISIONS_EMBED})
 MEETINGS_BASE = Path(vault.MEETINGS_DIR) / "Meetings.base"
+DECISIONS_BASE = Path(vault.PROJECTS_DIR) / "Decisions.base"
 _TRIAGE_VIEW_RE = re.compile(r"^\s*-?\s*name:\s*[\"']?Triage[\"']?\s*$", re.MULTILINE)
+_NEEDS_REVIEW_VIEW_RE = re.compile(r"^\s*-?\s*name:\s*[\"']?Needs review[\"']?\s*$", re.MULTILINE)
 _TO_REVIEW_VIEW_RE = re.compile(r"^\s*-?\s*name:\s*[\"']?To review[\"']?\s*$", re.MULTILINE)
 
 
@@ -51,15 +57,22 @@ def _review_block(root: Path) -> str:
     `/upgrade-vault`. Until then a vault's Meetings table may still call its
     queue Triage, and an embed of "To review" would show an error where the
     queue belongs. So the note embeds whichever name the vault's own table
-    carries (#263); a vault without the table gets the shipped name.
+    carries (#263); a vault without the table gets the shipped name. The
+    same holds for Decisions, whose queue was Needs review until #244.
     """
-    try:
-        text = (root / MEETINGS_BASE).read_text(encoding="utf-8")
-    except OSError:
-        return REVIEW_BLOCK
-    if _TRIAGE_VIEW_RE.search(text) and not _TO_REVIEW_VIEW_RE.search(text):
-        return REVIEW_BLOCK.replace("> ![[20-meetings/Meetings.base#To review]]", LEGACY_TRIAGE_EMBED)
-    return REVIEW_BLOCK
+    block = REVIEW_BLOCK
+    for base, legacy_re, legacy_line, shipped_line in (
+            (MEETINGS_BASE, _TRIAGE_VIEW_RE, LEGACY_TRIAGE_EMBED,
+             "> ![[20-meetings/Meetings.base#To review]]"),
+            (DECISIONS_BASE, _NEEDS_REVIEW_VIEW_RE, LEGACY_DECISIONS_EMBED,
+             "> ![[30-projects/Decisions.base#To review]]")):
+        try:
+            text = (root / base).read_text(encoding="utf-8")
+        except OSError:
+            continue
+        if legacy_re.search(text) and not _TO_REVIEW_VIEW_RE.search(text):
+            block = block.replace(shipped_line, legacy_line)
+    return block
 _PREP_KEYS = ("attendees", "last_meeting", "context")
 _PREP_LABELS = (("attendees", "Attendees"), ("last_meeting", "Last meeting"),
                 ("context", "Context"))

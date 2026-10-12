@@ -129,6 +129,25 @@ def _blocklist(root: Path) -> list:
         subject = front.get("calendar-subject") or front.get("title")
         if subject:
             terms.append(("meeting", str(subject)))
+    # Decisions, to dos and the owner's own notes are content too (review
+    # 2026-10-12: none of them was on the list).
+    for path in sorted((root / vault.PROJECTS_DIR).glob("*/decisions/*.md")):
+        terms.append(("decision", path.stem))
+        try:
+            front, _ = markdown.split_frontmatter(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            front = {}
+        if front.get("summary"):
+            terms.append(("decision", str(front["summary"])))
+    for path in sorted((root / vault.ACTIONS_DIR).glob("*.md")):
+        try:
+            front, _ = markdown.split_frontmatter(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            front = {}
+        if front.get("to-do"):
+            terms.append(("to-do", str(front["to-do"])))
+    for path in sorted((root / vault.THOUGHTS_DIR).glob("*.md")):
+        terms.append(("note", path.stem))
     cfg = config.read(root)["config"]
     if cfg["owner"]:
         terms.append(("owner", cfg["owner"]))

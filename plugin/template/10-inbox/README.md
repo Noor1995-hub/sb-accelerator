@@ -1,6 +1,6 @@
 # Input
 
-Drop files here — transcripts, voice memos, forwarded emails, documents. The evening run picks them up and moves each one out once it is handled, so this folder (and the **Input** table) is empty the morning after. Your own notes ticked **Include** in Thoughts & ideas show in the same table.
+Drop files here — transcripts, voice-memo transcripts, forwarded emails, documents. Only text can be read: an audio file, or a document whose text does not come through, is parked with a note saying so. The evening run picks them up and moves each one out once it is handled, so this folder (and the **Input** table) is empty the morning after. Your own notes ticked **Include** in Thoughts & ideas show in the same table.
 
 Rules:
 

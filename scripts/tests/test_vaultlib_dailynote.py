@@ -1647,3 +1647,20 @@ def test_plan_for_must_be_the_plans_own_value(tmp_path):
     with pytest.raises(dailynote.DailyNoteError, match="plan_for"):
         dailynote.write(root, windowed_payload(
             recap_window={"from": "2026-06-12", "to": "2026-06-12", "plan_for": "tonight"}))
+
+
+def test_a_vault_whose_decisions_table_still_says_needs_review_embeds_it(tmp_path):
+    """Review 2026-10-12: a 0.12.x vault (La Lorraine) still calls its
+    Decisions queue Needs review until its tables are refreshed."""
+    root = make_vault(tmp_path)
+    base = root / "30-projects" / "Decisions.base"
+    base.parent.mkdir(parents=True, exist_ok=True)
+    base.write_text("views:\n  - type: table\n    name: Needs review\n  - type: table\n    name: All\n",
+                    encoding="utf-8")
+    dailynote.write(root, payload())
+    text = (root / "60-daily-notes" / "2026-06-15.md").read_text(encoding="utf-8")
+    assert dailynote.LEGACY_DECISIONS_EMBED in text.split("\n")
+    assert text.replace(dailynote.LEGACY_DECISIONS_EMBED,
+                        "> ![[30-projects/Decisions.base#To review]]") == EXPECTED_FRESH
+    # and the legacy line is the machine's, never read back as the owner's
+    assert "Needs review" not in str(dailynote.read(root, "2026-06-15"))

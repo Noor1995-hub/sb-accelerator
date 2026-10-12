@@ -229,6 +229,12 @@ it has exactly three outcomes:
 | Carries context about people, projects or entities but is not a meeting — forwarded correspondence, a voice memo, pasted context | a capture: a note with `type: note` |
 | Not a capture at all — a whitepaper, a deck, a spreadsheet, an image, a stray binary | **park** it |
 
+A file whose text you cannot read — an audio file, a Word or PDF document
+whose words do not come through — is **parked** with that reason, whatever
+it may hold: a worker cannot read it either, and an inbox file has no
+failure count, so it would cost a worker and fail again every night. The
+parked note says how to have it processed: paste its text with `/add`.
+
 **When you cannot decide between a capture and a park, write the `note`.**
 A wrongly written note sits in Meetings → To review and is one click from `archived: true`;
 a wrongly parked file is out of the queue and on a never-propose-again list,
