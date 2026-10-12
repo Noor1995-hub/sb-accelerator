@@ -339,9 +339,11 @@ here unchanged. There is no cap. Each subagent carries its item, the
 `personName` of each of its `people`, today's date and these instructions:
 
 1. Read the material end to end — for a meeting, its note (Key Takeaways,
-   Debrief, transcript excerpts when present); for a log, the day log file
-   at `path`, only the groups whose id is in `groups`. Read each listed
-   person's page (`50-people/<slug>.md`) for its `## What I know`.
+   Debrief, transcript excerpts when present); for a log, per listed person
+   `python3 "$VAULTLIB" messages for-person --vault "$VAULT" --slug <slug> --logs <stem>`
+   (the groups that name them, each with its `link` and `kind`; only those
+   whose `gid` is in `groups`). Read each listed person's page
+   (`50-people/<slug>.md`) for its `## What I know`.
 2. For each listed person, keep only what **that person said about
    themselves** — personal or working: "I'm selling my house", "I prefer a
    written business case", "I'm moving to the Antwerp office", "I'm having a
