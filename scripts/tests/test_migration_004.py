@@ -81,5 +81,5 @@ def test_run_through_the_framework_bumps_to_5(tmp_path):
     assert [a["slug"] for a in result["applied"]] == ["structure-version-5", "structure-version-6",
                                                         "structure-version-7", "structure-version-8",
         "structure-version-9", "structure-version-10", "structure-version-11",
-        "structure-version-12", "structure-version-13"]
-    assert (root / "structure-version").read_text(encoding="utf-8").strip() == "13"
+        "structure-version-12", "structure-version-13", "structure-version-14"]
+    assert (root / "structure-version").read_text(encoding="utf-8").strip() == "14"

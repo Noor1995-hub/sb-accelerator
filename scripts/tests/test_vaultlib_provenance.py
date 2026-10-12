@@ -256,7 +256,7 @@ def test_record_provision_records_all_35_shipped_files(tmp_path):
     assert data["events"][-1] == {
         "event": "provision", "at": "2026-09-03T09:12:00Z",
         "plugin_version": data["events"][-1]["plugin_version"],
-        "structure_version": "13",
+        "structure_version": "14",
     }
 
 
