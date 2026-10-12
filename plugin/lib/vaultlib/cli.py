@@ -32,7 +32,7 @@ if __package__ in (None, ""):
     # the skills invoke it.
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from vaultlib import actions, config, dailynote, dates, decision, discover, entity, feedback, fetcherrors, health, lastsync, m365, meeting, migrate, msglog, msgrows, msgstate, notes, person, plaud, project, projectstate, provenance, runlog, scratch, schema, seenevents, syncjob, template, updatequeue, vault  # noqa: E402
+from vaultlib import actions, config, dailynote, dates, decision, discover, entity, feedback, fetcherrors, health, lastsync, m365, meeting, migrate, msglog, msgrows, msgstate, notes, person, plaud, project, projectstate, provenance, runlog, scratch, schema, seenevents, syncjob, template, triage, updatequeue, vault  # noqa: E402
 
 
 def _emit(payload: dict) -> None:
@@ -537,6 +537,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="write anyway despite a strong, non-imprecise cross-adapter "
              "time-window collision from another adapter — the "
              "interactive 'write it anyway' re-dispatch")
+    triage_list = meetings_sub.add_parser(
+        "triage-list", help="meetings waiting for review, with names (#271)")
+    _add_vault_argument(triage_list)
+    triage_apply = meetings_sub.add_parser(
+        "triage-apply", help="apply the owner's accept / dismiss / change answers")
+    _add_vault_argument(triage_apply)
+    triage_apply.add_argument("--items", required=True,
+                              help="path to a JSON array, or - to read stdin")
 
     plaud_group = top.add_parser("plaud", help="Plaud MCP adapter helpers")
     plaud_sub = plaud_group.add_subparsers(dest="action", required=True)
@@ -1179,6 +1187,12 @@ def _dispatch(args: argparse.Namespace) -> int:
             return _ok(fetcherrors.record(
                 root, payload, fetcherrors.parse_now(args.now)))
     if args.group == "meeting":
+        if args.action == "triage-list":
+            return _ok(triage.list_queue(root))
+        if args.action == "triage-apply":
+            items = (json.load(sys.stdin) if args.items == "-"
+                     else json.loads(Path(args.items).read_text(encoding="utf-8")))
+            return _ok(triage.apply(root, items))
         payload = (json.load(sys.stdin) if args.note == "-"
                    else json.loads(Path(args.note).read_text(encoding="utf-8")))
         return _ok(meeting.write(root, payload,
@@ -1339,6 +1353,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         return _fail(str(exc), "Fix the named constraint and retry.")
     except meeting.MeetingError as exc:
         return _fail(str(exc), "Fix the named payload field and retry.")
+    except triage.TriageError as exc:
+        return _fail(str(exc), "Pass a JSON array of {path, action} items.")
     except syncjob.SyncError as exc:
         return _fail(str(exc), "Fix the named id or argument and retry.")
     except seenevents.SeenEventsError as exc:
