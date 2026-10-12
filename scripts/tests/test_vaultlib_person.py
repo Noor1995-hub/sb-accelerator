@@ -421,3 +421,25 @@ def test_cli_person_write_requires_automatic_and_writes(tmp_path):
          "--slug", "dana-whitfield", "--timestamp", "2026-10-12T21:05"],
         capture_output=True, text=True, encoding="utf-8").stdout)
     assert touched["ok"] is True and touched["result"]["person-updated"] == "2026-10-12T21:05"
+
+
+def test_touch_rejects_a_timestamp_that_is_not_a_real_moment(tmp_path):
+    # Review I1: the stamp is the queue's start point; 2026-13-45T99:99
+    # would silently stop this person from ever being read again.
+    root, path = _dana(tmp_path)
+    with pytest.raises(ValueError, match="YYYY-MM-DDTHH:MM"):
+        person.touch(root, "dana-whitfield", timestamp="2026-13-45T99:99")
+    assert "person-updated" not in path.read_text(encoding="utf-8")
+
+
+def test_write_facts_refuses_when_the_section_has_an_open_code_fence(tmp_path):
+    # Review I2: a fact appended after an unclosed fence would be code, not
+    # a list item, and every later night's facts would land there too.
+    start = DANA.replace("# Dana Whitfield\n\n",
+                         "# Dana Whitfield\n\n## What I know\n\n- a\n```\ncode\n")
+    root, path = _dana(tmp_path, start)
+    before = path.read_bytes()
+    result = person.write_facts(root, "dana-whitfield",
+                                [{"date": "2026-10-08", "fact": f"X. {M}"}], "2026-10-12")
+    assert result["written"] == 0 and "code block" in result["skipped"][0]
+    assert path.read_bytes() == before

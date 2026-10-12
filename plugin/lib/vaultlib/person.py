@@ -239,6 +239,18 @@ def _is_iso_date(value: str) -> bool:
     return True
 
 
+def _ends_in_open_fence(text: str) -> bool:
+    """True when `text` leaves a ``` / ~~~ block open, by split_sections'
+    own fence rule."""
+    fence = None
+    for line in text.split("\n"):
+        match = markdown._FENCE_RE.match(line)
+        if match:
+            token = match.group(1)
+            fence = None if fence == token else (fence or token)
+    return fence is not None
+
+
 def insert_section_after_preamble(body: str, heading: str, lines: List[str]) -> str:
     """Append `lines` to `## heading`, creating the section right after the
     body's preamble (the `# Name` H1 and anything before the first `##`)
@@ -276,9 +288,21 @@ def write_facts(root: Path, slug: str, facts, today: str) -> dict:
     _, body = markdown.split_frontmatter(text)
     head = markdown._normalize(text)[: len(markdown._normalize(text)) - len(body)]
     existing = set()
-    for title, content in markdown.split_sections(body):
+    sections = markdown.split_sections(body)
+    target = sections[0][1]          # the preamble, when the section is new
+    for title, content in sections:
         if title == FACTS_HEADING:
             existing = {line.strip() for line in content.split("\n") if line.strip()}
+            target = content
+            break
+    if _ends_in_open_fence(target):
+        # A line appended here would be code, not a fact — and so would
+        # every later night's (review I2). The owner closes the block first.
+        return {"slug": path.stem, "path": path.relative_to(root).as_posix(),
+                "written": 0, "duplicates": [],
+                "skipped": [f"facts: '## {FACTS_HEADING}' ends inside an unclosed code "
+                            "block (```); close it on the page and retry — nothing "
+                            "was written"]}
     lines, skipped, duplicates = [], [], []
     for index, item in enumerate(facts):
         if not isinstance(item, dict):
@@ -316,8 +340,15 @@ def touch(root: Path, slug: str, *, timestamp: Optional[str] = None) -> dict:
     new material naming this person up to this minute (#273 piece 4)."""
     if timestamp is None:
         timestamp = datetime.datetime.now().isoformat(timespec="minutes")
-    if not _STAMP_RE.match(str(timestamp)):
-        raise ValueError(f"timestamp {timestamp!r} must be YYYY-MM-DDTHH:MM")
+    try:
+        valid = bool(_STAMP_RE.match(str(timestamp))) and bool(
+            datetime.datetime.strptime(str(timestamp), "%Y-%m-%dT%H:%M"))
+    except ValueError:
+        valid = False
+    if not valid:
+        # The stamp is the queue's start point: a month 13 or a 99:99 would
+        # stop this person from ever being read again (review I1).
+        raise ValueError(f"timestamp {timestamp!r} must be a real YYYY-MM-DDTHH:MM")
     path = _require_note(root, slug)
     text = path.read_text(encoding="utf-8")
     updated = markdown.upsert_scalar_field(text, "person-updated", timestamp)
