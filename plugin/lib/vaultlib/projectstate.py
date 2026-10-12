@@ -340,7 +340,7 @@ def write(root: Path, *, slug: str, payload, today: str,
             root, slug=slug, date_iso=today, timestamp=timestamp,
             next_milestone=milestone["text"] if milestone else None,
             next_milestone_date=milestone["date"] if milestone else None,
-            clear_milestone=milestone is None)
+            clear_milestone=milestone is None, stage=state.get("stage") or None)
     except project.ProjectError as exc:
         raise ProjectStateError(str(exc)) from exc
     return {"slug": slug, "path": f"{vault.PROJECTS_DIR}/{slug}/index.md",

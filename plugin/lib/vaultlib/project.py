@@ -15,7 +15,7 @@ from . import markdown, naming, schema, vault
 
 PROJECTS_DIR = vault.PROJECTS_DIR
 ENTITIES_DIR = vault.ENTITIES_DIR
-PROJECT_QUOTE_KEYS = frozenset({"project-name", "next-milestone"})
+PROJECT_QUOTE_KEYS = frozenset({"project-name", "next-milestone", "stage"})
 # Seconds are accepted on the way in (a caller may pass a fuller stamp) but
 # never written — the field is minute-precision, like a meeting's `date`.
 ISO_DATETIME_RE = re.compile(r"\A\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?\Z")
@@ -281,7 +281,7 @@ def _require_iso_datetime(value, label: str) -> str:
 
 def touch(root, *, slug: str, date_iso: str, timestamp: Optional[str] = None,
           next_milestone=None, next_milestone_date=None,
-          clear_milestone: bool = False) -> dict:
+          clear_milestone: bool = False, stage: Optional[str] = None) -> dict:
     """Bump the auto-maintained frontmatter of a project-state update.
 
     Stage-4 subagents send the project state as JSON and `project state
@@ -344,6 +344,11 @@ def touch(root, *, slug: str, date_iso: str, timestamp: Optional[str] = None,
     elif clear_milestone:
         updated = markdown.upsert_scalar_field(updated, "next-milestone", "")
         updated = markdown.upsert_scalar_field(updated, "next-milestone-date", "")
+    if stage:
+        # The card's Stage sentence, stored so the entity page's Engagements
+        # can show it live (#273). Collapsed to one line like a heading.
+        updated = markdown.upsert_scalar_field(
+            updated, "stage", markdown.emit_scalar(" ".join(str(stage).split()), quoted=True))
     changed = updated != text
     if changed:
         vault.atomic_write(index_path, updated)
