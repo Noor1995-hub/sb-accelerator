@@ -226,3 +226,135 @@ def export(root: Path, table: str, *, today: str, view: Optional[str] = None,
     ])
     return {"path": target.relative_to(root).as_posix(), "rows": len(rows),
             "columns": headers[1:], "warnings": cols["warnings"]}
+
+
+def _norm(text: str, kind: str) -> object:
+    text = (text or "").strip()
+    if kind in ("people", "projects"):
+        return [p.strip() for p in text.split(";") if p.strip()]
+    return text
+
+
+def to_value(text: str, kind: str, all_names: dict):
+    """(stored value, problem or None, unknown name?) for one owner cell."""
+    text = (text or "").strip()
+    if text == "":
+        return None, None, False
+    if kind.startswith("choice:"):
+        options = kind.split(":", 1)[1].split("|")
+        match = next((o for o in options if o.lower() == text.lower()), None)
+        return (match, None, False) if match else (None, f"{text!r} is not one of {options}", False)
+    if kind in ("text",):
+        return text, None, False
+    target = all_names[_LINK_KIND[kind]]
+
+    def resolve(name: str):
+        if name in target:
+            return name, None
+        hits = [s for s, n in target.items() if n.lower() == name.lower()]
+        if len(hits) == 1:
+            return hits[0], None
+        if len(hits) > 1:
+            return None, f"{name!r} matches several: {', '.join(sorted(hits))}"
+        return None, f"{name!r} matches no {_LINK_KIND[kind]}"
+
+    if kind == "company":
+        known = any(n.lower() == text.lower() for n in target.values())
+        return text, None, not known
+    if kind in ("people", "projects"):
+        out = []
+        for part in _norm(text, kind):
+            slug, problem = resolve(part)
+            if problem:
+                return None, problem, "matches no" in problem
+            out.append(slug)
+        return out, None, False
+    slug, problem = resolve(text)
+    return slug, problem, bool(problem and "matches no" in problem)
+
+
+def plan(root: Path, file_rel: str) -> dict:
+    book = xlsx.read(root / file_rel)
+    meta = {r[0]: (r[1] if len(r) > 1 else "") for r in book.get("_meta", []) if r}
+    table = meta.get("table", "")
+    spec = _spec(table)
+    if meta.get("format") != FORMAT:
+        raise TablesError(f"workbook format {meta.get('format')!r} is not {FORMAT} — export again")
+    title = table.title()
+    sheet = book.get(title) or []
+    original = book.get("_original") or []
+    headers = json.loads(meta.get("headers") or "[]")
+    if not sheet or [h.strip() for h in sheet[0][:len(headers)]] != headers or len(sheet[0]) > len(headers):
+        raise TablesError("the columns were changed in Excel — export again")
+    props = original[0]
+    kinds = {f[0]: f[1] for f in spec["fields"]}
+    required = {f[0] for f in spec["fields"] if f[2]}
+    by_key = {r[0]: r for r in original[1:] if r}
+    current = {o["key"]: o["data"] for o in objects(root, table)}
+    all_names = names(root)
+    out = {"table": table, "updates": [], "new": [], "conflicts": [], "refused": [], "unknown": []}
+
+    def pad(row):
+        return list(row) + [""] * (len(props) - len(row))
+
+    for index, raw in enumerate(sheet[1:], start=2):
+        row = pad(raw)
+        key = row[0].strip()
+        if not key:
+            if not any(c.strip() for c in row[1:]):
+                continue
+            values, problems = {}, []
+            for i, prop in enumerate(props[1:], start=1):
+                value, problem, unknown = to_value(row[i], kinds[prop], all_names)
+                if unknown:
+                    out["unknown"].append({"header": headers[i], "value": row[i].strip(),
+                                           "kind": _LINK_KIND.get(kinds[prop], "")})
+                if problem:
+                    problems.append(f"{headers[i]}: {problem}")
+                elif value not in (None, []):
+                    values[prop] = value
+            missing = [headers[props.index(p)] for p in required if p in props and p not in values]
+            if missing:
+                problems.append(f"missing {', '.join(missing)}")
+            if problems:
+                out["refused"].append({"row": index, "key": "", "header": "",
+                                       "reason": "new row: " + "; ".join(problems)})
+            else:
+                out["new"].append({"row": index, "values": values})
+            continue
+        if key not in current:
+            out["refused"].append({"row": index, "key": key, "header": "",
+                                   "reason": f"{key} is no longer in the vault — export again"})
+            continue
+        orig = pad(by_key.get(key, [key]))
+        for i, prop in enumerate(props[1:], start=1):
+            kind = kinds[prop]
+            mine, before = _norm(row[i], kind), _norm(orig[i], kind)
+            if mine == before:
+                continue
+            now = _norm(cell(current[key].get(prop), kind, all_names), kind)
+            if now == mine:
+                continue
+            if now != before:
+                out["conflicts"].append({"key": key, "header": headers[i],
+                                         "yours": row[i].strip(), "vault": cell(current[key].get(prop), kind, all_names)})
+                continue
+            if table == "projects" and prop == "entity":
+                out["refused"].append({"row": index, "key": key, "header": headers[i],
+                                       "reason": "moving a project to another entity is not supported"})
+                continue
+            value, problem, unknown = to_value(row[i], kind, all_names)
+            if unknown:
+                out["unknown"].append({"header": headers[i], "value": row[i].strip(),
+                                       "kind": _LINK_KIND.get(kind, "")})
+            if problem:
+                out["refused"].append({"row": index, "key": key, "header": headers[i], "reason": problem})
+            elif value in (None, []) and prop in required:
+                out["refused"].append({"row": index, "key": key, "header": headers[i],
+                                       "reason": f"{headers[i]} is required"})
+            else:
+                out["updates"].append({"key": key, "prop": prop, "header": headers[i],
+                                       "from": orig[i].strip(), "to": row[i].strip(),
+                                       "value": value if value != [] else None})
+    out["counts"] = {k: len(out[k]) for k in ("updates", "new", "conflicts", "refused", "unknown")}
+    return out
