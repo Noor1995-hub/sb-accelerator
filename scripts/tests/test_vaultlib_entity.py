@@ -988,6 +988,8 @@ def test_touch_refuses_a_bad_timestamp_and_defaults_to_now(tmp_path):
     entity.ensure(root, slug="acme", name="Acme", today="2026-10-12")
     with pytest.raises(entity.EntityError):
         entity.touch(root, "acme", timestamp="12/10 21h")
+    with pytest.raises(entity.EntityError, match="real"):
+        entity.touch(root, "acme", timestamp="2026-13-99T99:99")
     stamped = entity.touch(root, "acme")["entity-updated"]
     assert re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}", stamped)
 

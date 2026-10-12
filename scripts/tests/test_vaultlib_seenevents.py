@@ -312,6 +312,19 @@ def test_recording_an_outcome_round_trips(tmp_path):
     assert entry["checked_at"] == "2026-08-31T18:00:00"
 
 
+def test_an_unkeyed_outcome_is_skipped_and_the_batch_still_lands(tmp_path):
+    # Review 2026-10-12: triage hands an `unkeyed` occurrence over with
+    # start_utc null; one such entry used to fail the whole banking call.
+    root = make_vault(tmp_path)
+    unkeyed = {**outcome(), "id": "AAMkAGId2", "start_utc": None,
+               "outcome": "no-transcript"}
+    unkeyed.pop("recording_id", None)
+    recorded = seenevents.record(root, [outcome(), unkeyed], NOW)
+    assert (recorded["recorded"], recorded["skipped_unkeyed"]) == (1, 1)
+    cache = json.loads((root / seenevents.CACHE_RELPATH).read_text(encoding="utf-8"))
+    assert list(cache["events"]) == ["AAMkAGId1|2026-08-28T14:00:00"]
+
+
 def test_record_normalizes_graph_datetimes_to_the_triage_key(tmp_path):
     """The full event read says 2026-08-28T14:00:00.0000000, the search
     listing the same — both must land on one key, not two."""

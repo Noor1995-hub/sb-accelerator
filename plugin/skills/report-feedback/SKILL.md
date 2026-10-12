@@ -147,12 +147,15 @@ plainly that delaware's feedback channel is not set up on this vault yet,
 then save the approved draft — title and body, disclosure included — to:
 
 ```
-10-inbox/feedback-draft-{YYYY-MM-DD}.md
+99-workflow-config/feedback-drafts/feedback-draft-{YYYY-MM-DD}.md
 ```
 
+Never save it to `10-inbox/`: that folder is capture waiting to be
+processed, and the next sync would file or park the draft.
+
 Say exactly that: the report could not be sent automatically, and it has
-been saved to Input (the `10-inbox/` folder) for the consultant to relay once the channel
-is configured (`feedback.repo` and the token under
+been saved to `99-workflow-config/feedback-drafts/` for the consultant to
+relay once the channel is configured (`feedback.repo` and the token under
 `99-workflow-config/secrets/`). The report still exists somewhere useful —
 it is just waiting on a wire that is not connected yet.
 

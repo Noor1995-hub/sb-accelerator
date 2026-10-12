@@ -164,12 +164,15 @@ then save a copy of the approved title, the report body, and the
 disclosure to:
 
 ```
-10-inbox/feedback-draft-{generated}.md
+99-workflow-config/feedback-drafts/feedback-draft-{generated}.md
 ```
 
+Never save it to `10-inbox/`: that folder is capture waiting to be
+processed, and the next sync would file or park the draft.
+
 Say exactly that: the report could not be sent automatically, and it has
-been saved to Input (the `10-inbox/` folder) for the consultant to relay once the channel
-is configured (`feedback.repo` and the token under
+been saved to `99-workflow-config/feedback-drafts/` for the consultant to
+relay once the channel is configured (`feedback.repo` and the token under
 `99-workflow-config/secrets/`). The health report itself already exists at
 `99-workflow-config/health-reports/{generated}.md` regardless of whether
 sharing happened — running this skill is never wasted even offline.

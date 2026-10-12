@@ -56,6 +56,19 @@ def test_scaffold_writes_a_conformant_index(tmp_path):
     assert data["parent"] is None
 
 
+def test_scaffold_writes_the_stage_field_the_entity_page_reads(tmp_path):
+    # Review 2026-10-12: the stage reached the card but not `stage`, so the
+    # entity page's Engagements list showed nothing until the evening run.
+    root = vault_with_entity(tmp_path)
+    result = project.scaffold(root, **BASE, stage="Kickoff  agreed")
+    data, _ = md.split_frontmatter((root / result["path"]).read_text(encoding="utf-8"))
+    assert data["stage"] == "Kickoff agreed"
+    assert schema.validate("project", data) == []
+    plain = project.scaffold(root, **{**BASE, "name": "Other"})
+    data, _ = md.split_frontmatter((root / plain["path"]).read_text(encoding="utf-8"))
+    assert "stage" not in data
+
+
 def test_scaffold_creates_the_decisions_directory(tmp_path):
     root = vault_with_entity(tmp_path)
     result = project.scaffold(root, **BASE)

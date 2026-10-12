@@ -1,6 +1,6 @@
 ---
 name: setup-my-brain
-description: The Session-1 setup, run by the vault owner on their own — connects their accounts, asks who they are, reads their calendar, sent mail and Teams chat list for up to five minutes with their consent, proposes their organisations, people and work for them to accept, change or skip, and ends with their first evening note and a scheduled evening run. Triggers when the user invokes /setup-my-brain.
+description: The Session-1 setup, run by the vault owner on their own — connects their accounts, asks who they are, reads their calendar, sent mail and Teams chat list for up to five minutes with their consent, proposes their entities, people and work for them to accept, change or skip, and ends with their first evening note and a scheduled evening run. Triggers when the user invokes /setup-my-brain.
 user_invocable: true
 origin: net-new
 ---
@@ -136,9 +136,10 @@ python3 "$VAULTLIB" config read --vault "$VAULT"
 python3 "$VAULTLIB" migrate status --vault "$VAULT"
 ```
 
-If `pending` is non-empty, **stop** and hand off to `/upgrade-vault`, in one
-plain line: the vault needs an update before setup, and nothing has been
-asked yet. Come back once the upgrade is done.
+If `pending` is non-empty, **stop**, in one plain line: the vault needs an
+update before setup, which their delaware consultant does (`/upgrade-vault`
+is not run by the owner alone), and nothing has been asked yet. Come back
+once the update is done.
 
 ### Fresh run or re-run
 
@@ -602,9 +603,9 @@ Then close from their side of the table, in this order:
    one entity page.
 3. **What happens next, and when** — the first automatic evening run, or the
    hand-off from step 10.
-4. **When something is missing** — `/new-project` and `/update-entity`, one
-   line each: "you'll notice something missing in week two; here's what you
-   do then".
+4. **When something is missing** — `/add`, `/new-project`,
+   `/update-entity` and `/update-tables`, one line each: "you'll notice
+   something missing in week two; here's what you do then".
 5. **Anything still owed** — an account not switched on and who does it, a
    routine not yet scheduled, a topic skipped.
 
@@ -651,7 +652,7 @@ later picks the connection step up where this session left it.
 6. **Raw reads are deleted the moment they are built into evidence**
    (`discover build --consume`); everything else in scratch is swept at the
    close.
-7. **Organisations may be proposed from calendar and mail; only the owner
+7. **Entities may be proposed from calendar and mail; only the owner
    confirms.**
 8. **Nothing is shown to the owner that `discover check` did not pass.**
 9. **During the step-3 read, chat message text is never read, and neither is

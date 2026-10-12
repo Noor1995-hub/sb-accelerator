@@ -983,8 +983,16 @@ def touch(root: Path, slug: str, *, timestamp: Optional[str] = None) -> dict:
     `state-updated`. Nothing else in the dossier changes."""
     if timestamp is None:
         timestamp = datetime.datetime.now().isoformat(timespec="minutes")
-    if not _STAMP_RE.match(str(timestamp)):
-        raise EntityError(f"timestamp {timestamp!r} must be YYYY-MM-DDTHH:MM")
+    try:
+        valid = bool(_STAMP_RE.match(str(timestamp))) and bool(
+            datetime.datetime.strptime(str(timestamp), "%Y-%m-%dT%H:%M"))
+    except ValueError:
+        valid = False
+    if not valid:
+        # The stamp is the queue's start point: a month 13 or a 99:99 reads as
+        # no stamp, and the same material is appended again every night — the
+        # check person.touch already has (review 2026-10-12).
+        raise EntityError(f"timestamp {timestamp!r} must be a real YYYY-MM-DDTHH:MM")
     read(root, slug)  # raises EntityError if the dossier does not exist
     path = _dossier_path(root, slug)
     text = path.read_text(encoding="utf-8")

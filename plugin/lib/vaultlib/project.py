@@ -161,6 +161,10 @@ def scaffold(root: Path, *, name: str, project_type: str, entity: str,
         "next-milestone": None,
         "next-milestone-date": None,
     }
+    if stage and " ".join(str(stage).split()):
+        # The entity page's live Engagements list reads `stage`; on the card
+        # alone it stayed empty until the first evening state write.
+        frontmatter["stage"] = " ".join(str(stage).split())
     problems = schema.validate("project", frontmatter)
     if problems:
         raise ProjectError(

@@ -189,6 +189,15 @@ def test_today_iso_rejects_a_malformed_date():
         vault.today_iso("23-08-2026")
 
 
+def test_today_iso_rejects_an_impossible_date():
+    # Review 2026-10-12: 2026-99-99 passed the shape check and a decision
+    # written on it superseded a real one.
+    with pytest.raises(vault.VaultError, match="not a real date"):
+        vault.today_iso("2026-99-99")
+    with pytest.raises(vault.VaultError, match="not a real date"):
+        vault.today_iso("2026-02-30")
+
+
 def test_today_iso_defaults_to_a_well_formed_date():
     assert len(vault.today_iso()) == 10
 

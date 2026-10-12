@@ -1396,7 +1396,9 @@ python3 "$VAULTLIB" runlock acquire --vault "$VAULT" --routine sync-recordings
 ```
 
 `acquired: false` → nothing was written; stop and say: *"Your evening run is
-busy; your meetings stay in triage and that run picks up what you tick."*
+busy, so I couldn't save your answers. The meetings are waiting in Meetings ›
+To review: tick Keep or Dismiss there, or run this again once the evening
+run is done."*
 Then `scratch sweep` and end.
 
 **From here until the end of step 9, every exit releases the lock first** —
@@ -1494,7 +1496,7 @@ python3 "$VAULTLIB" scratch sweep --dir "$SCRATCH"
 `scratch sweep` is stdlib-only and deletes a fixed, built-in pattern list
 (`plaud.whoami.json`, `m365.whoami.json`, `rec_*.json`, `plaud.list.json`,
 `m365_*.json`, `*.blob.md`, `ids.json`, `*.payload.json`, `decision.json`,
-`decision-*.json`, plus `sentmail.sample.json`, `calendar.*.json` and
+`decision-*.json`, `fetch_errors_batch.json`, plus `sentmail.sample.json`, `calendar.*.json` and
 `*.block.md` from Session-1 onboarding) directly inside `--dir`, never
 recursing — this is the whole reason it exists rather than `rm -f`. **Every scratch file this contract names you
 write already matches one of those patterns; name any other raw connector

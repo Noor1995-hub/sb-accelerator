@@ -460,7 +460,13 @@ def record(root: Path, outcomes, now_utc: datetime) -> dict:
     if not isinstance(outcomes, list):
         raise SeenEventsError(
             "--outcomes must be a JSON array of outcome objects")
-    validated = [_validate_outcome(entry) for entry in outcomes]
+    # Triage sends an occurrence with no parseable start as `unkeyed`, with
+    # `start_utc: null`. The cache cannot key it (and prune would drop it),
+    # so it is left out — failing the call lost every other outcome in the
+    # batch (review 2026-10-12).
+    unkeyed = [e for e in outcomes if isinstance(e, dict) and e.get("start_utc") is None]
+    validated = [_validate_outcome(entry) for entry in outcomes
+                 if not (isinstance(entry, dict) and entry.get("start_utc") is None)]
     cache = load(root)
     checked_at = now_utc.strftime(_KEY_FMT)
     for key, payload in validated:
@@ -476,8 +482,8 @@ def record(root: Path, outcomes, now_utc: datetime) -> dict:
             del cache["events"][key]
             pruned += 1
     save(root, cache)
-    return {"recorded": len(validated), "pruned": pruned,
-            "cached_total": len(cache["events"])}
+    return {"recorded": len(validated), "skipped_unkeyed": len(unkeyed),
+            "pruned": pruned, "cached_total": len(cache["events"])}
 
 
 def settle_duplicate(root: Path, recording_id: str, existing_id: str,

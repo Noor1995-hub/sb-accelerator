@@ -33,8 +33,12 @@ sentence.
 Only with Microsoft 365 connected and its account proven
 (`config verify-account --adapter m365` returns `match: true`; call `get_me`,
 write the raw JSON to `$SCRATCH/m365.whoami.json` and pass it as `--identity`).
-On `match: false`, tell the owner plainly that the connected account is not
-theirs, and switch nothing on.
+On `match: false`, switch nothing on and say why in one plain sentence,
+by the result's `reason`: `account-mismatch` — the connected Microsoft 365
+account is not theirs; `adapter-disabled` — Microsoft 365 is switched off
+in this vault; `no-account-hint` — Microsoft 365 was never set up here. The
+last two are fixed by connecting it in `/setup-my-brain`, never by
+switching the feed on regardless.
 
 Only on a vault at structure version 6 or later: that update is what hides
 the saved notes from the file list, search and graph.
