@@ -740,3 +740,23 @@ def test_review_refuses_a_non_decision(tmp_path):
         decision.review(root, "30-projects/acme-erp/index.md", keep=True)
     with pytest.raises(decision.DecisionError):
         decision.review(root, "../elsewhere.md", keep=True)
+
+
+def test_source_resolves_to_a_session_record(tmp_path):
+    root = vault_with_project(tmp_path)
+    sessions = root / "_messages" / "sessions"
+    sessions.mkdir(parents=True)
+    (sessions / "2026-10-12-pricing-approach.md").write_text(
+        "---\ntype: session\n---\n# x\n", encoding="utf-8")
+    result = decision.write(root, project=PROJECT, date="2026-10-12",
+                            payload=note(source="2026-10-12-pricing-approach"),
+                            reviewed=False)
+    assert result["source"] == "2026-10-12-pricing-approach"
+
+
+def test_unknown_source_still_refuses_with_sessions_present(tmp_path):
+    root = vault_with_project(tmp_path)
+    (root / "_messages" / "sessions").mkdir(parents=True)
+    with pytest.raises(decision.DecisionError, match="matches no meeting"):
+        decision.write(root, project=PROJECT, date="2026-10-12",
+                       payload=note(source="2026-10-12-nothing"), reviewed=False)
