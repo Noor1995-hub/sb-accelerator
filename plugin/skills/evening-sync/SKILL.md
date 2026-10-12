@@ -34,7 +34,7 @@ The JSON envelope and interpreter resolution are documented in the plugin's
 ## Usage
 
 ```
-/evening-sync                    # interactive: one confirmation at the sync stage
+/evening-sync                    # interactive: asks only where a stage says so
 /evening-sync --unattended       # scheduled shape — never prompts, ever
 ```
 
@@ -44,6 +44,21 @@ a failed sync still gets metrics and project updates.
 
 ## Stage 1 — Dates (authoritative, never re-derived)
 
+Take the run lock:
+
+```bash
+python3 "$VAULTLIB" runlock acquire --vault "$VAULT" --routine evening-sync
+```
+
+`acquired: false` means the owner's on-demand processing is running. Retry
+once a minute, up to 10 times (a CLI call each, never a model check-in): one
+call per retry, `python3 -c "import time; time.sleep(60)"` followed by the
+acquire again, or the host's own wait. Never a loop the model polls. Then
+continue anyway and add to the warnings: "ran while the meeting sync held the
+lock (since <started_at>)".
+
+Release it on every early exit as well as at stage 7 (below).
+
 Read the deployment config, then plan the dates:
 
 ```bash
@@ -52,7 +67,7 @@ python3 "$VAULTLIB" dates plan --vault "$VAULT" --timezone <config.timezone>
 ```
 
 If `timezone` or `owner` is in `missing`, the pipeline cannot run
-deterministically: stop, and say which key to fill in
+deterministically: release the lock, stop, and say which key to fill in
 `99-workflow-config/config.json` (interactive), or write the alert as the
 run's only output (unattended).
 
@@ -170,7 +185,9 @@ here asks.
 
 **Sync:** run the `/sync-recordings` workflow (follow
 `${CLAUDE_PLUGIN_ROOT}/skills/sync-recordings/SKILL.md`) — unattended when this run is
-unattended, interactive otherwise. Its step 1 runs `sync reconcile-reviews`,
+unattended, interactive otherwise. The workflow's steps 8–11 (the owner's
+on-demand triage and processing) never run here, in either mode: this run
+processes in its own stage 4. Its step 1 runs `sync reconcile-reviews`,
 which IS this pipeline's reconcile stage. Record what it reports: synced
 stems, folded ticks, conflicts, per-adapter lines.
 
@@ -469,6 +486,12 @@ reported "Processed: 0" after writing a meeting correctly):
 - every project reported updated shows today's `last-updated` **and a fresh
   `state-updated`** in its frontmatter;
 - every recording reported synced has its stem in `20-meetings/`.
+
+Then release the run lock, before the summary:
+
+```bash
+python3 "$VAULTLIB" runlock release --vault "$VAULT" --routine evening-sync
+```
 
 ```
 ## Evening Sync Complete

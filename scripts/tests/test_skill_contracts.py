@@ -1702,49 +1702,24 @@ def test_sync_recordings_step5_m365_drop_is_a_two_write_path():
     )
 
 
-# PR B final-review fix, IMPORTANT: step 5 claimed m365 rows are probed
-# before the plan is shown, but nothing said the probe wave (step 6) must
-# run before step 5 in interactive mode, and the transcript-found bullet
-# looped a promoted entry back through "steps 3-5" — which would mean a
-# second plan/confirmation for that one row. Interactive mode must show
-# exactly one plan, after every probe in the wave has settled.
-def test_sync_recordings_interactive_plan_runs_once_after_every_probe():
+# #271: no plan is shown in either mode any more. A promoted probe row goes
+# straight from steps 3-4 to dispatch; step 5 only keeps the drop mechanics.
+def test_sync_recordings_promoted_row_never_waits_for_a_plan():
     text = read_skill("sync-recordings")
     step5 = text.split("### 5.")[1].split("### 6.")[0]
     step6 = text.split("### 6.")[1].split("### 7.")[0]
     step5_flat = re.sub(r"\s+", " ", step5)
     step6_flat = re.sub(r"\s+", " ", step6)
 
-    assert "probed first" in step5_flat.lower() or (
-        "every m365 occurrence is probed first" in step5_flat.lower()), (
-        "step 5 must state plainly that probing happens before the plan "
-        "is ever shown, in interactive mode"
-    )
-    assert "second table" in step5_flat.lower() or (
-        "second confirmation" in step5_flat.lower()), (
-        "step 5 must rule out a promoted row getting its own separate "
-        "confirmation"
-    )
-
-    assert "before step 5" in step6_flat.lower(), (
-        "step 6's probe-wave paragraph must point at step 5 and say this "
-        "wave runs before it, in interactive mode"
-    )
-
+    assert "No plan is shown" in step5_flat
     found_clause = step6_flat[step6_flat.index("transcript-found"):]
-    assert "steps 3–5" not in found_clause and "steps 3-5" not in found_clause, (
-        "the transcript-found bullet must not send a promoted row back "
-        "through step 5 individually — step 5 runs once, for every row, "
-        "not per promotion"
-    )
+    assert "steps 3–5" not in found_clause and "steps 3-5" not in found_clause
     assert "steps 3–4" in found_clause or "steps 3-4" in found_clause, (
         "the transcript-found bullet must still run the routing/confidence "
-        "steps (3-4) for a promoted row, just not step 5 again"
+        "steps (3-4) for a promoted row"
     )
-    assert "never step 5 again" in found_clause.lower() or (
-        "runs once" in found_clause.lower()), (
-        "the transcript-found bullet must say explicitly that this row "
-        "does not get its own step-5 pass"
+    assert "step 5" not in found_clause.lower().replace("step 5)", ""), (
+        "a promoted row must not be sent back through step 5"
     )
 
 
@@ -2352,7 +2327,6 @@ def test_evening_sync_notes_read_lists_only_marked_notes():
 BATCHING_RULE = "Dispatch in blocking batches of at most 3"
 
 
-@pytest.mark.xfail(reason="sync-recordings wired in Task 6", strict=True)
 def test_processing_lives_in_one_shared_reference():
     """#271: the evening run and the on-demand meeting sync follow the same
     processing text — never two copies that drift."""
@@ -2369,3 +2343,64 @@ def test_batching_rule_has_exactly_one_home():
     hits = [p for p in SKILLS_DIR.rglob("*.md")
             if BATCHING_RULE in p.read_text(encoding="utf-8")]
     assert [p.name for p in hits] == ["process.md"]
+
+
+def test_sync_recordings_never_touches_daily_notes():
+    """#271: safe to call any number of times a day."""
+    text = read_skill("sync-recordings")
+    assert "60-daily-notes" not in text.replace(
+        "never creates, writes or edits anything under `60-daily-notes/`", "")
+    assert "daily-note write" not in text
+    assert "never creates, writes or edits anything under `60-daily-notes/`" in text
+
+
+def test_only_evening_sync_writes_daily_notes():
+    writers = [p.parent.name for p in SKILLS_DIR.glob("*/SKILL.md")
+               if "daily-note write" in p.read_text(encoding="utf-8")]
+    assert writers == ["evening-sync"]
+
+
+def test_on_demand_steps_are_interactive_only():
+    text = read_skill("sync-recordings")
+    for heading in ("### 8. Triage in the chat", "### 9. Process",
+                    "### 10. Decisions in the chat", "### 11. Summary"):
+        assert heading in text, heading
+    for cli in ("meeting triage-list", "meeting triage-apply",
+                "decision review", "runlock acquire", "runlock release"):
+        assert cli in text, cli
+    unattended = text.split("## Unattended mode", 1)[1]
+    assert "steps 8–11" in unattended
+
+
+def test_evening_sync_holds_the_run_lock():
+    text = read_skill("evening-sync")
+    assert "runlock acquire --vault \"$VAULT\" --routine evening-sync" in text
+    assert "runlock release --vault \"$VAULT\" --routine evening-sync" in text
+
+
+def test_no_plan_is_shown_before_dispatch():
+    """#271: step 5 no longer shows a plan or waits for confirmation."""
+    text = read_skill("sync-recordings")
+    assert "### 5. Confirm the plan" not in text
+    for stale in ("proceed / edit / skip", "plan table", "confirm once, run",
+                  "the single step-5 plan"):
+        assert stale not in text, stale
+
+
+def test_on_demand_inputs_come_from_dates_plan_and_config():
+    text = read_skill("sync-recordings")
+    step9 = text.split("### 9. Process", 1)[1].split("### 10.", 1)[0]
+    assert "dates plan" in step9 and "`today`" in step9
+    assert "`owner`" in step9
+    assert "Warnings" in step9
+
+
+def test_on_demand_zero_project_notes_stay_ticked():
+    process = read_ref("evening-sync", "process.md")
+    assert "it stays ticked for tonight's recap, its only reader" in process
+    assert "a third fold after step 8's" in process
+
+
+def test_evening_sync_stage3_skips_on_demand_steps():
+    text = read_skill("evening-sync")
+    assert "steps 8–11" in text

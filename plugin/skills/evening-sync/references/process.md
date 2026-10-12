@@ -12,9 +12,13 @@ Followed by `/evening-sync` (after stage 3b) and by `/sync-recordings` step 9 (o
 | To Do's | yes — evening stage 2 | no |
 | Mail and Teams | evening stage 3b runs first | not read; `update-queue` still sees any log already on disk that is newer than a project's last state write |
 | Project-state updates and decisions (C) | yes | yes |
+| `today` and the owner slug | stage 1 (`dates plan`, `config read`) | `today` from `dates plan`, `owner` from `config read` — step 9 |
+| `sync_notes` lines (A, C) | the recap | step 11's Warnings line — there is no recap |
 
 On demand, C's subagents get no harvest jottings. Everything else in A–C is
 identical: same caps, same batching, same `--background` decision capture.
+Wherever this file says "the recap", "tonight" or "tomorrow", it means the
+evening run; on demand there is no recap.
 
 ## A. Your notes ticked Include
 
@@ -58,6 +62,7 @@ would otherwise fold tomorrow evening instead of tonight. It is one cheap
 read of `20-meetings/`; add anything it `flipped` to the folded-ticks count
 you recorded above, and surface its `conflict_ticks` the same way step 1's
 were.
+On demand this is a third fold after step 8's; add what it `flipped` to the same count.
 
 This writes `meetings-7d` / `meetings-30d` / `key-people` on active projects
 and `meetings-7d` / `meetings-30d` on people (confirmed meetings only — the
@@ -217,6 +222,8 @@ least one queue entry's `newNotes` and every such entry came back
 ```bash
 python3 "$VAULTLIB" notes mark-absorbed --vault "$VAULT" --path "<path>" --date <today>
 ```
+
+On demand, skip this for a note whose harvested `projects` is empty: it stays ticked for tonight's recap, its only reader.
 
 A note whose project failed keeps `include` ticked and is read again tomorrow;
 say so in `sync_notes`. `missing` (the owner deleted or moved it during the run)
