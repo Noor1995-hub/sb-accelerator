@@ -55,7 +55,8 @@ def test_several_notes_from_sections_keep_their_order(tmp_path):
     load().apply(root)
     _, text = body(root)
     section = text.split("## What I know", 1)[1].split("## Context", 1)[0]
-    assert [l for l in section.split("\n") if l.strip()] == ["- a", "- b", "- d"]
+    assert [l for l in section.split("\n") if l.strip()] == ["- a (Notes from Acme)", "- b (Notes from Acme)",
+                                                               "- d (Notes from Beta)"]
     assert text.count("## ") == 2
 
 
@@ -73,7 +74,7 @@ def test_existing_what_i_know_is_appended_to(tmp_path):
                             "## Notes from Acme\n\n- moved\n"})
     load().apply(root)
     _, text = body(root)
-    assert "## What I know\n\n- kept\n- moved\n" in text
+    assert "## What I know\n\n- kept\n- moved (Notes from Acme)\n" in text
 
 
 def test_every_page_gets_a_stamp_but_no_empty_section(tmp_path):
@@ -122,7 +123,7 @@ def test_crlf_page_migrates(tmp_path):
     root = vault(tmp_path, {"dana.md": raw})
     load().apply(root)
     _, text = body(root)
-    assert "## What I know\n\n- a\n" in text and "## Notes from" not in text
+    assert "## What I know\n\n- a (Notes from Acme)\n" in text and "## Notes from" not in text
 
 
 def test_the_whole_chain_ends_at_15(tmp_path):
@@ -144,3 +145,54 @@ def test_the_demo_vault_is_already_migrated(tmp_path):
     result = module.apply(root)
     assert files(root) == before and result["notes_moved"] == 0
     module.verify(root)
+
+
+# --- review fixes (opus review of 04720ac..b7a9106) -------------------------------
+
+def test_a_moved_line_that_does_not_name_its_entity_keeps_it(tmp_path):
+    # I1: /update-entity wrote "(from /update-entity, <date>)" under the
+    # heading; dropping the heading must not drop which entity it was about.
+    raw = (HEAD + "\n# Dana\n\n## Notes from Acme Finance\n\n"
+           "- Wants numbers. (from /update-entity, 2026-10-11)\n"
+           "- Straight. (moved from the Acme Finance page, 2026-10-12)\n")
+    root = vault(tmp_path, {"dana.md": raw})
+    load().apply(root)
+    _, text = body(root)
+    assert "- Wants numbers. (from /update-entity, 2026-10-11) (Notes from Acme Finance)\n" in text
+    assert "- Straight. (moved from the Acme Finance page, 2026-10-12)\n" in text
+
+
+def test_an_unbalanced_fence_leaves_the_page_and_reports_it(tmp_path):
+    # I2: an unclosed fence would reorder sections.
+    raw = HEAD + "\n# D\n\n## Context\nctx\n\n## Notes from A\n```\ncode\n\n## Other\no\n"
+    root = vault(tmp_path, {"dana.md": raw})
+    result = load().apply(root)
+    after = (root / "50-people/dana.md").read_text(encoding="utf-8")
+    assert "## Notes from A" in after and after.index("## Context") < after.index("## Notes from A")
+    assert any("50-people/dana.md" in item and "code block" in item for item in result["needs_human"])
+
+
+@pytest.mark.parametrize("heading", ["## Notes From Acme", "## notes from acme", "## Notes from"])
+def test_notes_from_headings_match_any_case_and_bare(tmp_path, heading):
+    # I3: hand-edited headings must not be skipped silently.
+    root = vault(tmp_path, {"dana.md": HEAD + f"\n# Dana\n\n{heading}\n\n- a\n"})
+    module = load()
+    module.apply(root)
+    _, text = body(root)
+    assert heading not in text and "## What I know\n\n- a" in text
+    module.verify(root)
+
+
+def test_an_existing_what_i_know_in_other_case_is_reused(tmp_path):
+    root = vault(tmp_path, {"dana.md": HEAD + "\n# Dana\n\n## What I Know\n\n- kept\n\n"
+                            "## Notes from Acme\n\n- moved\n"})
+    load().apply(root)
+    _, text = body(root)
+    assert text.count("## What I") == 1 and "- kept\n- moved" in text
+
+
+def test_verify_catches_a_differently_cased_notes_from(tmp_path):
+    raw = HEAD.replace("created:", "person-updated: 2026-10-01T10:00\ncreated:") + "\n# D\n\n## NOTES FROM X\n\n- a\n"
+    root = vault(tmp_path, {"dana.md": raw})
+    with pytest.raises(Exception, match="Notes from"):
+        load().verify(root)

@@ -13,9 +13,18 @@ person page:
   the first evening reads nothing older than the upgrade (the owner chose no
   look-back).
 
+A heading matches in any case, with or without an entity name (`## Notes
+From Acme`, `## Notes from`), and an existing `## What I Know` in any case is
+reused. A moved bullet that does not already name its entity (the
+/update-entity lines said only "(from /update-entity, <date>)") gets
+` (Notes from <entity>)` appended, so dropping the heading loses nothing.
+
 A page whose frontmatter will not parse is left byte-identical and named in
-`needs_human`. Running it twice changes nothing. Not lossy: every line is
-kept; only the `Notes from` headings go.
+`needs_human`. So is the body of a page where a `Notes from` section leaves a
+code block (```) open: moving it would reorder the sections that follow
+(only the stamp is added). Running it twice changes nothing. Not lossy:
+every line is kept; only the `Notes from` headings go. Pages that change are
+written with LF line endings, like every vault writer.
 
 The section placement is frozen here (a copy of person.py's at ship time): a
 migration must keep producing what it produced when it shipped.
@@ -37,7 +46,28 @@ TARGET_VERSION = 15
 LOSSY = None
 
 HEADING = "What I know"
-PREFIX = "Notes from "
+PREFIX = "notes from"
+
+
+def _entity_of(title: str):
+    """The entity name of a `Notes from <entity>` heading ("" when bare), in
+    any case; None for any other heading."""
+    t = title.strip()
+    if t.lower() == PREFIX:
+        return ""
+    if t.lower().startswith(PREFIX + " "):
+        return t[len(PREFIX):].strip()
+    return None
+
+
+def _open_fence(text: str) -> bool:
+    fence = None
+    for line in text.split("\n"):
+        match = markdown._FENCE_RE.match(line)
+        if match:
+            token = match.group(1)
+            fence = None if fence == token else (fence or token)
+    return fence is not None
 
 
 class MigrationError(Exception):
@@ -61,7 +91,7 @@ def _trim(content: str) -> List[str]:
 def _insert(body: str, lines: List[str]) -> str:
     sections = markdown.split_sections(body)
     for i, (title, content) in enumerate(sections):
-        if title == HEADING:
+        if title.strip().lower() == HEADING.lower():
             kept = content.rstrip("\n")
             last = kept.split("\n")[-1].strip() if kept.strip() else ""
             gap = "\n" if (not last or last.startswith("- ")) else "\n\n"
@@ -103,11 +133,22 @@ def apply(root: Path) -> dict:
             continue
         result["people"] += 1
         sections = markdown.split_sections(body)
+        if any(_entity_of(t) is not None and _open_fence(c) for t, c in sections):
+            result["needs_human"].append(
+                f"{rel}: a '## Notes from' section leaves a code block (```) open — "
+                f"its text was not moved; close the block and move it under "
+                f"'## {HEADING}' by hand")
+            sections = [("", body)]          # nothing in the body moves
         moved: List[str] = []
         kept = []
         for title, content in sections:
-            if title.startswith(PREFIX):
+            entity = _entity_of(title) if title else None
+            if entity is not None:
                 lines = _trim(content)
+                if entity:
+                    lines = [line + f" (Notes from {entity})"
+                             if line.startswith("- ") and f"the {entity} page" not in line
+                             else line for line in lines]
                 if moved and lines:
                     if not (moved[-1].startswith("- ") and lines[0].startswith("- ")):
                         moved.append("")
@@ -139,7 +180,10 @@ def verify(root: Path) -> dict:
         except (ValueError, OSError):
             continue          # reported by apply; the owner's to fix
         checked += 1
-        if any(t.startswith(PREFIX) for t, _ in markdown.split_sections(body)):
+        # A section left open by a code block was reported by apply and is
+        # the owner's to move, like an unreadable page.
+        if any(_entity_of(t) is not None and not _open_fence(c)
+               for t, c in markdown.split_sections(body) if t):
             problems.append(f"{rel}: still has a '## Notes from' heading")
         if data.get("person-updated") in (None, ""):
             problems.append(f"{rel}: no person-updated")
