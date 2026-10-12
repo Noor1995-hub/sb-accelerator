@@ -15,9 +15,14 @@ messages-30d: 0
 decision-role: evaluator
 stance: champion
 entity: commercial-operations
+person-updated: 2026-10-12T17:55
 ---
 
 # Omar Siddiqui
+
+## What I know
+
+- Carries the target CRM schema and RFP scoring. The only person who knows how the current pipeline data is actually stitched together. (moved from the Commercial Operations page, 2026-10-12)
 
 ## Context
 
@@ -36,7 +41,3 @@ WHERE econtains(attendees, this.slug)
 SORT date DESC
 LIMIT 10
 ```
-
-## Notes from Commercial Operations
-
-- Carries the target CRM schema and RFP scoring. The only person who knows how the current pipeline data is actually stitched together. (moved from the Commercial Operations page, 2026-10-12)

@@ -15,9 +15,14 @@ messages-30d: 0
 decision-role: sponsor
 stance: champion
 entity: commercial-operations
+person-updated: 2026-10-12T17:55
 ---
 
 # Sam Okafor
+
+## What I know
+
+- Owns both workstreams. Reliable on delivery; will not push back in a group, so ask separately. (moved from the Commercial Operations page, 2026-10-12)
 
 ## Context
 
@@ -36,7 +41,3 @@ WHERE econtains(attendees, this.slug)
 SORT date DESC
 LIMIT 10
 ```
-
-## Notes from Commercial Operations
-
-- Owns both workstreams. Reliable on delivery; will not push back in a group, so ask separately. (moved from the Commercial Operations page, 2026-10-12)

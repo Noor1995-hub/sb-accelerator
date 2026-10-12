@@ -24,7 +24,7 @@ from pathlib import Path
 # than read from the migration chain, because the two drifting apart is exactly
 # what this check is for — importing the chain would make the assertion agree
 # with whatever the chain says and catch nothing. Bump both together.
-EXPECTED_STRUCTURE_VERSION = "14"
+EXPECTED_STRUCTURE_VERSION = "15"
 
 
 def main(root: Path) -> list[str]:

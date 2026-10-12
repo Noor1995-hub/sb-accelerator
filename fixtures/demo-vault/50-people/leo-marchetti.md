@@ -15,9 +15,14 @@ messages-30d: 0
 entity: meridian-freight-holdings
 decision-role: sponsor
 stance: champion
+person-updated: 2026-10-12T17:55
 ---
 
 # Leo Marchetti
+
+## What I know
+
+- Decides fast once the case is quantified, and reverses himself just as fast. Wants a total, and will pick before the options are finished. (moved from the Meridian Freight Holdings page, 2026-10-12)
 
 ## Context
 
@@ -36,7 +41,3 @@ WHERE econtains(attendees, this.slug)
 SORT date DESC
 LIMIT 10
 ```
-
-## Notes from Meridian Freight Holdings
-
-- Decides fast once the case is quantified, and reverses himself just as fast. Wants a total, and will pick before the options are finished. (moved from the Meridian Freight Holdings page, 2026-10-12)

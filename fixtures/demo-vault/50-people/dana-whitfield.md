@@ -14,9 +14,14 @@ messages-30d: 0
 entity: nordbridge-components
 decision-role: evaluator
 stance: neutral
+person-updated: 2026-10-12T17:55
 ---
 
 # Dana Whitfield
+
+## What I know
+
+- Straight about constraints — flagged the Liège freeze before we could propose into it. No read yet on who signs above her. (moved from the Nordbridge Components page, 2026-10-12)
 
 ## Context
 
@@ -35,7 +40,3 @@ WHERE econtains(attendees, this.slug)
 SORT date DESC
 LIMIT 10
 ```
-
-## Notes from Nordbridge Components
-
-- Straight about constraints — flagged the Liège freeze before we could propose into it. No read yet on who signs above her. (moved from the Nordbridge Components page, 2026-10-12)
