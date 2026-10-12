@@ -605,13 +605,68 @@ python3 "$VAULTLIB" dates window --vault "$VAULT" --start 2026-08-20T16:42 --tim
 Pass its `utc_from`/`utc_to` values as the tool's
 `afterDateTime`/`beforeDateTime`. The window around one recording is narrow,
 but if the response carries `nextOffset`, page through (`offset` set to it)
-before scoring. Score candidates: title-keyword overlap and
-attendee-name matches beat same-day-only. A match pre-fills
-`calendar-subject`, `organizer`, `location`, `recurring`, `attendee-emails`.
+before scoring. Write every page you got to `$SCRATCH/calendar.<id>.json`
+as returned, then let the CLI apply the clock rule — never judge "one event
+starting a minute apart" by eye:
+
+```bash
+python3 "$VAULTLIB" m365 calendar-match --vault "$VAULT" --events "$SCRATCH/calendar.<id>.json" --start 2026-08-20T16:42 --duration-min 21 --timezone <tz>
+```
+
+(`--start` is the recording's owner-local start, `--duration-min` its
+length in minutes — the plaud listing's `duration` over 60000, rounded.) It answers
+`match`:
+
+- `single` — exactly one live event overlaps the recording and starts
+  within 5 minutes of it. **That is a match even with zero title or
+  attendee overlap**: a Plaud auto-title shares no word with the meeting's
+  subject, and its speakers are `Speaker 2` / `Speaker 4`, so neither
+  signal exists to be found (an 11:01 call against an 11:00 weekly was
+  once stamped `no-calendar-match` for exactly this reason). Stamp
+  `calendar_match: true` with `calendar-match-medium` — never `-high`: the
+  clock corroborates *when*, not *what*.
+- `ambiguous` — two or more events share the slot. Never auto-match on
+  time. Fall back to scoring: title-keyword overlap and attendee-name
+  matches beat same-day-only; a clear winner is `calendar-match-medium`
+  (or `-high` when the title and attendees both agree), a tie is a
+  no-match.
+- `none` — nothing overlaps, or the one event that does starts too far
+  from the recording to say it is the meeting. Stamp `no-calendar-match`.
+
+A match pre-fills `calendar-subject`, `organizer`, `location`, `recurring`,
+`attendee-emails` from the `single` result's `event` (or the scored winner
+among the `ambiguous` result's `candidates`).
+
+**Then resolve the matched meeting's people from the event itself.** The
+listing carries attendees as bare addresses; the full event read carries
+their names too. Read the matched event — `read_resource` with the `uri`
+from the `calendar-match` result (`event.uri`, or the winning candidate's
+`uri`), copied exactly; never build one from an `id` — and write the result
+as returned to `$SCRATCH/calendar.<id>.event.json`. Issue every matched
+recording's read in one batch of parallel calls, then resolve each in one
+Bash call:
+
+```bash
+python3 "$VAULTLIB" m365 resolve-attendees --vault "$VAULT" --event "$SCRATCH/calendar.<id>.event.json" --owner-slug <owner-slug>
+```
+
+(`<owner-slug>` is `config read`'s `owner`.) Its `attendees` are the
+meeting's person slugs, the vault owner first — use them as-is. It runs the
+same `person ensure` as the M365 worker, but matches an address already on
+a person note first, so a differently spelt display name never forks a
+second person; rooms are skipped. `new_attendees` is the count of people
+it created, for the attendees-group confidence reason. Any
+`unresolved_emails` (an address with no name) stay out of `attendees` —
+never invent a name for one; mention the count in the debrief.
+
+If the read fails, or `read_resource` is not available, the match still
+stands — the search answered, so this is never `calendar-tool-unavailable`.
+Fall back to the owner plus the `single` result's `known_attendees` (people
+already in the vault, matched by address), with no new people created.
 
 **Stamp honestly — these are different facts, never collapse them:**
 
-- searched, nothing matched → reason `no-calendar-match`
+- searched, nothing matched (`none`, or `ambiguous` with no winner) → reason `no-calendar-match`
 - tool missing or errored → reason `calendar-tool-unavailable`
 
 (Upstream, collapsing them hid a six-day connector outage.)
@@ -662,16 +717,18 @@ with a prospect, for instance. That is the *only* way such a meeting reaches
 its entity's dossier, since the dossier's Meeting Log is a Dataview query
 over this field and Dataview sees just what the meeting note itself says.
 
-Attendees are **person slugs**. For plaud, inbox, and capture recordings —
-where the calendar match (if any) or the transcript names people — ensure
-each attendee's note exists:
+Attendees are **person slugs**. A calendar-matched plaud or inbox recording
+already has them: step 2's `m365 resolve-attendees` ensured every calendar
+attendee — use its `attendees` and add no one to them by hand. For the rest
+(no calendar match, or a capture) — where a forwarded item or the
+transcript names people — ensure each attendee's note exists:
 
 ```bash
 python3 "$VAULTLIB" person ensure --vault "$VAULT" --name "<Full Name>"
 ```
 
-When the calendar match gives that attendee's address alongside the name,
-add `--email "<address>"` — it fills an empty email and never overwrites one.
+When the item gives that attendee's address alongside the name, add
+`--email "<address>"` — it fills an empty email and never overwrites one.
 Never pair a name with an address by guessing.
 
 Add `--entity <slug>` only when that attendee's email domain matched exactly
@@ -701,6 +758,9 @@ per group (vocabulary: ontology §Meeting):
 | `high` | calendar-match-high AND a strong link (`entity-domain-match` or `calendar-subject-match`) AND `all-attendees-known` |
 | `medium` | calendar match high or medium AND any project link AND at most one new attendee — but not qualifying for high |
 | `low` | everything else |
+
+A time-only calendar match (step 2's `single`) stamps `calendar-match-medium`
+and so can never reach `high`, whatever else lines up.
 
 A **capture** (`type: note`) is rated on a different axis, because it has no
 calendar to match: `medium` when the project link is `entity-domain-match`

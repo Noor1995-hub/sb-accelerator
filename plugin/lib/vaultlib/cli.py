@@ -663,6 +663,35 @@ def build_parser() -> argparse.ArgumentParser:
     m365_agenda.add_argument(
         "--date", help="owner-local day YYYY-MM-DD — events whose local start "
                        "falls on another day are dropped and counted")
+    m365_cm = m365_sub.add_parser(
+        "calendar-match",
+        help="time-only calendar match for one plaud/inbox recording: a single "
+             "live event starting within 5 minutes of the recording is a match "
+             "(single); two or more in the slot are ambiguous; none is none")
+    m365_cm.add_argument(
+        "--events", required=True,
+        help="path to the raw outlook_calendar_search output (every page), "
+             "or - for stdin")
+    m365_cm.add_argument("--start", required=True,
+                         help="recording start, owner-local YYYY-MM-DDTHH:MM")
+    m365_cm.add_argument("--duration-min", dest="duration_min", type=int,
+                         default=0, help="recording length in minutes")
+    m365_cm.add_argument(
+        "--vault", help="optional vault root: resolves the matched event's "
+                        "attendee addresses to existing person slugs")
+    m365_cm.add_argument("--timezone", help="IANA timezone name")
+    m365_cm.add_argument("--utc-offset", dest="utc_offset",
+                         help="explicit offset like +02:00 — same effect as --timezone")
+    m365_ra = m365_sub.add_parser(
+        "resolve-attendees",
+        help="person slugs for a calendar-matched plaud/inbox recording, from "
+             "the matched event's full read (ensures new people)")
+    _add_vault_argument(m365_ra)
+    m365_ra.add_argument("--event", required=True,
+                         help="the read_resource result for the matched event, as saved")
+    m365_ra.add_argument("--owner-slug", dest="owner_slug", required=True,
+                         help="the vault owner's person slug (config read's owner)")
+    m365_ra.add_argument("--today", help="ISO date override (tests)")
     m365_re = m365_sub.add_parser(
         "reassemble",
         help="render an event read + transcript read into one capture-bundle blob")
@@ -1363,6 +1392,20 @@ def _dispatch(args: argparse.Namespace) -> int:
                     else Path(args.events).read_text(encoding="utf-8"))
             return _ok(m365.agenda(m365.load_listing(text), timezone=args.timezone,
                                    utc_offset=args.utc_offset, date=args.date))
+        if args.action == "calendar-match":
+            text = (sys.stdin.read() if args.events == "-"
+                    else Path(args.events).read_text(encoding="utf-8"))
+            return _ok(m365.calendar_match(
+                m365.load_listing(text), start_local=args.start,
+                duration_min=args.duration_min, timezone=args.timezone,
+                utc_offset=args.utc_offset,
+                address_book=(person.address_book(root)
+                              if root is not None else None)))
+        if args.action == "resolve-attendees":
+            event = json.loads(Path(args.event).read_text(encoding="utf-8-sig"))
+            return _ok(m365.resolve_attendees(
+                root, event, owner_slug=args.owner_slug,
+                today=vault.today_iso(args.today)))
         if args.action == "capture":
             return _ok(m365.capture(args.source, args.out, event_path=args.event))
         return _ok(m365.reassemble(
