@@ -25,7 +25,7 @@ from datetime import datetime, timedelta
 from pathlib import Path, PurePosixPath
 from typing import Dict, List, Optional, Set, Tuple
 
-from . import markdown, project, scancache, vault
+from . import decision, markdown, project, scancache, vault
 
 INBOX_DIR = vault.INBOX_DIR
 MEETINGS_DIR = vault.MEETINGS_DIR
@@ -577,8 +577,11 @@ def reconcile_reviews(root: Path, *, timestamp: Optional[str] = None) -> dict:
             continue
         vault.atomic_write(path, updated)
         flipped.append(rel)
+    # A Dismiss ticked in Decisions.base never passes through a command:
+    # this evening fold is where a decision it had replaced is restored.
+    restored = decision.restore_dismissed(root, today=stamp[:10])
     return {"flipped": flipped, "conflict_ticks": conflict_ticks,
-            "confirmed_at": stamp,
+            "confirmed_at": stamp, "decisions_restored": restored,
             "warnings": warnings}
 
 

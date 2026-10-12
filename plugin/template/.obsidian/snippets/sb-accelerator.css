@@ -83,6 +83,8 @@
   [data-property-key="confidence"],
   [data-property-key="confidence-reasons"],
   [data-property-key="state-updated"],
+  [data-property-key="entity-updated"],
+  [data-property-key="person-updated"],
   [data-property-key="confirmed-at"]) {
   display: none !important;
 }
@@ -224,7 +226,7 @@
 
 /* The review queues at the top of the daily note (#238).
    `> [!review] Waiting for you` holds two embedded Bases views — Meetings
-   → Triage and Decisions → To review — so the owner ticks Keep or Dismiss
+   → To review and Decisions → To review — so the owner ticks Keep or Dismiss
    right there. Three rules:
 
    1. An empty table collapses, and the whole callout when both are empty:

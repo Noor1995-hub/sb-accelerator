@@ -47,7 +47,7 @@ CONSULTANT_LED = {"setup-my-brain", "upgrade-vault", "provision-vault"}
 # it.
 SELF_SERVE = {"evening-sync", "health-check", "sync-recordings", "log-decision",
               "new-project", "update-entity", "report-feedback",
-              "schedule-daily-loop", "sync-messages"}
+              "schedule-daily-loop", "sync-messages", "add", "update-tables"}
 
 # The vault's only egress path is `feedback send`, so the skills that invoke it
 # are the skills that can transmit. Derived below rather than trusted here.

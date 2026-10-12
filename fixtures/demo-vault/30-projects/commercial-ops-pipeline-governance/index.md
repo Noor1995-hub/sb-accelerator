@@ -78,3 +78,7 @@ Reference material for the evening run and for when you need the detail. Folded 
 > [!info]- Context
 > - **Contacts** — Sam Okafor (VP Commercial Operations), Taylor Brooks (Chief of Staff, runs the forecast call)
 > - **Source** — Standing responsibility; no start event to point at
+
+## Notes
+
+- Engagement note (moved from the Commercial Operations page, 2026-10-12): Standing area: pipeline hygiene, forecast cadence, quarterly review

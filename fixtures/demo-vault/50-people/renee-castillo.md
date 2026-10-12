@@ -3,7 +3,6 @@ person-name: "Renee Castillo"
 slug: renee-castillo
 email: renee.castillo@meridianfreight.example
 relationship: external
-company: "Meridian Freight Holdings"
 role: "IT Director"
 projects: [meridian-yard-automation-program]
 created: 2026-03-10
@@ -13,9 +12,17 @@ meetings-30d: 0
 last-met: 2026-03-10
 messages-7d: 0
 messages-30d: 0
+entity: meridian-freight-holdings
+decision-role: evaluator
+stance: neutral
+person-updated: 2026-10-12T17:55
 ---
 
 # Renee Castillo
+
+## What I know
+
+- Owns the integration work the consolidation created. Was absent when it was agreed, so her stance on it is untested. (moved from the Meridian Freight Holdings page, 2026-10-12)
 
 ## Context
 

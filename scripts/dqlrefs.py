@@ -120,7 +120,8 @@ def extract_refs(block: str) -> Refs:
     stripped = _QUOTED_RE.sub(" ", block)
     stripped = _DEREF_TAIL_RE.sub(") ", stripped)
 
-    functions = set(_CALL_RE.findall(stripped))
+    # `AND (` / `OR (` group a condition; they are operators, not calls.
+    functions = {name for name in _CALL_RE.findall(stripped) if name.lower() not in KEYWORDS}
     unknown = functions - KNOWN_FUNCTIONS
     if unknown:
         raise UnmodeledQuery(

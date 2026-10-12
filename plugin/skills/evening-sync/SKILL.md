@@ -34,7 +34,7 @@ The JSON envelope and interpreter resolution are documented in the plugin's
 ## Usage
 
 ```
-/evening-sync                    # interactive: one confirmation at the sync stage
+/evening-sync                    # interactive: asks only where a stage says so
 /evening-sync --unattended       # scheduled shape — never prompts, ever
 ```
 
@@ -44,6 +44,27 @@ a failed sync still gets metrics and project updates.
 
 ## Stage 1 — Dates (authoritative, never re-derived)
 
+Take the run lock:
+
+```bash
+python3 "$VAULTLIB" runlock acquire --vault "$VAULT" --routine evening-sync
+```
+
+`acquired: false` means the owner's on-demand processing is running. Wait
+with the CLI itself — up to 10 more calls, each one waiting 60 seconds inside
+the call and trying once more:
+
+```bash
+python3 "$VAULTLIB" runlock acquire --vault "$VAULT" --routine evening-sync --wait 60
+```
+
+Never a separate sleep command (a scheduled run is only allowed the CLI) and
+never a loop the model polls. Still `acquired: false` after the 10th → continue
+anyway and add to the warnings: "ran while the meeting sync held the lock
+(since <started_at>)".
+
+Release it on every early exit as well as at stage 7 (below).
+
 Read the deployment config, then plan the dates:
 
 ```bash
@@ -52,7 +73,7 @@ python3 "$VAULTLIB" dates plan --vault "$VAULT" --timezone <config.timezone>
 ```
 
 If `timezone` or `owner` is in `missing`, the pipeline cannot run
-deterministically: stop, and say which key to fill in
+deterministically: release the lock, stop, and say which key to fill in
 `99-workflow-config/config.json` (interactive), or write the alert as the
 run's only output (unattended).
 
@@ -85,7 +106,9 @@ morning, sees no note for today, and triggers the sync by hand. Running the
 standard plan then writes *tomorrow's* note and today never gets one (a live
 catch-up at 10:28 did exactly that: the skipped day's meetings were never
 prepped). `dates plan` reports the state instead of leaving it to you:
-`for_today_available` — today is a business day, today's note is missing,
+`for_today_available` — today is a business day, today's note is missing
+(an empty note Obsidian made, or one the owner typed into before any run,
+counts as missing: `daily-note write` keeps their text under **Notes**),
 and at least one daily note exists (a brand-new vault has nothing to catch
 up, so Session-1's first run never sees this offer) — and
 `for_today_suggested`, which adds "and it is before noon local". When
@@ -127,36 +150,18 @@ recap (stage 6) and decision candidates (stage 4). Each `- [ ]` line is also
 followed up in the To Do's table — see **To Do's** below. The note itself is
 the archive of the day — **never modify it**.
 
-**Your notes ticked Include.** Run `python3 "$VAULTLIB" migrate status --vault "$VAULT"`.
-While `structure_version` is below 11, skip this paragraph — the vault has no
-Include yet. Otherwise:
-
-```bash
-python3 "$VAULTLIB" notes harvest --vault "$VAULT"
-```
-
-Each listed note with a `body` is input tonight, read like a jotting but
-longer; a `body: null` note is over the size cap and its warning goes to
-`sync_notes`. All `notes harvest` warnings, and a failed `notes harvest` call,
-go to `sync_notes`, never to `watch`. For a note whose `projects` is empty, pick zero or more active
-projects it is about — the same signals as for a meeting that are available
-in free text: the project `keywords`, the project and entity names. Then:
-
-```bash
-python3 "$VAULTLIB" notes assign --vault "$VAULT" --path "<path>" --projects "<slug>[,<slug>]"
-```
-
-Zero projects is a valid answer: skip `assign`, and the note still informs
-the recap. `assign` only writes an empty `projects` — never second-guess the
-owner's choice. The run never changes a note's text, never moves a note, and
-never reads `95-private/`.
+**Your notes ticked Include:** follow section A of `${CLAUDE_PLUGIN_ROOT}/skills/evening-sync/references/process.md`.
 
 **To Do's.** While `structure_version` is below 12, skip this paragraph — the
 vault has no To Do's table yet. To the owner they are always "to do's", never "actions". Otherwise:
 
 ```bash
-python3 "$VAULTLIB" actions harvest --vault "$VAULT" --from <recap_from> --to <recap_to>
+python3 "$VAULTLIB" actions harvest --vault "$VAULT" --from <harvest_from> --to <recap_to>
 ```
+
+`harvest_from` (from `dates plan`) is one daily note further back than
+`recap_from`, so a to do written in a note after that evening's run is still
+picked up; lines already made into to dos are skipped, so nothing doubles.
 
 `closed` lists to-do notes whose line the owner ticked in a daily note
 since; the CLI already marked them done. `filled` lists notes made with
@@ -192,7 +197,9 @@ here asks.
 
 **Sync:** run the `/sync-recordings` workflow (follow
 `${CLAUDE_PLUGIN_ROOT}/skills/sync-recordings/SKILL.md`) — unattended when this run is
-unattended, interactive otherwise. Its step 1 runs `sync reconcile-reviews`,
+unattended, interactive otherwise. The workflow's steps 8–11 (the owner's
+on-demand triage and processing) never run here, in either mode: this run
+processes in its own stage 4. Its step 1 runs `sync reconcile-reviews`,
 which IS this pipeline's reconcile stage. Record what it reports: synced
 stems, folded ticks, conflicts, per-adapter lines.
 
@@ -223,183 +230,11 @@ M365: skip with one line in the summary.
 
 Runs every evening, whatever stage 3b did — off, skipped or failed.
 
-**Refresh:**
-
-```bash
-python3 "$VAULTLIB" sync reconcile-reviews --vault "$VAULT"
-python3 "$VAULTLIB" sync update-queue --vault "$VAULT" --today <today> --owner <owner-slug>
-```
-
-The second `reconcile-reviews` is deliberate, and it is the only place this
-pipeline repeats a step: a sync with recordings to process can run for the
-better part of an hour, and a tick placed in Meetings.base during that window
-would otherwise fold tomorrow evening instead of tonight. It is one cheap
-read of `20-meetings/`; add anything it `flipped` to the folded-ticks count
-you recorded above, and surface its `conflict_ticks` the same way step 1's
-were.
-
-This writes `meetings-7d` / `meetings-30d` / `key-people` on active projects
-and `meetings-7d` / `meetings-30d` on people (confirmed meetings only — the
-review queue is the quality gate), and returns `projectsNeedingUpdate`: each
-entry carries `indexPath`, `decisionsDir`, `lastUpdated`, `stateUpdated`,
-`newFiles`, `newNotes` (owner notes ticked Include that belong to the project), and the `existingDecisions` projection. Next to the queue it returns
-`notesNotQueued`: harvested notes with projects that no queue entry carries
-(their project could not be queued) — the write-back in stage 4 never marks
-them. Carry `warnings` — especially `SELF-CHECK`
-lines — into the final summary verbatim.
+Follow section B of `${CLAUDE_PLUGIN_ROOT}/skills/evening-sync/references/process.md`.
 
 ## Stage 4 — Project-state updates
 
-If the queue is empty, record "no projects to update", run the write-back for
-your notes below (a note with no project is still marked), then go to stage 6.
-Otherwise, dispatch one subagent per queued project (each with `model:
-sonnet`), each carrying the queue entry, the harvest jottings that mention
-the project, today's date, and these instructions.
-
-**Dispatch in blocking batches of at most 3 — this is the cap, not a
-suggestion layered on top of it.** Send ONE message containing at most 3
-blocking Agent calls (`run_in_background: false`); only once every call in
-that message has returned do you send the next message with the next batch
-of up to 3, repeating until every queued project has been dispatched. There
-is no background mode for this fan-out: a blocking call already returns
-exactly when its subagent finishes, so a batch's completion is the signal to
-send the next one — never a separate check. `/sync-recordings`'s own fan-out
-in step 6 dispatches its worker batches the same shape.
-
-The instructions each subagent gets:
-
-1. Read the `newFiles` meetings end-to-end — Key Takeaways, Debrief, Action
-   Items.
-   When the entry has `newLogs`, also run
-   `python3 "$VAULTLIB" messages for-project --vault "$VAULT" --slug <slug> --logs <comma-separated newLogs>`
-   and read the returned groups as input next to the meetings. Every state item
-   you take from one (a Needs attention item, an Owe, an Awaiting, a closed action) ends
-   with its source marker, `(mail · <link>)` or `(chat · <link>)` (`mail` or
-   `chat` per the group's `kind`), where `<link>` is the group's `link`
-   verbatim. The marker counts toward the item's
-   word cap (hot potatoes ≤ 30 words, owe and awaiting items ≤ 40), so write
-   the item short enough to carry it. When the entry has `removedSources`, drop
-   every current item whose marker links one of those logs unless a meeting or
-   a remaining group still supports it.
-   When the entry has `newNotes`, read each note end-to-end next to the
-   meetings. Every state item you take from one ends with
-   `(note · <note title>)` — plain text, no wikilink: a note is not a vault
-   object the state writer resolves, and its title may hold characters a
-   link refuses.
-2. Compose the project's **state** as JSON and write it to
-   `$SCRATCH/project-state-<slug>.json`. The CLI renders the whole index body
-   from it and refuses anything over its caps, naming the field:
-
-```bash
-cat > "$SCRATCH/project-state-<slug>.json" <<'JSON'
-{
-  "as_of": "<today>",
-  "stage": "one or two sentences, ≤ 60 words",
-  "hot_potatoes": [{"signal": "red", "text": "≤ 30 words — needs the owner's hand this week"},
-                   {"signal": "amber", "text": "≤ 30 words — a risk building, nothing to do yet"}],
-  "insights": ["≤ 30 words, at most two"],
-  "defining_decision": "<decision stem under this project, or null>",
-  "coming_up": [{"when": "Wed 16 Sept", "what": "≤ 40 words", "date": "2026-09-16"},
-                {"when": "Thu 1 Oct", "what": "Contract signature", "date": "2026-10-01", "milestone": true}],
-  "owe": [{"owner": "Full Name", "items": ["one task per item — never chain with ';'"]}],
-  "awaiting": ["…"], "questions": ["…"], "pending": ["…"], "watch": ["…"],
-  "context": {"contacts": "…", "source": "…"}
-}
-JSON
-python3 "$VAULTLIB" project state write --vault "$VAULT" --slug <slug> \
-  --state "$SCRATCH/project-state-<slug>.json" --today <today>
-```
-
-   Start from the index as it stands (read it: the current card, Coming up,
-   and every Background list are your prior state) and fold the new meetings
-   in — carry items that are still open, drop the ones the meetings closed,
-   never invent. `hot_potatoes` are the ≤ 3 things the owner must act on or
-   watch this week; `insights` are patterns, not events. `coming_up` holds
-   dated events only, ≤ 10 rows, the `date` sorts them; drop the ones that
-   have passed. Mark the significant events — a go-live, a signature, a
-   steerco decision, not a routine sync — with `"milestone": true`; it needs
-   a `date`. The Projects table's next milestone is the first marked row
-   dated today or later, and with none it is cleared, so carry the mark
-   forward on rows that keep it (the current one is `next-milestone` in the
-   frontmatter). Identity names
-   (entities, projects, people) go in as `[[slug]]` wikilinks — the CLI
-   rewrites them to links that open. A refusal names the field and the cap;
-   fix that field and retry once. `state write` also stamps `last-updated`
-   and `state-updated` — that timestamp, not the day in `last-updated`, is
-   what the next run's update queue compares against each meeting's
-   datetime or, when later, its `confirmed-at` stamp; so a meeting ticked
-   after tonight's write queues tomorrow, however old the meeting itself
-   is. Do **not** call `project touch` separately.
-3. Never edit `index.md` with your editor — the body is machine-rendered and
-   a hand edit is overwritten on the next run; the owner's own `## Notes`
-   section at the bottom, if present, is the one thing the CLI preserves.
-4. Decision capture: extract candidates from the new meetings, the
-   harvest jottings, the message log groups AND the `newNotes` read in step 1, then follow
-   `${CLAUDE_PLUGIN_ROOT}/skills/log-decision/SKILL.md` in **background mode**
-   (`/log-decision <slug> --background`) with those candidates as the
-   source. A decision from a message log group carries `source: <log stem>`, where `<log stem>` is the
-   group's `log` field. A decision from a note carries `source: <note stem>`.
-   Its rules apply unchanged: the material-decision test (commits
-   the engagement AND changes a stakeholder's behaviour), dedup against
-   `existingDecisions` (a `dismissed` one included — the owner rejected it,
-   so it is never captured again), supersession only on explicit conflict language,
-   never delete, status flips only. Writing nothing is a valid outcome.
-5. Return a fenced JSON block: `{"slug", "stateWritten": bool,
-   "decisionsWritten": [stems], "decisionsSkipped": N, "notes"}`. A subagent
-   that fails or returns no block becomes a warning, not a retry.
-
-Pin the model rather than letting it inherit. This pipeline is built to run
-unattended every evening, and a subagent spawned with no `model` runs at
-whatever the session costs — a scheduled run started from an expensive
-session quietly bills every project at that rate. The work is bounded: read
-the named meetings, compose the state JSON, apply the material-decision
-test. `/sync-recordings`'s own fan-out in stage 3 pins the same way.
-
-**Why this is a hard batching rule and not a warning.** A live cost analysis
-of this pipeline found a run whose orchestrator dispatched a 4th subagent
-within seconds of narrating "dispatching the first 3", then spawned that
-batch in the background and spent roughly 80 extra calls — polling tools and
-idle `Bash(true)` checks — babysitting it over twelve minutes; each idle
-check re-reads the full session context, and that alone was most of the
-run's bill. A prose warning against exactly this ("dispatch as blocking
-calls, never poll") was already in this skill at the time, and did not
-bind. The batching instruction above replaces that warning with a shape
-that leaves no room for the same reading: a batch is at most 3, sent as one
-message of blocking calls, and the only thing that ever triggers the next
-batch is that message returning — there is no step where "send one more"
-or "check on it" is even an available move.
-
-**A subagent that never returns is a warning, never a silently dropped
-item — but there is nothing to check on while a batch is in flight.**
-Because stage-4 dispatch is strictly blocking, you cannot "notice" a
-straggler mid-batch — the message you sent returns when every call in it is
-done, full stop. This differs from `/sync-recordings` step 6, which states a
-duration-scaled patience rule (a worker is a straggler only after
-max(10 minutes, half the recording's duration)) because that fan-out has a
-concrete per-item duration to scale against and a documented incident of a
-42-minute-transcript worker being written off too early. Stage-4 projects
-have no equivalent duration signal, so no such formula applies here; if the
-harness itself reports a dispatch as failed or timed out, name the project
-in the final summary as a ⚠ warning rather than silently dropping it — that
-is the only patience judgment stage 4 makes.
-
-Projects with only `needs-review` meetings never reach the queue — do not
-"help" one by confirming meetings yourself.
-
-**Write-back for your notes.** After every stage-4 batch has returned, take
-each harvested note with a `body` and mark a note only when it appears in at
-least one queue entry's `newNotes` and every such entry came back
-`stateWritten: true`, or when its harvested `projects` is empty. A note in
-`notesNotQueued` is never marked: it keeps `include` ticked and gets one
-`sync_notes` line.
-
-```bash
-python3 "$VAULTLIB" notes mark-absorbed --vault "$VAULT" --path "<path>" --date <today>
-```
-
-A note whose project failed keeps `include` ticked and is read again tomorrow;
-say so in `sync_notes`. `missing` (the owner deleted or moved it during the run)
-is not an error.
+Follow sections C, D and E of `${CLAUDE_PLUGIN_ROOT}/skills/evening-sync/references/process.md`, passing the stage-2 harvest jottings to C. Record its Returns for stages 6 and 7.
 
 ## Stage 5 — Tomorrow's calendar and prep
 
@@ -422,6 +257,9 @@ immediately on a refusal, and in any case before the run ends:
 ```bash
 python3 "$VAULTLIB" scratch sweep --dir "$SCRATCH"
 ```
+
+Prep never reads a person page's `## What I know`: facts about people stay
+on their page.
 
 When the gate passes, pull `next_business_day`'s events; compute the query
 window deterministically:
@@ -541,8 +379,12 @@ names the field, so one retry always suffices.
   The CLI renders it as the *Mail and Teams* block right after *At a
   glance*, inside the recap (below the *Waiting for you* queues). Build it
   in this order:
-  1. `python3 "$VAULTLIB" messages status --vault "$VAULT" --now <now UTC> [--first-run-since <since from stage 3b, first run only>] [--auth-error]`
+  1. `python3 "$VAULTLIB" messages status --vault "$VAULT" --now <now UTC> [--first-run-since <since from stage 3b, first run only>] [--auth-error] --peek`
      gives `{"lines": [...]}`; use those lines verbatim as `status` (at most 3).
+     `--peek` changes nothing. Once `daily-note write` has succeeded **and**
+     its `recap_skipped` is false, run the exact same command once more
+     without `--peek`: that is what drops the shown lines, so a refused
+     write or a skipped recap keeps them for the next note.
      Pass `--auth-error` when stage 3b's outcome line was `auth-error`: the
      CLI then adds the one line asking the owner to reconnect Microsoft 365;
      never write that line yourself.
@@ -562,9 +404,10 @@ names the field, so one retry always suffices.
      no internal terms.
 
   Run steps 1 and 2 exactly once per evening and reuse their results on any
-  retry of the daily-note payload — never run them again: `messages status`
-  clears the closed-unread state and `messages keywords-propose` records the
-  proposal, so a second run would lose or double what the first one did.
+  retry of the daily-note payload — never run them again (apart from the
+  one `messages status` without `--peek` after a successful write):
+  `messages keywords-propose` records the proposal, so a second run would
+  double it.
 
 The catch-up banner is the CLI's: `dates plan`'s `is_catchup` becomes the
 callout on write, and a banner you put in a payload is stripped with a
@@ -590,7 +433,7 @@ the vault.
 cat > "$SCRATCH/daily-note.payload.json" <<'JSON'
 {
   "date": "<next_business_day>",
-  "recap_window": {"from": "<recap_from>", "to": "<recap_to>",
+  "recap_window": {"from": "<recap_from>", "to": "<recap_to>", "plan_for": "<plan_for>",
                    "detailed_from": "<recap_detail_from, only when capped>"},
   "recap": {
     "glance": {
@@ -648,7 +491,9 @@ window's meetings, jottings and decisions and stamps the digest on the recap
 marker. A re-run over an unchanged input set comes back with
 `recap_skipped: true` and leaves the recap byte-identical — that is success,
 not a failure to write. Omitting `recap_window` silently forfeits both the
-guard and the catch-up banner, so always pass it. That applies to a
+guard and the catch-up banner, so always pass it. Copy `plan_for` from
+`dates plan` verbatim: it decides which missed evenings the banner counts,
+so the note says the same number as the plan. That applies to a
 *correction* too: if you have to rewrite a recap you already wrote this run,
 re-run `daily-note write` with `recap_window` again. A rewrite without it
 strips the stamp, and the next evening regenerates a recap the vault owner has
@@ -659,10 +504,19 @@ already read. Carry any `warnings` from the result into stage 7 verbatim.
 Counts come from what exists, not from what you intended (a lab run once
 reported "Processed: 0" after writing a meeting correctly):
 
-- tomorrow's note exists at `note_to_write` with a fresh mtime;
+- tomorrow's note exists at `note_to_write`, and `daily-note write` returned
+  `ok` (a re-run with nothing new returns `changed: false` and leaves the
+  file's date alone — that is not a failure);
 - every project reported updated shows today's `last-updated` **and a fresh
   `state-updated`** in its frontmatter;
 - every recording reported synced has its stem in `20-meetings/`.
+
+Then release the run lock, before the summary (`released: false` is expected
+when stage 1 carried on without it — not a failure):
+
+```bash
+python3 "$VAULTLIB" runlock release --vault "$VAULT" --routine evening-sync
+```
 
 ```
 ## Evening Sync Complete
@@ -672,6 +526,8 @@ reported "Processed: 0" after writing a meeting correctly):
 **Mail and Teams:** {outcome line | off | skipped: no M365 | failed: …}
 **To Do's:** {N} new → `65-to-dos/` ({K} with a project, {D} with a deadline) · {C} closed from ticks in daily notes | skipped: vault below structure 12
 **Metrics refreshed:** {P} projects · {Q} people
+**Entity pages updated:** {names, a team as "Finance (Acme)"} | none
+**People pages:** {N} facts added for {M} people | none
 **Projects updated:** {N} ({slugs}) — {M} decisions captured for review, {K} candidates skipped
 **Next note:** `60-daily-notes/{date}.md` ({DayName}, {tomorrow | today — for-today catch-up}) — {N} meetings prepped | calendar unavailable | calendar REFUSED — signed in as a different account (account-mismatch) | calendar REFUSED — no account bound to this vault yet (no-account-hint) | m365 disabled
 **Recap window:** {recap_from} → {recap_to} — {catch-up: N business days missed, detailed from {date}} | current

@@ -78,3 +78,7 @@ Reference material for the evening run and for when you need the detail. Folded 
 > [!info]- Context
 > - **Contacts** — Dana Whitfield (VP Procurement, buyer-side lead)
 > - **Source** — Intro call 2026-03-02, off a conference introduction
+
+## Notes
+
+- Engagement note (moved from the Nordbridge Components page, 2026-10-12): Three-plant rollout proposal, Phase 1 site still open

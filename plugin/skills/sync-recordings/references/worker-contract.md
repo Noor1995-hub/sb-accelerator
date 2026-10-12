@@ -41,9 +41,12 @@ enrichment (write it to `rec_N.note.json`); on failure proceed without.
 
 ## Fetching — M365
 
-Your briefing carries the event's URI and your scratch stem
-(`m365_event_<n>`) — no pre-read event file, no `transcript_url`. Fetch the
-event and derive your own ids before you touch a transcript:
+A worker dispatched by `/sync-recordings` always gets the **pre-fetched
+event variant** below — the probe already read the event — so it skips
+step 1. Steps 1–2 are the raw-URI path, which the probe contract restates:
+the briefing carries the event's URI and a scratch stem (`m365_event_<n>`)
+— no pre-read event file, no `transcript_url`. Fetch the event and derive
+your own ids before you touch a transcript:
 
 1. One `read_resource` call on the event URI you were given, **exactly as
    given**. It is a CLI-derived `calendar:///events/<id>` form that may
@@ -169,7 +172,7 @@ event and derive your own ids before you touch a transcript:
 Sanctioned Graph calls: exactly two — your own event, your own transcript.
 You make no other Graph call — not the calendar, not another occurrence.
 
-**Pre-fetched event variant.** Some briefings name an already-fetched event
+**Pre-fetched event variant.** Every `/sync-recordings` worker briefing names an already-fetched event
 in two forms — the **object** file (for Reassemble and Attendees below)
 and its one-element **array** wrapping (for the `ids` call right here) —
 plus its already-derived `recording_id` and a verbatim `transcript_url`,
@@ -212,12 +215,23 @@ python3 "$VAULTLIB" person ensure --vault "$VAULT" --name "<name>" --email "<add
 
 The address is stored on a new person and filled into an existing one whose
 email is empty; a set email is never overwritten. Leave `--email` off for an
-entry with no address — never guess one.
+entry with no address — never guess one. A person already on file with that
+address comes back under their own slug, whatever name Outlook shows
+("Peeters, Jan"), so no second note is made.
+
+Skip an entry that is a meeting room or equipment rather than a person (an
+entry typed `resource`, or a name and address that plainly belong to a
+room); when unsure, keep it.
+
+Do not link attendees to an entity: your briefing carries no per-attendee
+routing, so which entity a person belongs to would be a guess.
 
 Use each result's `slug`, plus the vault owner's person slug your prompt
 already carries, for the payload's `attendees` — the owner's slug arrives
 pre-resolved (the orchestrator read it from `config read`'s `owner`), so
-you never call `person ensure` for it yourself. Count the calls whose
+you never call `person ensure` for it yourself. The owner is usually among
+the event's attendees too: list every slug once, so a result that is the
+owner's own slug adds nothing. Count the calls whose
 result carries `"created": true` — those are people this vault has never
 seen before; everyone else came back `"created": false`.
 
@@ -284,11 +298,13 @@ Extract from the blob file the `reassemble` result named — never from the raw
 transcript files you wrote to scratch: the M365 one is unparsed WEBVTT, and
 for a recurring series it may carry other occurrences' transcripts (an inbox
 item has no blob: extract from the file you were given). Read the blob
-**completely**: `reassemble` reports `blob_lines` and `blob_chars`, and
-a long meeting's blob is larger than one Read call returns. When
-`blob_chars` is over 60,000, read it in consecutive `offset`/`limit`
-windows of 400 lines until you have covered all `blob_lines` lines, and
-draft from the whole meeting — never from the first window alone. Read
+**completely**: both `reassemble` commands report `blob_lines` and
+`blob_chars`, and a long meeting's blob is larger than one Read call
+returns. When `blob_chars` is over 60,000, read it in consecutive
+`offset`/`limit` windows of 400 lines until you have covered all
+`blob_lines` lines, and draft from the whole meeting — never from the first
+window alone. An inbox file gets the same treatment: if one Read did not
+reach its end, keep reading in 400-line windows until it does. Read
 `references/payload-contract.md` (its path is in your prompt) and draft
 the payload to `$SCRATCH/<scratch stem>.payload.json`: content fields from the
 transcript; every routing field copied from your prompt unchanged — except

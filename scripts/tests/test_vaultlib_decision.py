@@ -704,3 +704,127 @@ def test_a_dismissed_decision_cannot_be_superseded(tmp_path):
     # nothing was written for the refused supersession
     stems = [e["stem"] for e in decision.list_decisions(root, PROJECT)["decisions"]]
     assert stems == ["2026-03-10-noise"]
+
+
+def _decision_vault(tmp_path):
+    folder = tmp_path / "30-projects" / "acme-erp" / "decisions"
+    folder.mkdir(parents=True)
+    (tmp_path / "30-projects" / "acme-erp" / "index.md").write_text(
+        "---\ntype: project\nslug: acme-erp\n---\n", encoding="utf-8")
+    note = folder / "2026-10-12-go-live-moves.md"
+    note.write_text(
+        '---\ntype: decision\nproject: acme-erp\ndate: 2026-10-12\nstatus: active\n'
+        'summary: "Go-live moves to 3 Nov"\nsupersedes: "2026-09-01-go-live-oct"\n'
+        'reviewed: false\n---\n# Go-live moves to 3 Nov\n', encoding="utf-8")
+    return tmp_path, note
+
+
+def test_review_keep_sets_reviewed(tmp_path):
+    root, note = _decision_vault(tmp_path)
+    result = decision.review(root, note.relative_to(root).as_posix(), keep=True)
+    assert result["reviewed"] is True and result["dismissed"] is False
+    assert "reviewed: true" in note.read_text(encoding="utf-8")
+
+
+def test_review_dismiss_sets_archived_and_names_what_it_replaced(tmp_path):
+    root, note = _decision_vault(tmp_path)
+    result = decision.review(root, note.relative_to(root).as_posix(), keep=False)
+    text = note.read_text(encoding="utf-8")
+    assert "archived: true" in text and "reviewed: false" in text
+    assert result["supersedes"] == "2026-09-01-go-live-oct"
+
+
+def test_review_refuses_a_non_decision(tmp_path):
+    root, _ = _decision_vault(tmp_path)
+    with pytest.raises(decision.DecisionError):
+        decision.review(root, "30-projects/acme-erp/index.md", keep=True)
+    with pytest.raises(decision.DecisionError):
+        decision.review(root, "../elsewhere.md", keep=True)
+
+
+def test_source_resolves_to_a_session_record(tmp_path):
+    root = vault_with_project(tmp_path)
+    sessions = root / "_messages" / "sessions"
+    sessions.mkdir(parents=True)
+    (sessions / "2026-10-12-pricing-approach.md").write_text(
+        "---\ntype: session\n---\n# x\n", encoding="utf-8")
+    result = decision.write(root, project=PROJECT, date="2026-10-12",
+                            payload=note(source="2026-10-12-pricing-approach"),
+                            reviewed=False)
+    assert result["source"] == "2026-10-12-pricing-approach"
+
+
+def test_unknown_source_still_refuses_with_sessions_present(tmp_path):
+    root = vault_with_project(tmp_path)
+    (root / "_messages" / "sessions").mkdir(parents=True)
+    with pytest.raises(decision.DecisionError, match="matches no meeting"):
+        decision.write(root, project=PROJECT, date="2026-10-12",
+                       payload=note(source="2026-10-12-nothing"), reviewed=False)
+
+
+# --- withdraw (review 2026-10-12) --------------------------------------------
+
+def test_withdraw_flips_an_active_decision_and_says_why(tmp_path):
+    root, note = _decision_vault(tmp_path)
+    rel = note.relative_to(root).as_posix()
+    result = decision.withdraw(root, rel, date="2026-10-20", why="Steerco reversed it")
+    text = note.read_text(encoding="utf-8")
+    assert result["status"] == "withdrawn" and "status: withdrawn" in text
+    assert text.rstrip().endswith("**Withdrawn** — 2026-10-20 · Steerco reversed it.")
+    assert "# Go-live moves to 3 Nov" in text          # nothing else is touched
+    with pytest.raises(decision.DecisionError, match="only an active"):
+        decision.withdraw(root, rel, date="2026-10-21", why="again")
+
+
+def test_withdraw_refuses_without_a_reason_a_dismissed_note_or_an_earlier_date(tmp_path):
+    root, note = _decision_vault(tmp_path)
+    rel = note.relative_to(root).as_posix()
+    with pytest.raises(decision.DecisionError, match="--why"):
+        decision.withdraw(root, rel, date="2026-10-20", why="  ")
+    with pytest.raises(decision.DecisionError, match="after"):
+        decision.withdraw(root, rel, date="2026-10-01", why="too early")
+    decision.review(root, rel, keep=False)
+    with pytest.raises(decision.DecisionError, match="dismissed"):
+        decision.withdraw(root, rel, date="2026-10-20", why="x")
+
+
+# --- dismissing a replacement restores what it replaced (owner, 2026-10-12) --
+
+def _replaced_pair(tmp_path):
+    root, note = _decision_vault(tmp_path)
+    folder = note.parent
+    prior = folder / "2026-09-01-go-live-oct.md"
+    prior.write_text(
+        '---\ntype: decision\nproject: acme-erp\ndate: 2026-09-01\nstatus: superseded\n'
+        'summary: "Go-live in October"\nreviewed: true\n---\n# Go-live in October\n\n'
+        "**Superseded** — 2026-10-12 · replaced by [[2026-10-12-go-live-moves]].\n",
+        encoding="utf-8")
+    return root, note, prior
+
+
+def test_dismissing_a_replacement_in_the_chat_restores_the_prior(tmp_path):
+    root, note, prior = _replaced_pair(tmp_path)
+    result = decision.review(root, note.relative_to(root).as_posix(), keep=False)
+    text = prior.read_text(encoding="utf-8")
+    assert result["restored"] == "30-projects/acme-erp/decisions/2026-09-01-go-live-oct.md"
+    assert "status: active" in text and "**Restored** —" in text
+    assert "[[2026-10-12-go-live-moves]], was dismissed" in text
+    assert "**Superseded** —" in text                     # the trace stays
+
+
+def test_a_dismiss_ticked_in_the_table_is_restored_by_the_evening_fold(tmp_path):
+    from vaultlib import syncjob
+    root, note, prior = _replaced_pair(tmp_path)
+    note.write_text(note.read_text(encoding="utf-8").replace("reviewed: false", "reviewed: false\narchived: true"),
+                    encoding="utf-8")
+    first = syncjob.reconcile_reviews(root, timestamp="2026-10-13T19:00")
+    assert first["decisions_restored"] == ["30-projects/acme-erp/decisions/2026-09-01-go-live-oct.md"]
+    assert "Restored** — 2026-10-13" in prior.read_text(encoding="utf-8")
+    again = syncjob.reconcile_reviews(root, timestamp="2026-10-14T19:00")
+    assert again["decisions_restored"] == []              # idempotent
+
+
+def test_keep_and_unrelated_priors_are_left_alone(tmp_path):
+    root, note, prior = _replaced_pair(tmp_path)
+    decision.review(root, note.relative_to(root).as_posix(), keep=True)
+    assert "status: superseded" in prior.read_text(encoding="utf-8")

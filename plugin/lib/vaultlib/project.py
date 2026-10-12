@@ -15,7 +15,7 @@ from . import markdown, naming, schema, vault
 
 PROJECTS_DIR = vault.PROJECTS_DIR
 ENTITIES_DIR = vault.ENTITIES_DIR
-PROJECT_QUOTE_KEYS = frozenset({"project-name", "next-milestone"})
+PROJECT_QUOTE_KEYS = frozenset({"project-name", "next-milestone", "stage"})
 # Seconds are accepted on the way in (a caller may pass a fuller stamp) but
 # never written — the field is minute-precision, like a meeting's `date`.
 ISO_DATETIME_RE = re.compile(r"\A\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?\Z")
@@ -109,6 +109,26 @@ def _validate_inputs(root: Path, slug: str, project_type: str,
             f"maximum two levels of nesting: {parent!r} already has a parent "
             f"({parent_data['parent']!r})"
         )
+    # A sub-project sits under a project of the same entity — or of the same
+    # top-level entity, so a team's work can hang under its parent's project
+    # (review 2026-10-12: a Nordbridge project under a Meridian parent was
+    # accepted).
+    parent_entity = str(parent_data.get("entity") or "")
+    if parent_entity and _top_entity(root, parent_entity) != _top_entity(root, entity):
+        raise ProjectError(
+            f"parent project {parent!r} belongs to {parent_entity!r}, not to "
+            f"{entity!r} — a sub-project stays within its entity"
+        )
+
+
+def _top_entity(root: Path, slug: str) -> str:
+    """The entity itself, or the entity it is a team of."""
+    dossier = root / ENTITIES_DIR / slug / "dossier.md"
+    try:
+        data, _ = markdown.split_frontmatter(dossier.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return slug
+    return str(data.get("parent") or slug)
 
 
 def scaffold(root: Path, *, name: str, project_type: str, entity: str,
@@ -142,6 +162,12 @@ def scaffold(root: Path, *, name: str, project_type: str, entity: str,
             "owner joins to 50-people/<slug>.md"
         ) from exc
     _validate_inputs(root, slug, project_type, entity, parent)
+    # owner joins to a person note; a dangling one is a hole in the
+    # relationship graph (review 2026-10-12).
+    if not (root / vault.PEOPLE_DIR / f"{str(owner).strip()}.md").is_file():
+        raise ProjectError(
+            f"owner {owner!r} has no person note at {vault.PEOPLE_DIR}/{owner}.md — "
+            "create it first with: person ensure --name \"<Full Name>\"")
 
     frontmatter = {
         "type": "project",
@@ -161,6 +187,10 @@ def scaffold(root: Path, *, name: str, project_type: str, entity: str,
         "next-milestone": None,
         "next-milestone-date": None,
     }
+    if stage and " ".join(str(stage).split()):
+        # The entity page's live Engagements list reads `stage`; on the card
+        # alone it stayed empty until the first evening state write.
+        frontmatter["stage"] = " ".join(str(stage).split())
     problems = schema.validate("project", frontmatter)
     if problems:
         raise ProjectError(
@@ -281,7 +311,7 @@ def _require_iso_datetime(value, label: str) -> str:
 
 def touch(root, *, slug: str, date_iso: str, timestamp: Optional[str] = None,
           next_milestone=None, next_milestone_date=None,
-          clear_milestone: bool = False) -> dict:
+          clear_milestone: bool = False, stage: Optional[str] = None) -> dict:
     """Bump the auto-maintained frontmatter of a project-state update.
 
     Stage-4 subagents send the project state as JSON and `project state
@@ -344,6 +374,11 @@ def touch(root, *, slug: str, date_iso: str, timestamp: Optional[str] = None,
     elif clear_milestone:
         updated = markdown.upsert_scalar_field(updated, "next-milestone", "")
         updated = markdown.upsert_scalar_field(updated, "next-milestone-date", "")
+    if stage:
+        # The card's Stage sentence, stored so the entity page's Engagements
+        # can show it live (#273). Collapsed to one line like a heading.
+        updated = markdown.upsert_scalar_field(
+            updated, "stage", markdown.emit_scalar(" ".join(str(stage).split()), quoted=True))
     changed = updated != text
     if changed:
         vault.atomic_write(index_path, updated)

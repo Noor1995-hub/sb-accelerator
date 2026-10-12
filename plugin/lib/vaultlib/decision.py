@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Tuple
 
 from . import markdown, naming, schema, vault
 
@@ -40,6 +40,9 @@ OPTIONAL_NOTE_FIELDS = ("status", "source", "supersedes")
 # direction, appended so a reader of the old note sees what replaced it without
 # running a query. Append-only — the prior note's prose is never rewritten.
 SUPERSEDED_FOOTER = "**Superseded** — {date} · replaced by [[{stem}]]."
+WITHDRAWN_FOOTER = "**Withdrawn** — {date} · {why}"
+RESTORED_FOOTER = ("**Restored** — {date} · back in force: the decision that "
+                   "replaced it, [[{stem}]], was dismissed as not a real decision.")
 
 
 class DecisionError(Exception):
@@ -273,6 +276,8 @@ def _resolve_source(root: Path, raw: Optional[str]) -> Optional[str]:
         found = _find_note(root / MEETINGS_DIR, strict_stem)
         if found is None:
             found = _find_note(root / vault.MESSAGES_DIR, strict_stem)
+        if found is None:
+            found = _find_note(root / vault.MESSAGES_DIR / "sessions", strict_stem)
 
     # Search owner notes with lenient stem
     if found is None:
@@ -284,7 +289,8 @@ def _resolve_source(root: Path, raw: Optional[str]) -> Optional[str]:
     if found is None:
         raise DecisionError(
             f"source {lenient_stem!r} matches no meeting note at {MEETINGS_DIR}/{lenient_stem}.md, "
-            f"no log at {vault.MESSAGES_DIR}/{lenient_stem}.md and no note in "
+            f"no log at {vault.MESSAGES_DIR}/{lenient_stem}.md, no session at "
+            f"{vault.MESSAGES_DIR}/sessions/{lenient_stem}.md and no note in "
             f"{vault.THOUGHTS_DIR}/ — omit 'source' and put the provenance in the 'why' text"
         )
     return found.stem
@@ -469,3 +475,126 @@ def write(root: Path, *, project: str, date: str, payload: dict,
             applied["footer_added"] = True
         result["supersession"] = applied
     return result
+
+
+def _decision_note(root: Path, path: str) -> Tuple[Path, str, dict]:
+    """A decision note by vault-relative path: (file, text, frontmatter)."""
+    target = (root / path).resolve()
+    projects = (root / vault.PROJECTS_DIR).resolve()
+    if (target.suffix != ".md" or target.parent.name != "decisions"
+            or target.parent.parent.parent != projects):
+        raise DecisionError(f"{path!r} is not a decision note under "
+                            f"{vault.PROJECTS_DIR}/<project>/decisions/")
+    if not target.is_file():
+        raise DecisionError(f"{path!r} does not exist")
+    text = target.read_text(encoding="utf-8")
+    data, _ = markdown.split_frontmatter(text)
+    if data.get("type") != "decision":
+        raise DecisionError(f"{path!r} is not a decision note (type is "
+                            f"{data.get('type')!r})")
+    return target, text, data
+
+
+def withdraw(root: Path, path: str, *, date: str, why: str) -> dict:
+    """A decision that was reversed rather than replaced: `active` becomes
+    `withdrawn`, and a footer says when and why. Nothing is deleted — the
+    trace is the point (review 2026-10-12: the ontology named this status,
+    but no command could set it on an existing note)."""
+    why = " ".join(str(why or "").split())
+    if not why:
+        raise DecisionError("--why is required: one line on what reversed it")
+    target, text, data = _decision_note(root, path)
+    if data.get("archived") is True:
+        raise DecisionError(f"{path!r} was dismissed as not a real decision — "
+                            "there is nothing in force to withdraw")
+    if data.get("status") != "active":
+        raise DecisionError(f"{path!r} has status {data.get('status')!r} — only an "
+                            "active decision can be withdrawn")
+    if data.get("date") is not None and str(date) < str(data.get("date"))[:10]:
+        raise DecisionError(f"{path!r} is dated {data.get('date')}, after {date}")
+    try:
+        updated = markdown.replace_scalar_field(text, "status", "withdrawn")
+    except ValueError as exc:
+        raise DecisionError(f"{path!r} cannot be updated: {exc}") from exc
+    footer = WITHDRAWN_FOOTER.format(date=date, why=why.rstrip(".") + ".")
+    vault.atomic_write(target, updated.rstrip("\n") + "\n\n" + footer + "\n")
+    return {"path": target.relative_to(root.resolve()).as_posix(),
+            "project": data.get("project"), "summary": data.get("summary"),
+            "status": "withdrawn", "date": date}
+
+
+def review(root: Path, path: str, *, keep: bool) -> dict:
+    """The owner's Keep or Dismiss on one decision, given in the chat (#271).
+
+    The same two ticks as Decisions.base: Keep is `reviewed: true`, Dismiss is
+    `archived: true`. Dismiss says the note was never a real decision, so a
+    decision it replaced is back in force: that one is restored (owner's call,
+    2026-10-12), and the result names it for the caller to tell the owner.
+    """
+    target, text, data = _decision_note(root, path)
+    field = "reviewed" if keep else "archived"
+    updated = markdown.upsert_scalar_field(text, field, "true")
+    if updated != text:
+        vault.atomic_write(target, updated)
+    data, _ = markdown.split_frontmatter(updated)
+    restored = None
+    if not keep:
+        found = restore_dismissed(root, today=vault.today_iso(),
+                                  only=target.resolve())
+        restored = found[0] if found else None
+    return {
+        "path": target.relative_to(root.resolve()).as_posix(),
+        "project": data.get("project"),
+        "summary": data.get("summary"),
+        "reviewed": data.get("reviewed") is True,
+        "dismissed": data.get("archived") is True,
+        "supersedes": _unwrap(data.get("supersedes")),
+        "restored": restored,
+    }
+
+
+def restore_dismissed(root: Path, *, today: str,
+                      only: Optional[Path] = None) -> list:
+    """Put back in force every decision whose replacement was dismissed.
+
+    A dismissed decision (`archived: true`) was not a real decision, so the
+    supersession it made never happened: the decision it replaced flips back
+    from `superseded` to `active` and gains a dated **Restored** footer —
+    appended, never rewritten, like every decision edge. Only a prior whose
+    Superseded footer names the dismissed note is touched, so the call is
+    idempotent and runs every evening (`sync reconcile-reviews`), which is
+    how a Dismiss ticked in Decisions.base reaches it. `only` limits it to
+    one dismissed note. Returns the vault-relative paths restored.
+    """
+    restored: list = []
+    folder = root / vault.PROJECTS_DIR
+    notes = sorted(folder.glob("*/decisions/*.md")) if folder.is_dir() else []
+    for path in notes:
+        if only is not None and path.resolve() != only:
+            continue
+        try:
+            data, _ = markdown.split_frontmatter(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        prior_stem = _unwrap(data.get("supersedes"))
+        if data.get("archived") is not True or not prior_stem:
+            continue
+        prior = _find_note(path.parent, prior_stem)
+        if prior is None:
+            continue
+        prior_text = prior.read_text(encoding="utf-8")
+        try:
+            prior_data, _ = markdown.split_frontmatter(prior_text)
+        except ValueError:
+            continue
+        pointer = f"replaced by [[{path.stem}]]"
+        if prior_data.get("status") != "superseded" or pointer not in prior_text:
+            continue
+        try:
+            updated = markdown.replace_scalar_field(prior_text, "status", "active")
+        except ValueError:
+            continue
+        footer = RESTORED_FOOTER.format(date=today, stem=path.stem)
+        vault.atomic_write(prior, updated.rstrip("\n") + "\n\n" + footer + "\n")
+        restored.append(prior.relative_to(root).as_posix())
+    return restored

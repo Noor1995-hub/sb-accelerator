@@ -379,10 +379,23 @@ def test_status_reports_a_clamped_cursor_once(tmp_path):
         "I'm 7 days behind on your mail and Teams; I'll catch up tonight."]
 
 
+def test_status_peek_keeps_the_catch_up_line_until_a_real_run(tmp_path):
+    # Review 2026-10-12: the line was dropped before the note was written, so
+    # a refused write or a skipped recap lost it for good.
+    root = make_vault(tmp_path)
+    msgstate.advance(root, newest="2026-09-20T18:00:00Z", filled=[], now="2026-09-20T18:50:00Z", new_gaps=[])
+    msgstate.cursor(root, now="2026-10-01T19:00:00Z", timezone=None, utc_offset="+00:00")
+    line = "I couldn't catch up on your mail and Teams from 20 September to 24 September."
+    for _ in range(2):
+        assert line in msglog.status(root, now="2026-10-01T19:00:00Z", first_run_since=None, peek=True)
+    assert line in msglog.status(root, now="2026-10-01T19:00:00Z", first_run_since=None)
+    assert line not in msglog.status(root, now="2026-10-01T19:00:00Z", first_run_since=None, peek=True)
+
+
 def test_status_first_morning_line(tmp_path):
     root = make_vault(tmp_path)
     assert msglog.status(root, now="2026-09-30T19:00:00Z", first_run_since="2026-09-28T22:00:00Z") == [
-        "From today, this note also covers your mail and Teams."]
+        "From now on, this note also covers your mail and Teams."]
 
 
 def test_check_lines_drops_an_unsupported_line(env, tmp_path):
@@ -633,7 +646,7 @@ def test_status_merges_one_interval_closed_for_several_sources_and_never_exceeds
         {"source": "teams", "from": "2026-09-25T00:00:00Z", "to": "2026-09-25T12:00:00Z"}]
     msgstate.save(root, state)
     lines = msglog.status(root, now="2026-10-01T19:00:00Z", first_run_since="2026-09-30T22:00:00Z")
-    assert lines == ["From today, this note also covers your mail and Teams.",
+    assert lines == ["From now on, this note also covers your mail and Teams.",
                      "I couldn't catch up on your mail and Teams from 20 September to 22 September.",
                      "I couldn't catch up on your mail from 23 September to 24 September."]
     assert msglog.status(root, now="2026-10-01T19:00:00Z", first_run_since=None) == [
@@ -673,3 +686,87 @@ def test_an_empty_gap_fetch_closes_the_gap_end_to_end(tmp_path):
     msglog.check(str(scratch))
     msglog.write(root, str(scratch), now="2026-09-30T18:52:00Z", **TZ)
     assert msgstate.load(root)["gaps"] == []
+
+
+def test_day_log_readers_ignore_session_records(tmp_path):
+    root = make_vault(tmp_path)
+    folder = root / "_messages" / "sessions"
+    folder.mkdir(parents=True)
+    (folder / "2026-10-12-x.md").write_text("---\ntype: session\n---\n", encoding="utf-8")
+    assert msglog._logs(root) == []
+
+
+def _set_group(root, *, projects=(), weak=(), entities=()):
+    path = root / "_messages" / "2026-09-30-messages.md"
+    loaded = msglog.load_log(path)
+    group = loaded["data"]["groups"][0]
+    group.update(projects=list(projects), projects_weak=list(weak), entities=list(entities))
+    msglog._resave(root, path, loaded["data"], loaded["frontmatter"])
+
+
+def _project(root, slug, entity):
+    folder = root / "30-projects" / slug
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / "index.md").write_text(
+        f"---\ntype: project\nslug: {slug}\nentity: {entity}\nstatus: active\n---\n", encoding="utf-8")
+
+
+def test_for_entity_returns_a_group_tagged_with_the_entity_and_no_project(env):
+    """#273: entity-only mail must reach the entity's update."""
+    root = written_log(env)
+    _set_group(root, entities=["acme"])
+    [got] = msglog.for_entity(root, slug="acme", logs=["2026-09-30-messages"])
+    assert got["link"] == "[[_messages/2026-09-30-messages|30 Sep]]" and got["kind"] == "mail"
+    assert msglog.for_entity(root, slug="globex", logs=["2026-09-30-messages"]) == []
+
+
+def test_for_entity_returns_a_group_linked_through_a_project_of_the_entity(env):
+    root = written_log(env)
+    _project(root, "acme-erp", "acme")
+    _set_group(root, projects=["acme-erp"])
+    assert len(msglog.for_entity(root, slug="acme", logs=["2026-09-30-messages"])) == 1
+    _set_group(root, projects=["acme-erp"], weak=["acme-erp"])
+    assert msglog.for_entity(root, slug="acme", logs=["2026-09-30-messages"]) == []
+
+
+def test_cli_messages_for_entity(env):
+    import subprocess, sys
+    from pathlib import Path
+    root = written_log(env)
+    _set_group(root, entities=["acme"])
+    cli = Path(__file__).resolve().parents[2] / "plugin" / "lib" / "vaultlib" / "cli.py"
+    out = subprocess.run([sys.executable, str(cli), "messages", "for-entity", "--vault", str(root),
+                          "--slug", "acme", "--logs", "2026-09-30-messages"],
+                         capture_output=True, text=True, encoding="utf-8")
+    payload = json.loads(out.stdout)
+    assert payload["ok"] and len(payload["result"]["groups"]) == 1, out.stderr
+
+
+def _set_people(root, people):
+    path = root / "_messages" / "2026-09-30-messages.md"
+    loaded = msglog.load_log(path)
+    loaded["data"]["groups"][0]["people"] = list(people)
+    msglog._resave(root, path, loaded["data"], loaded["frontmatter"])
+
+
+def test_for_person_returns_the_groups_naming_the_person_with_their_link(env):
+    """#273 piece 4: section E reads a person's groups, with the link its
+    source marker cites."""
+    root = written_log(env)
+    _set_people(root, ["sam-lee"])
+    [got] = msglog.for_person(root, slug="sam-lee", logs=["2026-09-30-messages"])
+    assert got["link"] == "[[_messages/2026-09-30-messages|30 Sep]]" and got["people"] == ["sam-lee"]
+    assert msglog.for_person(root, slug="nobody", logs=["2026-09-30-messages"]) == []
+
+
+def test_cli_messages_for_person(env):
+    import subprocess, sys
+    from pathlib import Path
+    root = written_log(env)
+    _set_people(root, ["sam-lee"])
+    cli = Path(__file__).resolve().parents[2] / "plugin" / "lib" / "vaultlib" / "cli.py"
+    out = subprocess.run([sys.executable, str(cli), "messages", "for-person", "--vault", str(root),
+                          "--slug", "sam-lee", "--logs", "2026-09-30-messages"],
+                         capture_output=True, text=True, encoding="utf-8")
+    payload = json.loads(out.stdout)
+    assert payload["ok"] and len(payload["result"]["groups"]) == 1, out.stderr

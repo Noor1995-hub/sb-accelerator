@@ -32,6 +32,9 @@ BASE_SLUG = "meridian-freight-holdings-yard-automation-program"
 
 def vault_with_entity(tmp_path, slug="meridian-freight-holdings"):
     root = make_vault(tmp_path)
+    (root / "50-people").mkdir(exist_ok=True)
+    (root / "50-people" / "morgan-ellery.md").write_text(
+        '---\nperson-name: "Morgan Ellery"\nslug: morgan-ellery\n---\n', encoding="utf-8")
     dossier = root / "40-entities" / slug / "dossier.md"
     dossier.parent.mkdir(parents=True)
     dossier.write_text(
@@ -54,6 +57,19 @@ def test_scaffold_writes_a_conformant_index(tmp_path):
     assert data["owner"] == "morgan-ellery"
     assert data["created"] == "2026-08-23"
     assert data["parent"] is None
+
+
+def test_scaffold_writes_the_stage_field_the_entity_page_reads(tmp_path):
+    # Review 2026-10-12: the stage reached the card but not `stage`, so the
+    # entity page's Engagements list showed nothing until the evening run.
+    root = vault_with_entity(tmp_path)
+    result = project.scaffold(root, **BASE, stage="Kickoff  agreed")
+    data, _ = md.split_frontmatter((root / result["path"]).read_text(encoding="utf-8"))
+    assert data["stage"] == "Kickoff agreed"
+    assert schema.validate("project", data) == []
+    plain = project.scaffold(root, **{**BASE, "name": "Other"})
+    data, _ = md.split_frontmatter((root / plain["path"]).read_text(encoding="utf-8"))
+    assert "stage" not in data
 
 
 def test_scaffold_creates_the_decisions_directory(tmp_path):
@@ -539,3 +555,26 @@ def test_keywords_add_remove_and_list(tmp_path):
     assert project.keywords_list(root, slug=slug)["keywords"] == ["P-2317"]
     project.keywords_remove(root, slug=slug, keyword="P-2317", today="2026-09-30")
     assert project.keywords_list(root, slug=slug)["keywords"] == []
+
+
+# --- review 2026-10-12: owner and parent must join to something real -------
+
+def test_an_owner_without_a_person_note_is_refused(tmp_path):
+    root = vault_with_entity(tmp_path)
+    with pytest.raises(project.ProjectError, match="person ensure"):
+        project.scaffold(root, **dict(BASE, owner="nobody-here"))
+
+
+def test_a_parent_from_another_entity_is_refused_but_a_team_may_nest(tmp_path):
+    root = vault_with_entity(tmp_path)
+    for slug, extra in (("nordbridge", ""), ("meridian-finance", "parent: meridian-freight-holdings\n")):
+        d = root / "40-entities" / slug / "dossier.md"
+        d.parent.mkdir(parents=True)
+        d.write_text(f'---\ntype: entity\nentity-name: "E"\nslug: {slug}\nstatus: active\n{extra}---\n',
+                     encoding="utf-8")
+    parent = project.scaffold(root, **BASE)["slug"]
+    with pytest.raises(project.ProjectError, match="stays within its entity"):
+        project.scaffold(root, **dict(BASE, name="Elsewhere", entity="nordbridge", parent=parent))
+    team = project.scaffold(root, **dict(BASE, name="Finance yard", entity="meridian-finance",
+                                         parent=parent))
+    assert team["slug"].startswith("meridian-finance-")

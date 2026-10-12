@@ -338,3 +338,24 @@ def test_replace_scalar_field_leaves_a_following_scalar_key_alone():
         OBSIDIAN_EXPANDED, "status", "dormant")
     assert "status: dormant" in updated
     assert "  - priya-nathan\n" in updated  # other nodes untouched
+
+
+def test_remove_field_drops_the_whole_node_and_nothing_else():
+    text = ("---\nperson-name: \"Jan\"\ncompany:\n  - a\n\n  - b\n# note\nrole: \"CFO\"\n---\n\nbody\n")
+    out = md.remove_field(text, "company")
+    assert out == "---\nperson-name: \"Jan\"\n# note\nrole: \"CFO\"\n---\n\nbody\n"
+
+
+def test_remove_field_matches_only_the_top_level_key():
+    text = "---\nslug: x\nother:\n  company: y\nmy-company: z\n---\n"
+    assert md.remove_field(text, "company") == text
+
+
+def test_remove_field_absent_is_byte_identical():
+    text = "---\r\nslug: x\r\n---\r\nbody\r\n"
+    assert md.remove_field(text, "company") == text
+
+
+def test_remove_field_needs_frontmatter():
+    with pytest.raises(ValueError):
+        md.remove_field("no frontmatter\n", "company")

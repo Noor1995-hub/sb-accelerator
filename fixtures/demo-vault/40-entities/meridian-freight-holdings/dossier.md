@@ -23,11 +23,17 @@ last-updated: 2026-06-01
 
 ## Stakeholders
 
-| Name | Title | Role in Decision | Stance | Notes |
-|------|-------|------------------|--------|-------|
-| [[leo-marchetti]] | Chief Operating Officer | sponsor | champion | Decides fast once the case is quantified, and reverses himself just as fast. Wants a total, and will pick before the options are finished. |
-| [[renee-castillo]] | IT Director | evaluator | neutral | Owns the integration work the consolidation created. Was absent when it was agreed, so her stance on it is untested. |
-| [[jamie-ellwood]] | Operations lead, floor (unconfirmed) | influencer | neutral | First seen in the 2026-05-20 brainstorm; his floor detail is what moved Leo. Title and remit not yet confirmed. <!-- needs-review --> |
+```dataview
+TABLE WITHOUT ID
+  link(file.path, person-name) AS "Name",
+  choice(entity = this.slug, "", link("40-entities/" + entity + "/dossier").entity-name) AS "Team",
+  role AS "Title",
+  decision-role AS "Role in decision",
+  stance AS "Stance"
+FROM "50-people"
+WHERE entity = this.slug OR link("40-entities/" + entity + "/dossier").parent = this.slug
+SORT person-name ASC
+```
 
 ## Relationship History
 
@@ -64,7 +70,13 @@ LIMIT 20
 
 ## Engagements
 
-| Project | Status | One-liner |
-|---------|--------|-----------|
-| [meridian-yard-automation-program](../../30-projects/meridian-yard-automation-program/index.md) | Active | Three-yard automation rollout on one consolidated vendor platform |
-| [meridian-warehouse-pilot-phase-0](../../30-projects/meridian-warehouse-pilot-phase-0/index.md) | Completed | Single-warehouse pilot that opened the account |
+```dataview
+TABLE WITHOUT ID
+  link(file.path, project-name) AS "Project",
+  upper(substring(status, 0, 1)) + substring(status, 1) AS "Status",
+  stage AS "Where it stands",
+  next-milestone AS "Next milestone"
+FROM "30-projects"
+WHERE type = "project" AND (entity = this.slug OR link("40-entities/" + entity + "/dossier").parent = this.slug)
+SORT status ASC, project-name ASC
+```

@@ -7,7 +7,7 @@ below keep `main` always working and every change validated by CI. They are simp
 
 `main` is **protected** — you cannot push to it directly. All changes go through:
 
-**branch → commit → open a pull request → pass the three CI checks → (contributors: get 1
+**branch → commit → open a pull request → pass the three required CI checks → (contributors: get 1
 approval) → merge.**
 
 ## Step by step
@@ -35,9 +35,10 @@ gh pr create --fill
 ```
 
 **5. Wait for the checks** — the GitHub Actions `CI` workflow (`.github/workflows/ci.yml`) runs
-automatically and posts three status checks onto your PR: `plugin (skill lint + tests)`,
+automatically. Three of its jobs are required checks on your PR: `plugin (skill lint + tests)`,
 `template (structure validation)` and `plugin version (not already released)`. All three must
-be green to merge.
+be green to merge. Three more run without blocking yet — `changelog (new entry cites this PR)`,
+`runtime floor (python 3.10)` and `cross-platform (windows)` — keep them green too.
 
 **6. Get a review, unless you're a repo admin.** Non-admin contributors need 1 approving review
 before merge; repo admins/owners are exempt from the review requirement (but never from the

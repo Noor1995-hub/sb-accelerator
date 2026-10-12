@@ -65,7 +65,10 @@ confidence_reasons:
   `source-filename` are recorder provenance.
 - **Review checkboxes (booleans, edited in Meetings.base's *To review* view):** `reviewed` —
   one-click confirm; `archived` — hides the row from triage views (noise
-  disposal; the file stays).
+  disposal; the file stays). Dismiss on an accepted meeting only hides it:
+  a `confirmed` meeting keeps counting in metrics and project updates even
+  when `archived` (owner's choice, #273 — nothing is rewritten after the
+  fact). A meeting dismissed before it was accepted never counted.
 - Write-once; only triage fields (`attendees`, `projects`, `review_status`,
   `reviewed`, `archived`) are edited later — plus `confirmed-at`, which
   `sync reconcile-reviews` stamps (ISO to the minute) on the note when it
@@ -80,8 +83,8 @@ confidence_reasons:
   root) and blocks the entity derivation below. The evening fold's
   `sync rederive-entities` unwraps a wikilink whose target resolves and
   repairs the note; one that still doesn't resolve is reported, not fixed.
-  Click-through in `Meetings.base` is the read-only `↗ Project` formula
-  column, not the editable `projects` cells.
+  In `Meetings.base` the read-only **Projects** column (names, in *All
+  Meetings*) is the click-through, not the editable `projects` cells.
 - `entities[]` holds entity slugs: the organizations the meeting was
   **about** — not only the ones in the room. An internal 1:1 reviewing a
   client account carries that client, the same way the daily note's prep
@@ -167,7 +170,7 @@ object: project
 required: [project-name, slug, status, project-type, entity, owner, created,
            last-updated]
 optional: [type, parent, stakeholders, meetings-7d, meetings-30d, key-people,
-           next-milestone, next-milestone-date, state-updated, keywords]
+           next-milestone, next-milestone-date, state-updated, stage, keywords]
 enums:
   status: [active, paused, completed, cancelled]
   project-type: [initiative, area-of-responsibility]
@@ -197,6 +200,9 @@ body_sections: [Coming up, Recent meetings, Recent decisions, Background]
   unique across entities and typing one during meeting triage selects entity
   and project in a single gesture.
 - Example: `30-projects/acme-industries-operating-model/index.md`
+- `stage` — the card's Stage sentence, stored by `project state write`
+  (machine-maintained, like `state-updated`); the entity page's Engagements
+  shows it (#273).
 - `state-updated` is a full ISO timestamp (`YYYY-MM-DDTHH:MM`) written by
   `project touch` alongside `last-updated`. `last-updated` stays the
   human-facing day; `state-updated` is what the evening run's update queue
@@ -223,19 +229,45 @@ body_sections: [Coming up, Recent meetings, Recent decisions, Background]
 object: person
 required: [person-name, slug]
 keys_present: [relationship]
-optional: [email, company, role, projects, created, last-updated,
-           meetings-7d, meetings-30d, last-met, messages-7d, messages-30d]
+optional: [email, entity, company, role, decision-role, stance, projects, created,
+           last-updated, person-updated, meetings-7d, meetings-30d, last-met, messages-7d,
+           messages-30d]
 enums:
   relationship: [colleague, direct-report, external, null]
+  decision-role: [sponsor, champion, evaluator, influencer, blocker, null]
+  stance: [champion, neutral, blocker, null]
 ```
+
+- `entity` — the slug of the entity (or team) the person belongs to; that
+  entity's page lists them under Stakeholders (#273). Set by `person set`,
+  by `/update-tables`, and by `person ensure --entity` when routing knows it
+  for certain.
+- `company` — legacy free text, kept only where the structure-14 upgrade
+  found no single matching entity. Nothing new writes it.
+- `role` (the person's title), `decision-role` and `stance` are the person's
+  stakeholder fields, shown on their entity's page.
+- `person-updated` — when the automatic update last read new material naming
+  this person (ISO `YYYY-MM-DDTHH:MM`, written by `person touch`). The
+  structure-15 upgrade stamps every page, so nothing older is read.
+- **`## What I know`** (#273 piece 4) — directly after the `# Name` heading:
+  facts about the person. The evening run and on-demand runs append
+  `- <YYYY-MM-DD> — <fact> (<source marker>)` lines via `person write
+  --automatic`; it never edits or removes a line. A line without a marker is
+  the owner's. Two rules: (1) **it never leaves the vault** — no prep note,
+  brief, email or feedback report uses it, and the daily note shows nothing
+  from it; (2) **only what the person said about themselves** — never what
+  others said about them, never an interpretation. Removing a fact = deleting
+  its line. The structure-15 upgrade merged the older `## Notes from
+  <entity>` sections into it.
 
 - `relationship: null` (key present, value empty) = **uncurated** — that is
   what People.base's "Uncurated" view filters on. `keys_present` means the
   key itself must exist even when its value is null.
 - `relationship: direct-report` is what places a person in People.base's
-  "Direct reports" view. `company` and `role` are expected to be filled for a
-  direct report — the sync creates people with all three empty, so that view
-  stays empty until someone curates.
+  "Direct reports" view. `entity` (which replaces `company`) and `role` are
+  expected to be filled for a direct report — the sync creates people with
+  `relationship` and `role` empty, so that view stays empty until someone
+  curates.
 - Optional body convention for direct-report notes: a `## Development`
   section with `### Feedback History` (a dated table) and `### Growth Areas`.
   Nothing in the plugin reads or writes it; it is a place, not a pipeline.
@@ -252,9 +284,11 @@ enums:
 - `email` is stored when the M365 sync (or the message feed) creates the
   person, and filled into an existing note whose `email` is empty; a set
   email is never overwritten.
-- `relationship`, `company` and `role` stay hand-curated — nothing writes
-  them. `last-updated` is the creation day and is not a recency signal; sort
-  on `last-met` for that.
+- `relationship` stays hand-curated — nothing writes it. `role`,
+  `decision-role` and `stance` are written by `person set` (as
+  /update-entity uses it), by /update-tables and by the structure-14
+  upgrade. `last-updated` moves only when a writer touches the page (creation,
+  What I know) and is not a recency signal; sort on `last-met` for that.
 - Example: `50-people/jordan-reyes.md`
 
 ### Decision — `30-projects/{slug}/decisions/YYYY-MM-DD-{title}.md` · Base: `Decisions.base`
@@ -269,7 +303,7 @@ enums:
   status: [active, superseded, withdrawn]
 ```
 
-- **Edges:** `supersedes` (`[[decision]]` / null) · `source` (`[[meeting]]` / `[[message log]]` / `[[owner note]]`).
+- **Edges:** `supersedes` (`[[decision]]` / null) · `source` (`[[meeting]]` / `[[message log]]` / `[[session]]` / `[[owner note]]`).
 - Never deleted — status flips only. Supersession is a wikilink edge.
 - `archived: true` is the owner's **Dismiss** tick (#247): the capture was
   not a real decision. Same field and meaning as on a meeting; the file
@@ -278,7 +312,11 @@ enums:
   *Dismissed* in *All*, is never a project's defining decision and is never
   superseded. `decision list` still returns it, flagged `dismissed`, so the
   evening run's dedup does not capture it again. It is not `withdrawn`: a
-  withdrawn decision was real and later reversed.
+  withdrawn decision was real and later reversed. A dismissed decision that
+  had superseded another made no real replacement, so that prior flips back
+  to `active` with a dated `**Restored** —` footer (`decision review
+  --dismiss` at once; a tick in the table at the evening's
+  `reconcile-reviews`).
 - `date` is the date the decision was **made**, not the date it was written
   down. It is what orders the decision log.
 - `summary` is one full sentence — it is the Decision column in
@@ -294,8 +332,9 @@ enums:
   review state the way project metrics gate on a meeting's `review_status`, so
   ticking the box *is* the confirmation and no sync step folds it further. The
   asymmetry with Meeting is deliberate, not a missing feature.
-- `source` names a note in `20-meetings/`, a message log in `_messages/`, or
-  a note of your own in `80-thoughts-ideas/` (any subfolder). A note title
+- `source` names a note in `20-meetings/`, a message log in `_messages/`, a
+  session record in `_messages/sessions/` (a conversation added with `/add`),
+  or a note of your own in `80-thoughts-ideas/` (any subfolder). A note title
   may contain spaces and is matched case-insensitively. A decision drawn from an inbox
   transcript, a pasted paragraph or dictation carries no `source`; its
   provenance goes in the **Why** text.
@@ -353,8 +392,9 @@ Only an `active` decision can be superseded: `superseded` and `withdrawn`
 decisions were not in force, so replacing one is a category error — and in
 practice that is what a stale or mistyped stem looks like. A decision also
 cannot supersede one dated after it — the edge always points backward in
-time. A decision that was reversed rather than replaced is written
-`withdrawn` instead. **Never delete a decision note** — the trace is the
+time. A decision that was reversed rather than replaced is withdrawn instead:
+`decision withdraw` flips it to `withdrawn` and adds a dated
+`**Withdrawn** —` footer. **Never delete a decision note** — the trace is the
 point.
 
 ### Entity — `40-entities/{slug}/dossier.md` · Base: `Entities.base`
@@ -365,7 +405,7 @@ with: a client, a business unit, a partner, a supplier.
 ```yaml
 object: entity
 required: [type, entity-name, slug, status]
-optional: [entity-type, industry, owner, parent, created, last-updated]
+optional: [entity-type, industry, owner, parent, created, last-updated, entity-updated]
 enums:
   status: [prospect, active, dormant]
   entity-type: [client, business-unit, partner, supplier, other]
@@ -373,6 +413,10 @@ enums:
 body_sections: [Context, Stakeholders, Relationship History, Meeting Log,
                 Sensitivities, Engagements]
 ```
+
+`entity-updated` — when the automatic update last read new material (ISO
+minute, machine-maintained by `entity touch`, #273). `last-updated` is the day
+the page last changed.
 
 **Teams (#253).** A team or department is an entity with `parent:` — the slug
 of the entity it belongs to — usually `entity-type: business-unit`. At most two
@@ -407,18 +451,24 @@ last-updated: 2026-04-01
 The body opens with `# {entity-name}` — every dossier file is named
 `dossier.md`, so without it the only title Obsidian shows is the word
 "dossier" — and then carries exactly the six H2 sections in `body_sections`
-above, in that order. Two skills write it — `/new-project` creates a
-baseline, `/update-entity` maintains it — so this is the shared contract, not
-a per-skill template.
+above, in that order. `entity ensure` creates it (from /new-project,
+/update-entity, /update-tables or setup); `/update-entity` maintains it on
+demand, and the evening run, `/sync-recordings` and `/add` update it
+automatically — so this is the shared contract, not a per-skill template.
+
+Automatic writes end every item in a source marker, e.g. `(meeting · …)`,
+and may replace only items that carry one. An item without a marker is the
+owner's and is never replaced; deleting the marker makes an item the
+owner's.
 
 | Section | Shape | Merge rule |
 |---|---|---|
 | `## Context` | `> [!info]+ **Standing context**` callout holding `> - **{Label}:** {fact} — {why it matters}` | Update the bullet with a matching label; otherwise append inside the callout. Maximum 8 bullets; consolidate the least important rather than exceeding it. |
-| `## Stakeholders` | Table: Name · Title · Role in Decision · Stance · Notes | Match on name, case-insensitive. Update only fields carrying new information; never overwrite specific data with vaguer data. Never remove a row. New rows get `<!-- needs-review -->` in Notes. |
+| `## Stakeholders` | Live query: people whose `entity` is this entity or one of its teams (Name · Team · Title · Role in decision · Stance) | Not written. Edit the people (`person set`, People table, `/update-tables`). |
 | `## Relationship History` | `- **{YYYY-MM-DD}:** {what happened} — {significance}` | Insert in date order. Never modify or remove an existing entry. |
 | `## Meeting Log` | A Dataview index of the entity's meetings, then `### Dynamics` holding `- **{YYYY-MM-DD} — {Topic}:** {the read of the room}` | The table is a query — nothing writes it, and it needs no maintenance. Dynamics bullets are append-only, newest first. Never modify or remove an existing bullet. |
 | `## Sensitivities` | `> [!warning]+ **Handle with care**` callout holding `> - **{topic}:** {detail} — {implications}` | Update a matching topic; otherwise append inside the callout. Never remove. |
-| `## Engagements` | Table: Project · Status · One-liner | Match on project slug. Update status and one-liner. Never remove. Link `[{slug}](../../30-projects/{slug}/index.md)`. |
+| `## Engagements` | Live query: projects of this entity or its teams (Project · Status · Where it stands · Next milestone) | Not written. |
 
 Empty sections carry `*No entries yet.*` — replaced on first real entry.
 
@@ -448,8 +498,8 @@ or was written by hand without it, is absent from the table until the field
 is added: the query has no other way to reach it. See §Meeting for why the
 field exists rather than the join being computed from `projects[]`.
 
-**Role in Decision** vocabulary: sponsor · champion · evaluator · influencer
-· blocker. **Stance** vocabulary: champion · neutral · blocker.
+A person's **`decision-role`** vocabulary: sponsor · champion · evaluator ·
+influencer · blocker. **`stance`** vocabulary: champion · neutral · blocker.
 
 **Unvalidated marking.** Content that was generated rather than confirmed by
 a human carries `<!-- unvalidated -->` directly under its section header, and
@@ -468,9 +518,9 @@ context, because `/setup-my-brain` will.
   it is the join key.
 - Dates written **unquoted ISO** (`2026-02-07`) — quoted dates silently break
   Bases/Dataview date handling. This convention applies to every object type.
-- Per-entity project lists come free by grouping `Projects.base` on `entity`.
+- Per-entity project lists are the dossier's live `## Engagements` query.
 
-### Daily note — `60-daily-notes/{YYYY-MM-DD}.md` · no Base
+### Daily note — `60-daily-notes/{YYYY-MM-DD}.md` · `Daily notes.base`
 
 One note per working day, written the evening before by `/evening-sync`,
 jotted in by hand during the day, harvested (read-only) that evening. It is
@@ -633,6 +683,7 @@ enums:
 - `Decision —project→ Project`
 - `Decision —source→ Meeting`
 - `Decision —source→ Message log`
+- `Decision —source→ Session` (a conversation added with `/add`, in `_messages/sessions/`)
 - `Decision —source→ Owner note`
 - `Decision —supersedes→ Decision`
 - `To-do —project→ Project`

@@ -192,7 +192,12 @@ def create(root: Path, items, today: Optional[str] = None) -> dict:
     checked = [_validated(item, i) for i, item in enumerate(items)]
     today_iso = vault.today_iso(today)
     projects = _projects(root)
-    known = {r["key"]: r["path"] for r in _recorded(root) if r["key"]}
+    # A line from a daily note is one to do for good, done or not. A to do
+    # asked for in a session has no note to tie it to: only an open one with
+    # the same words is a duplicate — the same words months after the first
+    # was done are a new to do (review 2026-10-12).
+    known = {r["key"]: r["path"] for r in _recorded(root)
+             if r["key"] and (r["source"] is not None or r["data"].get("done") is not True)}
     folder = root / ACTIONS_DIR
     created: List[dict] = []
     skipped: List[dict] = []

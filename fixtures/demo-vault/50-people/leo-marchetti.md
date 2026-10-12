@@ -3,7 +3,6 @@ person-name: "Leo Marchetti"
 slug: leo-marchetti
 email: leo.marchetti@meridianfreight.example
 relationship: external
-company: "Meridian Freight Holdings"
 role: "Chief Operating Officer"
 projects: [meridian-yard-automation-program]
 created: 2026-03-10
@@ -13,9 +12,17 @@ meetings-30d: 1
 last-met: 2026-05-20
 messages-7d: 0
 messages-30d: 0
+entity: meridian-freight-holdings
+decision-role: sponsor
+stance: champion
+person-updated: 2026-10-12T17:55
 ---
 
 # Leo Marchetti
+
+## What I know
+
+- Decides fast once the case is quantified, and reverses himself just as fast. Wants a total, and will pick before the options are finished. (moved from the Meridian Freight Holdings page, 2026-10-12)
 
 ## Context
 

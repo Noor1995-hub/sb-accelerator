@@ -43,8 +43,12 @@ LOSSY = None
 BOOKMARKS = Path(".obsidian") / "bookmarks.json"
 TYPES_FILE = Path(".obsidian") / "types.json"
 # Kept equal to the template's types.json (a test pins it).
+# `projects` is a list: a project typed into a new note in Thoughts and
+# ideas would otherwise be stored as text, and the table's grouping formula
+# maps over it as a list (review 2026-10-12).
 TYPES = {"absorbed": "date", "archived": "checkbox", "done": "checkbox",
-         "due": "date", "include": "checkbox", "reviewed": "checkbox"}
+         "due": "date", "include": "checkbox", "projects": "multitext",
+         "reviewed": "checkbox"}
 CTIME = 1759000000000
 VIEWS = "99-workflow-config/views"
 ACTIONS = ("To Do's", "65-to-dos/To Do's.base")

@@ -3,7 +3,9 @@
 The lint is the technical control behind the disclosure promise: a draft
 that names anything from the vault is refused before a byte leaves the
 machine. `send` always runs it itself — there is no code path that posts an
-unlinted draft, no matter what a caller upstream already checked.
+unlinted draft, no matter what a caller upstream already checked. That
+includes every fact on a person page's `## What I know` (#273 piece 4):
+facts about people never leave the vault.
 """
 from __future__ import annotations
 
@@ -45,6 +47,46 @@ class FeedbackError(Exception):
     """A blocked draft or an unconfigured/unreachable feedback channel."""
 
 
+_FACT_DATE_RE = re.compile(r"\A- (?:\d{4}-\d{2}-\d{2} — )?")
+_FACT_MARKER_RE = re.compile(
+    r"\s*\((?:meeting|mail|chat|session|note|moved from|from|notes from) [^()]*\)\s*\Z",
+    re.IGNORECASE)
+
+
+def _facts(body: str) -> list:
+    """The text of each line under `## What I know` (#273 piece 4), without
+    its date and source marker: facts about a person never leave the vault."""
+    out = []
+    for title, content in markdown.split_sections(body):
+        if title.strip().lower() != "what i know":
+            continue
+        fence = None
+        for line in content.split("\n"):
+            # A code block (a query the upgrade moved here) holds no facts;
+            # its words would refuse any draft that says "list".
+            match = markdown._FENCE_RE.match(line)
+            if match:
+                token = match.group(1)
+                fence = None if fence == token else (fence or token)
+                continue
+            line = line.strip()
+            if not line or fence is not None:
+                continue
+            # Every trailing marker goes — a line the structure-15 upgrade
+            # moved can carry two — and so does the closing punctuation, so a
+            # draft quoting the fact mid-sentence still matches.
+            text = _FACT_DATE_RE.sub("", line)
+            while True:
+                stripped = _FACT_MARKER_RE.sub("", text)
+                if stripped == text:
+                    break
+                text = stripped
+            text = text.strip().rstrip(".!?;:,")
+            if text:
+                out.append(text)
+    return out
+
+
 def _blocklist(root: Path) -> list:
     """(kind, term) pairs. Deterministic, order-stable, casefolded later.
 
@@ -56,11 +98,12 @@ def _blocklist(root: Path) -> list:
     for path in sorted((root / vault.PEOPLE_DIR).glob("*.md")):
         terms.append(("person", path.stem))
         try:
-            front, _ = markdown.split_frontmatter(path.read_text(encoding="utf-8"))
+            front, body = markdown.split_frontmatter(path.read_text(encoding="utf-8"))
         except (OSError, ValueError):
-            front = {}
+            front, body = {}, ""
         if front.get("person-name"):
             terms.append(("person", str(front["person-name"])))
+        terms.extend(("fact", fact) for fact in _facts(body))
     for path in sorted((root / vault.ENTITIES_DIR).glob("*/dossier.md")):
         terms.append(("entity", path.parent.name))
         try:
@@ -86,6 +129,25 @@ def _blocklist(root: Path) -> list:
         subject = front.get("calendar-subject") or front.get("title")
         if subject:
             terms.append(("meeting", str(subject)))
+    # Decisions, to dos and the owner's own notes are content too (review
+    # 2026-10-12: none of them was on the list).
+    for path in sorted((root / vault.PROJECTS_DIR).glob("*/decisions/*.md")):
+        terms.append(("decision", path.stem))
+        try:
+            front, _ = markdown.split_frontmatter(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            front = {}
+        if front.get("summary"):
+            terms.append(("decision", str(front["summary"])))
+    for path in sorted((root / vault.ACTIONS_DIR).glob("*.md")):
+        try:
+            front, _ = markdown.split_frontmatter(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            front = {}
+        if front.get("to-do"):
+            terms.append(("to-do", str(front["to-do"])))
+    for path in sorted((root / vault.THOUGHTS_DIR).glob("*.md")):
+        terms.append(("note", path.stem))
     cfg = config.read(root)["config"]
     if cfg["owner"]:
         terms.append(("owner", cfg["owner"]))

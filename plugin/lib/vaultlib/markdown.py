@@ -235,6 +235,23 @@ def _replace_field_node(text: str, field: str, value: str,
     return normalized[: match.start(1)] + block + normalized[match.end(1):]
 
 
+def remove_field(text: str, field: str) -> str:
+    """Drop one top-level frontmatter field with its whole node (block-list
+    items across blank lines included, as the parser reads them), leaving
+    every other byte alone. A field that is not there returns `text`
+    unchanged. Raises when the text has no frontmatter."""
+    normalized = _normalize(text)
+    match = _FRONTMATTER_RE.match(normalized)
+    if not match:
+        raise ValueError("file has no YAML frontmatter")
+    lines = match.group(1).split("\n")
+    for index, line in enumerate(lines):
+        if line.startswith(f"{field}:"):
+            kept = lines[:index] + lines[_node_end(lines, index):]
+            return normalized[: match.start(1)] + "\n".join(kept) + normalized[match.end(1):]
+    return text
+
+
 def replace_scalar_field(text: str, field: str, value: str) -> str:
     """Replace one top-level field inside existing frontmatter, leaving every
     other byte alone.

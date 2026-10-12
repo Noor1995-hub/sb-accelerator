@@ -197,6 +197,12 @@ def today_iso(explicit: Optional[str] = None) -> str:
         return _datetime.date.today().isoformat()
     if not ISO_DATE_RE.match(explicit):
         raise VaultError(f"date {explicit!r} must be ISO YYYY-MM-DD")
+    # The shape alone let 2026-99-99 through, and a decision written on it
+    # superseded a real one (review 2026-10-12).
+    try:
+        _datetime.date.fromisoformat(explicit)
+    except ValueError as exc:
+        raise VaultError(f"date {explicit!r} is not a real date") from exc
     return explicit
 
 
@@ -213,6 +219,27 @@ def is_blank_note(path: Path) -> bool:
         return path.is_file() and not path.read_text(encoding="utf-8").strip()
     except OSError:
         return False
+
+
+_DAILY_TYPE_RE = re.compile(r"\A---\r?\n(?:.*\r?\n)*?type:\s*[\"']?daily-note[\"']?\s*\r?\n")
+
+
+def is_owner_only_daily_note(path: Path) -> bool:
+    """True for a daily note no evening run wrote: text the owner typed into
+    the empty note Obsidian made (its calendar icon creates one), with no
+    `type: daily-note` and no `evening-sync:` marker. Like a blank note it
+    proves no run happened — counting it as one hid a missed evening from
+    the catch-up — but unlike one it holds the owner's words, so the run
+    writes the real note around them (review 2026-10-12)."""
+    try:
+        if not path.is_file():
+            return False
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return False
+    if not text.strip():
+        return False
+    return "<!-- evening-sync:" not in text and not _DAILY_TYPE_RE.match(text)
 
 
 def list_dir_names(path: Path) -> List[str]:

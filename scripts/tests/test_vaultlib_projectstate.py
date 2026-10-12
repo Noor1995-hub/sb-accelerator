@@ -307,8 +307,27 @@ def test_a_dismissed_decision_is_never_the_defining_decision(tmp_path):
         projectstate.write(root, slug=slug, payload=state(), today="2026-06-15")
 
 
+def test_a_replaced_decision_is_never_the_defining_decision(tmp_path):
+    # Review 2026-10-12: the card could promote a decision no longer in force.
+    root, slug = scaffolded(tmp_path)
+    path = root / "30-projects" / slug / "decisions" / "2026-05-20-single-vendor-strategy-adopted.md"
+    path.write_text(path.read_text(encoding="utf-8").replace("status: active\n", "status: superseded\n"),
+                    encoding="utf-8")
+    with pytest.raises(projectstate.ProjectStateError, match="superseded"):
+        projectstate.write(root, slug=slug, payload=state(), today="2026-06-15")
+
+
 def test_recent_decisions_leave_out_dismissed_ones(tmp_path):
     root, slug = scaffolded(tmp_path)
     body = (root / "30-projects" / slug / "index.md").read_text(encoding="utf-8")
     block = body.split("## Recent decisions")[1].split("```")[1]
     assert "WHERE archived != true" in block
+
+
+def test_state_write_stores_the_stage_in_frontmatter(tmp_path):
+    root, slug = scaffolded(tmp_path)
+    payload = state()
+    payload["stage"] = "Vendor shortlist agreed; selection by 27 Dec"
+    projectstate.write(root, slug=slug, payload=payload, today="2026-06-15")
+    text = (root / "30-projects" / slug / "index.md").read_text(encoding="utf-8")
+    assert 'stage: "Vendor shortlist agreed; selection by 27 Dec"' in text

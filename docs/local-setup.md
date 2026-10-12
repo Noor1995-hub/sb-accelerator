@@ -118,8 +118,9 @@ vault. Assertions cover what a selector can express; these are judgement:
   `meridian-warehouse-pilot-phase-0` — have no decisions yet, so an empty
   decisions table there is correct, not a bug.
 - The sidebar is the coloured menu (Obsidian's Bookmarks tab): Start here,
-  Daily notes, Inbox, Meetings, Projects, People, Entities, Decisions,
-  Thoughts & ideas and a folded Library group; each opens its table (#263).
+  Daily notes, Thoughts & ideas, To Do's, Meetings, Projects, People,
+  Entities, Decisions, Input and a folded Library group; each opens its
+  table (#263).
   `ls -la` shows `.claude -> claude`.
 
 If a row set ever disagrees with what Obsidian shows, **Obsidian is right** —
@@ -137,8 +138,9 @@ cd /tmp/sb-test-vault
 claude --plugin-dir /path/to/sb-accelerator/plugin
 ```
 
-Run `/help` and confirm `/new-project`, `/update-entity`, and `/log-decision`
-appear.
+Run `/help` and confirm the plugin's 14 skills appear (the list is in
+`plugin/skills/README.md`) — at least `/new-project`, `/update-entity` and
+`/log-decision`.
 
 **Cowork cannot** — `--plugin-dir` is a Claude Code flag, and Cowork loads
 skills only from installed plugins and your own skill store, never from a
@@ -146,6 +148,12 @@ connected folder. To exercise the skills where they are designed to run, add
 this repo as a marketplace (Customize → Plugins → Add marketplace) using the
 root `.claude-plugin/marketplace.json` (`sb-accelerator-dev`), then install
 `second-brain`.
+
+**Keep one install.** Installing the plugin from two sources (say this dev
+marketplace and a personal upload, or dev and dryrun) gives you a second copy
+named `second-brain-2`. Skills that dispatch agents by the `second-brain:`
+prefix then reach the *other* copy's agents, so you test a mix of two
+versions without noticing. Uninstall one before testing.
 
 ### 5. Run a skill against the fixtures
 

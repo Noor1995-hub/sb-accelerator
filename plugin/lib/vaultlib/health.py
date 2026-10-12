@@ -257,7 +257,7 @@ def _entities(root: Path, meetings: List[dict], cutoff: date,
     return {"total": total, "no_meeting_30d": no_recent}
 
 
-def _decisions(root: Path, unparsed: _Counter) -> Dict[str, int]:
+def _decisions(root: Path, unparsed: _Counter) -> Tuple[Dict[str, int], int]:
     """Count decisions by `status`, allow-listed against the ontology.
 
     `schema.enum_values("decision", "status")` is the same allow-list the
@@ -266,10 +266,15 @@ def _decisions(root: Path, unparsed: _Counter) -> Dict[str, int]:
     render() would print verbatim. The allow-list keys are zero-filled so
     the rendered table has a stable shape regardless of which statuses are
     actually present.
+
+    Also returns how many wait in Decisions › To review (not kept, not
+    dismissed) — the decision half of the review backlog (review
+    2026-10-12: only meetings were counted).
     """
     allowed = schema.enum_values("decision", "status")
     counts: Dict[str, int] = {name: 0 for name in allowed}
     counts["unknown"] = 0
+    to_review = 0
     folder = root / PROJECTS_DIR
     for path in sorted(folder.glob("*/decisions/*.md")) if folder.is_dir() else []:
         data = _read_frontmatter(path, unparsed)
@@ -278,7 +283,9 @@ def _decisions(root: Path, unparsed: _Counter) -> Dict[str, int]:
         status = data.get("status")
         key = status if status in allowed else "unknown"
         counts[key] += 1
-    return counts
+        if data.get("reviewed") is not True and data.get("archived") is not True:
+            to_review += 1
+    return counts, to_review
 
 
 _EMPTY_PROVENANCE_BLOCK = {
@@ -407,6 +414,7 @@ def report(root: Path, today: str, window: int = DEFAULT_WINDOW_DAYS) -> dict:
 
     unparsed = _Counter()
     meetings = _index_meetings(root, unparsed)
+    decisions, decisions_to_review = _decisions(root, unparsed)
     in_window = [m for m in meetings
                  if m["date"] is not None
                  and window_start <= m["date"] <= today_date]
@@ -433,7 +441,8 @@ def report(root: Path, today: str, window: int = DEFAULT_WINDOW_DAYS) -> dict:
         "skip_list_size": len(syncjob.read_skip_records(root)),
         "projects": _projects(root, meetings, cutoff_30d, unparsed),
         "entities": _entities(root, meetings, cutoff_30d, unparsed),
-        "decisions": _decisions(root, unparsed),
+        "decisions": decisions,
+        "decisions_to_review": decisions_to_review,
         "unparsed": unparsed.value,
         "provenance": _provenance_block(root),
         "claude_link": provenance.claude_link_state(root),
@@ -497,6 +506,8 @@ def render(data: dict) -> str:
     lines += ["", "## Decisions", "| status | count |", "|---|---|"]
     lines += [f"| {status} | {count} |"
               for status, count in sorted(data["decisions"].items())]
+    lines += ["", "### Decisions waiting for review (all time)"]
+    lines += _table([("to_review", data["decisions_to_review"])])
     lines += ["", "## Unparsed"]
     lines += _table([("unparsed", data["unparsed"])])
     lines += ["", "## Provenance"]

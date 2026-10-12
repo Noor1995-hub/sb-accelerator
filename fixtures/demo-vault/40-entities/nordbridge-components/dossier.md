@@ -23,9 +23,17 @@ last-updated: 2026-06-12
 
 ## Stakeholders
 
-| Name | Title | Role in Decision | Stance | Notes |
-|------|-------|------------------|--------|-------|
-| [[dana-whitfield]] | VP Procurement | evaluator | neutral | Straight about constraints — flagged the Liège freeze before we could propose into it. No read yet on who signs above her. |
+```dataview
+TABLE WITHOUT ID
+  link(file.path, person-name) AS "Name",
+  choice(entity = this.slug, "", link("40-entities/" + entity + "/dossier").entity-name) AS "Team",
+  role AS "Title",
+  decision-role AS "Role in decision",
+  stance AS "Stance"
+FROM "50-people"
+WHERE entity = this.slug OR link("40-entities/" + entity + "/dossier").parent = this.slug
+SORT person-name ASC
+```
 
 ## Relationship History
 
@@ -56,6 +64,13 @@ LIMIT 20
 
 ## Engagements
 
-| Project | Status | One-liner |
-|---------|--------|-----------|
-| [nordbridge-regional-rollout-proposal](../../30-projects/nordbridge-regional-rollout-proposal/index.md) | Active | Three-plant rollout proposal, Phase 1 site still open |
+```dataview
+TABLE WITHOUT ID
+  link(file.path, project-name) AS "Project",
+  upper(substring(status, 0, 1)) + substring(status, 1) AS "Status",
+  stage AS "Where it stands",
+  next-milestone AS "Next milestone"
+FROM "30-projects"
+WHERE type = "project" AND (entity = this.slug OR link("40-entities/" + entity + "/dossier").parent = this.slug)
+SORT status ASC, project-name ASC
+```

@@ -71,7 +71,7 @@ def test_apply_lands_the_menu_and_keeps_the_owners_own(tmp_path):
     assert items[len(module.shipped_menu()):] == [
         {"type": "file", "ctime": 1, "path": "70-resources/mine.md", "title": "Mine"}]
     daily = read(root, OBS / "daily-notes.json")
-    assert daily["autorun"] is True and daily["template"] == "tpl.md"
+    assert daily["autorun"] is False and daily["template"] == "tpl.md"
     app = read(root, OBS / "app.json")
     assert app["newFileFolderPath"] == "80-thoughts-ideas" and app["userIgnoreFilters"] == ["_messages/"]
     ws = read(root, OBS / "workspace.json")
@@ -133,5 +133,5 @@ def test_the_whole_chain_lands_on_the_shipped_template(tmp_path):
 def test_run_through_the_framework_bumps_to_10(tmp_path):
     root = vault_v9(tmp_path)
     result = migrate.run(root, "2026-10-05", stamp="2026-10-05-120000")
-    assert [a["slug"] for a in result["applied"]] == ["structure-version-10", "structure-version-11", "structure-version-12", "structure-version-13"]
-    assert result["structure_version"] == 13
+    assert [a["slug"] for a in result["applied"]] == ["structure-version-10", "structure-version-11", "structure-version-12", "structure-version-13", "structure-version-14", "structure-version-15"]
+    assert result["structure_version"] == 15

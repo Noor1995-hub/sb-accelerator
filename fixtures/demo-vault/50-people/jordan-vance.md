@@ -13,6 +13,7 @@ meetings-30d: 1
 last-met: 2026-06-12
 messages-7d: 0
 messages-30d: 0
+person-updated: 2026-10-12T17:55
 ---
 
 # Jordan Vance

@@ -179,3 +179,296 @@ def test_ensure_refuses_a_malformed_email(tmp_path, bad):
     with pytest.raises(ValueError, match="email"):
         person.ensure(root, "Ana Fields", "2026-06-12", email=bad)
     assert not (root / "50-people" / "ana-fields.md").exists()
+
+
+def _entity(root, slug="acme"):
+    (root / "40-entities" / slug).mkdir(parents=True, exist_ok=True)
+    (root / "40-entities" / slug / "dossier.md").write_text(
+        f'---\ntype: entity\nentity-name: "Acme"\nslug: {slug}\nstatus: active\n---\n', encoding="utf-8")
+
+
+def test_ensure_links_a_new_person_and_writes_no_company(tmp_path):
+    root = make_vault(tmp_path)
+    _entity(root)
+    made = person.ensure(root, "Jan Peeters", "2026-10-12", entity="acme")
+    text = (root / made["path"]).read_text(encoding="utf-8")
+    assert "entity: acme" in text and "company" not in text
+
+
+def test_ensure_fills_an_empty_entity_only(tmp_path):
+    root = make_vault(tmp_path)
+    _entity(root)
+    _entity(root, "beta")
+    person.ensure(root, "Jan Peeters", "2026-10-12")
+    assert "entity" in person.ensure(root, "Jan Peeters", "2026-10-12", entity="acme")["updated"]
+    again = person.ensure(root, "Jan Peeters", "2026-10-12", entity="beta")
+    assert "entity" in again["ignored"]
+
+
+def test_set_fields_writes_and_validates(tmp_path):
+    root = make_vault(tmp_path)
+    _entity(root)
+    person.ensure(root, "Jan Peeters", "2026-10-12")
+    got = person.set_fields(root, "jan-peeters", entity="acme", role="CFO",
+                            decision_role="sponsor", stance="champion")
+    assert got["changed"] == ["entity", "role", "decision-role", "stance"]
+    text = (root / "50-people/jan-peeters.md").read_text(encoding="utf-8")
+    assert 'role: "CFO"' in text and "decision-role: sponsor" in text
+    with pytest.raises(ValueError, match="stance"):
+        person.set_fields(root, "jan-peeters", stance="hostile")
+    with pytest.raises(ValueError, match="entity"):
+        person.set_fields(root, "jan-peeters", entity="nobody")
+
+
+def test_set_fields_says_what_each_changed_field_was(tmp_path):
+    root = make_vault(tmp_path)
+    _entity(root)
+    _entity(root, "acme-finance")
+    person.ensure(root, "Jan Peeters", "2026-10-12", entity="acme-finance")
+    got = person.set_fields(root, "jan-peeters", entity="acme", role="CFO")
+    assert got["was"] == {"entity": "acme-finance", "role": ""}
+    assert person.set_fields(root, "jan-peeters", entity="acme")["was"] == {}
+
+
+def test_set_fields_lowercases_the_vocabulary_words(tmp_path):
+    root = make_vault(tmp_path)
+    person.ensure(root, "Jan Peeters", "2026-10-12")
+    got = person.set_fields(root, "jan-peeters", decision_role="Champion", stance=" Neutral ")
+    assert got["changed"] == ["decision-role", "stance"]
+    text = (root / "50-people/jan-peeters.md").read_text(encoding="utf-8")
+    assert "decision-role: champion" in text and "stance: neutral" in text
+
+
+def test_set_fields_entity_removes_the_legacy_company(tmp_path):
+    root = make_vault(tmp_path)
+    _entity(root)
+    path = root / "50-people/jan-peeters.md"
+    path.write_text('---\nperson-name: "Jan Peeters"\nslug: jan-peeters\ncompany: "LLBG"\n'
+                    'role:\n---\n\n# Jan Peeters\n', encoding="utf-8")
+    person.set_fields(root, "jan-peeters", entity="acme")
+    data, _ = md.split_frontmatter(path.read_text(encoding="utf-8"))
+    assert data["entity"] == "acme" and "company" not in data
+
+
+def test_ensure_filling_an_entity_removes_the_legacy_company(tmp_path):
+    root = make_vault(tmp_path)
+    _entity(root)
+    path = root / "50-people/jan-peeters.md"
+    path.write_text('---\nperson-name: "Jan Peeters"\nslug: jan-peeters\ncompany: "LLBG"\n'
+                    'role:\n---\n\n# Jan Peeters\n', encoding="utf-8")
+    person.ensure(root, "Jan Peeters", "2026-10-12", entity="acme")
+    data, _ = md.split_frontmatter(path.read_text(encoding="utf-8"))
+    assert data["entity"] == "acme" and "company" not in data
+
+
+# --- What I know (#273 piece 4) -------------------------------------------
+
+DANA = ('---\nperson-name: "Dana Whitfield"\nslug: dana-whitfield\nrelationship: external\n'
+        'created: 2026-03-02\nlast-updated: 2026-03-02\n---\n\n# Dana Whitfield\n\n'
+        '## Context\n\n- Owner wrote this.\n')
+M = "(meeting · [[08-10-26-weekly]])"
+
+
+def _dana(tmp_path, text=DANA):
+    root = make_vault(tmp_path)
+    path = root / "50-people" / "dana-whitfield.md"
+    path.write_text(text, encoding="utf-8", newline="")
+    return root, path
+
+
+def test_write_facts_creates_the_section_after_the_h1(tmp_path):
+    root, path = _dana(tmp_path)
+    result = person.write_facts(root, "dana-whitfield",
+                                [{"date": "2026-10-08", "fact": f"Is selling her house. {M}"}],
+                                "2026-10-12")
+    assert result["written"] == 1 and result["skipped"] == [] and result["duplicates"] == []
+    text = path.read_text(encoding="utf-8")
+    assert ("# Dana Whitfield\n\n## What I know\n\n"
+            f"- 2026-10-08 — Is selling her house. {M}\n\n## Context\n\n- Owner wrote this.\n") in text
+    assert "last-updated: 2026-10-12" in text
+
+
+def test_write_facts_appends_inside_the_section_before_the_next_heading(tmp_path):
+    start = DANA.replace("# Dana Whitfield\n\n",
+                         "# Dana Whitfield\n\n## What I know\n\n- Mine, undated.\n\n")
+    root, path = _dana(tmp_path, start)
+    person.write_facts(root, "dana-whitfield",
+                       [{"date": "2026-10-08", "fact": f"New fact. {M}"}], "2026-10-12")
+    body = md.split_frontmatter(path.read_text(encoding="utf-8"))[1]
+    assert ("## What I know\n\n- Mine, undated.\n- 2026-10-08 — New fact. "
+            f"{M}\n\n## Context\n\n- Owner wrote this.\n") in body
+
+
+def test_write_facts_after_owner_prose_leaves_a_blank_line(tmp_path):
+    start = DANA.replace("# Dana Whitfield\n\n",
+                         "# Dana Whitfield\n\n## What I know\n\nSome prose.\n\n")
+    root, path = _dana(tmp_path, start)
+    person.write_facts(root, "dana-whitfield",
+                       [{"date": "2026-10-08", "fact": f"New fact. {M}"}], "2026-10-12")
+    assert f"Some prose.\n\n- 2026-10-08 — New fact. {M}\n" in path.read_text(encoding="utf-8")
+
+
+def test_write_facts_without_h1_goes_after_the_preamble(tmp_path):
+    root, path = _dana(tmp_path, DANA.replace("# Dana Whitfield\n\n", "Intro line.\n\n"))
+    person.write_facts(root, "dana-whitfield",
+                       [{"date": "2026-10-08", "fact": f"X. {M}"}], "2026-10-12")
+    body = md.split_frontmatter(path.read_text(encoding="utf-8"))[1]
+    assert body.index("Intro line.") < body.index("## What I know") < body.index("## Context")
+
+
+def test_write_facts_refuses_a_fact_without_a_marker(tmp_path):
+    root, path = _dana(tmp_path)
+    before = path.read_bytes()
+    result = person.write_facts(root, "dana-whitfield",
+                                [{"date": "2026-10-08", "fact": "No source here."}], "2026-10-12")
+    assert result["written"] == 0 and len(result["skipped"]) == 1
+    assert "source marker" in result["skipped"][0]
+    assert path.read_bytes() == before          # nothing written, not even last-updated
+
+
+@pytest.mark.parametrize("item", [
+    {"date": "2026-13-01", "fact": f"Bad date. {M}"},
+    {"date": "", "fact": f"No date. {M}"},
+    {"date": "2026-10-08", "fact": ""},
+    {"date": "2026-10-08"},
+    "not an object",
+])
+def test_write_facts_refuses_malformed_items(tmp_path, item):
+    root, _ = _dana(tmp_path)
+    result = person.write_facts(root, "dana-whitfield", [item], "2026-10-12")
+    assert result["written"] == 0 and len(result["skipped"]) == 1
+
+
+def test_write_facts_refuses_a_multiline_fact(tmp_path):
+    root, path = _dana(tmp_path)
+    result = person.write_facts(root, "dana-whitfield",
+                                [{"date": "2026-10-08", "fact": f"Line one\n## Boom {M}"}],
+                                "2026-10-12")
+    assert result["written"] == 0 and "one line" in result["skipped"][0]
+    assert "## Boom" not in path.read_text(encoding="utf-8")
+
+
+def test_write_facts_skips_an_exact_duplicate(tmp_path):
+    root, path = _dana(tmp_path)
+    item = {"date": "2026-10-08", "fact": f"Is selling her house. {M}"}
+    person.write_facts(root, "dana-whitfield", [item], "2026-10-12")
+    result = person.write_facts(root, "dana-whitfield", [item, item], "2026-10-12")
+    assert result["written"] == 0 and len(result["duplicates"]) == 2
+    assert path.read_text(encoding="utf-8").count("Is selling her house.") == 1
+
+
+def test_write_facts_never_touches_other_sections_or_frontmatter(tmp_path):
+    root, path = _dana(tmp_path)
+    person.write_facts(root, "dana-whitfield",
+                       [{"date": "2026-10-08", "fact": f"X. {M}"}], "2026-10-12")
+    after = path.read_text(encoding="utf-8")
+    assert after.replace("last-updated: 2026-10-12", "last-updated: 2026-03-02").replace(
+        f"## What I know\n\n- 2026-10-08 — X. {M}\n\n", "") == DANA
+
+
+def test_write_facts_reads_a_crlf_file(tmp_path):
+    root, path = _dana(tmp_path, DANA.replace("\n", "\r\n"))
+    result = person.write_facts(root, "dana-whitfield",
+                                [{"date": "2026-10-08", "fact": f"X. {M}"}], "2026-10-12")
+    assert result["written"] == 1
+    text = path.read_text(encoding="utf-8")
+    assert "\r" not in text and "- Owner wrote this." in text and "## What I know" in text
+
+
+def test_write_facts_unknown_person_raises(tmp_path):
+    root = make_vault(tmp_path)
+    with pytest.raises(ValueError, match="no person 'nobody'"):
+        person.write_facts(root, "nobody", [{"date": "2026-10-08", "fact": f"X. {M}"}], "2026-10-12")
+
+
+def test_write_facts_needs_a_list(tmp_path):
+    root, _ = _dana(tmp_path)
+    with pytest.raises(ValueError, match="list"):
+        person.write_facts(root, "dana-whitfield", {"date": "2026-10-08"}, "2026-10-12")
+
+
+def test_touch_sets_person_updated_and_is_idempotent(tmp_path):
+    root, path = _dana(tmp_path)
+    first = person.touch(root, "dana-whitfield", timestamp="2026-10-12T21:05")
+    assert first["changed"] is True and "person-updated: 2026-10-12T21:05" in path.read_text(encoding="utf-8")
+    assert person.touch(root, "dana-whitfield", timestamp="2026-10-12T21:05")["changed"] is False
+
+
+def test_touch_rejects_a_malformed_timestamp(tmp_path):
+    root, _ = _dana(tmp_path)
+    with pytest.raises(ValueError, match="YYYY-MM-DDTHH:MM"):
+        person.touch(root, "dana-whitfield", timestamp="2026-10-12")
+
+
+def test_cli_person_write_requires_automatic_and_writes(tmp_path):
+    import json, subprocess, sys
+    from pathlib import Path
+    cli = Path(__file__).resolve().parents[2] / "plugin/lib/vaultlib/cli.py"
+    root, path = _dana(tmp_path)
+    payload = tmp_path / "facts.json"
+    payload.write_text(json.dumps({"facts": [{"date": "2026-10-08", "fact": f"X. {M}"}]}),
+                       encoding="utf-8")
+    base = [sys.executable, str(cli), "person", "write", "--vault", str(root),
+            "--slug", "dana-whitfield", "--facts", str(payload), "--today", "2026-10-12"]
+    refused = json.loads(subprocess.run(base, capture_output=True, text=True,
+                                        encoding="utf-8").stdout)
+    assert refused["ok"] is False and "--automatic" in refused["error"]
+    done = json.loads(subprocess.run(base + ["--automatic"], capture_output=True, text=True,
+                                     encoding="utf-8").stdout)
+    assert done["ok"] is True and done["result"]["written"] == 1
+    touched = json.loads(subprocess.run(
+        [sys.executable, str(cli), "person", "touch", "--vault", str(root),
+         "--slug", "dana-whitfield", "--timestamp", "2026-10-12T21:05"],
+        capture_output=True, text=True, encoding="utf-8").stdout)
+    assert touched["ok"] is True and touched["result"]["person-updated"] == "2026-10-12T21:05"
+
+
+def test_touch_rejects_a_timestamp_that_is_not_a_real_moment(tmp_path):
+    # Review I1: the stamp is the queue's start point; 2026-13-45T99:99
+    # would silently stop this person from ever being read again.
+    root, path = _dana(tmp_path)
+    with pytest.raises(ValueError, match="YYYY-MM-DDTHH:MM"):
+        person.touch(root, "dana-whitfield", timestamp="2026-13-45T99:99")
+    assert "person-updated" not in path.read_text(encoding="utf-8")
+
+
+def test_write_facts_refuses_when_the_section_has_an_open_code_fence(tmp_path):
+    # Review I2: a fact appended after an unclosed fence would be code, not
+    # a list item, and every later night's facts would land there too.
+    start = DANA.replace("# Dana Whitfield\n\n",
+                         "# Dana Whitfield\n\n## What I know\n\n- a\n```\ncode\n")
+    root, path = _dana(tmp_path, start)
+    before = path.read_bytes()
+    result = person.write_facts(root, "dana-whitfield",
+                                [{"date": "2026-10-08", "fact": f"X. {M}"}], "2026-10-12")
+    assert result["written"] == 0 and "code block" in result["skipped"][0]
+    assert path.read_bytes() == before
+
+
+def test_write_facts_reuses_the_section_in_any_case(tmp_path):
+    # The structure-15 upgrade reuses "## What I Know"; the writer must too,
+    # or the page grows a second section.
+    start = DANA.replace("# Dana Whitfield\n\n", "# Dana Whitfield\n\n## What I Know\n\n- mine\n\n")
+    root, path = _dana(tmp_path, start)
+    person.write_facts(root, "dana-whitfield",
+                       [{"date": "2026-10-08", "fact": f"X. {M}"}], "2026-10-12")
+    text = path.read_text(encoding="utf-8")
+    assert text.count("## What I") == 1 and f"- mine\n- 2026-10-08 — X. {M}\n" in text
+
+
+def test_ensure_finds_the_person_by_email_before_the_name(tmp_path):
+    # Review 2026-10-12: Outlook's "Peeters, Jan" (or a person renamed in the
+    # table) made a second note although the address was already on file.
+    root = make_vault(tmp_path)
+    person.ensure(root, "Jan Peeters", "2026-09-30", email="Jan.Peeters@acme.example")
+    result = person.ensure(root, "Peeters, Jan", "2026-10-12", email="jan.peeters@acme.example")
+    assert result["slug"] == "jan-peeters" and result["created"] is False
+    assert result["ignored"] == ["name"]
+    assert sorted(p.name for p in (root / "50-people").glob("*.md")) == ["jan-peeters.md"]
+
+
+def test_ensure_without_a_known_email_still_creates_by_name(tmp_path):
+    root = make_vault(tmp_path)
+    person.ensure(root, "Jan Peeters", "2026-09-30", email="jan@acme.example")
+    made = person.ensure(root, "Jan de Wit", "2026-10-12", email="dewit@acme.example")
+    assert made["slug"] == "jan-de-wit" and made["created"] is True

@@ -34,7 +34,7 @@ from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple
 
-from . import decision, markdown, msglog, msgstate, naming, notes, vault
+from . import dates, decision, markdown, msglog, msgstate, naming, notes, vault
 
 MEETINGS_DIR = vault.MEETINGS_DIR
 PROJECTS_DIR = vault.PROJECTS_DIR
@@ -150,6 +150,7 @@ def _index_meetings(root: Path) -> Tuple[List[dict], List[str]]:
                                    warnings),
             "attendees": _slug_list(data.get("attendees"), "attendees", rel,
                                     warnings),
+            "entities": _slug_list(data.get("entities"), "entities", rel, warnings),
         })
     return meetings, warnings
 
@@ -173,11 +174,13 @@ def _index_logs(root: Path) -> Tuple[List[dict], List[str]]:
         strong = [p for p in _slug_list(fm.get("projects"), "projects", rel,
                                         warnings) if p not in weak]
         people_groups: List[str] = []
+        groups: List[Tuple[str, List[str]]] = []
         for group in data["groups"]:
             people = group.get("people")
             if (isinstance(people, list)
                     and all(isinstance(p, str) for p in people)):
                 people_groups.extend(people)
+                groups.append((str(group.get("gid")), list(people)))
             else:
                 warnings.append(
                     f"{rel}: group {group.get('gid')!r} has no usable "
@@ -187,9 +190,252 @@ def _index_logs(root: Path) -> Tuple[List[dict], List[str]]:
             "date": _parse_first_iso_date(fm.get("date")),
             "updated": _parse_iso_datetime(fm.get("updated-at")),
             "strong": strong,
+            "entities": _slug_list(fm.get("entities"), "entities", rel, warnings),
             "people_groups": people_groups,
+            "groups": groups,
         })
     return out, warnings
+
+
+def _index_sessions(root: Path) -> Tuple[List[dict], List[str]]:
+    """Session records from /add (#267). Activity is `updated-at`, the write
+    time, like a message log. A damaged record warns and is skipped."""
+    out: List[dict] = []
+    warnings: List[str] = []
+    folder = root / vault.MESSAGES_DIR / "sessions"
+    for path in sorted(folder.glob("*.md")) if folder.is_dir() else []:
+        rel = path.relative_to(root).as_posix()
+        try:
+            data, _ = markdown.split_frontmatter(path.read_text(encoding="utf-8"))
+        except (ValueError, OSError) as exc:
+            warnings.append(f"{rel}: {exc}")
+            continue
+        out.append({
+            "path": rel,
+            "updated": _parse_iso_datetime(data.get("updated-at")),
+            "projects": _slug_list(data.get("projects"), "projects", rel, warnings),
+        })
+    return out, warnings
+
+
+ENTITY_STATUSES = ("active", "prospect")
+
+
+# Without a usable stamp a page reads back at most this many working days,
+# today included — a page untouched for a year must not pull a year of
+# material into one unattended night (entities and people alike).
+FIRST_LOOKBACK_BUSINESS_DAYS = 3
+
+# The plugin updates itself; the vault only changes at /upgrade-vault. Sections
+# D and E write page shapes a vault has only from these structure versions on,
+# and E's start points are the `person-updated` stamps migration 014 lays down.
+# Below the version the queue stays empty.
+ENTITY_MIN_STRUCTURE = 14
+PEOPLE_MIN_STRUCTURE = 15
+
+
+def _structure_version(root: Path) -> Optional[int]:
+    """The vault's structure version, or None when the marker is missing or
+    unreadable — no gate then: every provisioned vault carries one."""
+    try:
+        return int(vault.structure_version(root))
+    except (vault.VaultError, ValueError, OSError):
+        return None
+
+
+def _lookback_floor(today: date) -> datetime:
+    """00:00 on the first of the last FIRST_LOOKBACK_BUSINESS_DAYS working
+    days, today included: on a Monday, the Thursday before."""
+    return datetime.combine(
+        dates._walk_back_business_days(today, FIRST_LOOKBACK_BUSINESS_DAYS), time.min)
+
+
+def _entity_queue(root: Path, confirmed: List[dict], logs: List[dict],
+                  sessions: List[dict], included: List[dict],
+                  warnings: List[str], *, today: date,
+                  queued_notes: Set[str]) -> List[dict]:
+    """Entities with material newer than their `entity-updated` stamp (#273
+    piece 3). A team's own material queues the team in full and its active
+    parent in parent mode, so the parent's history gets the team's big
+    events. Dormant entities are never queued.
+
+    Without a usable stamp the first run is bounded: it reads back to the
+    `last-updated` day, but never further than FIRST_LOOKBACK_BUSINESS_DAYS
+    working days. A ticked note counts only when a project queue entry
+    carries it (`queued_notes`), so a note no project could read never
+    queues its entity either."""
+    floor = _lookback_floor(today)
+    project_entity: Dict[str, str] = {}
+    projects_dir = root / PROJECTS_DIR
+    for index_path in (sorted(projects_dir.glob("*/index.md")) if projects_dir.is_dir() else []):
+        try:
+            data, _ = markdown.split_frontmatter(index_path.read_text(encoding="utf-8"))
+        except (ValueError, OSError):
+            continue
+        if data.get("entity"):
+            project_entity[str(data.get("slug") or index_path.parent.name)] = str(data["entity"])
+
+    entities: Dict[str, dict] = {}
+    names: Dict[str, str] = {}   # every dossier, dormant ones too: a team's parent label
+    folder = root / vault.ENTITIES_DIR
+    for path in sorted(folder.glob("*/dossier.md")) if folder.is_dir() else []:
+        rel = path.relative_to(root).as_posix()
+        try:
+            data, _ = markdown.split_frontmatter(path.read_text(encoding="utf-8"))
+        except (ValueError, OSError) as exc:
+            warnings.append(f"{rel}: {exc}")
+            continue
+        slug = str(data.get("slug") or path.parent.name)
+        names[slug] = str(data.get("entity-name") or slug)
+        if str(data.get("status") or "") not in ENTITY_STATUSES:
+            continue
+        raw_stamp = data.get("entity-updated")
+        stamp = _parse_iso_datetime(raw_stamp)
+        if raw_stamp is not None and stamp is None:
+            warnings.append(
+                f"{rel}: unparseable entity-updated {raw_stamp!r} — reading "
+                f"at most the last {FIRST_LOOKBACK_BUSINESS_DAYS} working days; rewrite "
+                "it as YYYY-MM-DDTHH:MM or delete it")
+        if stamp is None:
+            day = _parse_first_iso_date(data.get("last-updated"))
+            if day is None:
+                warnings.append(
+                    f"{rel}: unparseable last-updated "
+                    f"{data.get('last-updated')!r} and no entity-updated — "
+                    f"reading the last {FIRST_LOOKBACK_BUSINESS_DAYS} working days")
+                stamp = floor
+            else:
+                stamp = max(datetime.combine(day, time.min), floor)
+        entities[slug] = {"slug": slug, "dossierPath": rel,
+                          "entityName": str(data.get("entity-name") or slug),
+                          "entityUpdated": (str(data.get("entity-updated"))
+                                            if data.get("entity-updated") else None),
+                          "parent": str(data.get("parent") or "") or None,
+                          "threshold": stamp}
+    for info in entities.values():
+        parent = info["parent"]
+        info["parentName"] = names.get(parent) if parent else None
+
+    def of(slugs) -> Set[str]:
+        return {project_entity[p] for p in slugs if p in project_entity}
+
+    own: Dict[str, dict] = {}
+    for slug, info in entities.items():
+        threshold = info["threshold"]
+        files = [m["file"] for m in confirmed
+                 if m["type"] != NOT_A_MEETING and _activity(m) >= threshold
+                 and (slug in m["entities"] or slug in of(m["projects"]))]
+        new_logs = [d["stem"] for d in logs
+                    if d["updated"] is not None and d["updated"] >= threshold
+                    and (slug in d["entities"] or slug in of(d["strong"]))]
+        new_sessions = [x["path"] for x in sessions
+                        if x["updated"] is not None and x["updated"] >= threshold
+                        and slug in of(x["projects"])]
+        new_notes = [n["path"] for n in included if n["path"] in queued_notes
+                     and slug in of(n["projects"])]
+        if files or new_logs or new_sessions or new_notes:
+            own[slug] = {"newFiles": files, "newLogs": new_logs,
+                         "newSessions": new_sessions, "newNotes": new_notes}
+
+    queue: Dict[str, dict] = {}
+
+    def entry(slug: str) -> dict:
+        info = entities[slug]
+        if slug not in queue:
+            material = own.get(slug, {"newFiles": [], "newLogs": [], "newSessions": [], "newNotes": []})
+            queue[slug] = {"slug": slug, "dossierPath": info["dossierPath"],
+                           "entityName": info["entityName"],
+                           "entityUpdated": info["entityUpdated"],
+                           "parent": info["parent"],
+                           "parentName": info["parentName"],
+                           "parentMode": slug not in own, **material, "teamFiles": []}
+        return queue[slug]
+
+    empty = {"newFiles": [], "newLogs": [], "newSessions": [], "newNotes": []}
+    for slug in own:
+        entry(slug)
+        parent = entities[slug]["parent"]
+        if not (parent and parent in entities):
+            continue
+        # Material tagged with the parent too is already the parent's own and
+        # is read in full; listing it again as team material would have the
+        # parent read it twice and write its big events twice.
+        mine, theirs = own[slug], own.get(parent, empty)
+        team = {key: [x for x in mine[src] if x not in theirs[src]]
+                for key, src in (("files", "newFiles"), ("logs", "newLogs"),
+                                 ("sessions", "newSessions"), ("notes", "newNotes"))}
+        if any(team.values()):
+            entry(parent)["teamFiles"].append({
+                "team": slug, "teamName": entities[slug]["entityName"], **team})
+    return [queue[slug] for slug in sorted(queue)]
+
+
+def _people_queue(root: Path, confirmed: List[dict], logs: List[dict],
+                  owner_slug: str, warnings: List[str], *,
+                  today: date) -> Tuple[List[dict], List[dict]]:
+    """People with material newer than their `person-updated` stamp (#273
+    piece 4), and that material grouped per meeting and per day log so one
+    reader handles everyone in it.
+
+    Without a stamp the start point is the `created` day at 00:00 (a person
+    created tonight still gets tonight's meeting), but never further back
+    than FIRST_LOOKBACK_BUSINESS_DAYS working days; a page made by hand,
+    with neither, starts there too. Section E's stamp takes over from the
+    first run. Session records are
+    not a source — /add writes session facts on the spot. Confirmed meetings
+    of every type count, `type: note` captures included."""
+    floor = _lookback_floor(today)
+    starts: Dict[str, datetime] = {}
+    names: Dict[str, Tuple[str, str]] = {}
+    folder = root / PEOPLE_DIR
+    for path in sorted(folder.glob("*.md")) if folder.is_dir() else []:
+        rel = path.relative_to(root).as_posix()
+        try:
+            data, _ = markdown.split_frontmatter(path.read_text(encoding="utf-8"))
+        except (ValueError, OSError):
+            continue      # the metrics pass already warned about this file
+        slug = str(data.get("slug") or "")
+        if not slug or slug == owner_slug:
+            continue
+        raw = data.get("person-updated")
+        stamp = _parse_iso_datetime(raw)
+        if raw is not None and stamp is None:
+            warnings.append(f"{rel}: unparseable person-updated {raw!r} — falling "
+                            "back to created; rewrite it as YYYY-MM-DDTHH:MM or delete it")
+        if stamp is None:
+            day = _parse_first_iso_date(data.get("created"))
+            stamp = (max(datetime.combine(day, time.min), floor) if day else floor)
+        starts[slug] = stamp
+        names[slug] = (rel, str(data.get("person-name") or slug))
+
+    work: List[dict] = []
+    queued: Set[str] = set()
+    for m in confirmed:
+        people = sorted({a for a in m["attendees"]
+                         if a in starts and _activity(m) >= starts[a]})
+        if people:
+            work.append({"kind": "meeting", "path": m["file"],
+                         "date": m["date"].isoformat(), "people": people})
+            queued.update(people)
+    for d in logs:
+        if d["updated"] is None:
+            continue
+        gids, people = [], set()
+        for gid, members in d["groups"]:
+            hit = {p for p in members if p in starts and d["updated"] >= starts[p]}
+            if hit:
+                gids.append(gid)
+                people |= hit
+        if people:
+            work.append({"kind": "log", "path": f"{vault.MESSAGES_DIR}/{d['stem']}.md",
+                         "stem": d["stem"],
+                         "date": d["date"].isoformat() if d["date"] else None,
+                         "groups": gids, "people": sorted(people)})
+            queued |= people
+    work.sort(key=lambda w: (w["date"] or "", w["path"]))
+    entries = [{"slug": s, "path": names[s][0], "personName": names[s][1]}
+               for s in sorted(queued)]
+    return entries, work
 
 
 def _activity(meeting: dict) -> datetime:
@@ -293,6 +539,8 @@ def run(root: Path, today: str, owner: str) -> dict:
     meetings, warnings = _index_meetings(root)
     logs, log_warnings = _index_logs(root)
     warnings.extend(log_warnings)
+    sessions, session_warnings = _index_sessions(root)
+    warnings.extend(session_warnings)
     # Notes the owner ticked Include. Harvest warnings are not repeated here:
     # stage 2 already ran `notes harvest` and carries them into the run.
     included = [n for n in notes.harvest(root)["notes"] if n["body"] is not None]
@@ -396,13 +644,16 @@ def run(root: Path, today: str, owner: str) -> dict:
                     if slug in d["strong"] and d["updated"] is not None
                     and d["updated"] >= threshold]
         new_notes = [n["path"] for n in included if slug in n["projects"]]
+        new_sessions = [s["path"] for s in sessions
+                        if slug in s["projects"] and s["updated"] is not None
+                        and s["updated"] >= threshold]
         removed: List[str] = []
         for log, at, entry in requeued.get(slug, []):
             if state_updated is not None and state_updated > at:
                 prune.append(entry)
             elif log not in removed:
                 removed.append(log)
-        if new_meetings or new_logs or removed or new_notes:
+        if new_meetings or new_logs or removed or new_notes or new_sessions:
             queue.append({
                 "slug": slug,
                 "indexPath": rel,
@@ -410,10 +661,12 @@ def run(root: Path, today: str, owner: str) -> dict:
                 "lastUpdated": last_updated.isoformat(),
                 "stateUpdated": (state_updated.isoformat(timespec="minutes")
                                  if state_updated is not None else None),
-                "newCount": len(new_meetings) + len(new_logs) + len(new_notes),
+                "newCount": (len(new_meetings) + len(new_logs) + len(new_notes)
+                             + len(new_sessions)),
                 "newFiles": [m["file"] for m in new_meetings],
                 "newLogs": new_logs,
                 "newNotes": new_notes,
+                "newSessions": new_sessions,
                 "removedSources": removed,
                 "existingDecisions":
                     decision.list_decisions(root, slug)["decisions"],
@@ -483,12 +736,38 @@ def run(root: Path, today: str, owner: str) -> dict:
     queued_notes = {path for entry in queue for path in entry["newNotes"]}
     not_queued = [n["path"] for n in included
                   if n["projects"] and n["path"] not in queued_notes]
+    structure = _structure_version(root)
+    waiting_for_upgrade: List[str] = []
+    if structure is not None and structure < ENTITY_MIN_STRUCTURE:
+        entities_queue: List[dict] = []
+        waiting_for_upgrade.append("entities")
+    else:
+        entities_queue = _entity_queue(root, confirmed, logs, sessions, included,
+                                       warnings, today=today_date,
+                                       queued_notes=queued_notes)
+    if structure is not None and structure < PEOPLE_MIN_STRUCTURE:
+        people_queue: List[dict] = []
+        people_work: List[dict] = []
+        waiting_for_upgrade.append("people")
+    else:
+        people_queue, people_work = _people_queue(root, confirmed, logs, owner_slug,
+                                                  warnings, today=today_date)
     return {
         "today": today_date.isoformat(),
+        # The minute this queue was built. Sections D and E stamp
+        # `entity-updated` / `person-updated` with it, not with their own later clock, so material that lands while
+        # the run is in flight is still newer than the stamp next time.
+        "queuedAt": datetime.now().isoformat(timespec="minutes"),
         "owner": owner_slug,
         "meetingsIndexed": len(meetings),
         "confirmedMeetings": len(confirmed),
         "projectsNeedingUpdate": queue,
+        "entitiesNeedingUpdate": entities_queue,
+        "peopleNeedingUpdate": people_queue,
+        "peopleWork": people_work,
+        # Sections whose queue stayed empty because the vault is below the
+        # structure version they need ("entities", "people").
+        "waitingForUpgrade": waiting_for_upgrade,
         "notesNotQueued": not_queued,
         "metricsWritten": {"projects": projects_written,
                            "people": people_written},

@@ -1,6 +1,6 @@
 ---
 name: sync-recordings
-description: Sync new meeting transcripts into the vault — from files dropped in the inbox, from a Plaud recorder connector, or from Microsoft 365. Triggers when the user invokes /sync-recordings or asks to sync recordings, process transcripts, or pull in what's in the inbox.
+description: Sync new meeting transcripts into the vault — from files dropped in the inbox, from a Plaud recorder connector, or from Microsoft 365. Triggers when the user invokes /sync-recordings or asks to sync recordings, process transcripts, or pull in what's in the inbox. One pasted text, a file, or this conversation ("add this to my second brain") is /add.
 user_invocable: true
 upstreamed-from: busdev@ccc27b8
 ---
@@ -31,9 +31,11 @@ The JSON envelope and interpreter resolution are documented in the plugin's
 ## Usage
 
 ```
-/sync-recordings                 # interactive: show the plan, confirm once, run
+/sync-recordings                 # interactive: syncs, then asks about triage and decisions
 /sync-recordings --unattended    # no prompts — scheduled runs and pipeline stages
 ```
+
+Called by the owner, it also asks about the meetings waiting for review, brings the accepted ones and your notes ticked Include into the brain, and asks about the decisions it found (steps 8–11).
 
 ## Rules
 
@@ -110,6 +112,12 @@ The JSON envelope and interpreter resolution are documented in the plugin's
     probe agent types, or — only on a harness where those plugin agent
     types do not resolve — the documented generic-subagent fallback with
     `model: sonnet` passed explicitly (step 6).
+11. **This skill never creates, writes or edits anything under `60-daily-notes/`.**
+    The daily note belongs to `/evening-sync` stage 6. Safe to call any number
+    of times a day.
+12. **Steps 8–11 run only when the owner called this skill** (interactive mode).
+    `--unattended` — and `/evening-sync` stage 3 — stops after step 7. This skill
+    never reads mail or Teams.
 
 ## The three adapters
 
@@ -220,6 +228,12 @@ it has exactly three outcomes:
 | A record of an interaction — transcript, meeting recording, meeting notes | a meeting note, the normal path below |
 | Carries context about people, projects or entities but is not a meeting — forwarded correspondence, a voice memo, pasted context | a capture: a note with `type: note` |
 | Not a capture at all — a whitepaper, a deck, a spreadsheet, an image, a stray binary | **park** it |
+
+A file whose text you cannot read — an audio file, a Word or PDF document
+whose words do not come through — is **parked** with that reason, whatever
+it may hold: a worker cannot read it either, and an inbox file has no
+failure count, so it would cost a worker and fail again every night. The
+parked note says how to have it processed: paste its text with `/add`.
 
 **When you cannot decide between a capture and a park, write the `note`.**
 A wrongly written note sits in Meetings → To review and is one click from `archived: true`;
@@ -717,6 +731,12 @@ When the item gives that attendee's address alongside the name, add
 `--email "<address>"` — it fills an empty email and never overwrites one.
 Never pair a name with an address by guessing.
 
+Add `--entity <slug>` only when that attendee's email domain matched exactly
+one entity in routing (signal 1 above): the person is then linked to that
+entity. Never a guess: when the domain matched no entity or more than one,
+or there is no address, omit `--entity`. It fills an empty `entity` and never
+overwrites one.
+
 Use the returned slugs. The vault owner attends their own meetings — include
 them. Names only guessed from transcript audio are unreliable: leave them
 out of `attendees` and mention them in the debrief instead.
@@ -768,45 +788,13 @@ There is no auto-confirm: every synced meeting lands `needs-review`, and the
 reviewed checkbox in Meetings.base is the confirm path. The stamp is the data
 a future calibration needs — write it accurately, not optimistically.
 
-### 5. Confirm the plan (interactive mode only)
+### 5. No plan is shown
 
-**Order, in interactive mode: every M365 occurrence is probed first, then
-one plan is shown, then dispatch.** Step 6's probe wave runs before this
-step ever shows anything — not interleaved with it, and never after. A
-`transcript-found` promotion (step 6) folds its row into *this* table,
-the same one every plaud/inbox recording is already on; it is never a
-second table or a second confirmation for that row. Skipped entirely
-under `--unattended`, where the probe wave and worker dispatch simply run
-back to back with no plan shown at all.
-
-Show one table — title, date, projects, new people, confidence — and ask
-once: proceed / edit / skip items. The title column is provisional: the
-real title is a step-6 subagent output, decided from the transcript, not
-yet drafted here — show the source filename or the calendar subject in
-its place.
-
-**The mechanism behind that ordering:** the probe wave (step 6) runs on
-haiku, not sonnet, and only a `transcript-found` reply extracts a row
-into `m365_routing.json` and carries it into this table; a row still
-waiting on a probe, or one a probe settled
-`no-transcript`/`no-access`/`forbidden`, never appears here at all.
-
-**M365 rows carry two more provisional columns, for the same reason.**
-Neither the attendee count nor the final confidence exists yet at step 5
-for an m365 recording — the worker settles both at dispatch (step 4's
-M365 exception, step 6). Show what step 4 actually computed, honestly,
-never a resolved value that doesn't exist yet:
-
-- **New people** — show "resolves at dispatch ({N} attendee emails)",
-  `{N}` being the length of that row's `attendee-emails` in
-  `m365_routing.json`; the email count is real, the new-person count is
-  not knowable until the worker runs `person ensure`.
-- **Confidence** — show the pre-computed component, not a guessed final
-  rating: `high-if-no-new-attendees` true → `"≤high — final at
-  dispatch"`; otherwise `medium-if-at-most-one-new` true → `"≤medium —
-  final at dispatch"`; otherwise `"low"` outright — when neither component
-  is true no new-attendee count could raise it, so `low` is already final
-  and needs no caveat.
+**No plan is shown — in either mode (#271).** Interactive mode extracts like
+unattended mode: ambiguous routing becomes `projects: []` and low confidence,
+and the owner settles every note in step 8 on the real titles. A step-8
+dismiss is `archived: true` on the note. The drop mechanics below are only
+for a recording the owner explicitly asks never to fetch again.
 
 For a recording the user says to permanently drop:
 
@@ -829,10 +817,10 @@ python3 "$VAULTLIB" sync park --vault "$VAULT" \
 ```
 
 A `plaud:` id has no inbox file, so `sync skip` — with its recording id
-already known at step 5 — is the whole story there.
+already known when it is dropped — is the whole story there.
 
 An m365 row is different in mechanism, not in what is knowable: its
-`recording_id` **is** known by step 5 — a row only reaches this table
+`recording_id` **is** known when it is dropped — a row only reaches the routing extract
 once its probe has promoted it, and that probe's `transcript-found` line
 carried `<recording_id>` verbatim before the row ever reached the
 routing extract. Dropping an m365 row is therefore two writes, not one:
@@ -853,10 +841,10 @@ routing extract. Dropping an m365 row is therefore two writes, not one:
 
    ```bash
    python3 "$VAULTLIB" sync skip --vault "$VAULT" --id m365:<hex> \
-     --reason "dropped from the plan by the owner"
+     --reason "dropped by the owner"
    ```
 
-Do both for every m365 row dropped at step 5, never just the seen-events
+Do both for every m365 row dropped this way, never just the seen-events
 write: the cache entry is what keeps triage from re-listing the
 occurrence immediately, and the skip-list line is the backstop that keeps
 a *pruned* cache entry from letting the occurrence resurface — a
@@ -882,10 +870,9 @@ occurrence out of every future triage.
 holds every `fetch` entry on the **probe dispatch list** — `unseen`,
 `unkeyed`, and `recheck-no-transcript` alike, never split by reason at
 this point — and none of them proceeds through the routing extract,
-steps 3–4, or the single step-5 plan until a probe promotes it. In interactive mode this whole wave
-runs before step 5's plan is ever shown — step 5 says the same thing from
-its own side; the two never interleave, and there is never a second plan
-for a row this wave promotes. Dispatch a probe for each one as the
+or steps 3–4 until a probe promotes it. No plan is shown in either mode
+(step 5), so a row this wave promotes goes straight on to routing and
+dispatch. Dispatch a probe for each one as the
 plugin's own agent type: `subagent_type: second-brain:sync-probe-m365`.
 **Dispatch in blocking batches of at most ~4 — this is the cap, not a
 suggestion on top of it:** send ONE message containing at most ~4 blocking
@@ -895,8 +882,8 @@ until every entry on the list has a probe. There is no background mode
 for this fan-out. Pass each probe: the
 `references/probe-contract.md` path (`references/worker-contract.md` too —
 the probe contract defers to it), `$VAULT`, `$SCRATCH`, `$VAULTLIB`, the
-vault timezone, the entry's `uri` (verbatim, from the calendar-search pages
-step 1 still holds), and its scratch stem, `m365_probe_<n>`. A probe never
+vault timezone, the entry's `event_uri` from the `sync m365-triage` result
+(verbatim — never the listing's `uri`; see issue #205 above), and its scratch stem, `m365_probe_<n>`. A probe never
 gets routing, confidence, or attendee data — it has not earned that cost
 yet.
 
@@ -929,10 +916,7 @@ When a probe batch returns, act on each line:
   any fetch survivor**: extract its row into `$SCRATCH/m365_routing.json`
   from the calendar-search pages (same fields, same verbatim rule, as
   step 1's ordinary extract), then run steps 3–4 (routing signals,
-  confidence inputs) for it — never step 5 again for this row alone: in
-  interactive mode step 5's plan runs once, after every probe in this
-  wave has settled, and its single table already includes every row
-  promoted here. Then dispatch it with the promoted-worker batches below,
+  confidence inputs) for it. Then dispatch it with the promoted-worker batches below,
   once every probe has returned, using the worker contract's
   **pre-fetched event variant**: the probe's event file and its verbatim
   `recording_id`/`transcript_url` in place of a URI to fetch — the worker
@@ -1231,8 +1215,7 @@ and settles it as already synced.
 Then write the batch's settled lines — `written` (with each
 `recording_id`, including any `already-synced`-derived entries),
 `no-transcript`, `no-access`, `forbidden`, `skipped` (including any
-`skip-listed`-derived entries, plus the step-5 drop-path entries described
-above) — one entry per occurrence, keyed by the `id` and `start_utc` the
+`skip-listed`-derived entries) — one entry per occurrence, keyed by the `id` and `start_utc` the
 triage result carried, to `$SCRATCH/m365_outcomes_batch.json`, and bank
 them before dispatching the next batch:
 
@@ -1425,6 +1408,152 @@ the `new-people:` clause each m365 worker's `written` line carries — you
 never call `person ensure` for an m365 attendee yourself (step 6), so its
 count has to come from the worker.
 
+### 8. Triage in the chat
+
+Only when the owner called `/sync-recordings` directly — never under
+`--unattended` and never from `/evening-sync` stage 3; there the run ends
+after step 7.
+
+```bash
+python3 "$VAULTLIB" meeting triage-list --vault "$VAULT"
+```
+
+Empty `items` → say "nothing waiting for you", take the run lock as below,
+and go to step 9 (notes ticked Include may still be waiting). Otherwise show ONE numbered list, one line per
+item, dry, no commentary:
+
+`1. Weekly with Acme · Mon 12 Oct 09:00 · Acme ERP rollout · Jan Peeters, Sofie Maes`
+
+Use `title`, `when` exactly as given (never work out a weekday yourself),
+`project_names` (or "no project") and `attendee_names`. Add
+` · ⚠ possible duplicate` when `conflicts_with` is set. Ask once:
+**"Accept, dismiss or change?"** Accept any free-text answer ("all accept",
+"1 3 accept, 2 dismiss, 4 project is finance close"). An unclear answer gets
+one short question back. "Not now" or no answer → `scratch sweep` and end;
+everything stays in triage.
+
+**A meeting with no project** (`projects` empty — an informal recording with
+no calendar event, typically): before showing the list, read the note
+(title, Key Takeaways, Debrief) and suggest **at most one** active project,
+from the same signals as routing in step 3 (project names, entity names,
+the people on it — run `sync routing-signals` if step 3 did not run in this
+call). Only when one project clearly fits;
+otherwise the line keeps "no project". Show it with a question mark:
+
+`3. Hallway chat · Mon 12 Oct 14:20 · no project — Acme ERP rollout? · Jan Peeters`
+
+Accept on that line takes the suggestion: write it as
+`{"path": …, "action": "change", "projects": ["<suggested slug>"]}`. The owner
+can say otherwise in the same answer ("3 accept, no project", "3 project is
+finance close"). A suggestion taken counts as a change for the one-line
+read-back below.
+
+**Changed to no project, and the meeting has `entities`:** ask about that
+item once — *"Also take it off <entity_names>'s page?"* Yes → add
+`"entities": []` to its change; no → leave `entities` out, and it stays on
+that page. An entity can be right without a project, so never clear it
+unasked.
+
+Translate the answer into a list of `{path, action[, projects][, attendees][, entities][, accept]}`.
+Projects and people are slugs: match the owner's words to existing project and
+people names. Never invent a slug. If a name matches nothing, or matches two,
+ask about that one item. When the answer changed a project or attendees, read
+your interpretation back in one line and wait for a yes.
+
+Only now take the run lock — never while a question is open, so the evening
+run is not held up by an answer that has not come yet:
+
+```bash
+python3 "$VAULTLIB" runlock acquire --vault "$VAULT" --routine sync-recordings
+```
+
+`acquired: false` → nothing was written; stop and say: *"Your evening run is
+busy, so I couldn't save your answers. The meetings are waiting in Meetings ›
+To review: tick Keep or Dismiss there, or run this again once the evening
+run is done."*
+Then `scratch sweep` and end.
+
+**From here until the end of step 9, every exit releases the lock first** —
+an error from any command in steps 8–9, a failed step 9:
+
+```bash
+python3 "$VAULTLIB" runlock release --vault "$VAULT" --routine sync-recordings
+```
+
+Then:
+
+```bash
+cat > "$SCRATCH/triage.payload.json" <<'JSON'
+[{"path": "20-meetings/…", "action": "accept"}]
+JSON
+python3 "$VAULTLIB" meeting triage-apply --vault "$VAULT" --items "$SCRATCH/triage.payload.json"
+python3 "$VAULTLIB" sync reconcile-reviews --vault "$VAULT"
+python3 "$VAULTLIB" sync rederive-entities --vault "$VAULT"
+```
+
+Report each `refused` item with its reason, in one line each. A duplicate is
+settled in Obsidian, as the reason says. Dismiss here is `archived: true` —
+the note is hidden, the recording is not skip-listed.
+
+### 9. Process
+
+Follow `${CLAUDE_PLUGIN_ROOT}/skills/evening-sync/references/process.md`
+with the **On demand** column of its Inputs table: sections A, B, C, D and E —
+without daily-note content, To Do's, or mail and Teams. Keep its Returns for
+steps 10 and 11.
+
+Its inputs on demand:
+
+- `<today>`: the `today` field of
+  `python3 "$VAULTLIB" dates plan --vault "$VAULT" --timezone <config.timezone>`,
+  consumed verbatim. Never compute a date yourself.
+- `<owner-slug>`: `owner` from the `config read` this skill already ran.
+
+On demand there is no recap: wherever process.md says "the recap", "tonight"
+or "tomorrow", it means the evening run. The `sync_notes` lines from A and C
+go to step 11's **Warnings** line.
+
+When section E has returned, release the lock — the project, entity
+and people pages are written, and the questions that follow must not hold up the
+evening run:
+
+```bash
+python3 "$VAULTLIB" runlock release --vault "$VAULT" --routine sync-recordings
+```
+
+### 10. Decisions in the chat
+
+From C's returns, list every `decisionsWritten` stem (read each note's
+`summary`), one line each: `1. Acme ERP rollout · Go-live moves to 3 Nov`.
+The note's path is `<decisionsDir>/<stem>.md`, `decisionsDir` from that
+project's queue entry. None → skip to step 11. Ask once: **"Keep or
+dismiss?"** "Not now" → they stay in Decisions › To review. For each answer:
+
+```bash
+python3 "$VAULTLIB" decision review --vault "$VAULT" --path "<decisionsDir>/<stem>.md" --keep
+python3 "$VAULTLIB" decision review --vault "$VAULT" --path "<decisionsDir>/<stem>.md" --dismiss
+```
+
+A dismissed decision whose result has `restored` set: say *"It had replaced
+<that decision>, which is back in force."* (The CLI restores it, with a dated
+footer; a Dismiss ticked in Decisions is restored the same way that evening.)
+
+### 11. Summary
+
+Summarize from disk, then `scratch sweep`:
+
+```
+## Brain updated
+**Meetings:** {N} accepted · {N} dismissed · {N} changed · {N} left in triage
+**Your notes:** {N} absorbed ({titles}) · {N} kept for tonight ({why})
+**Project pages rewritten:** {project names}
+**Entity pages updated:** {names, a team as "Finance (Acme)"} | none
+**People pages:** {N} facts added for {M} people | none
+**Decisions:** {N} kept · {N} dismissed · {N} left in Decisions › To review
+**Not done now:** mail and Teams, and tomorrow's daily note — tonight's run
+**Warnings:** {verbatim, `sync_notes` lines included} | none
+```
+
 ## Scratch hygiene
 
 Raw connector JSON — whoami payloads, `list_files` listings, transcripts —
@@ -1439,7 +1568,7 @@ python3 "$VAULTLIB" scratch sweep --dir "$SCRATCH"
 `scratch sweep` is stdlib-only and deletes a fixed, built-in pattern list
 (`plaud.whoami.json`, `m365.whoami.json`, `rec_*.json`, `plaud.list.json`,
 `m365_*.json`, `*.blob.md`, `ids.json`, `*.payload.json`, `decision.json`,
-`decision-*.json`, plus `sentmail.sample.json`, `calendar.*.json` and
+`decision-*.json`, `fetch_errors_batch.json`, plus `sentmail.sample.json`, `calendar.*.json` and
 `*.block.md` from Session-1 onboarding) directly inside `--dir`, never
 recursing — this is the whole reason it exists rather than `rm -f`. **Every scratch file this contract names you
 write already matches one of those patterns; name any other raw connector
@@ -1459,12 +1588,13 @@ reaches disk.)
 
 ## Unattended mode
 
-`--unattended` is what scheduled runs and the evening pipeline pass. Four
+`--unattended` is what scheduled runs and the evening pipeline pass. Five
 rules, not negotiable:
 
 1. **Never ask a question.** A blocked prompt means the run exits having
-   done nothing. Ambiguity in *extraction or routing* → skip that recording
-   and report it; it retries next run. Classification is not covered by this
+   done nothing. Ambiguity in *extraction* → skip that recording and report
+   it; it retries next run. Ambiguous *routing* is not skipped: rule 2
+   writes it with `projects: []` and low confidence. Classification is not covered by this
    rule: the three-outcome call in step 1 is decided in both modes, and its
    own ambiguity rule resolves toward writing the `note`. Note also that
    "skip" here means *defer to the next run* — unrelated to `sync skip` and
@@ -1495,3 +1625,6 @@ python3 "$VAULTLIB" runlog append --vault "$VAULT" --routine sync-recordings \
    Write it whether the run succeeded, refused an adapter, or found nothing —
    it is the one place a human looks after the fact, in
    `99-workflow-config/logs/routine-runs.log`.
+
+5. **Steps 8–11 never run.** Unattended stops after step 7 — steps 8–11 are
+   interactive only: no triage, no processing, no lock. The evening run processes in its own stage 4.

@@ -117,7 +117,7 @@ by hand: leave it, and name it in your outcome line.
 | Line | When |
 |---|---|
 | `written: <n> logs, <m> groups, <d> dropped points[, at-limit][, refused: <stems>][, failed: <sources>]` | `messages write` returned `ok` |
-| `nothing-new` | build's `groups` is 0 (after check and write ran on the empty file) |
+| `nothing-new[, failed: <sources>]` | build's `groups` is 0 (after check and write ran on the empty file); add `failed:` when a source could not be read |
 | `fetch-error: <what>` | a step failed and nothing was written |
 | `auth-error` | the connector refused the account |
 

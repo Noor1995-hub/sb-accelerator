@@ -220,6 +220,10 @@ def validate(root: Path, slug: str, raw) -> Tuple[dict, List[str], List[str]]:
             raise ProjectStateError(
                 f"defining_decision {decision!r} was dismissed by the owner as "
                 "not a real decision — pick one that stands, or null")
+        if str(fm.get("status") or "active") != "active":
+            raise ProjectStateError(
+                f"defining_decision {decision!r} is {fm.get('status')} — it no "
+                "longer stands; pick the decision that replaced it, or null")
         summary = str(fm.get("summary") or "").strip() or str(decision)
         when = str(fm.get("date") or "")[:10]
         suffix = f" ({display_long_date(when)})" if vault.ISO_DATE_RE.match(when) else ""
@@ -340,7 +344,7 @@ def write(root: Path, *, slug: str, payload, today: str,
             root, slug=slug, date_iso=today, timestamp=timestamp,
             next_milestone=milestone["text"] if milestone else None,
             next_milestone_date=milestone["date"] if milestone else None,
-            clear_milestone=milestone is None)
+            clear_milestone=milestone is None, stage=state.get("stage") or None)
     except project.ProjectError as exc:
         raise ProjectStateError(str(exc)) from exc
     return {"slug": slug, "path": f"{vault.PROJECTS_DIR}/{slug}/index.md",

@@ -8,6 +8,7 @@
     "done": "checkbox",
     "due": "date",
     "include": "checkbox",
+    "projects": "multitext",
     "reviewed": "checkbox"
   }
 }

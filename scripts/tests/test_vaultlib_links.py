@@ -110,3 +110,14 @@ def test_a_daily_note_and_a_log_never_share_a_stem(tmp_path):
     (root / "_messages" / "2026-09-30-messages.md").write_text("---\ntype: message-log\n---\n", encoding="utf-8")
     assert links.resolve(root, "2026-09-30")[0] == "daily note"
     assert links.resolve(root, "2026-09-30-messages")[0] == "message log"
+
+
+def test_a_session_record_resolves_as_a_session(tmp_path):
+    root = make_vault(tmp_path)
+    sessions = root / "_messages" / "sessions"
+    sessions.mkdir(parents=True)
+    (sessions / "2026-10-12-x.md").write_text("---\ntype: session\n---\n", encoding="utf-8")
+    kind, path, key = links.resolve(root, "_messages/sessions/2026-10-12-x")
+    assert kind == "session" and key is None
+    kind, _, _ = links.resolve(root, "2026-10-12-x")
+    assert kind == "session"

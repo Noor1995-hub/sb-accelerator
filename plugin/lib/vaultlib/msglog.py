@@ -406,7 +406,7 @@ def _short_date(day: str) -> str:
     return date.fromisoformat(day).strftime("%d %b").lstrip("0")
 
 
-def for_project(root: Path, *, slug: str, logs: List[str]) -> List[dict]:
+def _groups(root: Path, logs: List[str], wanted) -> List[dict]:
     out = []
     for stem in logs:
         try:
@@ -414,11 +414,44 @@ def for_project(root: Path, *, slug: str, logs: List[str]) -> List[dict]:
         except (MessagesError, OSError):
             continue
         for g in data["groups"]:
-            if slug in _strong(g) and g["points"]:
+            if wanted(g) and g["points"]:
                 out.append({"log": stem, "gid": g["gid"], "label": g["label"], "kind": g["kind"],
                             "people": g["people"], "points": [p["text"] for p in g["points"]],
                             "link": f"[[{vault.MESSAGES_DIR}/{stem}|{_short_date(data['date'])}]]"})
     return out
+
+
+def for_project(root: Path, *, slug: str, logs: List[str]) -> List[dict]:
+    return _groups(root, logs, lambda g: slug in _strong(g))
+
+
+def _project_entities(root: Path) -> Dict[str, str]:
+    """Project slug → its `entity`, from every project index."""
+    out: Dict[str, str] = {}
+    folder = root / vault.PROJECTS_DIR
+    for index in sorted(folder.glob("*/index.md")) if folder.is_dir() else []:
+        try:
+            fm, _ = markdown.split_frontmatter(index.read_text(encoding="utf-8"))
+        except (ValueError, OSError):
+            continue
+        if fm.get("entity"):
+            out[str(fm.get("slug") or index.parent.name)] = str(fm["entity"])
+    return out
+
+
+def for_entity(root: Path, *, slug: str, logs: List[str]) -> List[dict]:
+    """An entity's groups (#273): tagged with the entity itself, or strongly
+    linked to one of its projects. Same shape as for_project, so mail about
+    an organisation that has no project yet still reaches its page."""
+    project_entity = _project_entities(root)
+    return _groups(root, logs, lambda g: slug in (g.get("entities") or [])
+                   or any(project_entity.get(p) == slug for p in _strong(g)))
+
+
+def for_person(root: Path, *, slug: str, logs: List[str]) -> List[dict]:
+    """A person's groups (#273 piece 4): every group whose `people` names
+    them, so section E can cite each group's link. Same shape as for_entity."""
+    return _groups(root, logs, lambda g: slug in (g.get("people") or []))
 
 
 _CODE_RE = re.compile(r"\b(?:[A-Z]{1,5}-?\d{2,}|\d{2,}-[A-Z]{1,5})\b")
@@ -442,7 +475,8 @@ def _what(sources) -> str:
     return "your mail" if set(sources) <= {"inbox", "sent"} else "your mail and Teams"
 
 
-def status(root: Path, *, now: str, first_run_since: Optional[str], auth_error: bool = False) -> List[str]:
+def status(root: Path, *, now: str, first_run_since: Optional[str], auth_error: bool = False,
+           peek: bool = False) -> List[str]:
     """At most STATUS_LIMIT plain lines, most urgent first.
 
     Behind: a gap open for more than BEHIND_AFTER_DAYS whole days, or a feed
@@ -452,6 +486,10 @@ def status(root: Path, *, now: str, first_run_since: Optional[str], auth_error: 
     still records its run, so it never reads as being behind.
     Closed intervals: one line per (from, to), sources merged; a line that
     does not fit stays in the state for the next morning.
+
+    `peek` leaves the state alone: the evening run reads the lines before
+    the note is written and drops them only once it is — a refused write or
+    a skipped recap used to lose them for good (review 2026-10-12).
     """
     state = msgstate.load(root)
     now_dt = seenevents.parse_now(now)
@@ -459,7 +497,7 @@ def status(root: Path, *, now: str, first_run_since: Optional[str], auth_error: 
     if auth_error:
         lines.append(AUTH_LINE)
     if first_run_since:
-        lines.append("From today, this note also covers your mail and Teams.")
+        lines.append("From now on, this note also covers your mail and Teams.")
     behind = [((now_dt - seenevents.parse_now(g["from"])).days, g["source"]) for g in state["gaps"]]
     moved = [seenevents.parse_now(s) for s in (state["cursor"], state["last_run"]) if s]
     if moved:
@@ -478,7 +516,7 @@ def status(root: Path, *, now: str, first_run_since: Optional[str], auth_error: 
         lines.append(f"I couldn't catch up on {_what(sources)} from {_day_label(start)} "
                      f"to {_day_label(end)}.")
         shown.add((start, end))
-    if shown:
+    if shown and not peek:
         state["closed_unread"] = [g for g in state["closed_unread"] if (g["from"], g["to"]) not in shown]
         msgstate.save(root, state)
     return lines[:STATUS_LIMIT]

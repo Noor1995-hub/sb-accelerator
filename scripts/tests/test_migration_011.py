@@ -123,8 +123,8 @@ def test_the_whole_chain_lands_on_the_shipped_template(tmp_path):
 def test_run_through_the_framework_bumps_to_12(tmp_path):
     root = vault_v11(tmp_path)
     result = migrate.run(root, "2026-10-08", stamp="2026-10-08-120000")
-    assert [a["slug"] for a in result["applied"]] == ["structure-version-12", "structure-version-13"]
-    assert result["structure_version"] == 13
+    assert [a["slug"] for a in result["applied"]] == ["structure-version-12", "structure-version-13", "structure-version-14", "structure-version-15"]
+    assert result["structure_version"] == 15
 
 
 def test_property_types_match_the_template():
@@ -139,7 +139,7 @@ def test_property_types_are_added_and_the_owners_own_kept(tmp_path):
     (root / OBS / "types.json").write_text(json.dumps(
         {"types": {"tags": "tags", "due": "text", "mine": "number"}}), encoding="utf-8")
     result = load().apply(root)
-    assert result["types"] == "added absorbed, archived, done, include, reviewed"
+    assert result["types"] == "added absorbed, archived, done, include, projects, reviewed"
     types = json.loads((root / OBS / "types.json").read_text(encoding="utf-8"))["types"]
     assert types["include"] == "checkbox" and types["done"] == "checkbox"
     assert types["due"] == "text" and types["mine"] == "number" and types["tags"] == "tags"

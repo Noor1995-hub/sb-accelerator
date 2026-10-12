@@ -54,12 +54,14 @@ def write_project(root: Path, slug: str, *, status="active",
 
 def write_meeting(root: Path, stem: str, *, date_value="2026-06-10T10:00",
                   review_status="confirmed", projects=(), attendees=(),
-                  type_value="meeting", confirmed_at=None) -> None:
+                  type_value="meeting", confirmed_at=None, entities=()) -> None:
     proj = ", ".join(projects)
     att = ", ".join(attendees)
     lines = ["---", f"date: {date_value}", f"type: {type_value}",
              f"review_status: {review_status}",
              f"projects: [{proj}]", f"attendees: [{att}]"]
+    if entities:
+        lines += [f"entities: [{', '.join(entities)}]"]
     if confirmed_at is not None:
         lines += [f"confirmed-at: {confirmed_at}"]
     lines += ["---", "", "- x", ""]
@@ -899,3 +901,446 @@ def test_a_note_whose_project_cannot_queue_is_listed_as_not_queued(tmp_path):
 def test_notes_not_queued_is_empty_when_every_note_queued(tmp_path):
     root = make_vault(tmp_path)
     assert updatequeue.run(root, "2026-06-21", "owner-morgan")["notesNotQueued"] == []
+
+
+def test_project_written_at_noon_is_not_requeued_without_new_input(tmp_path):
+    """#271: the on-demand run wrote state at 12:00 after the 09:00 meeting
+    was accepted at 11:30; the evening run has nothing new for it."""
+    root = make_vault(tmp_path)
+    write_project(root, "alpha", last_updated="2026-10-12",
+                  state_updated="2026-10-12T12:00")
+    write_meeting(root, "morning", date_value="2026-10-12T09:00",
+                  projects=["alpha"], confirmed_at="2026-10-12T11:30")
+    result = updatequeue.run(root, "2026-10-12", "owner-morgan")
+    assert result["projectsNeedingUpdate"] == []
+    assert not [w for w in result["warnings"] if "SELF-CHECK" in w]
+
+
+def test_mail_read_in_the_evening_requeues_a_project_written_at_noon(tmp_path):
+    """#271: mail from this morning is read by the evening run; its log is
+    stamped with the evening write time, so the project queues again."""
+    root = vault_with_project_and_owner(
+        tmp_path, "acme-industries-rollout", "2026-10-12T12:00")
+    write_log(root, "2026-10-12",
+              [g("m1", projects=["acme-industries-rollout"])],
+              "2026-10-12T21:05")
+    queue = updatequeue.run(root, "2026-10-12", "morgan-ellery")[
+        "projectsNeedingUpdate"]
+    assert [e["slug"] for e in queue] == ["acme-industries-rollout"]
+    assert queue[0]["newLogs"] == ["2026-10-12-messages"]
+
+
+def write_session(root, stem, projects, updated_at):
+    folder = root / "_messages" / "sessions"
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / f"{stem}.md").write_text(
+        "---\ntype: session\ndate: 2026-10-12\n"
+        f"updated-at: {updated_at}\nprojects: [{', '.join(projects)}]\n"
+        "people: []\nscope: whole\n---\n# x\n", encoding="utf-8")
+
+
+def test_a_session_after_state_updated_queues_its_project(tmp_path):
+    root = make_vault(tmp_path)
+    write_project(root, "alpha", last_updated="2026-10-12",
+                  state_updated="2026-10-12T12:00")
+    write_session(root, "2026-10-12-pricing", ["alpha"], "2026-10-12T15:42")
+    queue = updatequeue.run(root, "2026-10-12", "owner-morgan")["projectsNeedingUpdate"]
+    assert [e["slug"] for e in queue] == ["alpha"]
+    assert queue[0]["newSessions"] == ["_messages/sessions/2026-10-12-pricing.md"]
+    assert queue[0]["newCount"] == 1
+
+
+def test_a_session_before_state_updated_does_not_requeue(tmp_path):
+    """#267: /add wrote the session, then section C wrote state — the
+    evening run must not take it again."""
+    root = make_vault(tmp_path)
+    write_project(root, "alpha", last_updated="2026-10-12",
+                  state_updated="2026-10-12T15:45")
+    write_session(root, "2026-10-12-pricing", ["alpha"], "2026-10-12T15:42")
+    assert updatequeue.run(root, "2026-10-12", "owner-morgan")["projectsNeedingUpdate"] == []
+
+
+def test_sessions_change_no_metric_and_are_not_message_logs(tmp_path):
+    root = vault_with_project_and_owner(tmp_path, "acme-industries-rollout", "2026-10-12T12:00")
+    write_session(root, "2026-10-12-pricing", ["acme-industries-rollout"], "2026-10-12T15:42")
+    result = updatequeue.run(root, "2026-10-12", "morgan-ellery")
+    entry = result["projectsNeedingUpdate"][0]
+    assert entry["newLogs"] == [] and entry["newFiles"] == []
+    assert not [w for w in result["warnings"] if "session" in w]
+
+
+
+# --- #273 piece 3: the entity queue ------------------------------------------
+
+def write_entity(root, slug, name, *, status="active", parent=None,
+                 entity_updated=None, last_updated="2026-10-01"):
+    folder = root / "40-entities" / slug
+    folder.mkdir(parents=True, exist_ok=True)
+    lines = ["---", "type: entity", f'entity-name: "{name}"', f"slug: {slug}",
+             f"status: {status}", f"last-updated: {last_updated}"]
+    if parent:
+        lines.append(f"parent: {parent}")
+    if entity_updated:
+        lines.append(f"entity-updated: {entity_updated}")
+    lines += ["---", f"# {name}", ""]
+    (folder / "dossier.md").write_text("\n".join(lines), encoding="utf-8")
+
+
+def entity_queue(root, today="2026-10-12"):
+    result = updatequeue.run(root, today, "owner-morgan")
+    return {e["slug"]: e for e in result["entitiesNeedingUpdate"]}
+
+
+def test_a_meeting_after_the_stamp_queues_its_entity(tmp_path):
+    root = make_vault(tmp_path)
+    write_entity(root, "acme", "Acme", entity_updated="2026-10-12T09:00")
+    write_meeting(root, "m1", date_value="2026-10-12T10:00", entities=["acme"])
+    write_meeting(root, "m0", date_value="2026-10-11T10:00", entities=["acme"])
+    queue = entity_queue(root)
+    assert queue["acme"]["newFiles"] == ["20-meetings/m1.md"]
+    assert queue["acme"]["parentMode"] is False and queue["acme"]["entityName"] == "Acme"
+
+
+def test_a_meeting_confirmed_after_the_stamp_queues_even_if_old(tmp_path):
+    root = make_vault(tmp_path)
+    write_entity(root, "acme", "Acme", entity_updated="2026-10-12T09:00")
+    write_meeting(root, "old", date_value="2026-10-01T10:00", entities=["acme"],
+                  confirmed_at="2026-10-12T11:00")
+    assert entity_queue(root)["acme"]["newFiles"] == ["20-meetings/old.md"]
+
+
+def test_no_stamp_falls_back_to_the_last_updated_day(tmp_path):
+    root = make_vault(tmp_path)
+    write_entity(root, "acme", "Acme", last_updated="2026-10-10")
+    write_meeting(root, "before", date_value="2026-10-05T10:00", entities=["acme"])
+    write_meeting(root, "after", date_value="2026-10-11T10:00", entities=["acme"])
+    assert entity_queue(root)["acme"]["newFiles"] == ["20-meetings/after.md"]
+
+
+def test_a_meeting_through_its_projects_entity_queues(tmp_path):
+    root = make_vault(tmp_path)
+    write_entity(root, "acme", "Acme", entity_updated="2026-10-12T09:00")
+    write_project(root, "acme-erp")                      # entity: acme
+    write_meeting(root, "m1", date_value="2026-10-12T10:00", projects=["acme-erp"])
+    assert entity_queue(root)["acme"]["newFiles"] == ["20-meetings/m1.md"]
+
+
+def test_logs_and_sessions_queue_by_entity_or_project(tmp_path):
+    root = make_vault(tmp_path)
+    write_entity(root, "acme", "Acme", entity_updated="2026-10-12T09:00")
+    write_project(root, "acme-erp")
+    write_log(root, "2026-10-12", [g("a1", projects=["acme-erp"])], "2026-10-12T21:00")
+    write_session(root, "2026-10-12-session-x", ["acme-erp"], "2026-10-12T15:00")
+    entry = entity_queue(root)["acme"]
+    assert entry["newLogs"] == ["2026-10-12-messages"]
+    assert entry["newSessions"] == ["_messages/sessions/2026-10-12-session-x.md"]
+
+
+def test_a_team_queues_itself_and_feeds_its_parent_in_parent_mode(tmp_path):
+    root = make_vault(tmp_path)
+    write_entity(root, "acme", "Acme", entity_updated="2026-10-12T09:00")
+    write_entity(root, "acme-finance", "Finance", parent="acme", entity_updated="2026-10-12T09:00")
+    write_meeting(root, "m1", date_value="2026-10-12T10:00", entities=["acme-finance"])
+    queue = entity_queue(root)
+    assert queue["acme-finance"]["newFiles"] == ["20-meetings/m1.md"]
+    assert queue["acme-finance"]["parentMode"] is False
+    parent = queue["acme"]
+    assert parent["parentMode"] is True and parent["newFiles"] == []
+    assert parent["teamFiles"][0]["team"] == "acme-finance"
+    assert parent["teamFiles"][0]["teamName"] == "Finance"
+    assert parent["teamFiles"][0]["files"] == ["20-meetings/m1.md"]
+
+
+def test_a_dormant_parent_is_not_queued_by_its_team(tmp_path):
+    root = make_vault(tmp_path)
+    write_entity(root, "acme", "Acme", status="dormant", entity_updated="2026-10-12T09:00")
+    write_entity(root, "acme-finance", "Finance", parent="acme", entity_updated="2026-10-12T09:00")
+    write_meeting(root, "m1", date_value="2026-10-12T10:00", entities=["acme-finance"])
+    assert set(entity_queue(root)) == {"acme-finance"}
+
+
+def test_dormant_entities_and_missing_dossiers_are_skipped(tmp_path):
+    root = make_vault(tmp_path)
+    write_entity(root, "old", "Old", status="dormant")
+    write_meeting(root, "m1", date_value="2026-10-12T10:00", entities=["old", "ghost"])
+    assert entity_queue(root) == {}
+
+
+def test_unconfirmed_meetings_and_note_captures_do_not_queue(tmp_path):
+    root = make_vault(tmp_path)
+    write_entity(root, "acme", "Acme", entity_updated="2026-10-12T09:00")
+    write_meeting(root, "m1", date_value="2026-10-12T10:00", entities=["acme"],
+                  review_status="needs-review")
+    write_meeting(root, "n1", date_value="2026-10-12T10:00", entities=["acme"], type_value="note")
+    assert entity_queue(root) == {}
+
+
+# --- #273 final review: bounded, exact entity queue ------------------------
+
+def test_first_run_without_a_stamp_looks_back_at_most_3_working_days(tmp_path):
+    # Monday 2026-10-12: Thu, Fri and Mon are the three working days.
+    root = make_vault(tmp_path)
+    write_entity(root, "acme", "Acme", last_updated="2025-10-01")
+    write_meeting(root, "old", date_value="2026-10-07T10:00", entities=["acme"])
+    write_meeting(root, "recent", date_value="2026-10-08T10:00", entities=["acme"])
+    assert entity_queue(root)["acme"]["newFiles"] == ["20-meetings/recent.md"]
+
+
+def test_unparseable_last_updated_warns_and_uses_the_3_working_day_window(tmp_path):
+    root = make_vault(tmp_path)
+    write_entity(root, "acme", "Acme", last_updated="someday")
+    write_meeting(root, "old", date_value="2026-10-07T10:00", entities=["acme"])
+    write_meeting(root, "recent", date_value="2026-10-08T10:00", entities=["acme"])
+    result = updatequeue.run(root, "2026-10-12", "owner-morgan")
+    [entry] = result["entitiesNeedingUpdate"]
+    assert entry["newFiles"] == ["20-meetings/recent.md"]
+    assert [w for w in result["warnings"]
+            if "40-entities/acme/dossier.md" in w and "last-updated" in w]
+
+
+def test_unparseable_entity_updated_warns_and_falls_back(tmp_path):
+    root = make_vault(tmp_path)
+    write_entity(root, "acme", "Acme", last_updated="2025-10-01",
+                 entity_updated="yesterday-ish")
+    write_meeting(root, "old", date_value="2026-10-07T10:00", entities=["acme"])
+    write_meeting(root, "recent", date_value="2026-10-08T10:00", entities=["acme"])
+    result = updatequeue.run(root, "2026-10-12", "owner-morgan")
+    assert result["entitiesNeedingUpdate"][0]["newFiles"] == ["20-meetings/recent.md"]
+    assert [w for w in result["warnings"]
+            if "40-entities/acme/dossier.md" in w and "entity-updated" in w]
+
+
+def test_a_meeting_tagged_with_parent_and_team_is_not_team_material_for_the_parent(tmp_path):
+    root = make_vault(tmp_path)
+    write_entity(root, "acme", "Acme", entity_updated="2026-10-12T09:00")
+    write_entity(root, "acme-finance", "Finance", parent="acme", entity_updated="2026-10-12T09:00")
+    write_meeting(root, "both", date_value="2026-10-12T10:00", entities=["acme", "acme-finance"])
+    write_meeting(root, "team", date_value="2026-10-12T11:00", entities=["acme-finance"])
+    parent = entity_queue(root)["acme"]
+    assert parent["newFiles"] == ["20-meetings/both.md"]
+    assert [t["files"] for t in parent["teamFiles"]] == [["20-meetings/team.md"]]
+
+
+def test_team_material_fully_covered_by_the_parent_leaves_no_team_item(tmp_path):
+    root = make_vault(tmp_path)
+    write_entity(root, "acme", "Acme", entity_updated="2026-10-12T09:00")
+    write_entity(root, "acme-finance", "Finance", parent="acme", entity_updated="2026-10-12T09:00")
+    write_meeting(root, "both", date_value="2026-10-12T10:00", entities=["acme", "acme-finance"])
+    parent = entity_queue(root)["acme"]
+    assert parent["teamFiles"] == [] and parent["parentMode"] is False
+
+
+def test_a_ticked_note_no_project_queue_carries_does_not_queue_its_entity(tmp_path):
+    root = make_vault(tmp_path)
+    write_entity(root, "acme", "Acme", entity_updated="2026-10-12T09:00")
+    write_project(root, "acme-crm", last_updated="someday")       # entity: acme
+    write_owner_note(root, "stuck.md", "include: true\nprojects: [acme-crm]\n")
+    result = updatequeue.run(root, "2026-10-12", "owner-morgan")
+    assert result["notesNotQueued"] == ["80-thoughts-ideas/stuck.md"]
+    assert result["entitiesNeedingUpdate"] == []
+
+
+def test_a_note_a_project_queue_carries_queues_its_entity(tmp_path):
+    root = make_vault(tmp_path)
+    write_entity(root, "acme", "Acme", entity_updated="2026-10-12T09:00")
+    write_project(root, "acme-crm", last_updated="2026-10-12",
+                  state_updated="2026-10-12T09:00")
+    write_owner_note(root, "idea.md", "include: true\nprojects: [acme-crm]\n")
+    assert entity_queue(root)["acme"]["newNotes"] == ["80-thoughts-ideas/idea.md"]
+
+
+def test_the_result_carries_the_minute_the_queue_was_built(tmp_path):
+    root = make_vault(tmp_path)
+    result = updatequeue.run(root, "2026-10-12", "owner-morgan")
+    assert re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}", result["queuedAt"])
+
+
+def test_entries_name_their_parent(tmp_path):
+    root = make_vault(tmp_path)
+    write_entity(root, "acme", "Acme", entity_updated="2026-10-12T09:00")
+    write_entity(root, "acme-finance", "Finance", parent="acme", entity_updated="2026-10-12T09:00")
+    write_meeting(root, "m1", date_value="2026-10-12T10:00", entities=["acme-finance"])
+    queue = entity_queue(root)
+    assert (queue["acme-finance"]["parent"], queue["acme-finance"]["parentName"]) == ("acme", "Acme")
+    assert (queue["acme"]["parent"], queue["acme"]["parentName"]) == (None, None)
+
+
+# --- people queue (#273 piece 4) --------------------------------------------
+
+def write_person_full(root, slug, *, created="2026-09-01", stamp=None):
+    lines = ["---", f'person-name: "{slug.title()}"', f"slug: {slug}", "relationship:",
+             f"created: {created}"]
+    if stamp:
+        lines.append(f"person-updated: {stamp}")
+    (root / "50-people" / f"{slug}.md").write_text("\n".join(lines + ["---", ""]),
+                                                    encoding="utf-8")
+
+
+def people_run(root, today="2026-10-12"):
+    result = updatequeue.run(root, today, "owner-morgan")
+    return result["peopleNeedingUpdate"], result["peopleWork"], result["warnings"]
+
+
+def test_a_meeting_after_the_stamp_queues_its_attendees(tmp_path):
+    root = make_vault(tmp_path)
+    write_person_full(root, "dana", stamp="2026-10-10T20:00")
+    write_person_full(root, "sam", stamp="2026-10-12T09:00")
+    write_meeting(root, "11-10-26-weekly", date_value="2026-10-11T10:00",
+                  attendees=["dana", "sam", "owner-morgan"])
+    queued, work, _ = people_run(root)
+    assert [p["slug"] for p in queued] == ["dana"]
+    assert work == [{"kind": "meeting", "path": "20-meetings/11-10-26-weekly.md",
+                     "date": "2026-10-11", "people": ["dana"]}]
+
+
+def test_the_owner_is_never_queued(tmp_path):
+    root = make_vault(tmp_path)
+    write_meeting(root, "m", date_value="2026-10-11T10:00", attendees=["owner-morgan"])
+    queued, work, _ = people_run(root)
+    assert queued == [] and work == []
+
+
+def test_a_note_capture_with_attendees_counts(tmp_path):
+    root = make_vault(tmp_path)
+    write_person_full(root, "dana", stamp="2026-10-10T20:00")
+    write_meeting(root, "fwd", date_value="2026-10-11T10:00", type_value="note",
+                  attendees=["dana"])
+    assert [w["path"] for w in people_run(root)[1]] == ["20-meetings/fwd.md"]
+
+
+def test_unconfirmed_meetings_do_not_count(tmp_path):
+    root = make_vault(tmp_path)
+    write_person_full(root, "dana", stamp="2026-10-10T20:00")
+    write_meeting(root, "m", date_value="2026-10-11T10:00", review_status="pending",
+                  attendees=["dana"])
+    assert people_run(root)[0] == []
+
+
+def test_created_is_the_start_point_without_a_stamp(tmp_path):
+    root = make_vault(tmp_path)
+    write_person_full(root, "dana", created="2026-10-11")
+    write_meeting(root, "old", date_value="2026-10-01T10:00", attendees=["dana"])
+    write_meeting(root, "new", date_value="2026-10-11T10:00", attendees=["dana"])
+    _, work, _ = people_run(root)
+    assert [w["path"] for w in work] == ["20-meetings/new.md"]
+
+
+def test_no_stamp_and_no_created_reads_3_working_days_without_a_warning(tmp_path):
+    # A hand-made page has neither: it reads back 3 working days (section E's
+    # stamp takes over after that), never with a nightly warning.
+    root = make_vault(tmp_path)
+    write_person(root, "dana")                       # no created, no stamp
+    write_meeting(root, "old", date_value="2026-10-07T10:00", attendees=["dana"])
+    write_meeting(root, "new", date_value="2026-10-12T10:00", attendees=["dana"])
+    queued, work, warnings = people_run(root, today="2026-10-12")
+    assert [p["slug"] for p in queued] == ["dana"]
+    assert [w["path"] for w in work] == ["20-meetings/new.md"]
+    assert not any("dana" in w for w in warnings)
+
+
+def test_an_old_created_day_is_bounded_to_3_working_days(tmp_path):
+    root = make_vault(tmp_path)
+    write_person_full(root, "dana", created="2026-01-05")
+    write_meeting(root, "old", date_value="2026-10-07T10:00", attendees=["dana"])
+    write_meeting(root, "new", date_value="2026-10-08T10:00", attendees=["dana"])
+    _, work, _ = people_run(root)
+    assert [w["path"] for w in work] == ["20-meetings/new.md"]
+
+
+def test_unparseable_stamp_warns_and_falls_back_to_created(tmp_path):
+    root = make_vault(tmp_path)
+    write_person_full(root, "dana", created="2026-10-11", stamp="yesterday")
+    write_meeting(root, "m", date_value="2026-10-11T10:00", attendees=["dana"])
+    queued, _, warnings = people_run(root)
+    assert [p["slug"] for p in queued] == ["dana"]
+    assert any("person-updated" in w and "dana" in w for w in warnings)
+
+
+def test_a_log_group_naming_a_person_queues_them_with_its_gid(tmp_path):
+    root = make_vault(tmp_path)
+    write_person_full(root, "dana", stamp="2026-10-10T20:00")
+    write_person_full(root, "sam", stamp="2026-10-10T20:00")
+    write_log(root, "2026-10-11", [g("a1", people=["dana"]), g("a2", people=["sam"]),
+                                   g("a3", people=["nobody"])], "2026-10-11T18:52")
+    queued, work, _ = people_run(root)
+    assert [p["slug"] for p in queued] == ["dana", "sam"]
+    assert work == [{"kind": "log", "path": "_messages/2026-10-11-messages.md",
+                     "stem": "2026-10-11-messages", "date": "2026-10-11",
+                     "groups": ["a1", "a2"], "people": ["dana", "sam"]}]
+
+
+def test_a_log_older_than_the_stamp_does_not_queue(tmp_path):
+    root = make_vault(tmp_path)
+    write_person_full(root, "dana", stamp="2026-10-12T09:00")
+    write_log(root, "2026-10-11", [g("a1", people=["dana"])], "2026-10-11T18:52")
+    assert people_run(root)[0] == []
+
+
+def test_start_points_are_per_person_within_one_meeting(tmp_path):
+    root = make_vault(tmp_path)
+    write_person_full(root, "dana", stamp="2026-10-01T00:00")
+    write_person_full(root, "sam", stamp="2026-10-12T09:00")
+    write_meeting(root, "a", date_value="2026-10-05T10:00", attendees=["dana", "sam"])
+    write_meeting(root, "b", date_value="2026-10-11T10:00", attendees=["sam"])
+    queued, work, _ = people_run(root)
+    assert [p["slug"] for p in queued] == ["dana"]
+    assert work == [{"kind": "meeting", "path": "20-meetings/a.md", "date": "2026-10-05",
+                     "people": ["dana"]}]
+
+
+def test_session_records_are_not_a_people_source(tmp_path):
+    root = make_vault(tmp_path)
+    write_person_full(root, "dana", stamp="2026-10-10T20:00")
+    folder = root / "_messages" / "sessions"
+    folder.mkdir(parents=True)
+    (folder / "s.md").write_text(
+        "---\ntitle: \"x\"\ndate: 2026-10-11\nprojects: [p]\npeople: [dana]\n"
+        "updated-at: 2026-10-11T12:00\n---\n- x\n", encoding="utf-8")
+    assert people_run(root)[0] == []
+
+
+def test_people_queue_writes_nothing(tmp_path):
+    root = make_vault(tmp_path)
+    write_person_full(root, "dana", stamp="2026-10-10T20:00")
+    write_meeting(root, "m", date_value="2026-10-11T10:00", attendees=["dana"])
+    updatequeue.run(root, "2026-10-12", "owner-morgan")
+    text = (root / "50-people" / "dana.md").read_text(encoding="utf-8")
+    assert "person-updated: 2026-10-10T20:00" in text
+
+
+# --- structure gate: D and E wait for /upgrade-vault -------------------------
+
+def test_people_and_entities_wait_for_the_upgrade(tmp_path):
+    root = make_vault(tmp_path)
+    write_entity(root, "acme", "Acme", entity_updated="2026-10-12T09:00")
+    write_person_full(root, "dana", created="2026-01-05")
+    write_meeting(root, "m1", date_value="2026-10-12T10:00", entities=["acme"],
+                  attendees=["dana"])
+    (root / "structure-version").write_text("3\n", encoding="utf-8")
+    result = updatequeue.run(root, "2026-10-12", "owner-morgan")
+    assert result["entitiesNeedingUpdate"] == []
+    assert result["peopleNeedingUpdate"] == [] and result["peopleWork"] == []
+    assert result["waitingForUpgrade"] == ["entities", "people"]
+
+
+def test_structure_14_runs_entities_but_not_people(tmp_path):
+    root = make_vault(tmp_path)
+    write_entity(root, "acme", "Acme", entity_updated="2026-10-12T09:00")
+    write_person_full(root, "dana", created="2026-01-05")
+    write_meeting(root, "m1", date_value="2026-10-12T10:00", entities=["acme"],
+                  attendees=["dana"])
+    (root / "structure-version").write_text("14\n", encoding="utf-8")
+    result = updatequeue.run(root, "2026-10-12", "owner-morgan")
+    assert [e["slug"] for e in result["entitiesNeedingUpdate"]] == ["acme"]
+    assert result["peopleWork"] == []
+    assert result["waitingForUpgrade"] == ["people"]
+
+
+def test_structure_15_runs_both(tmp_path):
+    root = make_vault(tmp_path)
+    write_person_full(root, "dana", stamp="2026-10-10T20:00")
+    write_meeting(root, "m1", date_value="2026-10-11T10:00", attendees=["dana"])
+    (root / "structure-version").write_text("15\n", encoding="utf-8")
+    result = updatequeue.run(root, "2026-10-12", "owner-morgan")
+    assert [p["slug"] for p in result["peopleNeedingUpdate"]] == ["dana"]
+    assert result["waitingForUpgrade"] == []

@@ -122,8 +122,10 @@ For each candidate, decide:
   then reversed. Never `superseded`; that status is set on the *prior* note.
 - **`source`** — the stem of the meeting note this came from, or of the message
   log (`_messages/<YYYY-MM-DD>-messages`) when the decision came from mail or
-  chat, or the title of one of the owner's own notes in `80-thoughts-ideas/`
-  (any subfolder) when it came from a note they wrote. A meeting stem must
+  chat, the stem of a session record (`_messages/sessions/<stem>`) when it
+  came from a conversation added with `/add`, or the title of one of the
+  owner's own notes in `80-thoughts-ideas/` (any subfolder) when it came from
+  a note they wrote. A meeting stem must
   resolve to a file in `20-meetings/`. A note title may contain spaces and is
   matched case-insensitively. **Omit `source`** only when there is none of
   these (an inbox transcript, a pasted paragraph or dictation): put the
@@ -136,8 +138,20 @@ For each candidate, decide:
 ### 5. Supersession — only on explicit conflict
 
 A new decision supersedes a prior one when the source **says** it replaces it:
-"instead of", "we're reversing", "this replaces". Not because you judge two
-notes inconsistent.
+"instead of", "this replaces". Not because you judge two notes inconsistent.
+
+A decision that is **reversed with nothing in its place** ("we're dropping
+that", "that's off") is not superseded — it is withdrawn. Foreground only,
+after the owner confirms it, never from a background run:
+
+```bash
+python3 "$VAULTLIB" decision withdraw --vault "$VAULT" \
+  --path "30-projects/<project>/decisions/<stem>.md" \
+  --why "<one line: what reversed it>" [--date <when>]
+```
+
+It flips `active` to `withdrawn` and adds a dated footer; nothing is deleted.
+When the reversal comes with a new decision, that one supersedes instead.
 
 When you are unsure, write the new note **without** `supersedes` and say in your
 summary that the two look inconsistent. Two active decisions a human resolves
@@ -190,8 +204,8 @@ which decision failed.
 `--foreground` writes `reviewed: true`, which is a claim that a human validated
 this note. Only pass it when one actually did.
 
-**Background.** Identical, with `--background` and two rules that are not
-negotiable:
+**Background.** Identical, with `--background` and three rules that are not
+negotiable — and never `decision withdraw`, which waits for the owner:
 
 1. **Never ask a question.** An unattended run that blocks on a prompt exits
    having done nothing. Ambiguity means skip that candidate and report it — a

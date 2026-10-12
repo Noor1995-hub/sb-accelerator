@@ -32,7 +32,7 @@ if __package__ in (None, ""):
     # the skills invoke it.
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from vaultlib import actions, config, dailynote, dates, decision, discover, entity, feedback, fetcherrors, health, lastsync, m365, meeting, migrate, msglog, msgrows, msgstate, notes, person, plaud, project, projectstate, provenance, runlog, scratch, schema, seenevents, syncjob, template, updatequeue, vault  # noqa: E402
+from vaultlib import actions, config, dailynote, dates, decision, discover, entity, feedback, fetcherrors, health, lastsync, m365, meeting, migrate, msglog, msgrows, msgstate, notes, person, plaud, project, projectstate, provenance, runlock, runlog, scratch, schema, session, seenevents, syncjob, tables, template, triage, updatequeue, vault, xlsx  # noqa: E402
 
 
 def _emit(payload: dict) -> None:
@@ -169,6 +169,33 @@ def build_parser() -> argparse.ArgumentParser:
     person_ensure.add_argument(
         "--email", help="the attendee's address; stored on creation, and "
                         "filled into an existing note whose email is empty")
+    person_ensure.add_argument(
+        "--entity", help="entity slug the person belongs to; only when known for "
+                         "certain — filled into an existing note whose entity is empty")
+    person_set = people_sub.add_parser(
+        "set", help="write a person's entity link and stakeholder fields (#273)")
+    _add_vault_argument(person_set)
+    person_set.add_argument("--slug", required=True)
+    person_set.add_argument("--entity")
+    person_set.add_argument("--role", help="the person's title")
+    person_set.add_argument("--decision-role", dest="decision_role")
+    person_set.add_argument("--stance")
+    person_write = people_sub.add_parser(
+        "write", help="append dated, sourced facts under ## What I know (#273)")
+    _add_vault_argument(person_write)
+    person_write.add_argument("--slug", required=True)
+    person_write.add_argument("--facts", required=True,
+                              help="path to a JSON file {\"facts\": [...]}, or - for stdin")
+    person_write.add_argument("--today", help="ISO date; defaults to today")
+    person_write.add_argument(
+        "--automatic", action="store_true",
+        help="required: the unattended writer — appends only, every fact ends "
+             "in a source marker")
+    person_touch = people_sub.add_parser(
+        "touch", help="stamp person-updated after the automatic update read new material")
+    _add_vault_argument(person_touch)
+    person_touch.add_argument("--slug", required=True)
+    person_touch.add_argument("--timestamp", help="YYYY-MM-DDTHH:MM; defaults to now")
 
     projects = top.add_parser("project", help="project folders")
     projects_sub = projects.add_subparsers(dest="action", required=True)
@@ -255,6 +282,12 @@ def build_parser() -> argparse.ArgumentParser:
     _add_vault_argument(ent_read)
     ent_read.add_argument("--slug", required=True)
 
+    ent_touch = entities_sub.add_parser(
+        "touch", help="stamp entity-updated after the automatic update read new material")
+    _add_vault_argument(ent_touch)
+    ent_touch.add_argument("--slug", required=True)
+    ent_touch.add_argument("--timestamp", help="YYYY-MM-DDTHH:MM; defaults to now")
+
     ent_validate = entities_sub.add_parser(
         "validate",
         help="clear the [!unvalidated] banner — the explicit review act; "
@@ -270,6 +303,10 @@ def build_parser() -> argparse.ArgumentParser:
     ent_write.add_argument("--edits", required=True,
                            help="path to a JSON file, or - to read stdin")
     ent_write.add_argument("--today", help="ISO date; defaults to today")
+    ent_write.add_argument(
+        "--automatic", action="store_true",
+        help="the unattended update: never replace a bullet without a source "
+             "marker (skipped and reported) and keep the unvalidated markers")
 
     decisions = top.add_parser("decision", help="decision notes")
     decisions_sub = decisions.add_subparsers(dest="action", required=True)
@@ -278,6 +315,21 @@ def build_parser() -> argparse.ArgumentParser:
         "list", help="print a project's decisions as JSON")
     _add_vault_argument(dec_list)
     dec_list.add_argument("--project", required=True, help="project slug")
+
+    dec_review = decisions_sub.add_parser(
+        "review", help="Keep or Dismiss one decision, as the owner answered (#271)")
+    _add_vault_argument(dec_review)
+    dec_review.add_argument("--path", required=True, help="vault-relative path")
+    verdict = dec_review.add_mutually_exclusive_group(required=True)
+    verdict.add_argument("--keep", action="store_true")
+    verdict.add_argument("--dismiss", action="store_true")
+
+    dec_withdraw = decisions_sub.add_parser(
+        "withdraw", help="mark an active decision as reversed, not replaced")
+    _add_vault_argument(dec_withdraw)
+    dec_withdraw.add_argument("--path", required=True, help="vault-relative path")
+    dec_withdraw.add_argument("--why", required=True, help="one line: what reversed it")
+    dec_withdraw.add_argument("--date", help="ISO date it was reversed; defaults to today")
 
     dec_write = decisions_sub.add_parser(
         "write", help="write a decision note, applying any supersession edge")
@@ -294,6 +346,29 @@ def build_parser() -> argparse.ArgumentParser:
                       help="a human validated this inline; writes reviewed: true")
     mode.add_argument("--background", action="store_true",
                       help="unattended capture; writes reviewed: false")
+
+    sessions = top.add_parser("session", help="hidden session records (#267)")
+    sessions_sub = sessions.add_subparsers(dest="action", required=True)
+    session_write = sessions_sub.add_parser(
+        "write", help="write one session record from a JSON payload")
+    _add_vault_argument(session_write)
+    session_write.add_argument("--note", required=True,
+                               help="path to a JSON file, or - to read stdin")
+    session_write.add_argument("--now", help="ISO datetime override (tests)")
+
+    table_group = top.add_parser("table", help="fill in tables in Excel (#272)")
+    table_sub = table_group.add_subparsers(dest="action", required=True)
+    t_export = table_sub.add_parser("export", help="write an .xlsx of one table")
+    _add_vault_argument(t_export)
+    t_export.add_argument("--table", required=True, choices=sorted(tables.TABLES))
+    t_export.add_argument("--today", required=True, help="YYYY-MM-DD, from dates plan")
+    t_export.add_argument("--view", help="view name; default the first view")
+    t_export.add_argument("--base", help="vault-relative .base path; default the table's own")
+    t_import = table_sub.add_parser("import", help="plan (or with --apply, write) a filled-in .xlsx")
+    _add_vault_argument(t_import)
+    t_import.add_argument("--file", required=True, help="vault-relative path of the .xlsx")
+    t_import.add_argument("--apply", action="store_true", help="write the plan (default: dry run)")
+    t_import.add_argument("--today", help="YYYY-MM-DD, for new objects' created date")
 
     sync = top.add_parser("sync", help="recording-sync ledger operations")
     sync_sub = sync.add_subparsers(dest="action", required=True)
@@ -537,6 +612,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="write anyway despite a strong, non-imprecise cross-adapter "
              "time-window collision from another adapter — the "
              "interactive 'write it anyway' re-dispatch")
+    triage_list = meetings_sub.add_parser(
+        "triage-list", help="meetings waiting for review, with names (#271)")
+    _add_vault_argument(triage_list)
+    triage_apply = meetings_sub.add_parser(
+        "triage-apply", help="apply the owner's accept / dismiss / change answers")
+    _add_vault_argument(triage_apply)
+    triage_apply.add_argument("--items", required=True,
+                              help="path to a JSON array, or - to read stdin")
 
     plaud_group = top.add_parser("plaud", help="Plaud MCP adapter helpers")
     plaud_sub = plaud_group.add_subparsers(dest="action", required=True)
@@ -759,6 +842,19 @@ def build_parser() -> argparse.ArgumentParser:
         "--dir", required=True,
         help="the session scratch directory to sweep — never the vault")
 
+    lock = top.add_parser("runlock", help="one run at a time (#271)")
+    lock_sub = lock.add_subparsers(dest="action", required=True)
+    lock_acquire = lock_sub.add_parser("acquire", help="take the run lock")
+    _add_vault_argument(lock_acquire)
+    lock_acquire.add_argument("--routine", required=True)
+    lock_acquire.add_argument("--now", help="ISO datetime override (tests)")
+    lock_acquire.add_argument(
+        "--wait", type=int, default=0,
+        help="when refused, sleep this many seconds (max 90) and try once more")
+    lock_release = lock_sub.add_parser("release", help="drop this routine's lock")
+    _add_vault_argument(lock_release)
+    lock_release.add_argument("--routine", required=True)
+
     runlog_group = top.add_parser(
         "runlog", help="append-only one-line-per-run log for unattended routines")
     runlog_sub = runlog_group.add_subparsers(dest="action", required=True)
@@ -898,6 +994,17 @@ def build_parser() -> argparse.ArgumentParser:
     m_for_project.add_argument("--slug", required=True)
     m_for_project.add_argument("--logs", required=True, help="comma-separated log stems")
 
+    m_for_entity = messages_sub.add_parser(
+        "for-entity", help="an entity's groups: tagged with it, or strongly linked to one of its projects")
+    _add_vault_argument(m_for_entity)
+    m_for_entity.add_argument("--slug", required=True)
+    m_for_entity.add_argument("--logs", required=True, help="comma-separated log stems")
+    m_for_person = messages_sub.add_parser(
+        "for-person", help="a person's groups: every group whose people name them")
+    _add_vault_argument(m_for_person)
+    m_for_person.add_argument("--slug", required=True)
+    m_for_person.add_argument("--logs", required=True, help="comma-separated log stems")
+
     m_propose = messages_sub.add_parser("keywords-propose", help="at most one keyword proposal a week")
     _add_vault_argument(m_propose)
     m_propose.add_argument("--today")
@@ -915,6 +1022,8 @@ def build_parser() -> argparse.ArgumentParser:
     m_status.add_argument("--first-run-since", dest="first_run_since")
     m_status.add_argument("--auth-error", dest="auth_error", action="store_true",
                           help="tonight's run could not reach Microsoft 365: add the reconnect line")
+    m_status.add_argument("--peek", action="store_true",
+                          help="read only: keep the shown catch-up lines until a run without --peek")
 
     return parser
 
@@ -1006,8 +1115,23 @@ def _dispatch(args: argparse.Namespace) -> int:
                    else json.loads(Path(args.identity).read_text(encoding="utf-8")))
         return _ok(config.verify_account(root, args.adapter, payload))
     if args.group == "person":
+        if args.action == "touch":
+            return _ok(person.touch(root, args.slug, timestamp=args.timestamp))
+        if args.action == "write":
+            if not args.automatic:
+                return _fail("person write needs --automatic",
+                             "It is the unattended writer; the owner edits the page by hand.")
+            payload = (json.load(sys.stdin) if args.facts == "-"
+                       else json.loads(Path(args.facts).read_text(encoding="utf-8")))
+            facts = payload.get("facts") if isinstance(payload, dict) else payload
+            return _ok(person.write_facts(root, args.slug, facts,
+                                          vault.today_iso(args.today)))
+        if args.action == "set":
+            return _ok(person.set_fields(root, args.slug, entity=args.entity, role=args.role,
+                                         decision_role=args.decision_role, stance=args.stance))
         today = vault.today_iso(getattr(args, "today", None))
-        return _ok(person.ensure(root, args.name, today, email=args.email))
+        return _ok(person.ensure(root, args.name, today, email=args.email,
+                                 entity=args.entity))
     if args.group == "messages":
         if args.action == "cursor":
             return _ok(msgstate.cursor(root, now=args.now, timezone=args.timezone,
@@ -1054,6 +1178,12 @@ def _dispatch(args: argparse.Namespace) -> int:
         if args.action == "for-project":
             stems = [s.strip() for s in args.logs.split(",") if s.strip()]
             return _ok({"groups": msglog.for_project(root, slug=args.slug, logs=stems)})
+        if args.action == "for-entity":
+            stems = [s.strip() for s in args.logs.split(",") if s.strip()]
+            return _ok({"groups": msglog.for_entity(root, slug=args.slug, logs=stems)})
+        if args.action == "for-person":
+            stems = [s.strip() for s in args.logs.split(",") if s.strip()]
+            return _ok({"groups": msglog.for_person(root, slug=args.slug, logs=stems)})
         if args.action == "keywords-propose":
             return _ok({"proposal": msglog.keywords_propose(root, today=vault.today_iso(args.today))})
         if args.action == "check-lines":
@@ -1063,7 +1193,7 @@ def _dispatch(args: argparse.Namespace) -> int:
             return _ok({"reset": True})
         if args.action == "status":
             return _ok({"lines": msglog.status(root, now=args.now, first_run_since=args.first_run_since,
-                                               auth_error=args.auth_error)})
+                                               auth_error=args.auth_error, peek=args.peek)})
     if args.group == "project":
         if args.action == "state":
             payload = (json.load(sys.stdin) if args.state == "-"
@@ -1103,22 +1233,51 @@ def _dispatch(args: argparse.Namespace) -> int:
             ))
         if args.action == "read":
             return _ok(entity.read(root, args.slug))
+        if args.action == "touch":
+            return _ok(entity.touch(root, args.slug, timestamp=args.timestamp))
         if args.action == "validate":
             return _ok(entity.validate(root, args.slug,
                                        vault.today_iso(args.today)))
         payload = (json.load(sys.stdin) if args.edits == "-"
                    else json.loads(Path(args.edits).read_text(encoding="utf-8")))
         return _ok(entity.write(root, args.slug, payload,
-                                vault.today_iso(args.today)))
+                                vault.today_iso(args.today),
+                                automatic=args.automatic))
     if args.group == "decision":
         if args.action == "list":
             return _ok(decision.list_decisions(root, args.project))
+        if args.action == "review":
+            return _ok(decision.review(root, args.path, keep=args.keep))
+        if args.action == "withdraw":
+            return _ok(decision.withdraw(root, args.path, date=vault.today_iso(args.date),
+                                         why=args.why))
         payload = (json.load(sys.stdin) if args.note == "-"
                    else json.loads(Path(args.note).read_text(encoding="utf-8")))
         return _ok(decision.write(
             root, project=args.project, date=vault.today_iso(args.date),
             payload=payload, reviewed=args.foreground,
         ))
+    if args.group == "session":
+        payload = (json.load(sys.stdin) if args.note == "-"
+                   else json.loads(Path(args.note).read_text(encoding="utf-8")))
+        now = datetime.fromisoformat(args.now) if args.now else None
+        return _ok(session.write(root, payload, now=now))
+    if args.group == "table":
+        if args.action == "export":
+            return _ok(tables.export(root, args.table, today=args.today,
+                                     view=args.view, base_path=args.base))
+        if not args.apply:
+            return _ok(tables.plan(root, args.file))
+        if not args.today:
+            raise tables.TablesError("--apply needs --today (from dates plan)")
+        lock = runlock.acquire(root, "update-tables")
+        if not lock["acquired"]:
+            return _fail("another run is busy (the evening run or a sync)",
+                         "Try again in a few minutes.")
+        try:
+            return _ok(tables.apply(root, args.file, today=args.today))
+        finally:
+            runlock.release(root, "update-tables")
     if args.group == "sync":
         if args.action == "scan":
             return _ok(syncjob.scan(root))
@@ -1208,6 +1367,12 @@ def _dispatch(args: argparse.Namespace) -> int:
             return _ok(fetcherrors.record(
                 root, payload, fetcherrors.parse_now(args.now)))
     if args.group == "meeting":
+        if args.action == "triage-list":
+            return _ok(triage.list_queue(root))
+        if args.action == "triage-apply":
+            items = (json.load(sys.stdin) if args.items == "-"
+                     else json.loads(Path(args.items).read_text(encoding="utf-8")))
+            return _ok(triage.apply(root, items))
         payload = (json.load(sys.stdin) if args.note == "-"
                    else json.loads(Path(args.note).read_text(encoding="utf-8")))
         return _ok(meeting.write(root, payload,
@@ -1297,6 +1462,12 @@ def _dispatch(args: argparse.Namespace) -> int:
                                stamp=args.stamp))
     if args.group == "scratch":
         return _ok(scratch.sweep(args.dir))
+    if args.group == "runlock":
+        if args.action == "acquire":
+            now = datetime.fromisoformat(args.now) if args.now else None
+            return _ok(runlock.acquire(root, args.routine, now=now,
+                                      wait=args.wait))
+        return _ok(runlock.release(root, args.routine))
     if args.group == "runlog":
         return _ok(runlog.append(root, args.routine, args.outcome))
     if args.group == "provenance":
@@ -1380,8 +1551,16 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         return _fail(str(exc), "Fix the named constraint and retry.")
     except decision.DecisionError as exc:
         return _fail(str(exc), "Fix the named constraint and retry.")
+    except session.SessionError as exc:
+        return _fail(str(exc), "Fix the named payload field and retry.")
     except meeting.MeetingError as exc:
         return _fail(str(exc), "Fix the named payload field and retry.")
+    except tables.TablesError as exc:
+        return _fail(str(exc), "Fix the named table, file or column and retry.")
+    except xlsx.XlsxError as exc:
+        return _fail(str(exc), "Pass the .xlsx that table export wrote.")
+    except triage.TriageError as exc:
+        return _fail(str(exc), "Pass a JSON array of {path, action} items.")
     except syncjob.SyncError as exc:
         return _fail(str(exc), "Fix the named id or argument and retry.")
     except seenevents.SeenEventsError as exc:
@@ -1411,6 +1590,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     except scratch.ScratchError as exc:
         return _fail(str(exc), "Check --dir points at the session scratch "
                      "directory and retry.")
+    except runlock.RunLockError as exc:
+        return _fail(str(exc), "Pass the routine's slug, e.g. sync-recordings.")
     except runlog.RunLogError as exc:
         return _fail(str(exc), "Fix --routine or --outcome and retry.")
     except health.HealthError as exc:

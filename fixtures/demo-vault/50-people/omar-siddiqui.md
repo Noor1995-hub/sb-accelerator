@@ -3,7 +3,6 @@ person-name: "Omar Siddiqui"
 slug: omar-siddiqui
 email: omar.siddiqui@cascadia-intermodal.example
 relationship: direct-report
-company: "Cascadia Intermodal Group"
 role: "Analytics Lead, Commercial Operations"
 projects: [commercial-ops-crm-modernization]
 created: 2025-06-01
@@ -13,9 +12,17 @@ meetings-30d: 1
 last-met: 2026-06-01
 messages-7d: 0
 messages-30d: 0
+decision-role: evaluator
+stance: champion
+entity: commercial-operations
+person-updated: 2026-10-12T17:55
 ---
 
 # Omar Siddiqui
+
+## What I know
+
+- Carries the target CRM schema and RFP scoring. The only person who knows how the current pipeline data is actually stitched together. (moved from the Commercial Operations page, 2026-10-12)
 
 ## Context
 

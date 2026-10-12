@@ -56,7 +56,7 @@ which copies `plugin/template/` — **including the hidden `.obsidian/`
 directory** — from the plugin's own cache into the vault location you agreed
 with the client. No repo checkout involved. It refuses to touch a target
 that already has files in it, and it verifies afterward that `.obsidian/`
-arrived and `structure-version` reads `2` before reporting success — the
+arrived and `structure-version` reads the version the plugin ships (15 as of 0.13.19) before reporting success — the
 single most common provisioning mistake used to be a copy that silently
 skipped the dotfile and opened with none of the layout or tables and no
 obvious reason why; this is now checked by the tool that does the copy,
@@ -98,8 +98,8 @@ is written. **No network is involved**, so Cowork's network-egress setting
 is not a prerequisite for this step: do not ask a client's IT to enable it
 for provisioning (it is an org-wide admin switch their console flags as a
 security risk, and even with it on, GitHub's release-asset host stays
-blocked). A fresh vault reports `14 installed, 0 already ok, 0 problem(s).`;
-a re-run reports `0 installed, 14 already ok`. The vault's first open then
+blocked). A fresh vault reports `11 installed, 0 already ok, 0 problem(s).`;
+a re-run reports `0 installed, 11 already ok`. The vault's first open then
 needs only the one **"trust author and enable plugins"** click — turning off
 Restricted Mode is the one step that can never ship as files.
 
