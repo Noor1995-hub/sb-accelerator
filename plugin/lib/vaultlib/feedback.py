@@ -3,7 +3,9 @@
 The lint is the technical control behind the disclosure promise: a draft
 that names anything from the vault is refused before a byte leaves the
 machine. `send` always runs it itself — there is no code path that posts an
-unlinted draft, no matter what a caller upstream already checked.
+unlinted draft, no matter what a caller upstream already checked. That
+includes every fact on a person page's `## What I know` (#273 piece 4):
+facts about people never leave the vault.
 """
 from __future__ import annotations
 
@@ -45,6 +47,30 @@ class FeedbackError(Exception):
     """A blocked draft or an unconfigured/unreachable feedback channel."""
 
 
+_FACT_DATE_RE = re.compile(r"\A- (?:\d{4}-\d{2}-\d{2} — )?")
+_FACT_MARKER_RE = re.compile(
+    r"\s*\((?:meeting|mail|chat|session|note|moved from|from) [^()]*\)\s*\Z")
+
+
+def _facts(body: str) -> list:
+    """The text of each line under `## What I know` (#273 piece 4), without
+    its date and source marker: facts about a person never leave the vault."""
+    out = []
+    for title, content in markdown.split_sections(body):
+        if title != "What I know":
+            continue
+        for line in content.split("\n"):
+            line = line.strip()
+            if not line:
+                continue
+            # Without its closing punctuation, so a draft quoting the fact
+            # mid-sentence still matches.
+            text = _FACT_MARKER_RE.sub("", _FACT_DATE_RE.sub("", line)).strip().rstrip(".!?;:,")
+            if text:
+                out.append(text)
+    return out
+
+
 def _blocklist(root: Path) -> list:
     """(kind, term) pairs. Deterministic, order-stable, casefolded later.
 
@@ -56,11 +82,12 @@ def _blocklist(root: Path) -> list:
     for path in sorted((root / vault.PEOPLE_DIR).glob("*.md")):
         terms.append(("person", path.stem))
         try:
-            front, _ = markdown.split_frontmatter(path.read_text(encoding="utf-8"))
+            front, body = markdown.split_frontmatter(path.read_text(encoding="utf-8"))
         except (OSError, ValueError):
-            front = {}
+            front, body = {}, ""
         if front.get("person-name"):
             terms.append(("person", str(front["person-name"])))
+        terms.extend(("fact", fact) for fact in _facts(body))
     for path in sorted((root / vault.ENTITIES_DIR).glob("*/dossier.md")):
         terms.append(("entity", path.parent.name))
         try:

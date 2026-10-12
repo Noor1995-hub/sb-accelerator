@@ -180,3 +180,16 @@ def test_post_wraps_url_error_without_echoing_token(monkeypatch):
     message = str(excinfo.value)
     assert "nope" in message
     assert "ghp_supersecret" not in message
+
+
+def test_a_fact_from_what_i_know_is_blocked(tmp_path):
+    root = seeded_vault(tmp_path)
+    (root / "50-people" / "zed.md").write_text(
+        '---\nperson-name: "Zed Q"\nslug: zed\n---\n# Zed Q\n\n## What I know\n\n'
+        "- 2026-10-08 — Is selling the house in Ghent. (meeting · [[m]])\n"
+        "- Plays chess on Sundays.\n", encoding="utf-8")
+    result = feedback.lint(root, "The sync crashed; also is selling the house in ghent lol")
+    assert result["ok"] is False
+    assert {"kind": "fact", "fragment": "Is selling the house in Ghent"} in result["blocked"]
+    assert feedback.lint(root, "plays chess on sundays")["ok"] is False
+    assert feedback.lint(root, "The sync crashed on step 6.")["ok"] is True

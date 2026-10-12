@@ -224,6 +224,7 @@
         "projects",
         "created",
         "last-updated",
+        "person-updated",
         "meetings-7d",
         "meetings-30d",
         "last-met",
