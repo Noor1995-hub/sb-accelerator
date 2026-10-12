@@ -2527,3 +2527,19 @@ def test_update_tables_triggers_on_bulk_table_work():
     head = read_skill("update-tables").split("---", 2)[1].lower()
     for phrase in ("fill in", "excel", "people", "projects", "entities"):
         assert phrase in head, phrase
+
+
+def test_update_entity_team_example_is_a_runnable_command():
+    """#273: the --parent example carried a literal backslash-n, so the
+    command as written did not run."""
+    text = read_skill("update-entity")
+    for block in re.findall(r"```bash\n(.*?)```", text, re.S):
+        literal = chr(92) + "n"  # a backslash followed by the letter n
+        assert literal + " " not in block and not block.rstrip().endswith(literal), block
+
+
+def test_ontology_says_dismiss_on_a_kept_meeting_only_hides_it():
+    text = (REPO_ROOT / "plugin" / "template" / "99-workflow-config" / "reference"
+            / "ontology.md").read_text(encoding="utf-8")
+    flat = " ".join(text.split())
+    assert "Dismiss on an accepted meeting only hides it" in flat

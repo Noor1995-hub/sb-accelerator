@@ -65,7 +65,10 @@ confidence_reasons:
   `source-filename` are recorder provenance.
 - **Review checkboxes (booleans, edited in Meetings.base's *To review* view):** `reviewed` —
   one-click confirm; `archived` — hides the row from triage views (noise
-  disposal; the file stays).
+  disposal; the file stays). Dismiss on an accepted meeting only hides it:
+  a `confirmed` meeting keeps counting in metrics and project updates even
+  when `archived` (owner's choice, #273 — nothing is rewritten after the
+  fact). A meeting dismissed before it was accepted never counted.
 - Write-once; only triage fields (`attendees`, `projects`, `review_status`,
   `reviewed`, `archived`) are edited later — plus `confirmed-at`, which
   `sync reconcile-reviews` stamps (ISO to the minute) on the note when it

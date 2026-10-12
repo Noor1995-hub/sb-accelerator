@@ -61,7 +61,8 @@ and `--type business-unit`, with the slug `{parent}-{team}` so two companies'
 Finance teams never collide:
 
 ```bash
-python3 "$VAULTLIB" entity ensure --vault "$VAULT" \n  --slug acme-finance --name "Finance" --type business-unit --status active --parent acme
+python3 "$VAULTLIB" entity ensure --vault "$VAULT" \
+  --slug acme-finance --name "Finance" --type business-unit --status active --parent acme
 ```
 
 The CLI writes **Part of** on the team's dossier and adds a **Teams** section to
