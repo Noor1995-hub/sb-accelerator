@@ -673,3 +673,11 @@ def test_an_empty_gap_fetch_closes_the_gap_end_to_end(tmp_path):
     msglog.check(str(scratch))
     msglog.write(root, str(scratch), now="2026-09-30T18:52:00Z", **TZ)
     assert msgstate.load(root)["gaps"] == []
+
+
+def test_day_log_readers_ignore_session_records(tmp_path):
+    root = make_vault(tmp_path)
+    folder = root / "_messages" / "sessions"
+    folder.mkdir(parents=True)
+    (folder / "2026-10-12-x.md").write_text("---\ntype: session\n---\n", encoding="utf-8")
+    assert msglog._logs(root) == []

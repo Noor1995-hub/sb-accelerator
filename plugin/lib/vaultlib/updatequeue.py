@@ -192,6 +192,27 @@ def _index_logs(root: Path) -> Tuple[List[dict], List[str]]:
     return out, warnings
 
 
+def _index_sessions(root: Path) -> Tuple[List[dict], List[str]]:
+    """Session records from /add (#267). Activity is `updated-at`, the write
+    time, like a message log. A damaged record warns and is skipped."""
+    out: List[dict] = []
+    warnings: List[str] = []
+    folder = root / vault.MESSAGES_DIR / "sessions"
+    for path in sorted(folder.glob("*.md")) if folder.is_dir() else []:
+        rel = path.relative_to(root).as_posix()
+        try:
+            data, _ = markdown.split_frontmatter(path.read_text(encoding="utf-8"))
+        except (ValueError, OSError) as exc:
+            warnings.append(f"{rel}: {exc}")
+            continue
+        out.append({
+            "path": rel,
+            "updated": _parse_iso_datetime(data.get("updated-at")),
+            "projects": _slug_list(data.get("projects"), "projects", rel, warnings),
+        })
+    return out, warnings
+
+
 def _activity(meeting: dict) -> datetime:
     """The moment a confirmed meeting last became new information for its
     projects: its datetime, or its `confirmed-at` stamp when that is later.
@@ -293,6 +314,8 @@ def run(root: Path, today: str, owner: str) -> dict:
     meetings, warnings = _index_meetings(root)
     logs, log_warnings = _index_logs(root)
     warnings.extend(log_warnings)
+    sessions, session_warnings = _index_sessions(root)
+    warnings.extend(session_warnings)
     # Notes the owner ticked Include. Harvest warnings are not repeated here:
     # stage 2 already ran `notes harvest` and carries them into the run.
     included = [n for n in notes.harvest(root)["notes"] if n["body"] is not None]
@@ -396,13 +419,16 @@ def run(root: Path, today: str, owner: str) -> dict:
                     if slug in d["strong"] and d["updated"] is not None
                     and d["updated"] >= threshold]
         new_notes = [n["path"] for n in included if slug in n["projects"]]
+        new_sessions = [s["path"] for s in sessions
+                        if slug in s["projects"] and s["updated"] is not None
+                        and s["updated"] >= threshold]
         removed: List[str] = []
         for log, at, entry in requeued.get(slug, []):
             if state_updated is not None and state_updated > at:
                 prune.append(entry)
             elif log not in removed:
                 removed.append(log)
-        if new_meetings or new_logs or removed or new_notes:
+        if new_meetings or new_logs or removed or new_notes or new_sessions:
             queue.append({
                 "slug": slug,
                 "indexPath": rel,
@@ -410,10 +436,12 @@ def run(root: Path, today: str, owner: str) -> dict:
                 "lastUpdated": last_updated.isoformat(),
                 "stateUpdated": (state_updated.isoformat(timespec="minutes")
                                  if state_updated is not None else None),
-                "newCount": len(new_meetings) + len(new_logs) + len(new_notes),
+                "newCount": (len(new_meetings) + len(new_logs) + len(new_notes)
+                             + len(new_sessions)),
                 "newFiles": [m["file"] for m in new_meetings],
                 "newLogs": new_logs,
                 "newNotes": new_notes,
+                "newSessions": new_sessions,
                 "removedSources": removed,
                 "existingDecisions":
                     decision.list_decisions(root, slug)["decisions"],

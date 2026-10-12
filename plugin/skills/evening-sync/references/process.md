@@ -11,6 +11,7 @@ Followed by `/evening-sync` (after stage 3b) and by `/sync-recordings` step 9 (o
 | Daily-note jottings (context for C) | yes — from stage 2 | no — they are read in the evening |
 | To Do's | yes — evening stage 2 | no |
 | Mail and Teams | evening stage 3b runs first | not read; `update-queue` still sees any log already on disk that is newer than a project's last state write |
+| Session records from `/add` | yes, when newer than the project's last state write | yes |
 | Project-state updates and decisions (C) | yes | yes |
 | `today` and the owner slug | stage 1 (`dates plan`, `config read`) | `today` from `dates plan`, `owner` from `config read` — step 9 |
 | `sync_notes` lines (A, C) | the recap | step 11's Warnings line — there is no recap |
@@ -112,6 +113,11 @@ The instructions each subagent gets:
    `(note · <note title>)` — plain text, no wikilink: a note is not a vault
    object the state writer resolves, and its title may hold characters a
    link refuses.
+   When the entry has `newSessions`, read each session record end-to-end next
+   to the meetings: a summary the owner approved of a conversation with
+   Claude, added with `/add`. Every state item you take from one ends with
+   `(session · [[<path without .md>|<title>]])`, where `<title>` is the
+   record's H1.
 2. Compose the project's **state** as JSON and write it to
    `$SCRATCH/project-state-<slug>.json`. The CLI renders the whole index body
    from it and refuses anything over its caps, naming the field:
@@ -160,11 +166,11 @@ python3 "$VAULTLIB" project state write --vault "$VAULT" --slug <slug> \
    a hand edit is overwritten on the next run; the owner's own `## Notes`
    section at the bottom, if present, is the one thing the CLI preserves.
 4. Decision capture: extract candidates from the new meetings, the
-   harvest jottings, the message log groups AND the `newNotes` read in step 1, then follow
+   harvest jottings, the message log groups, the `newNotes` AND the `newSessions` read in step 1, then follow
    `${CLAUDE_PLUGIN_ROOT}/skills/log-decision/SKILL.md` in **background mode**
    (`/log-decision <slug> --background`) with those candidates as the
    source. A decision from a message log group carries `source: <log stem>`, where `<log stem>` is the
-   group's `log` field. A decision from a note carries `source: <note stem>`.
+   group's `log` field. A decision from a note carries `source: <note stem>`. A decision from a session carries `source: <session stem>`.
    Its rules apply unchanged: the material-decision test (commits
    the engagement AND changes a stakeholder's behaviour), dedup against
    `existingDecisions` (a `dismissed` one included — the owner rejected it,

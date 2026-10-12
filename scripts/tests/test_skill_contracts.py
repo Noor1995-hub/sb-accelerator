@@ -2437,3 +2437,10 @@ def test_on_demand_lock_is_taken_only_after_the_owner_answered():
     assert (step8.index("Accept, dismiss or change?")
             < step8.index('runlock acquire --vault "$VAULT" --routine sync-recordings')
             < step8.index("meeting triage-apply"))
+
+
+def test_process_reads_session_records_with_their_marker():
+    c = read_ref("evening-sync", "process.md").split("## C.", 1)[1].split("## Returns", 1)[0]
+    assert "newSessions" in c
+    assert "(session · " in c
+    assert "source: <session stem>" in c
