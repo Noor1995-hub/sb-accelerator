@@ -32,7 +32,7 @@ if __package__ in (None, ""):
     # the skills invoke it.
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from vaultlib import actions, config, dailynote, dates, decision, discover, entity, feedback, fetcherrors, health, lastsync, m365, meeting, migrate, msglog, msgrows, msgstate, notes, person, plaud, project, projectstate, provenance, runlock, runlog, scratch, schema, session, seenevents, syncjob, template, triage, updatequeue, vault  # noqa: E402
+from vaultlib import actions, config, dailynote, dates, decision, discover, entity, feedback, fetcherrors, health, lastsync, m365, meeting, migrate, msglog, msgrows, msgstate, notes, person, plaud, project, projectstate, provenance, runlock, runlog, scratch, schema, session, seenevents, syncjob, tables, template, triage, updatequeue, vault, xlsx  # noqa: E402
 
 
 def _emit(payload: dict) -> None:
@@ -311,6 +311,20 @@ def build_parser() -> argparse.ArgumentParser:
     session_write.add_argument("--note", required=True,
                                help="path to a JSON file, or - to read stdin")
     session_write.add_argument("--now", help="ISO datetime override (tests)")
+
+    table_group = top.add_parser("table", help="fill in tables in Excel (#272)")
+    table_sub = table_group.add_subparsers(dest="action", required=True)
+    t_export = table_sub.add_parser("export", help="write an .xlsx of one table")
+    _add_vault_argument(t_export)
+    t_export.add_argument("--table", required=True, choices=sorted(tables.TABLES))
+    t_export.add_argument("--today", required=True, help="YYYY-MM-DD, from dates plan")
+    t_export.add_argument("--view", help="view name; default the first view")
+    t_export.add_argument("--base", help="vault-relative .base path; default the table's own")
+    t_import = table_sub.add_parser("import", help="plan (or with --apply, write) a filled-in .xlsx")
+    _add_vault_argument(t_import)
+    t_import.add_argument("--file", required=True, help="vault-relative path of the .xlsx")
+    t_import.add_argument("--apply", action="store_true", help="write the plan (default: dry run)")
+    t_import.add_argument("--today", help="YYYY-MM-DD, for new objects' created date")
 
     sync = top.add_parser("sync", help="recording-sync ledger operations")
     sync_sub = sync.add_subparsers(dest="action", required=True)
@@ -1135,6 +1149,22 @@ def _dispatch(args: argparse.Namespace) -> int:
                    else json.loads(Path(args.note).read_text(encoding="utf-8")))
         now = datetime.fromisoformat(args.now) if args.now else None
         return _ok(session.write(root, payload, now=now))
+    if args.group == "table":
+        if args.action == "export":
+            return _ok(tables.export(root, args.table, today=args.today,
+                                     view=args.view, base_path=args.base))
+        if not args.apply:
+            return _ok(tables.plan(root, args.file))
+        if not args.today:
+            raise tables.TablesError("--apply needs --today (from dates plan)")
+        lock = runlock.acquire(root, "update-tables")
+        if not lock["acquired"]:
+            return _fail("another run is busy (the evening run or a sync)",
+                         "Try again in a few minutes.")
+        try:
+            return _ok(tables.apply(root, args.file, today=args.today))
+        finally:
+            runlock.release(root, "update-tables")
     if args.group == "sync":
         if args.action == "scan":
             return _ok(syncjob.scan(root))
@@ -1398,6 +1428,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         return _fail(str(exc), "Fix the named payload field and retry.")
     except meeting.MeetingError as exc:
         return _fail(str(exc), "Fix the named payload field and retry.")
+    except tables.TablesError as exc:
+        return _fail(str(exc), "Fix the named table, file or column and retry.")
+    except xlsx.XlsxError as exc:
+        return _fail(str(exc), "Pass the .xlsx that table export wrote.")
     except triage.TriageError as exc:
         return _fail(str(exc), "Pass a JSON array of {path, action} items.")
     except syncjob.SyncError as exc:
