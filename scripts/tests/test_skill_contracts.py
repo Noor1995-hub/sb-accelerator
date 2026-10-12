@@ -53,7 +53,7 @@ def known_subcommands() -> set:
 
 
 NET_NEW = {"report-feedback", "health-check", "upgrade-vault", "setup-my-brain",
-           "schedule-daily-loop", "provision-vault", "sync-messages"}
+           "schedule-daily-loop", "provision-vault", "sync-messages", "add"}
 
 
 def test_expected_skills_exist():
@@ -2444,3 +2444,35 @@ def test_process_reads_session_records_with_their_marker():
     assert "newSessions" in c
     assert "(session · " in c
     assert "source: <session stem>" in c
+
+
+def test_add_skill_shape():
+    """#267: one item, owner's OK first, processed now, never a daily note."""
+    text = read_skill("add")
+    for heading in ("## Rules", "### 1. What was handed over", "### 2. Get the content",
+                    "### 3. Understand", "### 4. One line, one OK", "### 5. Write",
+                    "### 6. Process", "### 7. Decisions in the chat", "### 8. Summary"):
+        assert heading in text, heading
+    for cli in ("session write", "meeting triage-apply", "sync reconcile-reviews",
+                "sync archive", "decision review",
+                'runlock acquire --vault "$VAULT" --routine add',
+                'runlock release --vault "$VAULT" --routine add', "dates plan"):
+        assert cli in text, cli
+    assert "skills/evening-sync/references/process.md" in text
+    assert "skills/sync-recordings/SKILL.md" in text
+    assert "60-daily-notes" not in text.replace(
+        "never creates, writes or edits anything under `60-daily-notes/`", "")
+    assert "daily-note write" not in text
+    assert "plaud" not in text.lower(), "Plaud belongs to /sync-recordings"
+
+
+def test_add_writes_only_after_the_ok():
+    text = read_skill("add")
+    assert text.index("### 4. One line, one OK") < text.index('runlock acquire --vault "$VAULT" --routine add')
+    assert text.index('runlock acquire --vault "$VAULT" --routine add') < text.index("session write")
+
+
+def test_add_and_sync_recordings_split_their_triggers():
+    add = read_skill("add").split("---", 2)[1]
+    assert "remember this" in add and "add this to my second brain" in add
+    assert "sync" not in add.split("description:", 1)[1].split("\n", 1)[0].lower().replace("/sync-recordings", "")
