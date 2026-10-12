@@ -53,7 +53,8 @@ def known_subcommands() -> set:
 
 
 NET_NEW = {"report-feedback", "health-check", "upgrade-vault", "setup-my-brain",
-           "schedule-daily-loop", "provision-vault", "sync-messages", "add"}
+           "schedule-daily-loop", "provision-vault", "sync-messages", "add",
+           "update-tables"}
 
 
 def test_expected_skills_exist():
@@ -64,7 +65,7 @@ def test_expected_skills_exist():
             "sync-recordings", "evening-sync", "report-feedback",
             "health-check", "upgrade-vault", "setup-my-brain",
             "schedule-daily-loop", "provision-vault",
-            "sync-messages", "add"} <= names
+            "sync-messages", "add", "update-tables"} <= names
 
 
 @pytest.mark.parametrize("path", SKILL_FILES, ids=lambda p: p.parent.name)
@@ -2508,3 +2509,21 @@ def test_triage_suggests_a_project_for_a_meeting_with_none():
     assert "at most one" in flat
     assert "accept on that line takes the suggestion" in flat
     assert "a suggestion taken counts as a change" in flat
+
+
+def test_update_tables_skill_shape():
+    """#272: export, owner fills in, dry run, OK, apply — never a hand edit."""
+    text = read_skill("update-tables")
+    for cli in ("table export", "table import", "--apply", "dates plan"):
+        assert cli in text, cli
+    assert text.index("table import --vault") < text.index("--apply")
+    flat = " ".join(text.split()).lower()
+    assert "never edit the notes yourself" in flat
+    assert "wait for the owner's ok" in flat
+    assert "60-daily-notes" not in text
+
+
+def test_update_tables_triggers_on_bulk_table_work():
+    head = read_skill("update-tables").split("---", 2)[1].lower()
+    for phrase in ("fill in", "excel", "people", "projects", "entities"):
+        assert phrase in head, phrase
