@@ -263,3 +263,27 @@ def test_boolean_and_null_literals_are_not_properties():
     for literal in ("true", "false", "null"):
         assert literal not in refs.properties
     assert {"archived", "reviewed", "x"} <= set(refs.properties)
+
+
+
+@pytest.mark.parametrize("name", ["STAKEHOLDERS_QUERY", "ENGAGEMENTS_QUERY"])
+def test_the_entity_pages_live_lists_name_only_known_fields(name):
+    """#273: the dossier's live Stakeholders and Engagements read people and
+    projects; every field they name must exist on those objects."""
+    import sys
+    sys.path.insert(0, str(REPO_ROOT / "plugin" / "lib"))
+    from vaultlib import entity
+    block = dqlrefs.dataview_blocks(getattr(entity, name))[0]
+    refs = dqlrefs.extract_refs(block)
+    (from_path,) = refs.from_paths
+    # 30-projects holds projects and decisions; the query's type filter picks.
+    kind = "project" if 'type = "project"' in block else dqlrefs.folder_object_type(from_path)
+    known = dqlrefs.known_fields(kind)
+    assert refs.properties <= known, sorted(refs.properties - known)
+
+
+
+def test_and_or_before_a_bracket_are_operators_not_functions():
+    query = "\n".join(['TABLE x', 'FROM "50-people"', 'WHERE a = 1 AND (b = 2 OR (c = 3))'])
+    refs = dqlrefs.extract_refs(query)
+    assert {"a", "b", "c"} <= refs.properties
