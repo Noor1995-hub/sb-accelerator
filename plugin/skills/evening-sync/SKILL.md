@@ -228,7 +228,7 @@ Follow section B of `${CLAUDE_PLUGIN_ROOT}/skills/evening-sync/references/proces
 
 ## Stage 4 — Project-state updates
 
-Follow section C of `${CLAUDE_PLUGIN_ROOT}/skills/evening-sync/references/process.md`, passing the stage-2 harvest jottings. Record its Returns for stages 6 and 7.
+Follow sections C and D of `${CLAUDE_PLUGIN_ROOT}/skills/evening-sync/references/process.md`, passing the stage-2 harvest jottings to C. Record its Returns for stages 6 and 7.
 
 ## Stage 5 — Tomorrow's calendar and prep
 
@@ -508,6 +508,7 @@ python3 "$VAULTLIB" runlock release --vault "$VAULT" --routine evening-sync
 **Mail and Teams:** {outcome line | off | skipped: no M365 | failed: …}
 **To Do's:** {N} new → `65-to-dos/` ({K} with a project, {D} with a deadline) · {C} closed from ticks in daily notes | skipped: vault below structure 12
 **Metrics refreshed:** {P} projects · {Q} people
+**Entity pages updated:** {names, a team as "Finance (Acme)"} | none
 **Projects updated:** {N} ({slugs}) — {M} decisions captured for review, {K} candidates skipped
 **Next note:** `60-daily-notes/{date}.md` ({DayName}, {tomorrow | today — for-today catch-up}) — {N} meetings prepped | calendar unavailable | calendar REFUSED — signed in as a different account (account-mismatch) | calendar REFUSED — no account bound to this vault yet (no-account-hint) | m365 disabled
 **Recap window:** {recap_from} → {recap_to} — {catch-up: N business days missed, detailed from {date}} | current

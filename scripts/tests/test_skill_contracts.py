@@ -2313,7 +2313,7 @@ def test_evening_sync_notes_steps_run_in_order():
     assert (t.index("## Stage 2") < t.index("follow section A of")
             < t.index("**To Do's.**") < t.index("### Stage 3c")
             < t.index("Follow section B of") < t.index("## Stage 4")
-            < t.index("Follow section C of") < t.index("## Stage 5"))
+            < t.index("Follow sections C and D of") < t.index("## Stage 5"))
 
 
 def test_evening_sync_empty_queue_still_marks_notes():
@@ -2580,7 +2580,7 @@ def test_update_entity_links_people_fill_if_empty_and_moves_them_only_on_request
 
 
 def test_update_entity_bash_blocks_continue_lines_properly():
-    """M2: a long command breaks with `\` + newline, never a run of spaces."""
+    """M2: a long command breaks with a backslash + newline, never a run of spaces."""
     for block in re.findall(r"```bash\n(.*?)```", _people_step(), re.S):
         for line in block.splitlines():
             assert "   --" not in line.strip(), line
@@ -2603,3 +2603,25 @@ def test_setup_links_the_owner_to_their_own_company():
     step4 = text[text.index("## Step 4"):text.index("## Step 5")]
     flat = " ".join(step4.split())
     assert "person set" in flat and "--entity" in flat
+
+
+def test_process_has_entity_updates_after_project_updates():
+    text = read_ref("evening-sync", "process.md")
+    assert text.index("## C. Project-state updates") < text.index("## D. Entity updates") < text.index("## Returns")
+    d = text.split("## D. Entity updates", 1)[1].split("## Returns", 1)[0]
+    for needle in ("entitiesNeedingUpdate", "entity write", "entity touch", "parentMode",
+                   "(meeting · ", "(mail · ", "(session · ", "(note · ", "team)", "section C"):
+        assert needle in d, needle
+    assert "Dispatch in blocking batches of at most 3" not in d   # C's rule, referenced not copied
+
+
+def test_on_demand_runs_release_the_lock_after_entity_updates():
+    for skill, step in (("sync-recordings", "### 9. Process"), ("add", "### 6. Process")):
+        text = read_skill(skill)
+        part = text.split(step, 1)[1].split("###", 1)[0]
+        assert "section D" in part and part.index("section D") < part.index("runlock release"), skill
+
+
+def test_summaries_list_entity_pages_updated():
+    for skill in ("evening-sync", "sync-recordings", "add"):
+        assert "Entity pages updated" in read_skill(skill), skill

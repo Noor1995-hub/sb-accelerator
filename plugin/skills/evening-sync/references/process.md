@@ -13,6 +13,7 @@ Followed by `/evening-sync` (after stage 3b), and on demand by `/sync-recordings
 | Mail and Teams | evening stage 3b runs first | not read; `update-queue` still sees any log already on disk that is newer than a project's last state write |
 | Session records from `/add` | yes, when newer than the project's last state write | yes |
 | Project-state updates and decisions (C) | yes | yes |
+| Entity updates (D) | yes | yes — for the entities of what was just processed |
 | `today` and the owner slug | stage 1 (`dates plan`, `config read`) | `today` from `dates plan`, `owner` from `config read` — step 9 |
 | `sync_notes` lines (A, C) | the recap | the caller's summary Warnings line — there is no recap |
 
@@ -236,6 +237,68 @@ A note whose project failed keeps `include` ticked and is read again tomorrow;
 say so in `sync_notes`. `missing` (the owner deleted or moved it during the run)
 is not an error.
 
+## D. Entity updates
+
+After every section C batch has returned (D reads the projects' fresh
+"Where it stands"). `update-queue`'s result from B carries
+`entitiesNeedingUpdate`: one entry per active or prospect entity with
+material newer than its `entity-updated` stamp — `slug`, `dossierPath`,
+`entityName`, `newFiles` (meetings), `newLogs`, `newSessions`, `newNotes`,
+`parentMode` and `teamFiles` (a team's material, for its parent). Empty →
+record "no entity pages to update" and go on.
+
+Otherwise dispatch one subagent per entry (`model: sonnet`), in the same
+blocking batches of at most 3 as section C — the rule written there applies
+here unchanged, including its reasons. There is no cap on the number of
+entries. Each subagent carries its entry, today's date and these instructions:
+
+1. Read the new material end to end: the meetings (Key Takeaways, Debrief,
+   Action items), the log groups via
+   `python3 "$VAULTLIB" messages for-project --vault "$VAULT" --slug <a project of this entity> --logs <newLogs>`
+   (or read the log notes when the entity has no project), the session
+   records, the notes. Read the dossier as it stands:
+   `python3 "$VAULTLIB" entity read --vault "$VAULT" --slug <slug>`.
+2. Decide what changes, per section — writing nothing is a valid outcome,
+   and nothing is ever invented:
+   - **Relationship History** (`relationship_history`: date, what,
+     significance): dated events that matter for the relationship — a
+     milestone, a decision, an escalation, a contract, a key person
+     changing. The date is the event's own date. At most 3 per run.
+   - **Dynamics** (`meeting_log`: date, topic, dynamics): how the
+     relationship feels, one line per real signal. At most 3 per run.
+   - **Context** (`context`: label, fact, why): standing facts about the
+     organisation. Reuse an existing label when it is the same topic, so the
+     point is updated, not repeated.
+   - **Sensitivities** (`sensitivities`: topic, detail, implications): what
+     to handle with care. Same label rule.
+   - **`parentMode` true** (the entry has only `teamFiles`): only
+     Relationship History, only big events from the team's material. When
+     the entry has its own material too, handle that in full and the
+     `teamFiles` the same parent-mode way.
+3. Every item ends with its source marker, in the field that renders last
+   (`why`, `significance`, `dynamics`, `implications`): `(meeting · [[<meeting stem>]])`,
+   `(mail · <link>)` or `(chat · <link>)` (the group's `link`),
+   `(session · [[<path without .md>|<title>]])`, `(note · <note title>)`.
+   Team material on a parent page puts `(<team name> team)` before the
+   marker.
+4. Write, then stamp — also when nothing was worth writing, so the same
+   material is not read again:
+
+```bash
+cat > "$SCRATCH/entity-edits-<slug>.payload.json" <<'JSON'
+{"relationship_history": [{"date": "2026-10-12", "what": "…", "significance": "… (meeting · [[12-10-26-steerco]])"}]}
+JSON
+python3 "$VAULTLIB" entity write --vault "$VAULT" --slug <slug> --edits "$SCRATCH/entity-edits-<slug>.payload.json"
+python3 "$VAULTLIB" entity touch --vault "$VAULT" --slug <slug>
+```
+
+   Skip `entity write` when there is nothing to write; `entity touch`
+   always runs. A refusal names the field: fix it and retry once.
+5. Return a fenced JSON block: `{"slug", "written": {"relationship_history":
+   N, "meeting_log": N, "context": N, "sensitivities": N}, "notes"}`. A
+   subagent that fails or returns no block becomes a warning, not a retry —
+   its entity stays queued for the next run (no `entity touch`).
+
 ## Returns
 
 What the caller carries into its summary:
@@ -247,4 +310,5 @@ What the caller carries into its summary:
 - notes absorbed — `{path, projects}` for each note whose `mark-absorbed` returned `marked`
 - notes kept (`include` still ticked), each with why, including `notesNotQueued`
 - `sync_notes` lines from A and C — kept apart from warnings
+- `entitiesUpdated`: `[{slug, written}]` from D (names for the summary's **Entity pages updated** line)
 - warnings, verbatim, including `SELF-CHECK` lines
