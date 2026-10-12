@@ -79,3 +79,7 @@ Reference material for the evening run and for when you need the detail. Folded 
 > [!info]- Context
 > - **Contacts** — Leo Marchetti (COO, executive sponsor), Renee Castillo (IT Director), Jamie Ellwood (floor operations)
 > - **Source** — Follow-on from the Phase 0 warehouse pilot, delivered 2026-02
+
+## Notes
+
+- Engagement note (moved from the Meridian Freight Holdings page, 2026-10-12): Three-yard automation rollout on one consolidated vendor platform

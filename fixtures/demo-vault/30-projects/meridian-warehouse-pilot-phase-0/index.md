@@ -75,3 +75,7 @@ Reference material for the evening run and for when you need the detail. Folded 
 > [!info]- Context
 > - **Contacts** — Leo Marchetti (COO, executive sponsor)
 > - **Source** — First paid engagement with Meridian Freight, scoped deliberately small
+
+## Notes
+
+- Engagement note (moved from the Meridian Freight Holdings page, 2026-10-12): Single-warehouse pilot that opened the account

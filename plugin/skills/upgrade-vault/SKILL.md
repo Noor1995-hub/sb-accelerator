@@ -117,8 +117,11 @@ Report each migration's outcome briefly, then **read out every
 `needs_human` item across all the applied migrations' `apply` reports as
 the consultant's follow-up list** — these are the files a migration could
 not touch deterministically (unparseable frontmatter, a shape it would not
-guess at) and left byte-identical on purpose. An empty `needs_human` for
-every migration means there is nothing to hand off; say so.
+guess at) and left byte-identical on purpose, plus anything it did that the
+consultant should check (a value it kept over a conflicting one, a note it
+created, text it left on a page to place by hand). Read each item as it is,
+in order — the last one may be the command that resolves the rest. An empty
+`needs_human` for every migration means there is nothing to hand off; say so.
 
 ### On `ok: false`
 

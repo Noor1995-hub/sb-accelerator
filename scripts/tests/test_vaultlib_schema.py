@@ -134,3 +134,15 @@ def test_log_schema_requires_its_core_fields():
 def test_person_and_project_carry_the_new_optional_fields():
     assert "messages-7d" in schema.for_object("person")["optional"]
     assert "keywords" in schema.for_object("project")["optional"]
+
+
+def test_person_links_to_an_entity_and_carries_stakeholder_fields():
+    """#273: stakeholder fields live on the person."""
+    assert schema.enum_values("person", "decision-role") == [
+        "sponsor", "champion", "evaluator", "influencer", "blocker", None]
+    assert schema.enum_values("person", "stance") == ["champion", "neutral", "blocker", None]
+    assert "entity" in schema.for_object("person")["optional"]
+
+
+def test_project_has_a_machine_stage():
+    assert "stage" in schema.for_object("project")["optional"]

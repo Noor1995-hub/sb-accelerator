@@ -29,7 +29,9 @@ TABLES = {
         "quote": person.PERSON_QUOTE_KEYS,
         "fields": [("person-name", "text", True),
                    ("relationship", "choice:colleague|direct-report|external", False),
-                   ("company", "company", False), ("role", "text", False),
+                   ("entity", "entity", False), ("role", "text", False),
+                   ("decision-role", "choice:sponsor|champion|evaluator|influencer|blocker", False),
+                   ("stance", "choice:champion|neutral|blocker", False),
                    ("email", "text", False), ("projects", "projects", False)],
     },
     "projects": {
@@ -52,7 +54,7 @@ TABLES = {
     },
 }
 _LINK_KIND = {"entity": "entity", "person": "person", "project": "project",
-              "people": "person", "projects": "project", "company": "entity"}
+              "people": "person", "projects": "project"}
 
 
 def _spec(table: str) -> dict:
@@ -177,6 +179,17 @@ def cell(value, kind: str, all_names: dict) -> str:
     return "" if value is None else str(value)
 
 
+def value_cell(table: str, data: dict, prop: str, kind: str, all_names: dict) -> str:
+    """One object's cell as the owner sees it. A person with no `entity`
+    shows their legacy free-text `company` (#273), so the companies the
+    structure-14 upgrade could not match are there to resolve in Excel."""
+    shown = cell(data.get(prop), kind, all_names)
+    if table == "people" and prop == "entity" and not shown:
+        company = data.get("company")
+        return "" if company is None else str(company).strip()
+    return shown
+
+
 def _target(root: Path, table: str, today: str) -> Path:
     folder = root / "_heavy-assets"
     folder.mkdir(exist_ok=True)
@@ -200,7 +213,8 @@ def export(root: Path, table: str, *, today: str, view: Optional[str] = None,
     props = ["_key"] + [c["prop"] for c in cols["columns"]]
     rows = []
     for obj in objects(root, table):
-        rows.append([obj["key"]] + [cell(obj["data"].get(c["prop"]), kinds[c["prop"]], all_names)
+        rows.append([obj["key"]] + [value_cell(table, obj["data"], c["prop"], kinds[c["prop"]],
+                                               all_names)
                                     for c in cols["columns"]])
 
     lists: List[List[str]] = []
@@ -209,7 +223,7 @@ def export(root: Path, table: str, *, today: str, view: Optional[str] = None,
         kind = kinds[c["prop"]]
         if kind.startswith("choice:"):
             options, strict = kind.split(":", 1)[1].split("|"), True
-        elif kind in ("entity", "person", "project", "company"):
+        elif kind in ("entity", "person", "project"):
             options, strict = sorted(all_names[_LINK_KIND[kind]].values(), key=str.lower), False
         else:
             continue  # lists of links: no dropdown (a cell holds several)
@@ -278,9 +292,6 @@ def to_value(text: str, kind: str, all_names: dict):
             return None, f"{name!r} matches several: {', '.join(sorted(hits))}"
         return None, f"{name!r} matches no {_LINK_KIND[kind]}"
 
-    if kind == "company":
-        known = any(n.lower() == text.lower() for n in target.values())
-        return text, None, not known
     if kind in ("people", "projects"):
         out = []
         for part in _norm(text, kind):
@@ -462,12 +473,13 @@ def plan(root: Path, file_rel: str) -> dict:
             mine, before = _norm(row[i], kind), _norm(orig[i], kind)
             if mine == before:
                 continue
-            now = _norm(cell(current[key].get(prop), kind, all_names), kind)
+            shown = value_cell(table, current[key], prop, kind, all_names)
+            now = _norm(shown, kind)
             if now == mine:
                 continue
             if now != before:
                 out["conflicts"].append({"key": key, "header": headers[i], "yours": row[i].strip(),
-                                         "vault": cell(current[key].get(prop), kind, all_names)})
+                                         "vault": shown})
                 continue
             if table == "projects" and prop == "entity":
                 row_problems.append(f"{headers[i]}: moving a project to another entity is not supported")
@@ -519,6 +531,9 @@ def _write_props(root: Path, key: str, values: Dict[str, object], quote) -> None
     old, _ = markdown.split_frontmatter(text)
     for prop, value in values.items():
         text = markdown.upsert_scalar_field(text, prop, _render(value, prop in quote))
+        if prop == "entity" and key.startswith(vault.PEOPLE_DIR + "/"):
+            # The Entity cell showed the legacy `company` it replaces (#273).
+            text = markdown.remove_field(text, "company")
         if prop in ("person-name", "entity-name") and value and old.get(prop):
             text = text.replace(f"\n# {old[prop]}\n", "\n" + markdown.title_heading(value) + "\n", 1)
     vault.atomic_write(path, text)

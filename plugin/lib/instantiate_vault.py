@@ -72,7 +72,7 @@ NOT_WRITABLE_HINT = (
 # this check exists to catch — importing the chain here would make the
 # assertion agree with whatever the chain says and catch nothing. Bump both
 # together.
-EXPECTED_STRUCTURE_VERSION = "13"
+EXPECTED_STRUCTURE_VERSION = "14"
 
 
 class InstantiateError(Exception):

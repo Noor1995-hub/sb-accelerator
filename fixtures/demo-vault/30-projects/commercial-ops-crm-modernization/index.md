@@ -78,3 +78,7 @@ Reference material for the evening run and for when you need the detail. Folded 
 > [!info]- Context
 > - **Contacts** — Sam Okafor (VP Commercial Operations, delivery owner), Omar Siddiqui (Analytics Lead, target schema and RFP scoring)
 > - **Source** — Scoped at the CRM data modernization kickoff workshop, 2026-04-20
+
+## Notes
+
+- Engagement note (moved from the Commercial Operations page, 2026-10-12): Pipeline data consolidated onto one schema; vendor selection by 2026-08-30

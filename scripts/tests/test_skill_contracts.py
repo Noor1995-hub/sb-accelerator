@@ -2543,3 +2543,63 @@ def test_ontology_says_dismiss_on_a_kept_meeting_only_hides_it():
             / "ontology.md").read_text(encoding="utf-8")
     flat = " ".join(text.split())
     assert "Dismiss on an accepted meeting only hides it" in flat
+
+
+def test_update_entity_writes_stakeholders_onto_the_person():
+    text = read_skill("update-entity")
+    assert "person set" in text and "--decision-role" in text
+    assert '"stakeholders"' not in text and '"engagements"' not in text
+
+
+def test_new_project_no_longer_writes_an_engagements_row():
+    assert "engagements" not in read_skill("new-project").lower()
+
+
+def test_person_ensure_passes_the_entity_only_when_routing_knows_it():
+    flat = " ".join(read_skill("sync-recordings").split())
+    assert "--entity" in flat and "never a guess" in flat.lower()
+
+
+def _people_step():
+    text = read_skill("update-entity")
+    return text[text.index("### 6. People at this entity"):text.index("### 7. Summarise")]
+
+
+def test_update_entity_links_people_fill_if_empty_and_moves_them_only_on_request():
+    """#273: an existing person linked to another entity is not moved by
+    accident — the link is `person ensure --entity` (fill-if-empty), and
+    `person set --entity` runs only when the owner says they moved."""
+    step = _people_step()
+    flat = " ".join(step.split())
+    assert "person ensure" in flat and "--entity" in flat
+    for block in re.findall(r"```bash\n(.*?)```", step, re.S):
+        if "person set" in block:
+            assert "--entity" not in block, "person set must not carry --entity by default"
+    assert "only when the owner says they moved" in flat.lower()
+    assert '"was"' in flat or "`was`" in flat
+
+
+def test_update_entity_bash_blocks_continue_lines_properly():
+    """M2: a long command breaks with `\` + newline, never a run of spaces."""
+    for block in re.findall(r"```bash\n(.*?)```", _people_step(), re.S):
+        for line in block.splitlines():
+            assert "   --" not in line.strip(), line
+    assert "## Notes from <entity name>" in _people_step()
+    assert "(from /update-entity, <today>)" in _people_step()
+
+
+def test_the_m365_worker_passes_no_entity_without_a_per_attendee_map():
+    """#273: the M365 worker's briefing carries no attendee → entity map, so
+    the worker cannot know routing signal 1 per attendee."""
+    skill = read_skill("sync-recordings")
+    briefing = skill[skill.index("- the routing you decided"):
+                     skill.index("Extraction is structured work")]
+    if not re.search(r"attendee-entit", briefing):
+        assert "--entity" not in read_ref("sync-recordings", "worker-contract.md")
+
+
+def test_setup_links_the_owner_to_their_own_company():
+    text = read_skill("setup-my-brain")
+    step4 = text[text.index("## Step 4"):text.index("## Step 5")]
+    flat = " ".join(step4.split())
+    assert "person set" in flat and "--entity" in flat

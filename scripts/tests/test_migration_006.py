@@ -132,6 +132,6 @@ def test_run_through_the_framework_bumps_to_8(tmp_path):
     (root / "99-workflow-config").mkdir()
     result = migrate.run(root, "2026-10-02", stamp="2026-10-02-120000")
     assert [a["slug"] for a in result["applied"]] == ["structure-version-7", "structure-version-8",
-        "structure-version-9", "structure-version-10", "structure-version-11", "structure-version-12", "structure-version-13"]
-    assert result["structure_version"] == 13
-    assert (root / "structure-version").read_text(encoding="utf-8").strip() == "13"
+        "structure-version-9", "structure-version-10", "structure-version-11", "structure-version-12", "structure-version-13", "structure-version-14"]
+    assert result["structure_version"] == 14
+    assert (root / "structure-version").read_text(encoding="utf-8").strip() == "14"

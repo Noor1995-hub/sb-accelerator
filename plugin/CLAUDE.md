@@ -24,24 +24,13 @@ Read `ok` before anything else. On failure, the `error` names the constraint
 and `hint` says what to do — surface both to the user rather than retrying
 blind or working around the CLI by writing files directly.
 
-### Table cells are stored with the pipe escaped
+### An entity's Stakeholders and Engagements are live (#273)
 
-A markdown table row is delimited by `|`, so `entity write` escapes any pipe
-inside a cell as `\|` before storing it. That escape is part of the stored
-form, and `entity read` returns cells exactly as stored — a note the user
-dictated as `wants numbers | not narrative` comes back as
-`wants numbers \| not narrative`.
-
-There is no inverse. A caller that read a cell and wants to send text back
-must send the **unescaped** form, because the write path re-escapes every
-cell it is given. Passing the stored form straight back through
-`entity write` accumulates backslashes on each round trip. This applies only
-to the two table sections, Stakeholders and Engagements; bullet and heading
-sections store free text as given.
-
-A raw `|` a human typed straight into a cell in Obsidian is repaired on the
-next write — re-joined into the column it belongs to, stored escaped — and
-reported in the result's `repairs` list.
+They are Dataview lists over people (`entity`, `role`, `decision-role`,
+`stance`) and projects (`entity`, `status`, `stage`, `next-milestone`), so
+`entity write` has no table sections and refuses the `stakeholders` and
+`engagements` keys with a pointer: stakeholder details are written on the
+person with `person set`, and an entity's projects list themselves.
 
 ### Wikilink fields cross the boundary as bare stems
 

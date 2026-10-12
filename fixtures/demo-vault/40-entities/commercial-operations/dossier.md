@@ -23,11 +23,17 @@ last-updated: 2026-06-05
 
 ## Stakeholders
 
-| Name | Title | Role in Decision | Stance | Notes |
-|------|-------|------------------|--------|-------|
-| [[sam-okafor]] | VP, Commercial Operations | sponsor | champion | Owns both workstreams. Reliable on delivery; will not push back in a group, so ask separately. |
-| [[omar-siddiqui]] | Analytics Lead, Commercial Operations | evaluator | champion | Carries the target CRM schema and RFP scoring. The only person who knows how the current pipeline data is actually stitched together. |
-| [[taylor-brooks]] | Chief of Staff | influencer | neutral | Runs the forecast call and the governance cadence. Can triage and draft on Morgan's behalf; owns neither workstream. |
+```dataview
+TABLE WITHOUT ID
+  link(file.path, person-name) AS "Name",
+  choice(entity = this.slug, "", link("40-entities/" + entity + "/dossier").entity-name) AS "Team",
+  role AS "Title",
+  decision-role AS "Role in decision",
+  stance AS "Stance"
+FROM "50-people"
+WHERE entity = this.slug OR link("40-entities/" + entity + "/dossier").parent = this.slug
+SORT person-name ASC
+```
 
 ## Relationship History
 
@@ -65,7 +71,13 @@ LIMIT 20
 
 ## Engagements
 
-| Project | Status | One-liner |
-|---------|--------|-----------|
-| [commercial-ops-crm-modernization](../../30-projects/commercial-ops-crm-modernization/index.md) | Active | Pipeline data consolidated onto one schema; vendor selection by 2026-08-30 |
-| [commercial-ops-pipeline-governance](../../30-projects/commercial-ops-pipeline-governance/index.md) | Active | Standing area: pipeline hygiene, forecast cadence, quarterly review |
+```dataview
+TABLE WITHOUT ID
+  link(file.path, project-name) AS "Project",
+  upper(substring(status, 0, 1)) + substring(status, 1) AS "Status",
+  stage AS "Where it stands",
+  next-milestone AS "Next milestone"
+FROM "30-projects"
+WHERE type = "project" AND (entity = this.slug OR link("40-entities/" + entity + "/dossier").parent = this.slug)
+SORT status ASC, project-name ASC
+```

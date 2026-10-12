@@ -3,7 +3,6 @@ person-name: "Dana Whitfield"
 slug: dana-whitfield
 email: dana.whitfield@nordbridge.example
 relationship: external
-company: "Nordbridge Components"
 role: "VP Procurement"
 projects: [nordbridge-regional-rollout-proposal]
 created: 2026-03-02
@@ -12,6 +11,9 @@ meetings-7d: 0
 meetings-30d: 0
 messages-7d: 0
 messages-30d: 0
+entity: nordbridge-components
+decision-role: evaluator
+stance: neutral
 ---
 
 # Dana Whitfield
@@ -33,3 +35,7 @@ WHERE econtains(attendees, this.slug)
 SORT date DESC
 LIMIT 10
 ```
+
+## Notes from Nordbridge Components
+
+- Straight about constraints — flagged the Liège freeze before we could propose into it. No read yet on who signs above her. (moved from the Nordbridge Components page, 2026-10-12)

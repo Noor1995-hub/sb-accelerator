@@ -214,6 +214,9 @@ The address is stored on a new person and filled into an existing one whose
 email is empty; a set email is never overwritten. Leave `--email` off for an
 entry with no address — never guess one.
 
+Do not link attendees to an entity: your briefing carries no per-attendee
+routing, so which entity a person belongs to would be a guess.
+
 Use each result's `slug`, plus the vault owner's person slug your prompt
 already carries, for the payload's `attendees` — the owner's slug arrives
 pre-resolved (the orchestrator read it from `config read`'s `owner`), so

@@ -1,6 +1,6 @@
 ---
 name: update-entity
-description: Record relationship context about an organisation — people, meetings, company facts, sensitivities, engagements — into its dossier. Triggers when the user invokes /update-entity or asks to update, capture, or record context on a client, partner, supplier, or business unit.
+description: Record relationship context about an entity — people, meetings, company facts, sensitivities — into its dossier. Triggers when the user invokes /update-entity or asks to update, capture, or record context on a client, partner, supplier, or business unit.
 user_invocable: true
 upstreamed-from: busdev@ccc27b8
 ---
@@ -91,13 +91,11 @@ The banner (`> [!unvalidated] Generated context — verify before relying on
 details.`) survives `entity write` unconditionally now — writing content
 never clears it as a side effect. Clearing it is a separate, explicit act:
 `entity validate --slug <slug>`. Do not call it as part of routine routing;
-it is for a human's actual review of the dossier's content, the same
-discipline as rule 4 below for the stakeholder `needs-review` marker.
+it is for a human's actual review of the dossier's content (rule 7).
 
-One reading note: cells in the Stakeholders and Engagements tables come back
-with any pipe escaped as `\|`, because that is how they are stored. If you
-carry text from a cell into your payload, strip the backslash first — the write
-path escapes pipes again, so passing the stored form back doubles the escape.
+Stakeholders and Engagements are live lists the page builds itself from the
+people and projects linked to this entity, and `entity write` refuses them as
+keys.
 
 ### 3. Get the input
 
@@ -115,11 +113,10 @@ political dynamic worth remembering.
 | What you are looking at | Section |
 |---|---|
 | Company facts — industry, size, systems, strategy, recent news | `context` |
-| People — names, titles, who decides, where they stand | `stakeholders` |
+| People — names, titles, who decides, where they stand | the person, not the dossier: see "People at this entity" |
 | A meeting's *read of the room* — the tone, who held back, what went unsaid | `meeting_log` |
 | Political dynamics, sore points, topics to avoid, competitor ties | `sensitivities` |
 | Milestones in the relationship — trust earned or lost, turning points | `relationship_history` |
-| Projects and their status | `engagements` |
 
 Judgment calls worth getting right:
 
@@ -145,12 +142,6 @@ Judgment calls worth getting right:
 - **Vocabularies are closed.** Role in decision: sponsor · champion ·
   evaluator · influencer · blocker. Stance: champion · neutral · blocker. The
   CLI refuses anything else, so pick the nearest rather than inventing.
-- **Always pass a stakeholder's plain display name.** The CLI matches on a
-  slug derived from the name, so "Leo Marchetti" updates an existing row
-  whether that row stores `Leo Marchetti`, `[[leo-marchetti]]` or
-  `[[leo-marchetti|Leo Marchetti]]`. Do not copy a dossier's link syntax back
-  into the payload to make it match, and do not introduce a wikilink for a
-  person note that may not exist.
 
 **If nothing qualifies, write nothing.** Some input is genuinely not worth a
 permanent entry — a scheduling exchange, a pleasantry, a detail already
@@ -171,10 +162,6 @@ cat > /tmp/entity-edits.json <<'JSON'
     {"label": "Fleet", "fact": "three yards, 240 trailers",
      "why": "sets the automation scope"}
   ],
-  "stakeholders": [
-    {"name": "Leo Marchetti", "title": "COO", "role": "sponsor",
-     "stance": "champion", "notes": "wants numbers, not narrative"}
-  ],
   "meeting_log": [
     {"date": "2026-08-21", "topic": "Renewal planning",
      "dynamics": "Warm; Renee quieter than usual on integration"}
@@ -191,15 +178,65 @@ python3 "$VAULTLIB" entity write --vault "$VAULT" \
 
 Every *section* key is optional; send only the sections you have something for.
 Within an entry the fields are not: `context` needs all of `label`, `fact` and
-`why`, `stakeholders` needs `name`, `meeting_log` needs `date`, `topic` and
+`why`, `meeting_log` needs `date`, `topic` and
 `dynamics`,
 `sensitivities` needs `topic`, `detail` and `implications`,
-`relationship_history` needs `date`, `what` and `significance`, and
-`engagements` needs `project` — as the project's **slug**, not its display
-name. The CLI refuses an incomplete entry rather than rendering a half-empty
+and
+`relationship_history` needs `date`, `what` and `significance`. The CLI refuses an incomplete entry rather than rendering a half-empty
 bullet. Dates are ISO `YYYY-MM-DD`.
 
-### 6. Summarise
+### 6. People at this entity
+
+People are written on the person, not on the dossier. For each person the
+input names:
+
+1. Make sure they exist and are linked here:
+
+```bash
+python3 "$VAULTLIB" person ensure --vault "$VAULT" --name "<Full Name>" \
+  --entity <this entity's slug>
+```
+
+   This creates a new person already linked to this entity, and fills an
+   empty `entity` on someone the vault knows. It never moves anyone: when
+   the result's `ignored` lists `entity`, the person is linked to another
+   entity (often a team of this one). Leave that link alone, and say so in
+   the summary.
+2. Then set what you learned, using the person's `slug` from the result:
+
+```bash
+python3 "$VAULTLIB" person set --vault "$VAULT" --slug <slug> \
+  [--role "<title>"] \
+  [--decision-role <sponsor|champion|evaluator|influencer|blocker>] \
+  [--stance <champion|neutral|blocker>]
+```
+
+Pass only the flags you know. Add `--entity <this entity's slug>` to
+`person set` only when the owner says they moved here — a person linked
+elsewhere is otherwise left where they are. The result's `was` gives each
+changed field's previous value; say it ("Jan Peeters moved from Acme
+Finance to Acme", "title: COO → Group COO").
+
+The vocabularies are closed: role in decision is sponsor · champion ·
+evaluator · influencer · blocker, stance is champion · neutral · blocker.
+The CLI refuses anything else, so pick the nearest rather than inventing.
+
+A note about a person ("wants numbers, not narrative") goes onto the
+person's page, one bullet under `## Notes from <entity name>` (add the
+heading at the end of the page when it is missing):
+
+```markdown
+## Notes from <entity name>
+
+- <note> (from /update-entity, <today>)
+```
+
+The entity's Stakeholders list then shows them on its own.
+
+**Engagements:** nothing to write; the page lists the entity's projects
+itself.
+
+### 7. Summarise
 
 Report what changed, section by section, from the CLI's `changes` list. Then
 two things the list cannot tell you:
@@ -221,8 +258,8 @@ wrote those bytes and should hear that they changed.
 2. **Never hand-edit the dossier.** Every change goes through
    `entity write`.
 3. **Read before you write.** Routing without reading produces duplicates.
-4. **New stakeholders are flagged `needs-review` automatically.** Leave the
-   marker for a human to clear; do not remove it on the user's behalf.
+4. **Stakeholders and Engagements are never written to the dossier.** They
+   are live lists; change the person (`person set`) or the project instead.
 5. **Do not infer facts.** "Probably reports to the CFO" is not a fact. If it
    matters, ask.
 6. **Do not touch `status` or `entity-type`** unless the user asks. Those are
@@ -230,5 +267,4 @@ wrote those bytes and should hear that they changed.
 7. **The `[!unvalidated]` banner clears only through `entity validate`,
    never as a side effect of routing content.** Do not call `entity validate`
    on the user's behalf just because a write succeeded — it is the same
-   explicit-review discipline as rule 4, applied to the whole dossier instead
-   of one stakeholder row.
+   explicit-review discipline, applied to the whole dossier.

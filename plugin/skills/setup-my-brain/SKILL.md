@@ -461,6 +461,14 @@ python3 "$VAULTLIB" entity ensure --vault "$VAULT" --slug meridian-freight-holdi
 The slug is the name they gave, lowercase and hyphenated
 (`meridian-freight-holdings`).
 
+When their own company is one of the entities they ticked, link them to it,
+so their own page sits on that entity's Stakeholders list (`alex-rivera` is
+the owner slug from step 2):
+
+```bash
+python3 "$VAULTLIB" person set --vault "$VAULT" --slug alex-rivera --entity <own company slug>
+```
+
 ## Step 5 — your work
 
 The read has just gone through their chats and mail: open with what it
@@ -503,6 +511,10 @@ missing. For each ticked person:
 ```bash
 python3 "$VAULTLIB" person ensure --vault "$VAULT" --name "Priya Nathan"
 ```
+
+When the owner said where this person works and that entity exists (step 4
+made it), add `--entity <entity slug>`. If they named a company that is not an
+entity yet, leave `--entity` off rather than guessing a slug.
 
 ## Step 7 — how you write
 
