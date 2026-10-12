@@ -1,0 +1,55 @@
+"""One run at a time (#271)."""
+from datetime import datetime, timedelta
+
+import pytest
+
+from vaultlib import runlock
+
+T0 = datetime(2026, 10, 12, 12, 0)
+
+
+def test_acquire_on_free_vault(tmp_path):
+    result = runlock.acquire(tmp_path, "sync-recordings", now=T0)
+    assert result["acquired"] and not result["took_over"]
+    assert (tmp_path / runlock.LOCK_RELPATH).is_file()
+
+
+def test_fresh_lock_of_another_routine_refuses(tmp_path):
+    runlock.acquire(tmp_path, "evening-sync", now=T0)
+    result = runlock.acquire(tmp_path, "sync-recordings", now=T0 + timedelta(minutes=30))
+    assert result["acquired"] is False
+    assert result["holder"]["routine"] == "evening-sync"
+
+
+def test_stale_lock_is_taken_over(tmp_path):
+    runlock.acquire(tmp_path, "evening-sync", now=T0)
+    result = runlock.acquire(tmp_path, "sync-recordings", now=T0 + timedelta(hours=3))
+    assert result["acquired"] and result["stale"] and result["took_over"]
+
+
+def test_same_routine_takes_its_own_lock_over(tmp_path):
+    """A crashed interactive call must not lock the owner out for two hours."""
+    runlock.acquire(tmp_path, "sync-recordings", now=T0)
+    result = runlock.acquire(tmp_path, "sync-recordings", now=T0 + timedelta(minutes=5))
+    assert result["acquired"] and result["took_over"]
+
+
+def test_release_only_removes_own_lock(tmp_path):
+    runlock.acquire(tmp_path, "evening-sync", now=T0)
+    assert runlock.release(tmp_path, "sync-recordings")["released"] is False
+    assert (tmp_path / runlock.LOCK_RELPATH).is_file()
+    assert runlock.release(tmp_path, "evening-sync")["released"] is True
+    assert not (tmp_path / runlock.LOCK_RELPATH).exists()
+
+
+def test_unreadable_lock_counts_as_stale(tmp_path):
+    path = tmp_path / runlock.LOCK_RELPATH
+    path.parent.mkdir(parents=True)
+    path.write_text("not json", encoding="utf-8")
+    result = runlock.acquire(tmp_path, "sync-recordings", now=T0)
+    assert result["acquired"] and result["stale"]
+
+
+def test_routine_name_is_validated(tmp_path):
+    with pytest.raises(runlock.RunLockError):
+        runlock.acquire(tmp_path, "Evening Sync", now=T0)

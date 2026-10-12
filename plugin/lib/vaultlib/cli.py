@@ -32,7 +32,7 @@ if __package__ in (None, ""):
     # the skills invoke it.
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from vaultlib import actions, config, dailynote, dates, decision, discover, entity, feedback, fetcherrors, health, lastsync, m365, meeting, migrate, msglog, msgrows, msgstate, notes, person, plaud, project, projectstate, provenance, runlog, scratch, schema, seenevents, syncjob, template, triage, updatequeue, vault  # noqa: E402
+from vaultlib import actions, config, dailynote, dates, decision, discover, entity, feedback, fetcherrors, health, lastsync, m365, meeting, migrate, msglog, msgrows, msgstate, notes, person, plaud, project, projectstate, provenance, runlock, runlog, scratch, schema, seenevents, syncjob, template, triage, updatequeue, vault  # noqa: E402
 
 
 def _emit(payload: dict) -> None:
@@ -746,6 +746,16 @@ def build_parser() -> argparse.ArgumentParser:
         "--dir", required=True,
         help="the session scratch directory to sweep — never the vault")
 
+    lock = top.add_parser("runlock", help="one run at a time (#271)")
+    lock_sub = lock.add_subparsers(dest="action", required=True)
+    lock_acquire = lock_sub.add_parser("acquire", help="take the run lock")
+    _add_vault_argument(lock_acquire)
+    lock_acquire.add_argument("--routine", required=True)
+    lock_acquire.add_argument("--now", help="ISO datetime override (tests)")
+    lock_release = lock_sub.add_parser("release", help="drop this routine's lock")
+    _add_vault_argument(lock_release)
+    lock_release.add_argument("--routine", required=True)
+
     runlog_group = top.add_parser(
         "runlog", help="append-only one-line-per-run log for unattended routines")
     runlog_sub = runlog_group.add_subparsers(dest="action", required=True)
@@ -1278,6 +1288,11 @@ def _dispatch(args: argparse.Namespace) -> int:
                                stamp=args.stamp))
     if args.group == "scratch":
         return _ok(scratch.sweep(args.dir))
+    if args.group == "runlock":
+        if args.action == "acquire":
+            now = datetime.fromisoformat(args.now) if args.now else None
+            return _ok(runlock.acquire(root, args.routine, now=now))
+        return _ok(runlock.release(root, args.routine))
     if args.group == "runlog":
         return _ok(runlog.append(root, args.routine, args.outcome))
     if args.group == "provenance":
@@ -1394,6 +1409,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     except scratch.ScratchError as exc:
         return _fail(str(exc), "Check --dir points at the session scratch "
                      "directory and retry.")
+    except runlock.RunLockError as exc:
+        return _fail(str(exc), "Pass the routine's slug, e.g. sync-recordings.")
     except runlog.RunLogError as exc:
         return _fail(str(exc), "Fix --routine or --outcome and retry.")
     except health.HealthError as exc:
