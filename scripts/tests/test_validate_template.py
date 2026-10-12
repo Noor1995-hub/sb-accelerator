@@ -41,7 +41,7 @@ def make_populated_template(tmp_path):
         "Never read or display files under 99-workflow-config/secrets/.\n",
         encoding="utf-8",
     )
-    (t / "structure-version").write_text("13\n", encoding="utf-8")
+    (t / "structure-version").write_text("14\n", encoding="utf-8")
     secrets = t / "99-workflow-config" / "secrets"
     secrets.mkdir(parents=True, exist_ok=True)
     (secrets / "README.md").write_text("secrets readme", encoding="utf-8")
