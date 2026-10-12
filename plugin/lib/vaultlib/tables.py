@@ -69,6 +69,10 @@ def _refs(expr: str, editable: set) -> set:
     return found & editable
 
 
+def _pretty(prop: str) -> str:
+    return prop.replace("-", " ").capitalize()
+
+
 def columns(spec: dict, base_text: Optional[str], view: Optional[str]) -> dict:
     editable = [f[0] for f in spec["fields"]]
     warnings: List[str] = []
@@ -108,9 +112,15 @@ def columns(spec: dict, base_text: Optional[str], view: Optional[str]) -> dict:
     except basefile.BaseFileError as exc:
         warnings.append(f"could not read the table's columns ({exc}); using the default order")
         picked = []
+    name_prop = editable[0]  # every spec lists its name field first
+    if name_prop not in [c["prop"] for c in picked]:
+        # The name identifies a row; it leads even when the view shows it only
+        # through a formula over several properties (Entities: name + parent).
+        picked.insert(0, {"prop": name_prop,
+                          "header": known.get(name_prop, _pretty(name_prop))})
     for prop in editable:
         if prop not in [c["prop"] for c in picked]:
-            picked.append({"prop": prop, "header": known.get(prop, prop)})
+            picked.append({"prop": prop, "header": known.get(prop, _pretty(prop))})
     headers = [c["header"] for c in picked]
     for c in picked:  # two columns may carry the same display name
         if headers.count(c["header"]) > 1:

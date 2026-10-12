@@ -95,3 +95,16 @@ def test_projects_export_shows_names_not_slugs(tmp_path):
 def test_unknown_table_is_refused(tmp_path):
     with pytest.raises(tables.TablesError):
         tables.export(make_vault(tmp_path), "meetings", today="2026-10-12")
+
+
+def test_the_name_column_comes_first_when_the_view_lacks_it():
+    """Entities' view shows the name through a formula over name and parent,
+    which maps to no single property — the name still leads."""
+    spec = tables.TABLES["entities"]
+    got = tables.columns(spec, (TEMPLATE / "40-entities/Entities.base").read_text(encoding="utf-8"), None)
+    assert got["columns"][0]["prop"] == "entity-name"
+
+
+def test_columns_without_any_name_in_the_base_get_a_readable_header():
+    got = tables.columns(tables.TABLES["people"], (TEMPLATE / "50-people/People.base").read_text(encoding="utf-8"), None)
+    assert {c["prop"]: c["header"] for c in got["columns"]}["email"] == "Email"
