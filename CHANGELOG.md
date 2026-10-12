@@ -15,7 +15,7 @@ delivers them.
 
 ## Unreleased
 
-- **Entity pages update themselves**: every evening, and right away when you call the meeting sync or `/add`, each active entity with new meetings, mail, sessions or notes gets its Context, Relationship History, Dynamics and Sensitivities brought up to date — every line says where it came from, and nothing you wrote is removed. A team's page is updated in full; its parent's history gets the team's big events. (#273)
+- **Entity pages update themselves**: every evening, and right away when you call the meeting sync or `/add`, each active entity with new meetings, mail, sessions or notes gets its Context, Relationship History, Dynamics and Sensitivities brought up to date — every line says where it came from, and nothing you wrote is removed. A team's page is updated in full; its parent's history gets the team's big events. (#273, #282)
 
 - **Entity pages fill themselves**: Stakeholders now lists the people linked to the entity (and its teams), with their title, role in decision and stance, and Engagements lists its projects with where each stands and what is next — always current, however a person or project was added. A person's company is now a real link to an entity (the People table shows **Entity**); title, role in decision and stance live on the person and can be filled in with `/update-tables`. Needs `/upgrade-vault` (structure 14): it links people to their entity where the company name matches one (others are listed for you to resolve), moves each Stakeholders row's details and notes onto the person and each project's one-liner into the project's Notes, then replaces the old typed tables. Anything it cannot place stays on the page and is listed. (#273, #281)
 
