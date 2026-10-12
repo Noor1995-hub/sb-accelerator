@@ -114,8 +114,11 @@ From here, every exit releases the lock first, up to the end of step 6.
 **Plaud recording, or text/file (meeting or note).** Dispatch **one**
 `sync-worker` with the same briefing `/sync-recordings` step 6 gives it,
 plus the routing the owner just confirmed (projects, attendees, type). It
-writes the meeting note (`meeting write`, `needs-review`), and for an inbox
-file it archives the file as usual. Then mark it accepted with the #277 commands:
+writes the meeting note (`meeting write`, `needs-review`). For text or a
+file, `/add` then moves the inbox file out with `sync archive` once the note
+is verified on disk, as `/sync-recordings` does: Input is only a stop on the
+way and is empty again when `/add` ends. If no note was written, the file
+stays in Input and the evening run retries it; the summary says so. Then mark it accepted with the #277 commands:
 
 ```bash
 python3 "$VAULTLIB" meeting triage-apply --vault "$VAULT" --items "$SCRATCH/add.payload.json"   # [{"path": ..., "action": "accept"}]
