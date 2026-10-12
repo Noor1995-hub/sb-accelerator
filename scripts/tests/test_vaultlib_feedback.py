@@ -180,3 +180,39 @@ def test_post_wraps_url_error_without_echoing_token(monkeypatch):
     message = str(excinfo.value)
     assert "nope" in message
     assert "ghp_supersecret" not in message
+
+
+def test_a_fact_from_what_i_know_is_blocked(tmp_path):
+    root = seeded_vault(tmp_path)
+    (root / "50-people" / "zed.md").write_text(
+        '---\nperson-name: "Zed Q"\nslug: zed\n---\n# Zed Q\n\n## What I know\n\n'
+        "- 2026-10-08 — Is selling the house in Ghent. (meeting · [[m]])\n"
+        "- Plays chess on Sundays.\n", encoding="utf-8")
+    result = feedback.lint(root, "The sync crashed; also is selling the house in ghent lol")
+    assert result["ok"] is False
+    assert {"kind": "fact", "fragment": "Is selling the house in Ghent"} in result["blocked"]
+    assert feedback.lint(root, "plays chess on sundays")["ok"] is False
+    assert feedback.lint(root, "The sync crashed on step 6.")["ok"] is True
+
+
+def test_migrated_lines_and_any_heading_case_are_blocked(tmp_path):
+    # Final review I2: a migrated /update-entity line carries two trailing
+    # parentheticals, and the heading may be "## What I Know".
+    root = seeded_vault(tmp_path)
+    (root / "50-people" / "zed.md").write_text(
+        '---\nperson-name: "Zed Q"\nslug: zed\n---\n# Zed Q\n\n## What I Know\n\n'
+        "- Wants numbers, not narrative. (from /update-entity, 2026-10-01) (Notes from Acme)\n",
+        encoding="utf-8")
+    result = feedback.lint(root, "the user wants numbers, not narrative in the recap")
+    assert {"kind": "fact", "fragment": "Wants numbers, not narrative"} in result["blocked"]
+
+
+def test_code_blocks_under_what_i_know_are_not_facts(tmp_path):
+    # PR review: a migrated dataview block must not put "LIST" on the
+    # blocklist — it would refuse any draft containing "list".
+    root = seeded_vault(tmp_path)
+    (root / "50-people" / "zed.md").write_text(
+        '---\nperson-name: "Zed Q"\nslug: zed\n---\n# Zed Q\n\n## What I know\n\n'
+        "```dataview\nLIST\n```\n\n- Plays chess on Sundays.\n", encoding="utf-8")
+    assert feedback.lint(root, "The list view crashed in dataview.")["ok"] is True
+    assert feedback.lint(root, "plays chess on sundays")["ok"] is False

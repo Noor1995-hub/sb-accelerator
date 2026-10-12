@@ -15,10 +15,11 @@ messages-30d: 0
 decision-role: influencer
 stance: neutral
 entity: meridian-freight-holdings
+person-updated: 2026-10-12T17:55
 ---
 
 # Jamie Ellwood
 
-## Notes from Meridian Freight Holdings
+## What I know
 
 - First seen in the 2026-05-20 brainstorm; his floor detail is what moved Leo. Title and remit not yet confirmed. (unconfirmed; moved from the Meridian Freight Holdings page, 2026-10-12)

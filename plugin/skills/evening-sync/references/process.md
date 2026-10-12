@@ -1,6 +1,6 @@
 # Processing (shared)
 
-Followed by `/evening-sync` (after stage 3b), and on demand by `/sync-recordings` step 9 and `/add` step 6. Everything here runs the same for every caller. Only the inputs differ — see Inputs.
+Followed by `/evening-sync` (after stage 3b), and on demand by `/sync-recordings` step 9 and `/add` step 6, sections A to E. Everything here runs the same for every caller. Only the inputs differ — see Inputs.
 
 ## Inputs
 
@@ -14,6 +14,7 @@ Followed by `/evening-sync` (after stage 3b), and on demand by `/sync-recordings
 | Session records from `/add` | yes, when newer than the project's last state write | yes |
 | Project-state updates and decisions (C) | yes | yes |
 | Entity updates (D) | yes | yes — every entity with new material since its last update, not only the entities of what was just processed |
+| Facts about people (E) | yes | yes — every person with new material since their last update |
 | `today` and the owner slug | stage 1 (`dates plan`, `config read`) | `today` from `dates plan`, `owner` from `config read` — step 9 |
 | `sync_notes` lines (A, C) | the recap | the caller's summary Warnings line — there is no recap |
 
@@ -73,8 +74,9 @@ entry carries `indexPath`, `decisionsDir`, `lastUpdated`, `stateUpdated`,
 `newFiles`, `newNotes` (owner notes ticked Include that belong to the project), and the `existingDecisions` projection. Next to the queue it returns
 `notesNotQueued`: harvested notes with projects that no queue entry carries
 (their project could not be queued) — the write-back in section C never marks
-them. It also returns `entitiesNeedingUpdate` (section D) and `queuedAt`, the
-minute the queue was built (`YYYY-MM-DDTHH:MM`); keep it for D. Carry `warnings` — especially `SELF-CHECK`
+them. It also returns `entitiesNeedingUpdate` (section D), `peopleNeedingUpdate` and
+`peopleWork` (section E) and `queuedAt`, the minute the queue was built
+(`YYYY-MM-DDTHH:MM`); keep it for D and E. Carry `warnings` — especially `SELF-CHECK`
 lines — into the final summary verbatim.
 
 ## C. Project-state updates
@@ -322,6 +324,78 @@ python3 "$VAULTLIB" entity touch --vault "$VAULT" --slug <slug> --timestamp <que
    its entity stays queued for the next run. A refused write is not such a
    failure: step 4 covers it.
 
+## E. Facts about people
+
+After section D has returned. `update-queue`'s result from B carries
+`peopleNeedingUpdate` (`slug`, `path`, `personName`) and `peopleWork`: one
+item per meeting (`kind: meeting`, `path`, `date`, `people`) and per day log
+(`kind: log`, `path`, `stem`, `date`, `groups`, `people`) that names someone
+with material newer than their `person-updated` stamp. `peopleWork` empty →
+record "no people pages to update" and go on.
+
+Otherwise dispatch one subagent per item (`model: sonnet`), in the same
+blocking batches of at most 3 as section C — the rule written there applies
+here unchanged. There is no cap. Each subagent carries its item, the
+`personName` of each of its `people`, today's date and these instructions:
+
+1. Read the material end to end — for a meeting, its note (Key Takeaways,
+   Debrief, transcript excerpts when present); for a log, per listed person
+   `python3 "$VAULTLIB" messages for-person --vault "$VAULT" --slug <slug> --logs <stem>`
+   (the groups that name them, each with its `link` and `kind`; only those
+   whose `gid` is in `groups`). Read each listed person's page
+   (`50-people/<slug>.md`) for its `## What I know`.
+2. For each listed person, keep only what **that person said about
+   themselves** — personal or working: "I'm selling my house", "I prefer a
+   written business case", "I'm moving to the Antwerp office", "I'm having a
+   hard time with this topic". Never what others said about them, never an
+   interpretation of tone or mood ("seemed stressed"), nothing invented,
+   nothing already on their page. When the material does not show that the
+   person said it themselves — a condensed mail or chat point ("Dana is
+   selling her house" may be the owner writing to Dana), a Key Takeaway with
+   no speaker — write nothing for it. Writing nothing is a valid outcome —
+   most meetings hold no such fact.
+3. Do not write to the page — several subagents run at once and may share a
+   person. Return a fenced JSON block: `{"path", "facts": {"<slug>":
+   [{"date", "fact"}, …], …}, "notes"}`, one line per fact, the date being
+   the material's own `date`, each fact ending in its source marker:
+   `(meeting · [[<meeting stem>]])` for a meeting, or `(mail · <link>)` /
+   `(chat · <link>)` for a log group (the group's `link`, `mail` or `chat`
+   per its `kind`). A person with nothing gets `[]`. A subagent that fails
+   or returns no block becomes a warning.
+
+When every batch has returned, write the facts one person at a time — never
+two `person write` calls on the same page at once:
+
+```bash
+cat > "$SCRATCH/person-facts-<slug>.payload.json" <<'JSON'
+{"facts": [{"date": "2026-10-08", "fact": "Is selling her house, wants to move closer to Ghent. (meeting · [[08-10-26-weekly]])"}]}
+JSON
+python3 "$VAULTLIB" person write --vault "$VAULT" --slug <slug> --automatic --facts "$SCRATCH/person-facts-<slug>.payload.json"
+```
+
+The payload joins that person's facts from every item. `person write`
+refuses a fact without a marker, on more than one line or with a bad date,
+and refuses the whole page when its `## What I know` is left inside an open
+code block; each lands in `skipped` with a reason that holds no fact text.
+`duplicates` are fine. Every `skipped` reason goes to the caller's
+**Warnings** with the person's name. When it is the open-code-block
+refusal, that person is not stamped, so once the owner closes the block the
+next run reads the material again.
+
+Then stamp each person in `peopleNeedingUpdate` whose items all returned a
+block and whose page was not refused — also when nothing was written:
+
+```bash
+python3 "$VAULTLIB" person touch --vault "$VAULT" --slug <slug> --timestamp <queuedAt>
+```
+
+A person with a failed item is not stamped either (`person write` skips
+exact duplicates when the material is read again).
+
+What reaches the caller is **counts only**: facts written and people
+touched. No fact text goes into the summary, the recap or the daily note —
+facts about people never leave their page.
+
 ## Returns
 
 What the caller carries into its summary:
@@ -334,4 +408,5 @@ What the caller carries into its summary:
 - notes kept (`include` still ticked), each with why, including `notesNotQueued`
 - `sync_notes` lines from A and C — kept apart from warnings
 - `entitiesUpdated`: `[{slug, entityName, parentName, written}]` from D. The summary's **Entity pages updated** line lists only the entities where something was written, by name, a team with its parent: "Finance (Acme)"
+- `peopleFacts`: `{facts: N, people: M}` from E — counts only, never names or fact text. The summary's **People pages:** line reads "N facts added for M people", or none
 - warnings, verbatim, including `SELF-CHECK` lines

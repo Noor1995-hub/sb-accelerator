@@ -15,9 +15,14 @@ messages-30d: 0
 entity: meridian-freight-holdings
 decision-role: evaluator
 stance: neutral
+person-updated: 2026-10-12T17:55
 ---
 
 # Renee Castillo
+
+## What I know
+
+- Owns the integration work the consolidation created. Was absent when it was agreed, so her stance on it is untested. (moved from the Meridian Freight Holdings page, 2026-10-12)
 
 ## Context
 
@@ -36,7 +41,3 @@ WHERE econtains(attendees, this.slug)
 SORT date DESC
 LIMIT 10
 ```
-
-## Notes from Meridian Freight Holdings
-
-- Owns the integration work the consolidation created. Was absent when it was agreed, so her stance on it is untested. (moved from the Meridian Freight Holdings page, 2026-10-12)

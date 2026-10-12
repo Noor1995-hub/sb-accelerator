@@ -300,7 +300,7 @@ def test_the_whole_chain_runs_over_a_vault_with_a_broken_person(tmp_path):
     (root / "50-people/broken.md").write_text(broken, encoding="utf-8")
     (root / "structure-version").write_text("13\n", encoding="utf-8")
     result = migrate.run(root, "2026-10-12", stamp="2026-10-12-120000")
-    assert result["structure_version"] == 14
+    assert result["structure_version"] == 15
     assert any("50-people/broken.md" in item for item in result["applied"][0]["apply"]["needs_human"])
 
 

@@ -230,7 +230,8 @@ object: person
 required: [person-name, slug]
 keys_present: [relationship]
 optional: [email, entity, company, role, decision-role, stance, projects, created,
-           last-updated, meetings-7d, meetings-30d, last-met, messages-7d, messages-30d]
+           last-updated, person-updated, meetings-7d, meetings-30d, last-met, messages-7d,
+           messages-30d]
 enums:
   relationship: [colleague, direct-report, external, null]
   decision-role: [sponsor, champion, evaluator, influencer, blocker, null]
@@ -245,6 +246,19 @@ enums:
   found no single matching entity. Nothing new writes it.
 - `role` (the person's title), `decision-role` and `stance` are the person's
   stakeholder fields, shown on their entity's page.
+- `person-updated` — when the automatic update last read new material naming
+  this person (ISO `YYYY-MM-DDTHH:MM`, written by `person touch`). The
+  structure-15 upgrade stamps every page, so nothing older is read.
+- **`## What I know`** (#273 piece 4) — directly after the `# Name` heading:
+  facts about the person. The evening run and on-demand runs append
+  `- <YYYY-MM-DD> — <fact> (<source marker>)` lines via `person write
+  --automatic`; it never edits or removes a line. A line without a marker is
+  the owner's. Two rules: (1) **it never leaves the vault** — no prep note,
+  brief, email or feedback report uses it, and the daily note shows nothing
+  from it; (2) **only what the person said about themselves** — never what
+  others said about them, never an interpretation. Removing a fact = deleting
+  its line. The structure-15 upgrade merged the older `## Notes from
+  <entity>` sections into it.
 
 - `relationship: null` (key present, value empty) = **uncurated** — that is
   what People.base's "Uncurated" view filters on. `keys_present` means the

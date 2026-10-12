@@ -707,16 +707,16 @@ def test_curated_person_fixtures_carry_context_and_recent_meetings():
         target.append(path)
     assert curated, "no curated person fixtures found"
     for path in curated:
-        # `## Notes from <entity>` is where the structure-14 upgrade moved a
-        # stakeholder row's notes (#273); it comes after the two sections.
+        # `## What I know` holds facts about the person (#273 piece 4); the
+        # structure-15 upgrade merged the older `## Notes from <entity>` into it.
         titles = [t for t in h2_titles(path.read_text(encoding="utf-8"))
-                  if not t.startswith("Notes from ")]
+                  if t != "What I know"]
         assert titles == PERSON_BODY_SECTIONS, (
             f"{path}: curated person notes carry Context + Recent Meetings"
         )
     for path in uncurated:
         titles = [t for t in h2_titles(path.read_text(encoding="utf-8"))
-                  if not t.startswith("Notes from ")]
+                  if t != "What I know"]
         assert titles == [], (
             f"{path}: uncurated person notes model the auto-created empty body"
         )

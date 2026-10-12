@@ -222,14 +222,18 @@ evaluator · influencer · blocker, stance is champion · neutral · blocker.
 The CLI refuses anything else, so pick the nearest rather than inventing.
 
 A note about a person ("wants numbers, not narrative") goes onto the
-person's page, one bullet under `## Notes from <entity name>` (add the
-heading at the end of the page when it is missing):
+person's page under `## What I know`, as something the person said or
+showed about themselves — never your interpretation of them:
 
-```markdown
-## Notes from <entity name>
-
-- <note> (from /update-entity, <today>)
+```bash
+cat > "$SCRATCH/person-facts-<slug>.payload.json" <<'JSON'
+{"facts": [{"date": "<today>", "fact": "Wants numbers, not narrative. (session · /update-entity, <today>)"}]}
+JSON
+python3 "$VAULTLIB" person write --vault "$VAULT" --slug <slug> --automatic --facts "$SCRATCH/person-facts-<slug>.payload.json"
 ```
+
+A fact listed in `skipped`: fix it and retry once, else say so in the
+summary.
 
 The entity's Stakeholders list then shows them on its own.
 

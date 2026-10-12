@@ -15,9 +15,14 @@ messages-30d: 0
 decision-role: influencer
 stance: neutral
 entity: commercial-operations
+person-updated: 2026-10-12T17:55
 ---
 
 # Taylor Brooks
+
+## What I know
+
+- Runs the forecast call and the governance cadence. Can triage and draft on Morgan's behalf; owns neither workstream. (moved from the Commercial Operations page, 2026-10-12)
 
 ## Context
 
@@ -36,7 +41,3 @@ WHERE econtains(attendees, this.slug)
 SORT date DESC
 LIMIT 10
 ```
-
-## Notes from Commercial Operations
-
-- Runs the forecast call and the governance cadence. Can triage and draft on Morgan's behalf; owns neither workstream. (moved from the Commercial Operations page, 2026-10-12)

@@ -180,5 +180,5 @@ def test_verify_catches_a_menu_still_on_an_old_name(tmp_path):
 def test_run_through_the_framework_bumps_to_13(tmp_path):
     root = vault_v12(tmp_path)
     result = migrate.run(root, "2026-10-09", stamp="2026-10-09-120000")
-    assert [a["slug"] for a in result["applied"]] == ["structure-version-13", "structure-version-14"]
-    assert result["structure_version"] == 14
+    assert [a["slug"] for a in result["applied"]] == ["structure-version-13", "structure-version-14", "structure-version-15"]
+    assert result["structure_version"] == 15

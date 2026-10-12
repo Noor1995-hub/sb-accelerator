@@ -88,6 +88,14 @@ When the owner asks you to add a to do in a session, write
 ontology (`type: to-do`, `to-do`, `project`, `due`, `done: false`,
 `created`) and say the deadline back as a date, so they can correct it.
 
+### Facts about people
+
+A person page's `## What I know` holds what that person said about
+themselves. It never goes into anything meant for someone else — prep
+notes, briefs, emails, feedback reports — and the daily note shows nothing
+from it. Add a fact by telling Claude (`/add`) or by writing the line
+yourself; delete a line to remove it.
+
 ### Heavy Assets
 
 Generated binaries (`.pptx`, `.xlsx`, `.pdf`, `.docx`, `.zip`) go to

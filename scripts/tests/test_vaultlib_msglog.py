@@ -727,3 +727,33 @@ def test_cli_messages_for_entity(env):
                          capture_output=True, text=True, encoding="utf-8")
     payload = json.loads(out.stdout)
     assert payload["ok"] and len(payload["result"]["groups"]) == 1, out.stderr
+
+
+def _set_people(root, people):
+    path = root / "_messages" / "2026-09-30-messages.md"
+    loaded = msglog.load_log(path)
+    loaded["data"]["groups"][0]["people"] = list(people)
+    msglog._resave(root, path, loaded["data"], loaded["frontmatter"])
+
+
+def test_for_person_returns_the_groups_naming_the_person_with_their_link(env):
+    """#273 piece 4: section E reads a person's groups, with the link its
+    source marker cites."""
+    root = written_log(env)
+    _set_people(root, ["sam-lee"])
+    [got] = msglog.for_person(root, slug="sam-lee", logs=["2026-09-30-messages"])
+    assert got["link"] == "[[_messages/2026-09-30-messages|30 Sep]]" and got["people"] == ["sam-lee"]
+    assert msglog.for_person(root, slug="nobody", logs=["2026-09-30-messages"]) == []
+
+
+def test_cli_messages_for_person(env):
+    import subprocess, sys
+    from pathlib import Path
+    root = written_log(env)
+    _set_people(root, ["sam-lee"])
+    cli = Path(__file__).resolve().parents[2] / "plugin" / "lib" / "vaultlib" / "cli.py"
+    out = subprocess.run([sys.executable, str(cli), "messages", "for-person", "--vault", str(root),
+                          "--slug", "sam-lee", "--logs", "2026-09-30-messages"],
+                         capture_output=True, text=True, encoding="utf-8")
+    payload = json.loads(out.stdout)
+    assert payload["ok"] and len(payload["result"]["groups"]) == 1, out.stderr

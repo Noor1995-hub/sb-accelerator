@@ -1424,7 +1424,7 @@ the note is hidden, the recording is not skip-listed.
 ### 9. Process
 
 Follow `${CLAUDE_PLUGIN_ROOT}/skills/evening-sync/references/process.md`
-with the **On demand** column of its Inputs table: sections A, B, C and D —
+with the **On demand** column of its Inputs table: sections A, B, C, D and E —
 without daily-note content, To Do's, or mail and Teams. Keep its Returns for
 steps 10 and 11.
 
@@ -1439,8 +1439,8 @@ On demand there is no recap: wherever process.md says "the recap", "tonight"
 or "tomorrow", it means the evening run. The `sync_notes` lines from A and C
 go to step 11's **Warnings** line.
 
-When section D has returned, release the lock — the project and entity
-pages are written, and the questions that follow must not hold up the
+When section E has returned, release the lock — the project, entity
+and people pages are written, and the questions that follow must not hold up the
 evening run:
 
 ```bash
@@ -1474,6 +1474,7 @@ Summarize from disk, then `scratch sweep`:
 **Your notes:** {N} absorbed ({titles}) · {N} kept for tonight ({why})
 **Project pages rewritten:** {project names}
 **Entity pages updated:** {names, a team as "Finance (Acme)"} | none
+**People pages:** {N} facts added for {M} people | none
 **Decisions:** {N} kept · {N} dismissed · {N} left in Decisions › To review
 **Not done now:** mail and Teams, and tomorrow's daily note — tonight's run
 **Warnings:** {verbatim, `sync_notes` lines included} | none

@@ -174,11 +174,13 @@ def _index_logs(root: Path) -> Tuple[List[dict], List[str]]:
         strong = [p for p in _slug_list(fm.get("projects"), "projects", rel,
                                         warnings) if p not in weak]
         people_groups: List[str] = []
+        groups: List[Tuple[str, List[str]]] = []
         for group in data["groups"]:
             people = group.get("people")
             if (isinstance(people, list)
                     and all(isinstance(p, str) for p in people)):
                 people_groups.extend(people)
+                groups.append((str(group.get("gid")), list(people)))
             else:
                 warnings.append(
                     f"{rel}: group {group.get('gid')!r} has no usable "
@@ -190,6 +192,7 @@ def _index_logs(root: Path) -> Tuple[List[dict], List[str]]:
             "strong": strong,
             "entities": _slug_list(fm.get("entities"), "entities", rel, warnings),
             "people_groups": people_groups,
+            "groups": groups,
         })
     return out, warnings
 
@@ -341,6 +344,72 @@ def _entity_queue(root: Path, confirmed: List[dict], logs: List[dict],
             entry(parent)["teamFiles"].append({
                 "team": slug, "teamName": entities[slug]["entityName"], **team})
     return [queue[slug] for slug in sorted(queue)]
+
+
+def _people_queue(root: Path, confirmed: List[dict], logs: List[dict],
+                  owner_slug: str, warnings: List[str], *,
+                  today: date) -> Tuple[List[dict], List[dict]]:
+    """People with material newer than their `person-updated` stamp (#273
+    piece 4), and that material grouped per meeting and per day log so one
+    reader handles everyone in it.
+
+    No look-back: without a stamp the start point is the `created` day at
+    00:00 (a person created tonight still gets tonight's meeting); without
+    either — a page made by hand — it is today at 00:00, and section E's
+    stamp takes over from the first run. Session records are
+    not a source — /add writes session facts on the spot. Confirmed meetings
+    of every type count, `type: note` captures included."""
+    starts: Dict[str, datetime] = {}
+    names: Dict[str, Tuple[str, str]] = {}
+    folder = root / PEOPLE_DIR
+    for path in sorted(folder.glob("*.md")) if folder.is_dir() else []:
+        rel = path.relative_to(root).as_posix()
+        try:
+            data, _ = markdown.split_frontmatter(path.read_text(encoding="utf-8"))
+        except (ValueError, OSError):
+            continue      # the metrics pass already warned about this file
+        slug = str(data.get("slug") or "")
+        if not slug or slug == owner_slug:
+            continue
+        raw = data.get("person-updated")
+        stamp = _parse_iso_datetime(raw)
+        if raw is not None and stamp is None:
+            warnings.append(f"{rel}: unparseable person-updated {raw!r} — falling "
+                            "back to created; rewrite it as YYYY-MM-DDTHH:MM or delete it")
+        if stamp is None:
+            day = _parse_first_iso_date(data.get("created")) or today
+            stamp = datetime.combine(day, time.min)
+        starts[slug] = stamp
+        names[slug] = (rel, str(data.get("person-name") or slug))
+
+    work: List[dict] = []
+    queued: Set[str] = set()
+    for m in confirmed:
+        people = sorted({a for a in m["attendees"]
+                         if a in starts and _activity(m) >= starts[a]})
+        if people:
+            work.append({"kind": "meeting", "path": m["file"],
+                         "date": m["date"].isoformat(), "people": people})
+            queued.update(people)
+    for d in logs:
+        if d["updated"] is None:
+            continue
+        gids, people = [], set()
+        for gid, members in d["groups"]:
+            hit = {p for p in members if p in starts and d["updated"] >= starts[p]}
+            if hit:
+                gids.append(gid)
+                people |= hit
+        if people:
+            work.append({"kind": "log", "path": f"{vault.MESSAGES_DIR}/{d['stem']}.md",
+                         "stem": d["stem"],
+                         "date": d["date"].isoformat() if d["date"] else None,
+                         "groups": gids, "people": sorted(people)})
+            queued |= people
+    work.sort(key=lambda w: (w["date"] or "", w["path"]))
+    entries = [{"slug": s, "path": names[s][0], "personName": names[s][1]}
+               for s in sorted(queued)]
+    return entries, work
 
 
 def _activity(meeting: dict) -> datetime:
@@ -644,10 +713,12 @@ def run(root: Path, today: str, owner: str) -> dict:
     entities_queue = _entity_queue(root, confirmed, logs, sessions, included,
                                    warnings, today=today_date,
                                    queued_notes=queued_notes)
+    people_queue, people_work = _people_queue(root, confirmed, logs, owner_slug,
+                                              warnings, today=today_date)
     return {
         "today": today_date.isoformat(),
-        # The minute this queue was built. Section D stamps `entity-updated`
-        # with it, not with its own later clock, so material that lands while
+        # The minute this queue was built. Sections D and E stamp
+        # `entity-updated` / `person-updated` with it, not with their own later clock, so material that lands while
         # the run is in flight is still newer than the stamp next time.
         "queuedAt": datetime.now().isoformat(timespec="minutes"),
         "owner": owner_slug,
@@ -655,6 +726,8 @@ def run(root: Path, today: str, owner: str) -> dict:
         "confirmedMeetings": len(confirmed),
         "projectsNeedingUpdate": queue,
         "entitiesNeedingUpdate": entities_queue,
+        "peopleNeedingUpdate": people_queue,
+        "peopleWork": people_work,
         "notesNotQueued": not_queued,
         "metricsWritten": {"projects": projects_written,
                            "people": people_written},

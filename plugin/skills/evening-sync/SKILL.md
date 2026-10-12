@@ -228,7 +228,7 @@ Follow section B of `${CLAUDE_PLUGIN_ROOT}/skills/evening-sync/references/proces
 
 ## Stage 4 — Project-state updates
 
-Follow sections C and D of `${CLAUDE_PLUGIN_ROOT}/skills/evening-sync/references/process.md`, passing the stage-2 harvest jottings to C. Record its Returns for stages 6 and 7.
+Follow sections C, D and E of `${CLAUDE_PLUGIN_ROOT}/skills/evening-sync/references/process.md`, passing the stage-2 harvest jottings to C. Record its Returns for stages 6 and 7.
 
 ## Stage 5 — Tomorrow's calendar and prep
 
@@ -251,6 +251,9 @@ immediately on a refusal, and in any case before the run ends:
 ```bash
 python3 "$VAULTLIB" scratch sweep --dir "$SCRATCH"
 ```
+
+Prep never reads a person page's `## What I know`: facts about people stay
+on their page.
 
 When the gate passes, pull `next_business_day`'s events; compute the query
 window deterministically:
@@ -509,6 +512,7 @@ python3 "$VAULTLIB" runlock release --vault "$VAULT" --routine evening-sync
 **To Do's:** {N} new → `65-to-dos/` ({K} with a project, {D} with a deadline) · {C} closed from ticks in daily notes | skipped: vault below structure 12
 **Metrics refreshed:** {P} projects · {Q} people
 **Entity pages updated:** {names, a team as "Finance (Acme)"} | none
+**People pages:** {N} facts added for {M} people | none
 **Projects updated:** {N} ({slugs}) — {M} decisions captured for review, {K} candidates skipped
 **Next note:** `60-daily-notes/{date}.md` ({DayName}, {tomorrow | today — for-today catch-up}) — {N} meetings prepped | calendar unavailable | calendar REFUSED — signed in as a different account (account-mismatch) | calendar REFUSED — no account bound to this vault yet (no-account-hint) | m365 disabled
 **Recap window:** {recap_from} → {recap_to} — {catch-up: N business days missed, detailed from {date}} | current

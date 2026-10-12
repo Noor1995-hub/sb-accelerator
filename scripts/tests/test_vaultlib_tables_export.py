@@ -110,3 +110,15 @@ def test_the_name_column_comes_first_when_the_view_lacks_it():
 def test_columns_without_any_name_in_the_base_get_a_readable_header():
     got = tables.columns(tables.TABLES["people"], (TEMPLATE / "50-people/People.base").read_text(encoding="utf-8"), None)
     assert {c["prop"]: c["header"] for c in got["columns"]}["email"] == "Email"
+
+
+def test_people_export_carries_no_page_text(tmp_path):
+    root = make_vault(tmp_path)
+    path = root / "50-people/jan-peeters.md"
+    path.write_text(path.read_text(encoding="utf-8")
+                    + "\n## What I know\n\n- 2026-10-08 — Secret fact. (meeting · [[m]])\n",
+                    encoding="utf-8")
+    result = tables.export(root, "people", today="2026-10-12")
+    book = xlsx.read(root / result["path"])
+    cells = [str(c) for sheet in book.values() for row in sheet for c in row]
+    assert not any("Secret fact" in c for c in cells)
