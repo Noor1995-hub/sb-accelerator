@@ -75,6 +75,11 @@ before touching anything:
   data; one with a `lossy` string drops something a human might want back
   — read that string out in full, not summarized, so the consultant knows
   exactly what will not survive the run.
+- When the chain includes 009: the Navigator parts of the lossy lines of
+  003, 004 and 006 are moot, because 009 switches Navigator off — say so
+  right after reading them out. The rest still stands: 003 also hides
+  `claude`, `99-workflow-config` and `CLAUDE.md` in the sidebar and trims
+  the ribbon, and those changes outlive Navigator.
 - That a full vault snapshot is taken first, automatically, before the
   first migration applies — a zip under
   `99-workflow-config/snapshots/`, with only the three most recent
@@ -182,9 +187,12 @@ Group `files[]` into three lists and present them in this order:
    consultant decides.
 3. **Missing** (`state: missing`) — offer to restore each from the shipped
    template; treat it the same as a needs-consent item for the gate below.
-   On the update to structure 11, `99-workflow-config/views/Input.base`
-   arrives here as missing: recommend accepting it, because the menu's
-   **Input** entry opens it.
+   Recommend accepting **every missing `.base` file and `How it works.md`**:
+   the menu (`.obsidian/bookmarks.json`) points at the tables — Daily notes,
+   Thoughts and ideas, To Dos, and Input, Recent, Resources, Heavy assets,
+   Private and Archive under `99-workflow-config/views/` — and an entry
+   whose table is missing opens nothing. A vault upgrading from structure 9
+   or older gets most of them here.
 
 If `baseline` is `"unknown"`, say so explicitly: this vault predates
 provenance, so **every** differing managed file needs consent — there is

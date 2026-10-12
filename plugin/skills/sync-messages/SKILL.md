@@ -33,8 +33,12 @@ sentence.
 Only with Microsoft 365 connected and its account proven
 (`config verify-account --adapter m365` returns `match: true`; call `get_me`,
 write the raw JSON to `$SCRATCH/m365.whoami.json` and pass it as `--identity`).
-On `match: false`, tell the owner plainly that the connected account is not
-theirs, and switch nothing on.
+On `match: false`, switch nothing on and say why in one plain sentence,
+by the result's `reason`: `account-mismatch` — the connected Microsoft 365
+account is not theirs; `adapter-disabled` — Microsoft 365 is switched off
+in this vault; `no-account-hint` — Microsoft 365 was never set up here. The
+last two are fixed by connecting it in `/setup-my-brain`, never by
+switching the feed on regardless.
 
 Only on a vault at structure version 6 or later: that update is what hides
 the saved notes from the file list, search and graph.
@@ -63,14 +67,15 @@ here: they change how the vault looks, not where the notes are kept.
    python3 "$VAULTLIB" config write --vault "$VAULT" --field messages.consented-at --value "<now, YYYY-MM-DDTHH:MM local>"
    python3 "$VAULTLIB" config write --vault "$VAULT" --field messages.scope --value "teams-chats,inbox,sent-items"
    ```
-   `messages reset` makes tonight a first evening: switching back on after a
-   pause starts from today and never reports the pause as missed mail.
+   `messages reset` makes tonight a first evening: the first run reads from
+   yesterday 00:00, so switching back on after a pause never reports the
+   pause as missed mail.
 3. Ask: *"Is there anyone or anything I should never read? For example HR
    matters or a private chat. You can also tell me later."* For each answer,
    resolve it and add it as under **What to skip** (below). No answer means
    none.
 4. Read back: *"From tonight I'll read your mail and Teams, starting with
-   today's messages."* plus the read-back of each exclusion from **What to
+   yesterday's messages."* plus the read-back of each exclusion from **What to
    skip**.
 
 ## Switching off

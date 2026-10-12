@@ -154,8 +154,12 @@ the archive of the day — **never modify it**.
 vault has no To Do's table yet. To the owner they are always "to do's", never "actions". Otherwise:
 
 ```bash
-python3 "$VAULTLIB" actions harvest --vault "$VAULT" --from <recap_from> --to <recap_to>
+python3 "$VAULTLIB" actions harvest --vault "$VAULT" --from <harvest_from> --to <recap_to>
 ```
+
+`harvest_from` (from `dates plan`) is one daily note further back than
+`recap_from`, so a to do written in a note after that evening's run is still
+picked up; lines already made into to dos are skipped, so nothing doubles.
 
 `closed` lists to-do notes whose line the owner ticked in a daily note
 since; the CLI already marked them done. `filled` lists notes made with
@@ -373,8 +377,12 @@ names the field, so one retry always suffices.
   The CLI renders it as the *Mail and Teams* block right after *At a
   glance*, inside the recap (below the *Waiting for you* queues). Build it
   in this order:
-  1. `python3 "$VAULTLIB" messages status --vault "$VAULT" --now <now UTC> [--first-run-since <since from stage 3b, first run only>] [--auth-error]`
+  1. `python3 "$VAULTLIB" messages status --vault "$VAULT" --now <now UTC> [--first-run-since <since from stage 3b, first run only>] [--auth-error] --peek`
      gives `{"lines": [...]}`; use those lines verbatim as `status` (at most 3).
+     `--peek` changes nothing. Once `daily-note write` has succeeded **and**
+     its `recap_skipped` is false, run the exact same command once more
+     without `--peek`: that is what drops the shown lines, so a refused
+     write or a skipped recap keeps them for the next note.
      Pass `--auth-error` when stage 3b's outcome line was `auth-error`: the
      CLI then adds the one line asking the owner to reconnect Microsoft 365;
      never write that line yourself.
@@ -394,9 +402,10 @@ names the field, so one retry always suffices.
      no internal terms.
 
   Run steps 1 and 2 exactly once per evening and reuse their results on any
-  retry of the daily-note payload — never run them again: `messages status`
-  clears the closed-unread state and `messages keywords-propose` records the
-  proposal, so a second run would lose or double what the first one did.
+  retry of the daily-note payload — never run them again (apart from the
+  one `messages status` without `--peek` after a successful write):
+  `messages keywords-propose` records the proposal, so a second run would
+  double it.
 
 The catch-up banner is the CLI's: `dates plan`'s `is_catchup` becomes the
 callout on write, and a banner you put in a payload is stripped with a
@@ -422,7 +431,7 @@ the vault.
 cat > "$SCRATCH/daily-note.payload.json" <<'JSON'
 {
   "date": "<next_business_day>",
-  "recap_window": {"from": "<recap_from>", "to": "<recap_to>",
+  "recap_window": {"from": "<recap_from>", "to": "<recap_to>", "plan_for": "<plan_for>",
                    "detailed_from": "<recap_detail_from, only when capped>"},
   "recap": {
     "glance": {
@@ -480,7 +489,9 @@ window's meetings, jottings and decisions and stamps the digest on the recap
 marker. A re-run over an unchanged input set comes back with
 `recap_skipped: true` and leaves the recap byte-identical — that is success,
 not a failure to write. Omitting `recap_window` silently forfeits both the
-guard and the catch-up banner, so always pass it. That applies to a
+guard and the catch-up banner, so always pass it. Copy `plan_for` from
+`dates plan` verbatim: it decides which missed evenings the banner counts,
+so the note says the same number as the plan. That applies to a
 *correction* too: if you have to rewrite a recap you already wrote this run,
 re-run `daily-note write` with `recap_window` again. A rewrite without it
 strips the stamp, and the next evening regenerates a recap the vault owner has
@@ -491,7 +502,9 @@ already read. Carry any `warnings` from the result into stage 7 verbatim.
 Counts come from what exists, not from what you intended (a lab run once
 reported "Processed: 0" after writing a meeting correctly):
 
-- tomorrow's note exists at `note_to_write` with a fresh mtime;
+- tomorrow's note exists at `note_to_write`, and `daily-note write` returned
+  `ok` (a re-run with nothing new returns `changed: false` and leaves the
+  file's date alone — that is not a failure);
 - every project reported updated shows today's `last-updated` **and a fresh
   `state-updated`** in its frontmatter;
 - every recording reported synced has its stem in `20-meetings/`.

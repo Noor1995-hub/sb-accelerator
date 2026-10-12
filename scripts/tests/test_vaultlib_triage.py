@@ -216,3 +216,24 @@ def test_when_label_accepts_a_space_separator(tmp_path):
     path.write_text(path.read_text(encoding="utf-8").replace(
         "date: 2026-10-12T09:00", "date: 2026-10-12 09:00"), encoding="utf-8")
     assert triage.list_queue(root)["items"][0]["when"] == "Mon 12 Oct 09:00"
+
+
+def test_change_to_no_project_can_also_clear_the_entity(tmp_path):
+    # Owner's call 2026-10-12: "no project" asks whether the meeting should
+    # also leave its entity's page; the answer arrives as `entities`.
+    root = make_vault(tmp_path)
+    (root / "40-entities" / "acme").mkdir(parents=True)
+    (root / "40-entities" / "acme" / "dossier.md").write_text(
+        '---\ntype: entity\nentity-name: "Acme"\nslug: acme\n---\n', encoding="utf-8")
+    a = write_meeting(root, "a")
+    b = write_meeting(root, "b")
+    result = triage.apply(root, [
+        {"path": "20-meetings/a.md", "action": "change", "projects": [], "entities": []},
+        {"path": "20-meetings/b.md", "action": "change", "projects": [], "entities": ["acme"]},
+    ])
+    assert result["refused"] == []
+    assert "entities: []" in a.read_text(encoding="utf-8")
+    assert "entities: [acme]" in b.read_text(encoding="utf-8")
+    bad = triage.apply(root, [{"path": "20-meetings/a.md", "action": "change",
+                               "entities": ["nope"]}])
+    assert "matches no note" in bad["refused"][0]["reason"]

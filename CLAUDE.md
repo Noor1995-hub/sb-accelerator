@@ -63,7 +63,7 @@ rendering change is verified.
 
 A change is **UI-impacting** when it touches any of:
 
-- `plugin/template/.obsidian/**` — theme, Minimal Theme Settings, CSS snippets, navigator
+- `plugin/template/.obsidian/**` — theme, Minimal Theme Settings, CSS snippets, bookmarks (the sidebar)
 - any `*.base` or `*.canvas`
 - `fixtures/demo-vault/**` — it changes what renders
 - `plugin/template/99-workflow-config/reference/ontology.md` — property renames empty views
@@ -86,7 +86,9 @@ python scripts/validate_template.py  # template skeleton invariants
 python -m pytest scripts/tests -q    # validator unit tests
 ```
 
-Same three things CI runs. To exercise the plugin against a vault, instantiate
+The core of what CI runs; CI also repeats the tests on Python 3.10 and on
+Windows, and checks the plugin version and the CHANGELOG entry
+(`.github/workflows/ci.yml`). To exercise the plugin against a vault, instantiate
 `plugin/template/` into a scratch directory (`docs/local-setup.md`).
 
 ## Git & CI
@@ -98,7 +100,9 @@ Same three things CI runs. To exercise the plugin against a vault, instantiate
 - `CHANGELOG.md` is client-facing release notes, not a work log: a PR gets a
   line under `Unreleased` (ending with its PR number) only if a client would
   notice — plugin behavior, a skill, the template, a migration. Internal
-  changes stay out; git history is that record. Not CI-enforced.
+  changes stay out; git history is that record. CI's `changelog_entry` job
+  checks that a new `Unreleased` entry cites the PR's number (not yet a
+  required check); whether a PR needs an entry at all is still your call.
 - Backlog model (labels, milestones, board): `docs/backlog.md`.
 - Merging to `main` publishes nothing. A tag push publishes to the **dryrun**
   channel only (hardcoded — a tag can never reach clients); promoting to the

@@ -135,7 +135,8 @@ target that already has files in it, makes the copy writable (a read-only
 plugin cache — Cowork's is one — would otherwise hand its read-only modes
 to every file and folder in the new vault), and verifies afterward that
 the vault accepts a write, that `.obsidian/` arrived, and that
-`structure-version` reads `3` before reporting success. It also attempts
+`structure-version` reads the version this plugin ships (15 as of 0.13.19)
+before reporting success. It also attempts
 the `.claude → claude` symlink as part of the same run (see step 3).
 
 Read `ok` first. On `ok: false`, **surface `error` and `hint` verbatim**.
@@ -203,7 +204,8 @@ cache, so a Cowork sandbox with egress off installs exactly what a
 machine with egress on would. Exit 0 means done; report any `error: ...`
 lines on stderr verbatim, and the summary line
 (`N installed, N already ok, N problem(s).`) either way. A fresh vault
-reports `14 installed`; a re-run reports `14 already ok`.
+reports `11 installed` (three plugins of three files, plus the theme's two);
+a re-run reports `11 already ok`.
 
 A `vendored copy sha256 mismatch` error means the plugin itself shipped a
 wrong file — the script refuses to install it and does not try to download

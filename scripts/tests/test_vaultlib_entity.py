@@ -988,6 +988,8 @@ def test_touch_refuses_a_bad_timestamp_and_defaults_to_now(tmp_path):
     entity.ensure(root, slug="acme", name="Acme", today="2026-10-12")
     with pytest.raises(entity.EntityError):
         entity.touch(root, "acme", timestamp="12/10 21h")
+    with pytest.raises(entity.EntityError, match="real"):
+        entity.touch(root, "acme", timestamp="2026-13-99T99:99")
     stamped = entity.touch(root, "acme")["entity-updated"]
     assert re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}", stamped)
 
@@ -1083,3 +1085,15 @@ def test_a_manual_write_needs_no_source(tmp_path):
     result = entity.write(root, "meridian-freight-holdings", {"relationship_history": [
         {"date": "2026-10-11", "what": "Call", "significance": "told by the owner"}]}, TODAY)
     assert result["changes"] and result["skipped"] == []
+
+
+def test_renaming_an_entity_moves_its_heading_and_its_teams_links(tmp_path):
+    # Review 2026-10-12: the heading and every team's Part of kept the old name.
+    root = two_entities(tmp_path)
+    entity.ensure(root, slug="acme-finance", name="Finance", today="2026-10-02", parent="acme")
+    entity.ensure(root, slug="acme", name="Acme Group", today="2026-10-03")
+    _, body = md.split_frontmatter(dossier(root, "acme"))
+    assert "# Acme Group" in body and "# Acme Industries" not in body
+    _, team = md.split_frontmatter(dossier(root, "acme-finance"))
+    assert "**Part of** [[40-entities/acme/dossier|Acme Group]]" in team
+    assert team.count("**Part of**") == 1

@@ -1,5 +1,20 @@
 # Session 1 — the onboarding interview
 
+> **Status 2026-10-12 — read this first.** Since v0.12.5 (#229) Session 1 is
+> `/setup-my-brain` run by the **vault owner alone**, with no consultant in
+> the room. The skill now runs in Steps 0–11 (preflight; welcome and connect;
+> what only they know; a consented read of calendar, sent mail and Teams chat
+> list; entities; work; people; how they write; systems and boundaries; the
+> first evening note; the standing evening run; close), not the Phase 0–5
+> interview this script was written for. The source of truth is
+> `plugin/skills/setup-my-brain/SKILL.md`.
+>
+> This script is kept for reference, and for a consultant who sits in at the
+> owner's request. If you do: the owner types, not you; the phase names and
+> timings below no longer match the skill; and the "Day before" checks still
+> apply — they are yours to do, including `/upgrade-vault`, which is run by
+> the consultant and never handed to the owner alone.
+
 delaware-side material; never ships. The consultant's side of
 `/setup-my-brain`: how to run the room while the skill runs the interview.
 This is not a transcript of what the skill says — read
@@ -37,10 +52,12 @@ Budget the whole session at **two hours**, live, vault open on screen.
 
 ## Room setup
 
-The consultant drives the keyboard. The executive watches the screen and
-answers; they never type the interview themselves — the skill is built as a
-live conversation with a human doing the writing, not a form to hand across
-the table.
+*Superseded — see the status note at the top.* The skill is now built for
+the owner at their own keyboard. If you sit in, stay beside them and let them
+answer and type.
+
+Originally: the consultant drove the keyboard and the executive watched the
+screen and answered, never typing the interview themselves.
 
 ## The arc
 

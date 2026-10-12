@@ -64,6 +64,11 @@ def ensure(root: Path, name: str, today: str,
     attendee's address, and a note created before it passed one (#242) gets
     it filled the next time that person is seen. A set email is never
     overwritten — a differing one is reported as ignored, like the name.
+
+    With an email, the note that already carries that address wins over the
+    name: Outlook's "Peeters, Jan" or a person renamed in the table is the
+    same person, not a second note (review 2026-10-12). The result then
+    names that note's slug.
     """
     slug = naming.slugify(name)
     naming.validate_slug(slug)
@@ -72,7 +77,15 @@ def ensure(root: Path, name: str, today: str,
     if entity is not None:
         entity = _require_entity(root, entity)
 
-    found = _existing_note(root, slug)
+    found = None
+    if email is not None:
+        known = address_book(root).get(email)
+        if known:
+            found = _existing_note(root, known)
+            if found is not None:
+                slug = found.stem
+    if found is None:
+        found = _existing_note(root, slug)
     if found is not None:
         result = {
             "slug": slug,

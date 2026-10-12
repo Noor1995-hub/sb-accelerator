@@ -17,5 +17,3 @@ views:
         direction: DESC
     columnSize:
       formula.day: 320
-  - type: table
-    name: View

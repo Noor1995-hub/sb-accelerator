@@ -329,6 +329,11 @@ def missed_runs(root: Path, recap_from: date, recap_to: date) -> int:
     return missed
 
 
+# `actions harvest` refuses a wider window (actions.MAX_WINDOW_DAYS; kept
+# equal by a test, since actions imports this module).
+HARVEST_MAX_WINDOW_DAYS = 62
+
+
 def _walk_back_business_days(end: date, count: int) -> date:
     """The date `count` business days back from `end`, counting `end` itself.
 
@@ -502,6 +507,14 @@ def plan(root: Path, today: Optional[str] = None, *,
     detail_from = (max(recap_from,
                        _walk_back_business_days(recap_to, catchup_threshold))
                    if over_threshold else recap_from)
+    # To-dos are read from one note further back than the recap: a `- [ ]`
+    # line written in a day's note after that evening's run would otherwise
+    # never be read (review 2026-10-12). Re-reading is safe — the harvest
+    # skips every line it already made a to-do of. Capped at the harvest's
+    # own window limit, so a long absence never fails stage 2.
+    earlier = [noted for noted in on_disk if noted < recap_from]
+    harvest_from = max(max(earlier) if earlier else recap_from,
+                       recap_to - timedelta(days=HARVEST_MAX_WINDOW_DAYS))
     return {
         "today": today_date.isoformat(),
         "today_day_name": DAY_NAMES[today_date.weekday()],
@@ -528,6 +541,7 @@ def plan(root: Path, today: Optional[str] = None, *,
         "over_threshold": over_threshold,
         "recap_detail_from": detail_from.isoformat(),
         "business_days_not_detailed": business_days(recap_from, detail_from),
+        "harvest_from": harvest_from.isoformat(),
     }
 
 

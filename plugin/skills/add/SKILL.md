@@ -259,7 +259,8 @@ python3 "$VAULTLIB" runlock release --vault "$VAULT" --routine add
 As `/sync-recordings` step 10: list `decisionsWritten`, one line each, none →
 skip to step 8. Ask once **"Keep or dismiss?"**, and run
 `decision review --keep|--dismiss` with `--path "<decisionsDir>/<stem>.md"`.
-"Not now" → they stay in Decisions › To review.
+A dismiss whose result has `restored` set: say the decision it had replaced
+is back in force. "Not now" → they stay in Decisions › To review.
 
 ### 8. Summary
 

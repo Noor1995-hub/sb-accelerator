@@ -197,6 +197,12 @@ def today_iso(explicit: Optional[str] = None) -> str:
         return _datetime.date.today().isoformat()
     if not ISO_DATE_RE.match(explicit):
         raise VaultError(f"date {explicit!r} must be ISO YYYY-MM-DD")
+    # The shape alone let 2026-99-99 through, and a decision written on it
+    # superseded a real one (review 2026-10-12).
+    try:
+        _datetime.date.fromisoformat(explicit)
+    except ValueError as exc:
+        raise VaultError(f"date {explicit!r} is not a real date") from exc
     return explicit
 
 

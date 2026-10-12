@@ -153,10 +153,12 @@ fabricated entry to justify the call is not.
 ### 5. Write it
 
 Build the payload as a file — never inline, where quoting mangles apostrophes
-and em dashes:
+and em dashes — in `$SCRATCH`, never a system temp directory, named for the
+entity (`entity-<slug>.payload.json`, which `scratch sweep` clears), so two
+updates can never read each other's payload:
 
 ```bash
-cat > /tmp/entity-edits.json <<'JSON'
+cat > "$SCRATCH/entity-meridian-freight-holdings.payload.json" <<'JSON'
 {
   "context": [
     {"label": "Fleet", "fact": "three yards, 240 trailers",
@@ -173,7 +175,7 @@ cat > /tmp/entity-edits.json <<'JSON'
 }
 JSON
 python3 "$VAULTLIB" entity write --vault "$VAULT" \
-  --slug meridian-freight-holdings --edits /tmp/entity-edits.json
+  --slug meridian-freight-holdings --edits "$SCRATCH/entity-meridian-freight-holdings.payload.json"
 ```
 
 Every *section* key is optional; send only the sections you have something for.
@@ -221,13 +223,14 @@ The vocabularies are closed: role in decision is sponsor · champion ·
 evaluator · influencer · blocker, stance is champion · neutral · blocker.
 The CLI refuses anything else, so pick the nearest rather than inventing.
 
-A note about a person ("wants numbers, not narrative") goes onto the
-person's page under `## What I know`, as something the person said or
-showed about themselves — never your interpretation of them:
+A fact a person said about themselves ("said they prefer a written business
+case") goes onto the person's page under `## What I know` — only what they
+said, never what others said about them and never your interpretation of
+them ("wants numbers, not narrative" is a reading, not a fact they gave):
 
 ```bash
 cat > "$SCRATCH/person-facts-<slug>.payload.json" <<'JSON'
-{"facts": [{"date": "<today>", "fact": "Wants numbers, not narrative. (session · /update-entity, <today>)"}]}
+{"facts": [{"date": "<today>", "fact": "Said they prefer a written business case. (session · /update-entity, <today>)"}]}
 JSON
 python3 "$VAULTLIB" person write --vault "$VAULT" --slug <slug> --automatic --facts "$SCRATCH/person-facts-<slug>.payload.json"
 ```
@@ -250,10 +253,9 @@ two things the list cannot tell you:
 - **What you deliberately did not record**, if you dropped something as too
   thin or too speculative to be worth a permanent entry.
 
-If the envelope's `repairs` list is not empty, say what the CLI repaired — it
-tidied up a hand-edit in the dossier (a raw `|` inside a table cell, a deleted
-separator row, a note starting with a pipe). Nothing was lost, but the user
-wrote those bytes and should hear that they changed.
+If the envelope's `repairs` list is not empty, say what the CLI repaired —
+it tidied up a hand-edit in the dossier. Nothing was lost, but the user wrote
+those bytes and should hear that they changed.
 
 ## Rules
 

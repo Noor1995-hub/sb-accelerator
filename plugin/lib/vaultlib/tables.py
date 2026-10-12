@@ -15,7 +15,9 @@ from typing import Dict, List, Optional
 
 from . import basefile, entity, markdown, naming, person, project, vault, xlsx
 
-FORMAT = "1"
+# "2" (review 2026-10-12): cells show choice labels and "Name (Entity)";
+# a format-1 workbook's hidden snapshot would read as conflicts.
+FORMAT = "2"
 LIST_SEP = "; "
 
 
@@ -151,7 +153,12 @@ def objects(root: Path, table: str) -> List[dict]:
 
 
 def names(root: Path) -> Dict[str, Dict[str, str]]:
+    """slug -> the name a cell shows, per kind. Two projects may share a name
+    under different entities (the slug carries the entity); those show as
+    "Name (Entity)", so a dropdown never offers two identical entries and a
+    picked one resolves to exactly one project (review 2026-10-12)."""
     out = {"entity": {}, "person": {}, "project": {}}
+    project_entity: Dict[str, str] = {}
     for kind, table, key in (("entity", "entities", "entity-name"),
                              ("person", "people", "person-name"),
                              ("project", "projects", "project-name")):
@@ -161,7 +168,25 @@ def names(root: Path) -> Dict[str, Dict[str, str]]:
             else:
                 slug = str(obj["data"].get("slug") or Path(obj["key"]).parent.name)
             out[kind][slug] = str(obj["data"].get(key) or slug)
+            if table == "projects":
+                project_entity[slug] = str(obj["data"].get("entity") or "")
+    counts: Dict[str, int] = {}
+    for name in out["project"].values():
+        counts[name.lower()] = counts.get(name.lower(), 0) + 1
+    for slug, name in list(out["project"].items()):
+        if counts[name.lower()] > 1 and project_entity.get(slug):
+            ent = project_entity[slug]
+            out["project"][slug] = f"{name} ({out['entity'].get(ent, ent)})"
     return out
+
+
+# What the owner sees for a stored choice value: the words the tables use,
+# never the internal value (review 2026-10-12). Import accepts either.
+_CHOICE_LABELS = {"initiative": "Project", "area-of-responsibility": "Responsibility"}
+
+
+def choice_label(value: str) -> str:
+    return _CHOICE_LABELS.get(value, value.replace("-", " ").capitalize())
 
 
 def _as_list(value) -> List[str]:
@@ -171,6 +196,9 @@ def _as_list(value) -> List[str]:
 
 
 def cell(value, kind: str, all_names: dict) -> str:
+    if kind.startswith("choice:") and value not in (None, ""):
+        options = kind.split(":", 1)[1].split("|")
+        return choice_label(str(value)) if str(value) in options else str(value)
     if kind in ("entity", "person", "project"):
         slug = str(value or "")
         return all_names[_LINK_KIND[kind]].get(slug, slug)
@@ -222,7 +250,7 @@ def export(root: Path, table: str, *, today: str, view: Optional[str] = None,
     for i, c in enumerate(cols["columns"], start=1):
         kind = kinds[c["prop"]]
         if kind.startswith("choice:"):
-            options, strict = kind.split(":", 1)[1].split("|"), True
+            options, strict = [choice_label(o) for o in kind.split(":", 1)[1].split("|")], True
         elif kind in ("entity", "person", "project"):
             options, strict = sorted(all_names[_LINK_KIND[kind]].values(), key=str.lower), False
         else:
@@ -276,8 +304,10 @@ def to_value(text: str, kind: str, all_names: dict):
         return None, f"{text} is an Excel error value, not a value to keep", False
     if kind.startswith("choice:"):
         options = kind.split(":", 1)[1].split("|")
-        match = next((o for o in options if o.lower() == text.lower()), None)
-        return (match, None, False) if match else (None, f"{text!r} is not one of {options}", False)
+        match = next((o for o in options
+                      if text.lower() in (o.lower(), choice_label(o).lower())), None)
+        return (match, None, False) if match else (
+            None, f"{text!r} is not one of {[choice_label(o) for o in options]}", False)
     if kind in ("text",):
         return text, None, False
     target = all_names[_LINK_KIND[kind]]
@@ -290,6 +320,12 @@ def to_value(text: str, kind: str, all_names: dict):
             return hits[0], None
         if len(hits) > 1:
             return None, f"{name!r} matches several: {', '.join(sorted(hits))}"
+        # A bare name that two entities share shows as "Name (Entity)":
+        # say it is ambiguous, not unknown.
+        shared = [s for s, n in target.items() if n.lower().startswith(name.lower() + " (")]
+        if shared:
+            return None, (f"{name!r} matches several: "
+                          f"{', '.join(sorted(target[s] for s in shared))} — pick one")
         return None, f"{name!r} matches no {_LINK_KIND[kind]}"
 
     if kind in ("people", "projects"):
@@ -314,13 +350,21 @@ def _slug_of(table: str, key: str, data: dict) -> str:
     return str(data.get("slug") or Path(key).parent.name)
 
 
+def _name_key(table: str, name, data: dict) -> str:
+    """What must be unique: the name, and for a project the name within its
+    entity — the slug carries the entity, so two entities may each have an
+    "AI Transformation" (review 2026-10-12)."""
+    key = str(name or "").strip().lower()
+    return f"{key}|{data.get('entity') or ''}" if table == "projects" else key
+
+
 def _check_row(root: Path, table: str, slug: str, merged: dict, changed: Dict[str, object],
                quote, others: Dict[str, str]) -> Optional[str]:
     """The creators' own rules, applied to an update or a new row. Returns a
     refusal reason, or None. `changed` may be normalised in place (email)."""
     name_prop = _name_prop(table)
     if changed.get(name_prop):
-        holder = others.get(str(changed[name_prop]).lower())
+        holder = others.get(_name_key(table, changed[name_prop], merged))
         if holder is not None and holder != slug:
             return (f"another row or {_spec(table)['object']} already has this name "
                     f"({changed[name_prop]}) — were rows moved or copied?")
@@ -356,6 +400,14 @@ def _check_row(root: Path, table: str, slug: str, merged: dict, changed: Dict[st
             pdata, _ = markdown.split_frontmatter(parent_index.read_text(encoding="utf-8"))
             if pdata.get("parent"):
                 return f"maximum two levels: {parent!r} already has a parent"
+            # The rule `project scaffold` applies: a sub-project stays within
+            # its (top-level) entity (review 2026-10-12).
+            parent_entity = str(pdata.get("entity") or "")
+            own_entity = str(merged.get("entity") or "")
+            if (parent_entity and own_entity and project._top_entity(root, parent_entity)
+                    != project._top_entity(root, own_entity)):
+                return (f"parent project {parent!r} belongs to another entity — "
+                        "a sub-project stays within its entity")
             if slug and any(o["data"].get("parent") == slug for o in objects(root, "projects")):
                 return f"{slug!r} has sub-projects of its own — it cannot get a parent"
     return None
@@ -412,7 +464,7 @@ def plan(root: Path, file_rel: str) -> dict:
     # unless their own row renames them.
     others: Dict[str, str] = {}
     for key, data in current.items():
-        others[str(data.get(name_prop) or "").lower()] = _slug_of(table, key, data)
+        others[_name_key(table, data.get(name_prop), data)] = _slug_of(table, key, data)
     name_col = props.index(name_prop) if name_prop in props else None
     if name_col is not None:
         for _, row in rows:
@@ -420,7 +472,7 @@ def plan(root: Path, file_rel: str) -> dict:
             if key in current and key_count.get(key) == 1:
                 orig = pad(by_key.get(key, [key]))
                 if row[name_col].strip() != orig[name_col].strip():
-                    others.pop(orig[name_col].strip().lower(), None)
+                    others.pop(_name_key(table, orig[name_col], current[key]), None)
 
     def unknown(i, raw, kind):
         out["unknown"].append({"header": headers[i], "value": raw.strip(),
@@ -454,7 +506,7 @@ def plan(root: Path, file_rel: str) -> dict:
                 out["refused"].append({"row": index, "key": "", "header": "",
                                        "reason": "new row: " + "; ".join(problems)})
             else:
-                others[str(values[name_prop]).lower()] = f"(new row {index})"
+                others[_name_key(table, values[name_prop], values)] = f"(new row {index})"
                 out["new"].append({"row": index, "values": values})
             continue
         if key_count.get(key, 0) > 1:
@@ -583,8 +635,16 @@ def apply(root: Path, file_rel: str, *, today: str) -> dict:
     for key, values in grouped.items():
         try:
             parent = values.pop("parent", None) if table == "entities" else None
+            old_name = None
+            if table == "entities" and "entity-name" in values:
+                old_name = markdown.split_frontmatter(
+                    (root / key).read_text(encoding="utf-8"))[0].get("entity-name")
             if values:
                 _write_props(root, key, values, quote)
+            if old_name is not None:
+                # _write_props already moved the heading; the teams follow.
+                entity.refresh_after_rename(root, Path(key).parent.name, None,
+                                            str(values["entity-name"]))
             if parent:
                 data, _ = markdown.split_frontmatter((root / key).read_text(encoding="utf-8"))
                 entity.ensure(root, slug=Path(key).parent.name, name=str(data.get("entity-name")),

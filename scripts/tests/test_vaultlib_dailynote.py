@@ -1379,7 +1379,7 @@ type: daily-note
 > [!hot] Watch
 > - nothing needs your hand this window
 
-> [!sync]- Sync notes — 1 item, also in the run log
+> [!sync]- Sync notes — 1 item
 > - One duplicate flagged.
 <!-- evening-sync:recap:end -->
 
@@ -1623,3 +1623,44 @@ def test_read_takes_the_notes_heading_and_the_old_end_of_day_alike(tmp_path):
     old = dailynote.read(root, "2026-10-05")
     assert new["notes"] == ["call Dana about the pilot"] == new["end_of_day"]
     assert old["notes"] == ["wrap up"] == old["end_of_day"]
+
+
+def test_a_for_today_banner_counts_the_same_missed_runs_as_the_plan(tmp_path):
+    # Review 2026-10-12: last note Monday, caught up Thursday morning. The
+    # plan counts Mon, Tue and Wed evenings; the banner said 2.
+    root = make_windowed_vault(tmp_path)
+    (root / "60-daily-notes" / "2026-06-15.md").write_text(
+        "---\ndate: 2026-06-15\ntype: daily-note\n---\n", encoding="utf-8")
+    from vaultlib import dates
+    plan = dates.plan(root, "2026-06-18", for_today=True)
+    dailynote.write(root, windowed_payload(
+        date="2026-06-18",
+        recap_window={"from": plan["recap_from"], "to": plan["recap_to"],
+                      "plan_for": plan["plan_for"]}))
+    text = (root / "60-daily-notes" / "2026-06-18.md").read_text(encoding="utf-8")
+    assert plan["business_days_missed"] == 3
+    assert "3 business days without an evening run" in text
+
+
+def test_plan_for_must_be_the_plans_own_value(tmp_path):
+    root = make_windowed_vault(tmp_path)
+    with pytest.raises(dailynote.DailyNoteError, match="plan_for"):
+        dailynote.write(root, windowed_payload(
+            recap_window={"from": "2026-06-12", "to": "2026-06-12", "plan_for": "tonight"}))
+
+
+def test_a_vault_whose_decisions_table_still_says_needs_review_embeds_it(tmp_path):
+    """Review 2026-10-12: a 0.12.x vault (La Lorraine) still calls its
+    Decisions queue Needs review until its tables are refreshed."""
+    root = make_vault(tmp_path)
+    base = root / "30-projects" / "Decisions.base"
+    base.parent.mkdir(parents=True, exist_ok=True)
+    base.write_text("views:\n  - type: table\n    name: Needs review\n  - type: table\n    name: All\n",
+                    encoding="utf-8")
+    dailynote.write(root, payload())
+    text = (root / "60-daily-notes" / "2026-06-15.md").read_text(encoding="utf-8")
+    assert dailynote.LEGACY_DECISIONS_EMBED in text.split("\n")
+    assert text.replace(dailynote.LEGACY_DECISIONS_EMBED,
+                        "> ![[30-projects/Decisions.base#To review]]") == EXPECTED_FRESH
+    # and the legacy line is the machine's, never read back as the owner's
+    assert "Needs review" not in str(dailynote.read(root, "2026-06-15"))

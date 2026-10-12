@@ -216,3 +216,22 @@ def test_code_blocks_under_what_i_know_are_not_facts(tmp_path):
         "```dataview\nLIST\n```\n\n- Plays chess on Sundays.\n", encoding="utf-8")
     assert feedback.lint(root, "The list view crashed in dataview.")["ok"] is True
     assert feedback.lint(root, "plays chess on sundays")["ok"] is False
+
+
+def test_decisions_to_dos_and_own_notes_are_blocked(tmp_path):
+    # Review 2026-10-12: none of these was on the list.
+    root = seeded_vault(tmp_path)
+    folder = root / "30-projects" / "zz-proj" / "decisions"
+    folder.mkdir(parents=True)
+    (folder / "2026-10-01-close-the-ghent-plant.md").write_text(
+        '---\ntype: decision\nsummary: "Close the Ghent plant by March"\n---\n', encoding="utf-8")
+    (root / "65-to-dos").mkdir(exist_ok=True)
+    (root / "65-to-dos" / "2026-10-02-call.md").write_text(
+        '---\ntype: to-do\nto-do: "Call the works council chair"\n---\n', encoding="utf-8")
+    (root / "80-thoughts-ideas").mkdir(exist_ok=True)
+    (root / "80-thoughts-ideas" / "Reorg options for finance.md").write_text("x", encoding="utf-8")
+    for draft in ("we decided to close the ghent plant by march",
+                  "the to do call the works council chair vanished",
+                  "my note reorg options for finance was not read"):
+        assert feedback.lint(root, draft)["ok"] is False, draft
+    assert feedback.lint(root, "The sync crashed on step 6.")["ok"] is True

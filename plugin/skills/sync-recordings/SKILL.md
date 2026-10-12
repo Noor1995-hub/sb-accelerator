@@ -229,6 +229,12 @@ it has exactly three outcomes:
 | Carries context about people, projects or entities but is not a meeting — forwarded correspondence, a voice memo, pasted context | a capture: a note with `type: note` |
 | Not a capture at all — a whitepaper, a deck, a spreadsheet, an image, a stray binary | **park** it |
 
+A file whose text you cannot read — an audio file, a Word or PDF document
+whose words do not come through — is **parked** with that reason, whatever
+it may hold: a worker cannot read it either, and an inbox file has no
+failure count, so it would cost a worker and fail again every night. The
+parked note says how to have it processed: paste its text with `/add`.
+
 **When you cannot decide between a capture and a park, write the `note`.**
 A wrongly written note sits in Meetings → To review and is one click from `archived: true`;
 a wrongly parked file is out of the queue and on a never-propose-again list,
@@ -816,8 +822,8 @@ until every entry on the list has a probe. There is no background mode
 for this fan-out. Pass each probe: the
 `references/probe-contract.md` path (`references/worker-contract.md` too —
 the probe contract defers to it), `$VAULT`, `$SCRATCH`, `$VAULTLIB`, the
-vault timezone, the entry's `uri` (verbatim, from the calendar-search pages
-step 1 still holds), and its scratch stem, `m365_probe_<n>`. A probe never
+vault timezone, the entry's `event_uri` from the `sync m365-triage` result
+(verbatim — never the listing's `uri`; see issue #205 above), and its scratch stem, `m365_probe_<n>`. A probe never
 gets routing, confidence, or attendee data — it has not earned that cost
 yet.
 
@@ -1382,7 +1388,13 @@ can say otherwise in the same answer ("3 accept, no project", "3 project is
 finance close"). A suggestion taken counts as a change for the one-line
 read-back below.
 
-Translate the answer into a list of `{path, action[, projects][, attendees][, accept]}`.
+**Changed to no project, and the meeting has `entities`:** ask about that
+item once — *"Also take it off <entity_names>'s page?"* Yes → add
+`"entities": []` to its change; no → leave `entities` out, and it stays on
+that page. An entity can be right without a project, so never clear it
+unasked.
+
+Translate the answer into a list of `{path, action[, projects][, attendees][, entities][, accept]}`.
 Projects and people are slugs: match the owner's words to existing project and
 people names. Never invent a slug. If a name matches nothing, or matches two,
 ask about that one item. When the answer changed a project or attendees, read
@@ -1396,7 +1408,9 @@ python3 "$VAULTLIB" runlock acquire --vault "$VAULT" --routine sync-recordings
 ```
 
 `acquired: false` → nothing was written; stop and say: *"Your evening run is
-busy; your meetings stay in triage and that run picks up what you tick."*
+busy, so I couldn't save your answers. The meetings are waiting in Meetings ›
+To review: tick Keep or Dismiss there, or run this again once the evening
+run is done."*
 Then `scratch sweep` and end.
 
 **From here until the end of step 9, every exit releases the lock first** —
@@ -1460,9 +1474,9 @@ python3 "$VAULTLIB" decision review --vault "$VAULT" --path "<decisionsDir>/<ste
 python3 "$VAULTLIB" decision review --vault "$VAULT" --path "<decisionsDir>/<stem>.md" --dismiss
 ```
 
-A dismissed decision whose result has `supersedes` set: say *"It had replaced
-<that decision>, which stays marked replaced — reopen it in Decisions if it
-still holds."*
+A dismissed decision whose result has `restored` set: say *"It had replaced
+<that decision>, which is back in force."* (The CLI restores it, with a dated
+footer; a Dismiss ticked in Decisions is restored the same way that evening.)
 
 ### 11. Summary
 
@@ -1494,7 +1508,7 @@ python3 "$VAULTLIB" scratch sweep --dir "$SCRATCH"
 `scratch sweep` is stdlib-only and deletes a fixed, built-in pattern list
 (`plaud.whoami.json`, `m365.whoami.json`, `rec_*.json`, `plaud.list.json`,
 `m365_*.json`, `*.blob.md`, `ids.json`, `*.payload.json`, `decision.json`,
-`decision-*.json`, plus `sentmail.sample.json`, `calendar.*.json` and
+`decision-*.json`, `fetch_errors_batch.json`, plus `sentmail.sample.json`, `calendar.*.json` and
 `*.block.md` from Session-1 onboarding) directly inside `--dir`, never
 recursing — this is the whole reason it exists rather than `rm -f`. **Every scratch file this contract names you
 write already matches one of those patterns; name any other raw connector
@@ -1518,8 +1532,9 @@ reaches disk.)
 rules, not negotiable:
 
 1. **Never ask a question.** A blocked prompt means the run exits having
-   done nothing. Ambiguity in *extraction or routing* → skip that recording
-   and report it; it retries next run. Classification is not covered by this
+   done nothing. Ambiguity in *extraction* → skip that recording and report
+   it; it retries next run. Ambiguous *routing* is not skipped: rule 2
+   writes it with `projects: []` and low confidence. Classification is not covered by this
    rule: the three-outcome call in step 1 is decided in both modes, and its
    own ambiguity rule resolves toward writing the `note`. Note also that
    "skip" here means *defer to the next run* — unrelated to `sync skip` and

@@ -532,3 +532,17 @@ def test_messages_block_reflects_config_and_renders_its_rows(tmp_path):
     assert "## Mail and Teams" in text
     for row in ("| feed on | True |", "| logs in window | 0 |", "| days at the limit | 0 |"):
         assert row in text
+
+
+def test_decisions_waiting_for_review_are_counted(tmp_path):
+    # Review 2026-10-12: the "review backlog" counted meetings only.
+    root = seeded_vault(tmp_path)
+    before = health.report(root, TODAY)["decisions_to_review"]
+    _write_decision(root, "extra-project", "2026-06-02-open", status="active")
+    kept = root / "30-projects" / "extra-project" / "decisions" / "2026-06-03-kept.md"
+    _write_decision(root, "extra-project", "2026-06-03-kept", status="active")
+    kept.write_text(kept.read_text(encoding="utf-8").replace("status: active", "status: active\nreviewed: true"),
+                    encoding="utf-8")
+    data = health.report(root, TODAY)
+    assert data["decisions_to_review"] == before + 1
+    assert f"| to_review | {before + 1} |" in health.render(data)

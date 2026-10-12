@@ -61,6 +61,10 @@ def _person_note(root: Path, slug: str) -> Path:
     return root / vault.PEOPLE_DIR / f"{slug}.md"
 
 
+def _entity_dossier(root: Path, slug: str) -> Path:
+    return root / vault.ENTITIES_DIR / slug / "dossier.md"
+
+
 def _name(path: Path, key: str, slug: str) -> str:
     try:
         data, _ = markdown.split_frontmatter(path.read_text(encoding="utf-8"))
@@ -84,6 +88,7 @@ def list_queue(root: Path) -> dict:
             continue
         projects = _as_list(data.get("projects"))
         attendees = _as_list(data.get("attendees"))
+        entities = _as_list(data.get("entities"))
         items.append({
             "path": rel,
             "title": _title(data, body, path.stem),
@@ -96,6 +101,9 @@ def list_queue(root: Path) -> dict:
             "attendees": attendees,
             "attendee_names": [_name(_person_note(root, s), "person-name", s)
                                for s in attendees],
+            "entities": entities,
+            "entity_names": [_name(_entity_dossier(root, s), "entity-name", s)
+                             for s in entities],
             "confidence": data.get("confidence"),
             "conflicts_with": data.get("conflicts-with") or None,
         })
@@ -150,8 +158,8 @@ def _apply_one(root: Path, item) -> Optional[str]:
                 "in Obsidian, then accept")
     updated = text
     if action == "change":
-        if "projects" not in item and "attendees" not in item:
-            return "change needs projects and/or attendees"
+        if not any(key in item for key in ("projects", "attendees", "entities")):
+            return "change needs projects, attendees and/or entities"
         if "projects" in item:
             problem = _check_slugs(root, item["projects"], "projects", _project_index)
             if problem:
@@ -164,6 +172,15 @@ def _apply_one(root: Path, item) -> Optional[str]:
                 return problem
             updated = markdown.upsert_scalar_field(
                 updated, "attendees", _flow_list(item["attendees"]))
+        if "entities" in item:
+            # Only when the owner said so: changing a meeting to no project
+            # asks whether it should also leave its entity's page (owner's
+            # call, 2026-10-12) — an entity can be right without a project.
+            problem = _check_slugs(root, item["entities"], "entities", _entity_dossier)
+            if problem:
+                return problem
+            updated = markdown.upsert_scalar_field(
+                updated, "entities", _flow_list(item["entities"]))
     if accept:
         updated = markdown.upsert_scalar_field(updated, "reviewed", "true")
     if action == "dismiss":

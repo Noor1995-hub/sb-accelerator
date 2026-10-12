@@ -10,7 +10,7 @@ origin: net-new
 `/evening-sync` writes tomorrow's note. This skill is what makes it happen on
 its own, every working evening, instead of whenever someone remembers.
 
-Run at the end of Session 1 (`/setup-my-brain` phase 4b invokes it), and again
+Run at the end of Session 1 (`/setup-my-brain` step 10 invokes it), and again
 whenever the answer changes: a new laptop, a different working rhythm, or a
 routine that turns out to fire at a bad hour. It is safe to run as often as
 you like — it updates the task it already made rather than stacking a second
@@ -64,7 +64,7 @@ If `timezone` or `owner` is in `missing`, stop here and say which one.
 `/evening-sync` refuses to run without them, so scheduling it would create a
 task whose every firing writes an alert and nothing else — a routine that
 looks alive in the task list and is dead in the vault. Fill them (Session 1
-does, in phase 1) and come back.
+does, in step 2) and come back.
 
 Keep two values from the result: `timezone`, and `owner` — the person slug
 that names the task.
@@ -200,11 +200,12 @@ task list is readable without opening anything.
 This is the honest half of the promise, and it is not optional.
 
 **The task fires while the Claude app is running on this machine.** If the app
-is closed when the task is due, it runs at next launch instead — so a night
-where the laptop is shut produces tomorrow's note the next time Claude opens,
-not at the hour on the clock. `/evening-sync` handles that gracefully: the
-catch-up window widens on its own and the note says so. What it cannot do is
-run on a machine that is off.
+is closed when the task is due, it runs at next launch instead, not at the
+hour on the clock. `/evening-sync` handles that on its own: opened the next
+morning before noon, it writes **today's** note, recapping up to yesterday;
+opened later than that, it writes the next working day's note with a wider
+recap, and a note that covers more than one missed evening says so. What it
+cannot do is run on a machine that is off.
 
 Say the two consequences plainly:
 

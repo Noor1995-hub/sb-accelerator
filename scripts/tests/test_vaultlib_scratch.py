@@ -140,3 +140,11 @@ def test_sweep_reports_a_directory_matching_a_pattern_as_skipped_not_deleted(tmp
 def test_sweep_expands_user_and_resolves(tmp_path):
     result = scratch.sweep(str(tmp_path) + "/")
     assert result["dir"] == str(tmp_path.resolve())
+
+
+def test_sweep_covers_the_fetch_error_batch(tmp_path):
+    # Review 2026-10-12: /sync-recordings names this file, and it matched no
+    # pattern, so it outlived every run.
+    (tmp_path / "fetch_errors_batch.json").write_text("[]", encoding="utf-8")
+    result = scratch.sweep(str(tmp_path))
+    assert "fetch_errors_batch.json" in result["deleted"]

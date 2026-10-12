@@ -423,6 +423,11 @@ and core markdown all still render — `.obsidian/snippets/` and
 absent is the Minimal theme (so heading colours are the default), Notebook
 Navigator (the sidebar shows "Plugin no longer active") and Dataview.
 
+> *Obsolete in part (2026-10-12):* Notebook Navigator was removed in #263
+> (0.13.7); the sidebar is now Obsidian's core Bookmarks menu, so a
+> plugin-free vault shows the real sidebar. Only Dataview and the theme are
+> still lost.
+
 The Dataview loss is safe rather than silent, which is the important part:
 `test_obsidian_render.py` asserts `dom["dataviewTables"]` truthily, so a vault
 with no Dataview plugin makes those tests **fail loudly** at zero tables — it
@@ -433,7 +438,8 @@ warns about belongs to a trusted-but-uninitialised profile, not to this.
 marker visibility, markdown structure, **or a `.base` view** — a plugin-free
 vault on a private `--home` is a legitimate way to get an answer without
 queueing behind another session. Only Dataview and the navigator need the
-shared profile and its accepted trust. Either way, state in the report which
+shared profile and its accepted trust. (Navigator: obsolete since #263, see
+the note above.) Either way, state in the report which
 plugins were absent rather than implying full fidelity.
 
 `.base` belongs on the first list, not the second: **Bases is a core plugin**,
@@ -599,6 +605,10 @@ the operator in the throwaway probe profile. This does not soften the design
 rule: consent still cannot ship as files, and nothing in the repo pre-grants
 it; it is the one click per probe home, made scriptable when no human is at
 the keyboard.
+
+> *Obsolete (2026-10-12):* the paragraph below is about Notebook Navigator,
+> removed in #263 (0.13.7). It no longer ships, so there is no modal to
+> dismiss. The Restricted Mode remedy above still holds.
 
 **The photobomb that follows.** The moment plugins first load, Notebook
 Navigator pops its "What's new" release-notes modal, which then sits in front
@@ -959,3 +969,48 @@ file (`gh api repos/anthropics/claude-code/contents/plugins/code-review/commands
 and before claiming a pin is ignored, check `modelUsage` in a run log. It
 lists every model the session touched. `--model` is the orchestrator's model;
 subagents' models are the plugin's aliases, resolved by the build.
+
+## 2026-10-12 — a skill gated on "any migration pending", and an automatic stage read unbounded history
+
+**What went wrong.** A pre-release review found two related gaps. A skill
+checked whether *any* migration was pending rather than whether the vault had
+reached the structure version that skill needs, so it either refused when
+nothing it relied on was missing, or ran when the one thing it relied on was.
+And an automatic stage that reads history (mail, Teams, recordings) took its
+start point from state a migration was meant to set: on a vault where the
+plugin had been updated but `/upgrade-vault` not yet run, that state was
+absent and the stage would have read back without limit.
+
+**The rule.** A skill gates on the specific `structure-version` it needs
+(`>= N`), never on "pending is empty". Any automatic stage that reads history
+is gated the same way and bounded on its own — a default window or a hard
+cap — so a plugin update that lands ahead of `/upgrade-vault` cannot start an
+unbounded run. Plugin updates and vault upgrades are separate events; assume
+the gap between them.
+
+## 2026-10-12 — a Python heredoc in Git Bash wrote a real line break where `\n` was meant
+
+**What went wrong.** On Windows, editing a file with a Python heredoc run
+from Git Bash, a `"\n"` inside a string literal in the replacement text
+reached the target file as an actual line break, splitting a string literal
+in two. The file no longer compiled, and nothing in the edit step said so.
+Writing this very entry the same way did it again: every `\n` in the
+paragraph landed as a line break.
+
+**The rule.** For an edit whose text contains escape sequences (`\n`, `\t`,
+backslashes in general), use the Edit tool, not a shell heredoc. Afterwards
+compile or run the tests for that file before moving on, and for prose, look
+at the bytes that landed.
+
+## 2026-10-12 — a renamed table view broke the embeds that named it
+
+**What went wrong.** A view in a template `.base` file was renamed. The
+template's own embeds were updated, but vaults keep their old `.base` files
+until a migration or template refresh replaces them, so places that embed
+the view by name (the daily note's embeds) pointed at a view that the
+owner's copy of the file did not have yet, and rendered empty.
+
+**The rule.** When a view in a template `.base` is renamed, every place that
+embeds it by name needs a fallback to the old name (or the refresh must land
+in the same migration), because existing vaults run on the old file until it
+is refreshed. Grep for the old view name across `plugin/` before merging.

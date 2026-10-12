@@ -324,6 +324,13 @@ def build_parser() -> argparse.ArgumentParser:
     verdict.add_argument("--keep", action="store_true")
     verdict.add_argument("--dismiss", action="store_true")
 
+    dec_withdraw = decisions_sub.add_parser(
+        "withdraw", help="mark an active decision as reversed, not replaced")
+    _add_vault_argument(dec_withdraw)
+    dec_withdraw.add_argument("--path", required=True, help="vault-relative path")
+    dec_withdraw.add_argument("--why", required=True, help="one line: what reversed it")
+    dec_withdraw.add_argument("--date", help="ISO date it was reversed; defaults to today")
+
     dec_write = decisions_sub.add_parser(
         "write", help="write a decision note, applying any supersession edge")
     _add_vault_argument(dec_write)
@@ -986,6 +993,8 @@ def build_parser() -> argparse.ArgumentParser:
     m_status.add_argument("--first-run-since", dest="first_run_since")
     m_status.add_argument("--auth-error", dest="auth_error", action="store_true",
                           help="tonight's run could not reach Microsoft 365: add the reconnect line")
+    m_status.add_argument("--peek", action="store_true",
+                          help="read only: keep the shown catch-up lines until a run without --peek")
 
     return parser
 
@@ -1155,7 +1164,7 @@ def _dispatch(args: argparse.Namespace) -> int:
             return _ok({"reset": True})
         if args.action == "status":
             return _ok({"lines": msglog.status(root, now=args.now, first_run_since=args.first_run_since,
-                                               auth_error=args.auth_error)})
+                                               auth_error=args.auth_error, peek=args.peek)})
     if args.group == "project":
         if args.action == "state":
             payload = (json.load(sys.stdin) if args.state == "-"
@@ -1210,6 +1219,9 @@ def _dispatch(args: argparse.Namespace) -> int:
             return _ok(decision.list_decisions(root, args.project))
         if args.action == "review":
             return _ok(decision.review(root, args.path, keep=args.keep))
+        if args.action == "withdraw":
+            return _ok(decision.withdraw(root, args.path, date=vault.today_iso(args.date),
+                                         why=args.why))
         payload = (json.load(sys.stdin) if args.note == "-"
                    else json.loads(Path(args.note).read_text(encoding="utf-8")))
         return _ok(decision.write(

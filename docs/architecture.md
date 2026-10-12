@@ -32,8 +32,22 @@ having, `CONTRIBUTING.md`'s "Cutting a release" for the procedure, and
 `playbooks/plugin-distribution.md` for the client-side delivery paths and the
 owner-only setup (`sb-dist`, `DIST_PUSH_TOKEN`) it depends on.
 
-The vault's own marker is `plugin/template/structure-version` — a plain integer,
-bumped only by a migration under `migrations/`, read by `/upgrade-vault`.
+The vault's own marker is `structure-version` at the vault root (shipped as
+`plugin/template/structure-version`) — a plain integer, bumped only by a
+migration under `plugin/migrations/` (`001`–`014` today, structure versions
+2–15), read by `/upgrade-vault`. The root `migrations/` folder only holds
+candidates that have no place in the chain yet. `/upgrade-vault` is run by the
+consultant and is never handed to the vault owner alone.
+
+## What the plugin ships
+
+14 skills and 5 agents, no hooks. The skill and agent index (what each does,
+what triggers it, who dispatches each agent) is `plugin/skills/README.md`.
+Agents are never invoked directly: `/sync-recordings` dispatches
+`sync-worker`, `sync-worker-m365` and `sync-probe-m365`, `/sync-messages`
+dispatches `sync-messages-worker`, and `/setup-my-brain` dispatches
+`setup-discovery-worker`. Session 1 (`/setup-my-brain`) is run by the vault
+owner alone since v0.12.5.
 
 ## The vault's `claude/` directory
 
@@ -54,11 +68,18 @@ Anything placed in `claude/skills/` is invisible to Cowork.
 
 ## CI
 
-Three required checks on every PR (see `.github/workflows/ci.yml`):
+`.github/workflows/ci.yml` runs six jobs. Three are required checks on every
+PR (the `main-ci` ruleset):
 
 - `plugin (skill lint + tests)` — skill frontmatter + clean-room lint + pytest over `scripts/tests/`
 - `template (structure validation)` — template skeleton invariants
 - `plugin version (not already released)` — plugin/ changes require a version bump; bumped version must not be already tagged
+
+Three more run but do not block a merge yet:
+
+- `changelog (new entry cites this PR)` — a new `Unreleased` bullet in `CHANGELOG.md` must cite the PR's number (PRs only)
+- `runtime floor (python 3.10)` — the test suite on Python 3.10, the version Cowork's VM ships
+- `cross-platform (windows)` — the test suite on a Windows runner
 
 `.github/workflows/release.yml` is separate and not a PR status check — it
 runs on a `plugin-v*` tag push or an owner's `workflow_dispatch`, never on a

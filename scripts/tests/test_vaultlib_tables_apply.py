@@ -126,3 +126,20 @@ def test_resolving_a_legacy_company_sets_the_entity_and_drops_company(tmp_path):
     assert result["written"] == [{"key": "50-people/sofie-maes.md", "prop": "entity"}]
     data, _ = fm(root, "50-people/sofie-maes.md")
     assert data["entity"] == "acme" and "company" not in data
+
+
+def test_renaming_an_entity_in_excel_moves_its_teams_links(tmp_path):
+    # Review 2026-10-12: a team's Part of line kept the parent's old name.
+    from vaultlib import entity
+    root = make_vault(tmp_path)
+    entity.ensure(root, slug="acme-finance", name="Finance", today="2026-10-02", parent="acme")
+    rel, book = exported(root, "entities")
+    acme = next(r for r in book["Entities"][1:] if r[0] == "40-entities/acme/dossier.md")
+    acme[col(book, "Entities", "Entity")] = "Acme Group"
+    save(root, rel, book)
+    result = tables.apply(root, rel, today="2026-10-12")
+    assert result["failed"] == []
+    _, body = fm(root, "40-entities/acme/dossier.md")
+    assert "# Acme Group" in body
+    _, team = fm(root, "40-entities/acme-finance/dossier.md")
+    assert "**Part of** [[40-entities/acme/dossier|Acme Group]]" in team

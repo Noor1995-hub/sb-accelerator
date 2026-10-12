@@ -38,6 +38,8 @@ SWEEP_PATTERNS = (
     # payloads left behind by older plugin versions.
     "decision.json",
     "decision-*.json",
+    # /sync-recordings banks a wave's fetch errors here.
+    "fetch_errors_batch.json",
     # Session-1 onboarding (/setup-my-brain): a sent-mail sample, raw
     # calendar reads, and drafted context blocks. A block file is written
     # only when it is about to be consumed by `context write` — the sweep

@@ -60,6 +60,9 @@ which project is stale, which entity has gone quiet, or any other vault
 object; the counts carry the whole story:
 
 - Meetings in the window, and how many still have no project linked.
+- The review backlog: meetings in the window still waiting in To review
+  (`needs_review`), and decisions waiting in To review at all
+  (`decisions_to_review`, not limited to the window) — say which is which.
 - Daily-note coverage over working days in the window.
 - Input items pending and the skip-list size.
 - Projects and entities with no meeting reference in the last 30 days —
@@ -164,12 +167,15 @@ then save a copy of the approved title, the report body, and the
 disclosure to:
 
 ```
-10-inbox/feedback-draft-{generated}.md
+99-workflow-config/feedback-drafts/feedback-draft-{generated}.md
 ```
 
+Never save it to `10-inbox/`: that folder is capture waiting to be
+processed, and the next sync would file or park the draft.
+
 Say exactly that: the report could not be sent automatically, and it has
-been saved to Input (the `10-inbox/` folder) for the consultant to relay once the channel
-is configured (`feedback.repo` and the token under
+been saved to `99-workflow-config/feedback-drafts/` for the consultant to
+relay once the channel is configured (`feedback.repo` and the token under
 `99-workflow-config/secrets/`). The health report itself already exists at
 `99-workflow-config/health-reports/{generated}.md` regardless of whether
 sharing happened — running this skill is never wasted even offline.

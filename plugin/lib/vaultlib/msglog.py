@@ -475,7 +475,8 @@ def _what(sources) -> str:
     return "your mail" if set(sources) <= {"inbox", "sent"} else "your mail and Teams"
 
 
-def status(root: Path, *, now: str, first_run_since: Optional[str], auth_error: bool = False) -> List[str]:
+def status(root: Path, *, now: str, first_run_since: Optional[str], auth_error: bool = False,
+           peek: bool = False) -> List[str]:
     """At most STATUS_LIMIT plain lines, most urgent first.
 
     Behind: a gap open for more than BEHIND_AFTER_DAYS whole days, or a feed
@@ -485,6 +486,10 @@ def status(root: Path, *, now: str, first_run_since: Optional[str], auth_error: 
     still records its run, so it never reads as being behind.
     Closed intervals: one line per (from, to), sources merged; a line that
     does not fit stays in the state for the next morning.
+
+    `peek` leaves the state alone: the evening run reads the lines before
+    the note is written and drops them only once it is — a refused write or
+    a skipped recap used to lose them for good (review 2026-10-12).
     """
     state = msgstate.load(root)
     now_dt = seenevents.parse_now(now)
@@ -492,7 +497,7 @@ def status(root: Path, *, now: str, first_run_since: Optional[str], auth_error: 
     if auth_error:
         lines.append(AUTH_LINE)
     if first_run_since:
-        lines.append("From today, this note also covers your mail and Teams.")
+        lines.append("From now on, this note also covers your mail and Teams.")
     behind = [((now_dt - seenevents.parse_now(g["from"])).days, g["source"]) for g in state["gaps"]]
     moved = [seenevents.parse_now(s) for s in (state["cursor"], state["last_run"]) if s]
     if moved:
@@ -511,7 +516,7 @@ def status(root: Path, *, now: str, first_run_since: Optional[str], auth_error: 
         lines.append(f"I couldn't catch up on {_what(sources)} from {_day_label(start)} "
                      f"to {_day_label(end)}.")
         shown.add((start, end))
-    if shown:
+    if shown and not peek:
         state["closed_unread"] = [g for g in state["closed_unread"] if (g["from"], g["to"]) not in shown]
         msgstate.save(root, state)
     return lines[:STATUS_LIMIT]

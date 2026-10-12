@@ -1,6 +1,6 @@
 # Processing (shared)
 
-Followed by `/evening-sync` (after stage 3b), and on demand by `/sync-recordings` step 9 and `/add` step 6, sections A to E. Everything here runs the same for every caller. Only the inputs differ — see Inputs.
+Followed by `/evening-sync` (section A in stage 2, B to E after stage 3b), and on demand by `/sync-recordings` step 9 and `/add` step 6, sections A to E. Everything here runs the same for every caller. Only the inputs differ — see Inputs.
 
 ## Inputs
 
@@ -58,8 +58,9 @@ python3 "$VAULTLIB" sync reconcile-reviews --vault "$VAULT"
 python3 "$VAULTLIB" sync update-queue --vault "$VAULT" --today <today> --owner <owner-slug>
 ```
 
-The second `reconcile-reviews` is deliberate, and it is the only place this
-pipeline repeats a step: a sync with recordings to process can run for the
+In the evening run this is the second `reconcile-reviews` (the sync's
+step 1 ran the first); `/add` runs only this one. The repeat is deliberate,
+and it is the only place this pipeline repeats a step: a sync with recordings to process can run for the
 better part of an hour, and a tick placed in Meetings.base during that window
 would otherwise fold tomorrow evening instead of tonight. It is one cheap
 read of `20-meetings/`; add anything it `flipped` to the folded-ticks count
@@ -246,10 +247,12 @@ After every section C batch has returned (D reads the projects' fresh
 "Where it stands"). `update-queue`'s result from B carries
 `entitiesNeedingUpdate`: one entry per active or prospect entity with
 material newer than its `entity-updated` stamp (on a first run, at most the
-last 14 days) — `slug`, `dossierPath`, `entityName`, `parent` and
+last 3 working days) — `slug`, `dossierPath`, `entityName`, `parent` and
 `parentName` (a team's parent, else null), `newFiles` (meetings), `newLogs`,
 `newSessions`, `newNotes`, `parentMode` and `teamFiles` (a team's material,
-for its parent). Empty → record "no entity pages to update" and go on.
+for its parent). Empty → record "no entity pages to update" and go on. If
+B's `waitingForUpgrade` lists `entities`, the vault is below structure 14:
+record "entity pages wait for /upgrade-vault" instead and go on.
 
 Otherwise dispatch one subagent per entry (`model: sonnet`), in the same
 blocking batches of at most 3 as section C — the rule written there applies
@@ -330,8 +333,10 @@ After section D has returned. `update-queue`'s result from B carries
 `peopleNeedingUpdate` (`slug`, `path`, `personName`) and `peopleWork`: one
 item per meeting (`kind: meeting`, `path`, `date`, `people`) and per day log
 (`kind: log`, `path`, `stem`, `date`, `groups`, `people`) that names someone
-with material newer than their `person-updated` stamp. `peopleWork` empty →
-record "no people pages to update" and go on.
+with material newer than their `person-updated` stamp (without one, at most
+the last 3 working days). `peopleWork` empty → record "no people pages to
+update" and go on. If B's `waitingForUpgrade` lists `people`, the vault is
+below structure 15: record "people pages wait for /upgrade-vault" instead.
 
 Otherwise dispatch one subagent per item (`model: sonnet`), in the same
 blocking batches of at most 3 as section C — the rule written there applies

@@ -38,9 +38,15 @@ REVIEW_BLOCK = ("> [!review] Waiting for you\n"
 # The Meetings view was named Triage until #240. A note that migration 006
 # has not rewritten still carries this line, and it is not a jotting.
 LEGACY_TRIAGE_EMBED = "> ![[20-meetings/Meetings.base#Triage]]"
-_REVIEW_LINES = frozenset(REVIEW_BLOCK.split("\n")) | {LEGACY_TRIAGE_EMBED}
+# The Decisions view was named Needs review until #244 — the name a 0.12.x
+# vault still carries until its tables are refreshed.
+LEGACY_DECISIONS_EMBED = "> ![[30-projects/Decisions.base#Needs review]]"
+_REVIEW_LINES = (frozenset(REVIEW_BLOCK.split("\n"))
+                 | {LEGACY_TRIAGE_EMBED, LEGACY_DECISIONS_EMBED})
 MEETINGS_BASE = Path(vault.MEETINGS_DIR) / "Meetings.base"
+DECISIONS_BASE = Path(vault.PROJECTS_DIR) / "Decisions.base"
 _TRIAGE_VIEW_RE = re.compile(r"^\s*-?\s*name:\s*[\"']?Triage[\"']?\s*$", re.MULTILINE)
+_NEEDS_REVIEW_VIEW_RE = re.compile(r"^\s*-?\s*name:\s*[\"']?Needs review[\"']?\s*$", re.MULTILINE)
 _TO_REVIEW_VIEW_RE = re.compile(r"^\s*-?\s*name:\s*[\"']?To review[\"']?\s*$", re.MULTILINE)
 
 
@@ -51,15 +57,22 @@ def _review_block(root: Path) -> str:
     `/upgrade-vault`. Until then a vault's Meetings table may still call its
     queue Triage, and an embed of "To review" would show an error where the
     queue belongs. So the note embeds whichever name the vault's own table
-    carries (#263); a vault without the table gets the shipped name.
+    carries (#263); a vault without the table gets the shipped name. The
+    same holds for Decisions, whose queue was Needs review until #244.
     """
-    try:
-        text = (root / MEETINGS_BASE).read_text(encoding="utf-8")
-    except OSError:
-        return REVIEW_BLOCK
-    if _TRIAGE_VIEW_RE.search(text) and not _TO_REVIEW_VIEW_RE.search(text):
-        return REVIEW_BLOCK.replace("> ![[20-meetings/Meetings.base#To review]]", LEGACY_TRIAGE_EMBED)
-    return REVIEW_BLOCK
+    block = REVIEW_BLOCK
+    for base, legacy_re, legacy_line, shipped_line in (
+            (MEETINGS_BASE, _TRIAGE_VIEW_RE, LEGACY_TRIAGE_EMBED,
+             "> ![[20-meetings/Meetings.base#To review]]"),
+            (DECISIONS_BASE, _NEEDS_REVIEW_VIEW_RE, LEGACY_DECISIONS_EMBED,
+             "> ![[30-projects/Decisions.base#To review]]")):
+        try:
+            text = (root / base).read_text(encoding="utf-8")
+        except OSError:
+            continue
+        if legacy_re.search(text) and not _TO_REVIEW_VIEW_RE.search(text):
+            block = block.replace(shipped_line, legacy_line)
+    return block
 _PREP_KEYS = ("attendees", "last_meeting", "context")
 _PREP_LABELS = (("attendees", "Attendees"), ("last_meeting", "Last meeting"),
                 ("context", "Context"))
@@ -82,7 +95,7 @@ _HEADING_RE = re.compile(
 _TASK_RE = re.compile(r"\A- \[( |x|X)\]\s*(.*)\Z")
 _ALLOWED_KEYS = ("date", "recap", "meetings", "meetings_note", "recap_window")
 _ALLOWED_MEETING_KEYS = ("time", "subject", "entity", "prep")
-_ALLOWED_WINDOW_KEYS = ("from", "to", "detailed_from")
+_ALLOWED_WINDOW_KEYS = ("from", "to", "detailed_from", "plan_for")
 _DIGEST_LENGTH = 16
 
 
@@ -152,7 +165,19 @@ def _validate_window(payload: dict, note_date: str) -> Optional[dict]:
             raise DailyNoteError(
                 f"recap_window.detailed_from ({detailed.isoformat()}) must "
                 f"fall within {start.isoformat()}..{end.isoformat()}")
-    return {"from": start, "to": end, "detailed_from": detailed}
+    plan_for = raw.get("plan_for", "next-business-day")
+    if plan_for not in ("today", "next-business-day"):
+        raise DailyNoteError(
+            f"recap_window.plan_for {plan_for!r} must be `dates plan`'s "
+            "plan_for: 'today' or 'next-business-day'")
+    # Which evening runs the banner counts as missed: up to the run now
+    # writing, which in the --for-today frame is a late one standing in for
+    # the evening before the note's date — `dates plan` counts it, and so
+    # must the banner (review 2026-10-12: plan said 3, the note said 2).
+    count_to = (datetime.strptime(note_date, "%Y-%m-%d").date()
+                if plan_for == "today" else end)
+    return {"from": start, "to": end, "detailed_from": detailed,
+            "count_to": count_to}
 
 
 def _day_name(date_iso: str) -> str:
@@ -387,7 +412,7 @@ def _catchup_banner(root: Path, window: Optional[dict]) -> Optional[str]:
     """
     if window is None:
         return None
-    missed = dates.missed_runs(root, window["from"], window["to"])
+    missed = dates.missed_runs(root, window["from"], window.get("count_to", window["to"]))
     if missed <= 0:
         return None
     lines = [

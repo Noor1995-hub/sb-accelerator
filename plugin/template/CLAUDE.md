@@ -35,7 +35,7 @@ questions, and browses.
 | `90-archive/` | Completed and historical items |
 | `95-private/` | Vault owner's private notes — never read by any skill |
 | `99-workflow-config/` | Context portfolio, object model reference, lessons log |
-| `claude/` | Vault-local Claude Code home — `.claude` symlinks here so skills stay visible in Obsidian |
+| `claude/` | Vault-local Claude Code home — `.claude` symlinks here; hidden from Obsidian's file list |
 | `_heavy-assets/` | Generated binaries (.pptx/.xlsx/.pdf/…) |
 | `_messages/` | Mail and Teams message logs — machine material for Claude, hidden; you never need to open them |
 
@@ -83,10 +83,12 @@ where the run can tell, and empty where it cannot. The **To Do's** table
 shows the open ones per project, soonest deadline first; ticking **Done**
 there closes one. Call them "to do's" to the owner, never "actions".
 
-When the owner asks you to add a to do in a session, write
-`65-to-dos/{YYYY-MM-DD}-{kebab-title}.md` with the frontmatter in the
-ontology (`type: to-do`, `to-do`, `project`, `due`, `done: false`,
-`created`) and say the deadline back as a date, so they can correct it.
+When the owner asks you to add a to do in a session, never write the file
+yourself: put `[{"text": "<the to do>", "project": "<slug or null>", "due":
+"<their deadline words or null>"}]` in a scratch JSON file and run
+`actions create --vault <vault> --items <file>` with the plugin's
+`lib/vaultlib/cli.py` (the `$VAULTLIB` every skill uses) — it works out the date, quotes the fields and skips duplicates. Say
+the deadline back as the date it returns, so they can correct it.
 
 ### Facts about people
 
