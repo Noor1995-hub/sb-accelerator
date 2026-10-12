@@ -13,7 +13,7 @@ import re
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from . import basefile, entity, markdown, person, project, vault, xlsx
+from . import basefile, entity, markdown, naming, person, project, vault, xlsx
 
 FORMAT = "1"
 LIST_SEP = "; "
@@ -358,3 +358,79 @@ def plan(root: Path, file_rel: str) -> dict:
                                        "value": value if value != [] else None})
     out["counts"] = {k: len(out[k]) for k in ("updates", "new", "conflicts", "refused", "unknown")}
     return out
+
+
+def _render(value, quoted: bool) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, list):
+        return "[" + ", ".join(value) + "]"
+    return markdown.emit_scalar(value, quoted)
+
+
+def _write_props(root: Path, key: str, values: Dict[str, object], quote) -> None:
+    path = root / key
+    text = path.read_text(encoding="utf-8")
+    old, _ = markdown.split_frontmatter(text)
+    for prop, value in values.items():
+        text = markdown.upsert_scalar_field(text, prop, _render(value, prop in quote))
+        if prop in ("person-name", "entity-name") and value and old.get(prop):
+            text = text.replace(f"\n# {old[prop]}\n", "\n" + markdown.title_heading(value) + "\n", 1)
+    vault.atomic_write(path, text)
+
+
+def _create(root: Path, table: str, values: dict, today: str) -> str:
+    if table == "people":
+        made = person.ensure(root, values["person-name"], today, email=values.get("email"))
+        if not made.get("created", True):
+            raise TablesError(f"already exists: {made.get('path')} — fill it in on its own row")
+        return made["path"]
+    if table == "entities":
+        slug = naming.slugify(values["entity-name"])
+        if (root / vault.ENTITIES_DIR / slug / "dossier.md").exists():
+            # entity.ensure would *update* an existing dossier — never from a new row.
+            raise TablesError(f"already exists: {vault.ENTITIES_DIR}/{slug}/dossier.md — "
+                              "fill it in on its own row")
+        made = entity.ensure(root, slug=slug,
+                             name=values["entity-name"], today=today,
+                             entity_type=values.get("entity-type"), status=values.get("status"),
+                             owner=values.get("owner"), parent=values.get("parent"))
+        return made["path"]
+    made = project.scaffold(root, name=values["project-name"], project_type=values["project-type"],
+                            entity=values["entity"], owner=values["owner"], today=today,
+                            parent=values.get("parent"))
+    return made["path"]
+
+
+_CREATED_BY = {"people": {"person-name", "email"},
+               "entities": {"entity-name", "entity-type", "status", "owner", "parent"},
+               "projects": {"project-name", "project-type", "entity", "owner", "parent"}}
+
+
+def apply(root: Path, file_rel: str, *, today: str) -> dict:
+    planned = plan(root, file_rel)
+    table = planned["table"]
+    quote = _spec(table)["quote"]
+    result = {"plan": planned, "written": [], "created": [], "failed": []}
+    grouped: Dict[str, Dict[str, object]] = {}
+    for u in planned["updates"]:
+        grouped.setdefault(u["key"], {})[u["prop"]] = u["value"]
+    for key, values in grouped.items():
+        try:
+            _write_props(root, key, values, quote)
+            result["written"] += [{"key": key, "prop": p} for p in values]
+        except (ValueError, OSError) as exc:
+            result["failed"].append({"key": key, "reason": str(exc)})
+    for new in planned["new"]:
+        try:
+            key = _create(root, table, new["values"], today)
+            rest = {p: v for p, v in new["values"].items() if p not in _CREATED_BY[table]}
+            if table == "projects" and rest.get("status") == "active":
+                rest.pop("status")
+            if rest:
+                _write_props(root, key, rest, quote)
+            result["created"].append({"row": new["row"], "key": key})
+        except (TablesError, entity.EntityError, project.ProjectError,
+                ValueError, OSError) as exc:
+            result["failed"].append({"row": new["row"], "reason": str(exc)})
+    return result
