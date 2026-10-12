@@ -34,9 +34,9 @@ part of the deployment:
   owner's actual portfolio, or the sync routing keeps landing meetings as
   low-confidence. Revisit the seeded project list before assuming the sync
   itself is wrong.
-- **Inbox items pending growing week on week** → the vault owner's own
+- **Input items pending growing week on week** → the vault owner's own
   time, not a vault problem. The queue is only draining if someone works
-  the Triage view regularly; a week-over-week climb means the loop needs
+  the Meetings table's To review view regularly; a week-over-week climb means the loop needs
   more of their time than it's getting, not a different tool.
 
 Read the trend, not the single week: one thin week can be a real quiet week.

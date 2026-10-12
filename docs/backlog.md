@@ -3,6 +3,12 @@
 GitHub-native: plain GitHub Issues organized by an org Projects v2 board. Everything is driven
 from the `gh` CLI, so it works from the terminal and from Claude Code.
 
+> **Status 2026-10-12.** Waves 1–4 are done: every issue in the four wave milestones is closed
+> (7, 4, 5 and 4 issues), though the milestones themselves are still open on GitHub. All open
+> work (14 issues) now sits in `Unscheduled`. The wave table below is kept as the record of how
+> the first deployment was sequenced, not as the current plan. For what is open, run
+> `gh issue list -R DLW-INT-BTA-BELUX/sb-accelerator --state open`.
+
 ## Where it lives
 
 | Surface | Link |
