@@ -133,6 +133,35 @@ documented next to `last-updated` ("last-updated is the day the page last
 changed; entity-updated is when the automatic update last read new
 material"). No migration: the field appears with the first update.
 
+## Amendments after the final review (2026-10-12)
+
+These supersede the text above where they differ; `process.md` section D is
+the authority.
+
+- **First run is bounded.** Without `entity-updated` the threshold is the
+  later of the `last-updated` day at 00:00 and today − 14 days; an
+  unparseable `last-updated` or `entity-updated` warns (naming the dossier)
+  and uses the same fallback.
+- **Entity-only mail.** `messages for-entity --slug E --logs …` returns the
+  groups tagged with E or strongly linked to a project with `entity: E`; D
+  reads logs through it, not `for-project`.
+- **Never overwrite the owner.** D writes with `entity write --automatic`: a
+  Context/Sensitivities item whose label matches a bullet with no source
+  marker is skipped and reported (`skipped`), and the per-section
+  `<!-- unvalidated -->` marker stays. A reused label carries the bullet's
+  prior markers.
+- **Refusals never re-queue forever.** Retry once; then drop the refused
+  section, write the rest, `entity touch` anyway and report in `notes`.
+- **Stamp time.** `update-queue` returns `queuedAt`; D passes it as
+  `entity touch --timestamp`.
+- **Queue details.** An empty project queue still runs D. A meeting tagged
+  with both parent and team is the parent's own material, not team material.
+  A ticked note queues its entity only when a project queue entry carries it.
+  Entries carry `parent` / `parentName`; returns carry `entityName` /
+  `parentName`, and the summary lists only entities where something was
+  written ("Finance (Acme)" for a team). "At most 3 per run" is per section
+  per entity.
+
 ## Testing
 
 - **CLI:**

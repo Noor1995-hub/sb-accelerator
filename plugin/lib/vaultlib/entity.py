@@ -778,10 +778,38 @@ def _validate_items(edit_key: str, items: list) -> None:
 
 # --- writing --------------------------------------------------------------
 
-def write(root: Path, slug: str, edits: Mapping, today: str) -> dict:
+# The source marker an automatic line ends with (#273): `(meeting · …)`,
+# `(mail · …)`, `(chat · …)`, `(session · …)`, `(note · …)`. A labelled
+# bullet without one was written by the owner (or by /update-entity with the
+# owner in the loop), and an unattended run must never overwrite it.
+_SOURCE_MARKER_RE = re.compile(r"\((?:meeting|mail|chat|session|note) · .*\)\s*\Z")
+_BULLET_LABEL_RE = re.compile(r"- \*\*(.+?):\*\*")
+_LABEL_KEYS = {"context": "label", "sensitivities": "topic"}
+
+
+def _owner_bullet_labels(content: str) -> List[str]:
+    """Labels of the bullets in a labelled section that carry no source
+    marker — the owner's own points."""
+    labels = []
+    for line in _lines(content):
+        body = _body(line)
+        match = _BULLET_LABEL_RE.match(body)
+        if match and not _SOURCE_MARKER_RE.search(body):
+            labels.append(match.group(1))
+    return labels
+
+
+def write(root: Path, slug: str, edits: Mapping, today: str, *,
+          automatic: bool = False) -> dict:
     """Apply section edits to an existing dossier.
 
-    Returns `{"path", "changes", "repairs"}`. `repairs` is always present and
+    `automatic` is the unattended update (#273 section D): a Context or
+    Sensitivities item whose label matches a bullet with no source marker is
+    the owner's point and is skipped, never replaced — it is listed in
+    `skipped` and the rest is written. An automatic write also leaves each
+    section's `<!-- unvalidated -->` marker in place: nobody reviewed it.
+
+    Returns `{"path", "changes", "repairs", "skipped"}`. `repairs` is always present and
     empty for a clean file; each entry names the section and what was tidied up
     in the human's own content. The skill surfaces it, because a repair the
     user is not told about is indistinguishable from a bug they will find
@@ -834,6 +862,30 @@ def write(root: Path, slug: str, edits: Mapping, today: str) -> dict:
             "deleted or renamed section is the usual cause) and retry."
         )
 
+    skipped: List[str] = []
+    if automatic:
+        contents = dict(sections)
+        for key, label_key in _LABEL_KEYS.items():
+            if key not in active:
+                continue
+            owners = set(_owner_bullet_labels(contents[_SECTION_FOR_EDIT[key]]))
+            kept = []
+            for item in active[key]:
+                label = _text(item[label_key])
+                if label in owners:
+                    skipped.append(
+                        f"{key} '{label}': the owner's point (no source "
+                        "marker) — not replaced; use a new label")
+                else:
+                    kept.append(item)
+            if kept:
+                active[key] = kept
+            else:
+                del active[key]
+        if not active:
+            return {"path": path.relative_to(root).as_posix(), "changes": [],
+                    "repairs": [], "skipped": skipped}
+
     changes: List[str] = []
     repairs: List[str] = []
     updated: List[Tuple[str, str]] = []
@@ -846,9 +898,10 @@ def write(root: Path, slug: str, edits: Mapping, today: str) -> dict:
         merged, touched, notes = _MERGERS[edit_key](content, active[edit_key])
         repairs.extend(f"{title}: {note}" for note in notes)
         # A human supplied this content, so the section is no longer
-        # unvalidated.
-        merged = "\n".join(line for line in merged.split("\n")
-                           if _body(line) != UNVALIDATED)
+        # unvalidated — unless the write was automatic: nobody reviewed it.
+        if not automatic:
+            merged = "\n".join(line for line in merged.split("\n")
+                               if _body(line) != UNVALIDATED)
         updated.append((title, merged))
         changes.append(f"{title}: {touched} entr{'y' if touched == 1 else 'ies'}")
 
@@ -866,7 +919,7 @@ def write(root: Path, slug: str, edits: Mapping, today: str) -> dict:
                                               "last-updated", today)
     vault.atomic_write(path, rewritten)
     return {"path": path.relative_to(root).as_posix(), "changes": changes,
-            "repairs": repairs}
+            "repairs": repairs, "skipped": skipped}
 
 
 def validate(root: Path, slug: str, today: str) -> dict:

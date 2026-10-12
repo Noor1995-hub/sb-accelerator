@@ -218,13 +218,26 @@ def _index_sessions(root: Path) -> Tuple[List[dict], List[str]]:
 ENTITY_STATUSES = ("active", "prospect")
 
 
+ENTITY_FIRST_LOOKBACK_DAYS = 14
+
+
 def _entity_queue(root: Path, confirmed: List[dict], logs: List[dict],
                   sessions: List[dict], included: List[dict],
-                  warnings: List[str]) -> List[dict]:
+                  warnings: List[str], *, today: date,
+                  queued_notes: Set[str]) -> List[dict]:
     """Entities with material newer than their `entity-updated` stamp (#273
     piece 3). A team's own material queues the team in full and its active
     parent in parent mode, so the parent's history gets the team's big
-    events. Dormant entities are never queued."""
+    events. Dormant entities are never queued.
+
+    Without a usable stamp the first run is bounded: it reads back to the
+    `last-updated` day, but never further than ENTITY_FIRST_LOOKBACK_DAYS —
+    a dossier untouched for a year must not pull a year of material into one
+    unattended night. A ticked note counts only when a project queue entry
+    carries it (`queued_notes`), so a note no project could read never
+    queues its entity either."""
+    floor = datetime.combine(today - timedelta(days=ENTITY_FIRST_LOOKBACK_DAYS),
+                             time.min)
     project_entity: Dict[str, str] = {}
     projects_dir = root / PROJECTS_DIR
     for index_path in (sorted(projects_dir.glob("*/index.md")) if projects_dir.is_dir() else []):
@@ -236,6 +249,7 @@ def _entity_queue(root: Path, confirmed: List[dict], logs: List[dict],
             project_entity[str(data.get("slug") or index_path.parent.name)] = str(data["entity"])
 
     entities: Dict[str, dict] = {}
+    names: Dict[str, str] = {}   # every dossier, dormant ones too: a team's parent label
     folder = root / vault.ENTITIES_DIR
     for path in sorted(folder.glob("*/dossier.md")) if folder.is_dir() else []:
         rel = path.relative_to(root).as_posix()
@@ -244,19 +258,36 @@ def _entity_queue(root: Path, confirmed: List[dict], logs: List[dict],
         except (ValueError, OSError) as exc:
             warnings.append(f"{rel}: {exc}")
             continue
+        slug = str(data.get("slug") or path.parent.name)
+        names[slug] = str(data.get("entity-name") or slug)
         if str(data.get("status") or "") not in ENTITY_STATUSES:
             continue
-        slug = str(data.get("slug") or path.parent.name)
-        stamp = _parse_iso_datetime(data.get("entity-updated"))
+        raw_stamp = data.get("entity-updated")
+        stamp = _parse_iso_datetime(raw_stamp)
+        if raw_stamp is not None and stamp is None:
+            warnings.append(
+                f"{rel}: unparseable entity-updated {raw_stamp!r} — reading "
+                f"at most the last {ENTITY_FIRST_LOOKBACK_DAYS} days; rewrite "
+                "it as YYYY-MM-DDTHH:MM or delete it")
         if stamp is None:
             day = _parse_first_iso_date(data.get("last-updated"))
-            stamp = datetime.combine(day, time.min) if day else datetime.min
+            if day is None:
+                warnings.append(
+                    f"{rel}: unparseable last-updated "
+                    f"{data.get('last-updated')!r} and no entity-updated — "
+                    f"reading the last {ENTITY_FIRST_LOOKBACK_DAYS} days")
+                stamp = floor
+            else:
+                stamp = max(datetime.combine(day, time.min), floor)
         entities[slug] = {"slug": slug, "dossierPath": rel,
                           "entityName": str(data.get("entity-name") or slug),
                           "entityUpdated": (str(data.get("entity-updated"))
                                             if data.get("entity-updated") else None),
                           "parent": str(data.get("parent") or "") or None,
                           "threshold": stamp}
+    for info in entities.values():
+        parent = info["parent"]
+        info["parentName"] = names.get(parent) if parent else None
 
     def of(slugs) -> Set[str]:
         return {project_entity[p] for p in slugs if p in project_entity}
@@ -273,7 +304,8 @@ def _entity_queue(root: Path, confirmed: List[dict], logs: List[dict],
         new_sessions = [x["path"] for x in sessions
                         if x["updated"] is not None and x["updated"] >= threshold
                         and slug in of(x["projects"])]
-        new_notes = [n["path"] for n in included if slug in of(n["projects"])]
+        new_notes = [n["path"] for n in included if n["path"] in queued_notes
+                     and slug in of(n["projects"])]
         if files or new_logs or new_sessions or new_notes:
             own[slug] = {"newFiles": files, "newLogs": new_logs,
                          "newSessions": new_sessions, "newNotes": new_notes}
@@ -287,17 +319,27 @@ def _entity_queue(root: Path, confirmed: List[dict], logs: List[dict],
             queue[slug] = {"slug": slug, "dossierPath": info["dossierPath"],
                            "entityName": info["entityName"],
                            "entityUpdated": info["entityUpdated"],
+                           "parent": info["parent"],
+                           "parentName": info["parentName"],
                            "parentMode": slug not in own, **material, "teamFiles": []}
         return queue[slug]
 
+    empty = {"newFiles": [], "newLogs": [], "newSessions": [], "newNotes": []}
     for slug in own:
         entry(slug)
         parent = entities[slug]["parent"]
-        if parent and parent in entities:
+        if not (parent and parent in entities):
+            continue
+        # Material tagged with the parent too is already the parent's own and
+        # is read in full; listing it again as team material would have the
+        # parent read it twice and write its big events twice.
+        mine, theirs = own[slug], own.get(parent, empty)
+        team = {key: [x for x in mine[src] if x not in theirs[src]]
+                for key, src in (("files", "newFiles"), ("logs", "newLogs"),
+                                 ("sessions", "newSessions"), ("notes", "newNotes"))}
+        if any(team.values()):
             entry(parent)["teamFiles"].append({
-                "team": slug, "teamName": entities[slug]["entityName"],
-                "files": own[slug]["newFiles"], "logs": own[slug]["newLogs"],
-                "sessions": own[slug]["newSessions"], "notes": own[slug]["newNotes"]})
+                "team": slug, "teamName": entities[slug]["entityName"], **team})
     return [queue[slug] for slug in sorted(queue)]
 
 
@@ -599,9 +641,15 @@ def run(root: Path, today: str, owner: str) -> dict:
     queued_notes = {path for entry in queue for path in entry["newNotes"]}
     not_queued = [n["path"] for n in included
                   if n["projects"] and n["path"] not in queued_notes]
-    entities_queue = _entity_queue(root, confirmed, logs, sessions, included, warnings)
+    entities_queue = _entity_queue(root, confirmed, logs, sessions, included,
+                                   warnings, today=today_date,
+                                   queued_notes=queued_notes)
     return {
         "today": today_date.isoformat(),
+        # The minute this queue was built. Section D stamps `entity-updated`
+        # with it, not with its own later clock, so material that lands while
+        # the run is in flight is still newer than the stamp next time.
+        "queuedAt": datetime.now().isoformat(timespec="minutes"),
         "owner": owner_slug,
         "meetingsIndexed": len(meetings),
         "confirmedMeetings": len(confirmed),

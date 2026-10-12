@@ -990,3 +990,63 @@ def test_touch_refuses_a_bad_timestamp_and_defaults_to_now(tmp_path):
         entity.touch(root, "acme", timestamp="12/10 21h")
     stamped = entity.touch(root, "acme")["entity-updated"]
     assert re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}", stamped)
+
+
+# --- #273 final review: an automatic write never overwrites the owner ------
+
+def test_automatic_write_cannot_replace_an_owner_bullet(tmp_path):
+    root = seeded(tmp_path)
+    entity.write(root, "meridian-freight-holdings", {"context": [
+        {"label": "Size", "fact": "1,200 staff", "why": "scale"}],
+        "sensitivities": [{"topic": "Union", "detail": "strike in 2024",
+                           "implications": "avoid headcount talk"}]}, TODAY)
+    result = entity.write(root, "meridian-freight-holdings", {"context": [
+        {"label": "Size", "fact": "1,400 staff", "why": "scale (meeting · [[12-10-26-steerco]])"}],
+        "sensitivities": [{"topic": "Union", "detail": "calm now",
+                           "implications": "fine (mail · [[_messages/2026-10-12-messages|12 Oct]])"}]},
+        TODAY, automatic=True)
+    sections = entity.read(root, "meridian-freight-holdings")["sections"]
+    assert "1,200 staff" in sections["Context"] and "1,400 staff" not in sections["Context"]
+    assert "strike in 2024" in sections["Sensitivities"] and "calm now" not in sections["Sensitivities"]
+    assert len(result["skipped"]) == 2
+    assert any("Size" in s for s in result["skipped"]) and any("Union" in s for s in result["skipped"])
+
+
+def test_automatic_write_can_replace_an_automatic_bullet(tmp_path):
+    root = seeded(tmp_path)
+    entity.write(root, "meridian-freight-holdings", {"context": [
+        {"label": "Size", "fact": "1,200 staff",
+         "why": "scale (meeting · [[01-10-26-kickoff]])"}]}, TODAY, automatic=True)
+    result = entity.write(root, "meridian-freight-holdings", {"context": [
+        {"label": "Size", "fact": "1,400 staff",
+         "why": "scale (meeting · [[01-10-26-kickoff]]) (meeting · [[12-10-26-steerco]])"}]},
+        TODAY, automatic=True)
+    text = entity.read(root, "meridian-freight-holdings")["sections"]["Context"]
+    assert text.count("**Size:**") == 1 and "1,400 staff" in text
+    assert result["skipped"] == []
+
+
+def test_automatic_write_keeps_the_unvalidated_marker(tmp_path):
+    root = seeded(tmp_path)
+    entity.write(root, "meridian-freight-holdings", {"context": [
+        {"label": "Industry", "fact": "freight",
+         "why": "scope (meeting · [[12-10-26-steerco]])"}]}, TODAY, automatic=True)
+    assert "Context" in entity.read(root, "meridian-freight-holdings")["unvalidated"]
+
+
+def test_cli_entity_write_automatic_flag(tmp_path):
+    import json, subprocess, sys
+    from pathlib import Path
+    root = seeded(tmp_path)
+    entity.write(root, "meridian-freight-holdings", {"context": [
+        {"label": "Size", "fact": "1,200 staff", "why": "scale"}]}, TODAY)
+    edits = tmp_path / "edits.json"
+    edits.write_text(json.dumps({"context": [
+        {"label": "Size", "fact": "1,400 staff", "why": "scale (meeting · [[x]])"}]}), encoding="utf-8")
+    cli = Path(__file__).resolve().parents[2] / "plugin" / "lib" / "vaultlib" / "cli.py"
+    out = subprocess.run([sys.executable, str(cli), "entity", "write", "--vault", str(root),
+                          "--slug", "meridian-freight-holdings", "--edits", str(edits),
+                          "--automatic", "--today", TODAY],
+                         capture_output=True, text=True, encoding="utf-8")
+    payload = json.loads(out.stdout)
+    assert payload["ok"] and payload["result"]["skipped"], out.stdout + out.stderr

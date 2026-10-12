@@ -681,3 +681,49 @@ def test_day_log_readers_ignore_session_records(tmp_path):
     folder.mkdir(parents=True)
     (folder / "2026-10-12-x.md").write_text("---\ntype: session\n---\n", encoding="utf-8")
     assert msglog._logs(root) == []
+
+
+def _set_group(root, *, projects=(), weak=(), entities=()):
+    path = root / "_messages" / "2026-09-30-messages.md"
+    loaded = msglog.load_log(path)
+    group = loaded["data"]["groups"][0]
+    group.update(projects=list(projects), projects_weak=list(weak), entities=list(entities))
+    msglog._resave(root, path, loaded["data"], loaded["frontmatter"])
+
+
+def _project(root, slug, entity):
+    folder = root / "30-projects" / slug
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / "index.md").write_text(
+        f"---\ntype: project\nslug: {slug}\nentity: {entity}\nstatus: active\n---\n", encoding="utf-8")
+
+
+def test_for_entity_returns_a_group_tagged_with_the_entity_and_no_project(env):
+    """#273: entity-only mail must reach the entity's update."""
+    root = written_log(env)
+    _set_group(root, entities=["acme"])
+    [got] = msglog.for_entity(root, slug="acme", logs=["2026-09-30-messages"])
+    assert got["link"] == "[[_messages/2026-09-30-messages|30 Sep]]" and got["kind"] == "mail"
+    assert msglog.for_entity(root, slug="globex", logs=["2026-09-30-messages"]) == []
+
+
+def test_for_entity_returns_a_group_linked_through_a_project_of_the_entity(env):
+    root = written_log(env)
+    _project(root, "acme-erp", "acme")
+    _set_group(root, projects=["acme-erp"])
+    assert len(msglog.for_entity(root, slug="acme", logs=["2026-09-30-messages"])) == 1
+    _set_group(root, projects=["acme-erp"], weak=["acme-erp"])
+    assert msglog.for_entity(root, slug="acme", logs=["2026-09-30-messages"]) == []
+
+
+def test_cli_messages_for_entity(env):
+    import subprocess, sys
+    from pathlib import Path
+    root = written_log(env)
+    _set_group(root, entities=["acme"])
+    cli = Path(__file__).resolve().parents[2] / "plugin" / "lib" / "vaultlib" / "cli.py"
+    out = subprocess.run([sys.executable, str(cli), "messages", "for-entity", "--vault", str(root),
+                          "--slug", "acme", "--logs", "2026-09-30-messages"],
+                         capture_output=True, text=True, encoding="utf-8")
+    payload = json.loads(out.stdout)
+    assert payload["ok"] and len(payload["result"]["groups"]) == 1, out.stderr

@@ -1473,7 +1473,7 @@ Summarize from disk, then `scratch sweep`:
 **Meetings:** {N} accepted · {N} dismissed · {N} changed · {N} left in triage
 **Your notes:** {N} absorbed ({titles}) · {N} kept for tonight ({why})
 **Project pages rewritten:** {project names}
-**Entity pages updated:** {names} | none
+**Entity pages updated:** {names, a team as "Finance (Acme)"} | none
 **Decisions:** {N} kept · {N} dismissed · {N} left in Decisions › To review
 **Not done now:** mail and Teams, and tomorrow's daily note — tonight's run
 **Warnings:** {verbatim, `sync_notes` lines included} | none

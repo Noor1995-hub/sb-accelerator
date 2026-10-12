@@ -1073,3 +1073,92 @@ def test_unconfirmed_meetings_and_note_captures_do_not_queue(tmp_path):
                   review_status="needs-review")
     write_meeting(root, "n1", date_value="2026-10-12T10:00", entities=["acme"], type_value="note")
     assert entity_queue(root) == {}
+
+
+# --- #273 final review: bounded, exact entity queue ------------------------
+
+def test_first_run_without_a_stamp_looks_back_at_most_14_days(tmp_path):
+    root = make_vault(tmp_path)
+    write_entity(root, "acme", "Acme", last_updated="2025-10-01")
+    write_meeting(root, "old", date_value="2026-09-20T10:00", entities=["acme"])
+    write_meeting(root, "recent", date_value="2026-10-05T10:00", entities=["acme"])
+    assert entity_queue(root)["acme"]["newFiles"] == ["20-meetings/recent.md"]
+
+
+def test_unparseable_last_updated_warns_and_uses_the_14_day_window(tmp_path):
+    root = make_vault(tmp_path)
+    write_entity(root, "acme", "Acme", last_updated="someday")
+    write_meeting(root, "old", date_value="2026-09-20T10:00", entities=["acme"])
+    write_meeting(root, "recent", date_value="2026-10-05T10:00", entities=["acme"])
+    result = updatequeue.run(root, "2026-10-12", "owner-morgan")
+    [entry] = result["entitiesNeedingUpdate"]
+    assert entry["newFiles"] == ["20-meetings/recent.md"]
+    assert [w for w in result["warnings"]
+            if "40-entities/acme/dossier.md" in w and "last-updated" in w]
+
+
+def test_unparseable_entity_updated_warns_and_falls_back(tmp_path):
+    root = make_vault(tmp_path)
+    write_entity(root, "acme", "Acme", last_updated="2025-10-01",
+                 entity_updated="yesterday-ish")
+    write_meeting(root, "old", date_value="2026-09-20T10:00", entities=["acme"])
+    write_meeting(root, "recent", date_value="2026-10-05T10:00", entities=["acme"])
+    result = updatequeue.run(root, "2026-10-12", "owner-morgan")
+    assert result["entitiesNeedingUpdate"][0]["newFiles"] == ["20-meetings/recent.md"]
+    assert [w for w in result["warnings"]
+            if "40-entities/acme/dossier.md" in w and "entity-updated" in w]
+
+
+def test_a_meeting_tagged_with_parent_and_team_is_not_team_material_for_the_parent(tmp_path):
+    root = make_vault(tmp_path)
+    write_entity(root, "acme", "Acme", entity_updated="2026-10-12T09:00")
+    write_entity(root, "acme-finance", "Finance", parent="acme", entity_updated="2026-10-12T09:00")
+    write_meeting(root, "both", date_value="2026-10-12T10:00", entities=["acme", "acme-finance"])
+    write_meeting(root, "team", date_value="2026-10-12T11:00", entities=["acme-finance"])
+    parent = entity_queue(root)["acme"]
+    assert parent["newFiles"] == ["20-meetings/both.md"]
+    assert [t["files"] for t in parent["teamFiles"]] == [["20-meetings/team.md"]]
+
+
+def test_team_material_fully_covered_by_the_parent_leaves_no_team_item(tmp_path):
+    root = make_vault(tmp_path)
+    write_entity(root, "acme", "Acme", entity_updated="2026-10-12T09:00")
+    write_entity(root, "acme-finance", "Finance", parent="acme", entity_updated="2026-10-12T09:00")
+    write_meeting(root, "both", date_value="2026-10-12T10:00", entities=["acme", "acme-finance"])
+    parent = entity_queue(root)["acme"]
+    assert parent["teamFiles"] == [] and parent["parentMode"] is False
+
+
+def test_a_ticked_note_no_project_queue_carries_does_not_queue_its_entity(tmp_path):
+    root = make_vault(tmp_path)
+    write_entity(root, "acme", "Acme", entity_updated="2026-10-12T09:00")
+    write_project(root, "acme-crm", last_updated="someday")       # entity: acme
+    write_owner_note(root, "stuck.md", "include: true\nprojects: [acme-crm]\n")
+    result = updatequeue.run(root, "2026-10-12", "owner-morgan")
+    assert result["notesNotQueued"] == ["80-thoughts-ideas/stuck.md"]
+    assert result["entitiesNeedingUpdate"] == []
+
+
+def test_a_note_a_project_queue_carries_queues_its_entity(tmp_path):
+    root = make_vault(tmp_path)
+    write_entity(root, "acme", "Acme", entity_updated="2026-10-12T09:00")
+    write_project(root, "acme-crm", last_updated="2026-10-12",
+                  state_updated="2026-10-12T09:00")
+    write_owner_note(root, "idea.md", "include: true\nprojects: [acme-crm]\n")
+    assert entity_queue(root)["acme"]["newNotes"] == ["80-thoughts-ideas/idea.md"]
+
+
+def test_the_result_carries_the_minute_the_queue_was_built(tmp_path):
+    root = make_vault(tmp_path)
+    result = updatequeue.run(root, "2026-10-12", "owner-morgan")
+    assert re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}", result["queuedAt"])
+
+
+def test_entries_name_their_parent(tmp_path):
+    root = make_vault(tmp_path)
+    write_entity(root, "acme", "Acme", entity_updated="2026-10-12T09:00")
+    write_entity(root, "acme-finance", "Finance", parent="acme", entity_updated="2026-10-12T09:00")
+    write_meeting(root, "m1", date_value="2026-10-12T10:00", entities=["acme-finance"])
+    queue = entity_queue(root)
+    assert (queue["acme-finance"]["parent"], queue["acme-finance"]["parentName"]) == ("acme", "Acme")
+    assert (queue["acme"]["parent"], queue["acme"]["parentName"]) == (None, None)

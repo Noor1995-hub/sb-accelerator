@@ -244,7 +244,7 @@ skip to step 8. Ask once **"Keep or dismiss?"**, and run
 ## Added
 **What:** Meeting · Acme ERP rollout · "Forecast call moves to Thursday"  (or Session · …)
 **Project pages updated:** {names}
-**Entity pages updated:** {names} | none
+**Entity pages updated:** {names, a team as "Finance (Acme)"} | none
 **Decisions:** {N} kept · {N} dismissed · {N} left in Decisions › To review
 **Warnings:** {verbatim} | none
 ```

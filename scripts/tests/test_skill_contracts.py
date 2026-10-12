@@ -2625,3 +2625,56 @@ def test_on_demand_runs_release_the_lock_after_entity_updates():
 def test_summaries_list_entity_pages_updated():
     for skill in ("evening-sync", "sync-recordings", "add"):
         assert "Entity pages updated" in read_skill(skill), skill
+
+
+def _process_d():
+    text = read_ref("evening-sync", "process.md")
+    return " ".join(text.split("## D. Entity updates", 1)[1].split("## Returns", 1)[0].split())
+
+
+def test_an_empty_project_queue_still_goes_to_entity_updates():
+    """#273 review I1: C's empty-queue branch must not skip D."""
+    c = read_ref("evening-sync", "process.md").split("## C. Project-state updates", 1)[1]
+    sentence = " ".join(c.split("If the queue is empty", 1)[1].split("Otherwise", 1)[0].split())
+    assert "section D" in sentence and "caller's next step" not in sentence
+
+
+def test_entity_updates_read_entity_mail_through_for_entity():
+    d = _process_d()
+    assert "messages for-entity" in d and "messages for-project" not in d
+    assert "read the log notes" not in d
+
+
+def test_a_refused_entity_write_is_dropped_and_the_entity_still_touched():
+    """#273 review I4: a deterministic refusal must not re-queue forever."""
+    d = _process_d()
+    assert "drop the refused section" in d and "write the rest" in d
+    assert "`entity touch` anyway" in d and "notes" in d
+    assert "at most 8 points" in d
+    assert "no `entity touch`" not in d
+
+
+def test_entity_updates_never_overwrite_the_owner():
+    d = _process_d()
+    assert "--automatic" in d
+    assert "never reused" in d and "prior markers" in d
+
+
+def test_entity_updates_stamp_with_the_queue_time():
+    d = _process_d()
+    assert "--timestamp <queuedAt>" in d
+    text = read_ref("evening-sync", "process.md")
+    assert "queuedAt" in text.split("## B. Refresh", 1)[1].split("## C.", 1)[0]
+
+
+def test_entity_updates_read_project_stages_and_cap_per_section_per_entity():
+    d = _process_d()
+    assert "`stage`" in d and "per section per entity" in d
+
+
+def test_entity_inputs_and_returns_are_accurate():
+    text = read_ref("evening-sync", "process.md")
+    assert "for the entities of what was just processed" not in text
+    returns = text.split("## Returns", 1)[1]
+    assert "entityName" in returns and "parentName" in returns
+    assert "Finance (Acme)" in returns

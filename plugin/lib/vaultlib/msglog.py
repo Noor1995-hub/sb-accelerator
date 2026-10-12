@@ -406,7 +406,7 @@ def _short_date(day: str) -> str:
     return date.fromisoformat(day).strftime("%d %b").lstrip("0")
 
 
-def for_project(root: Path, *, slug: str, logs: List[str]) -> List[dict]:
+def _groups(root: Path, logs: List[str], wanted) -> List[dict]:
     out = []
     for stem in logs:
         try:
@@ -414,11 +414,38 @@ def for_project(root: Path, *, slug: str, logs: List[str]) -> List[dict]:
         except (MessagesError, OSError):
             continue
         for g in data["groups"]:
-            if slug in _strong(g) and g["points"]:
+            if wanted(g) and g["points"]:
                 out.append({"log": stem, "gid": g["gid"], "label": g["label"], "kind": g["kind"],
                             "people": g["people"], "points": [p["text"] for p in g["points"]],
                             "link": f"[[{vault.MESSAGES_DIR}/{stem}|{_short_date(data['date'])}]]"})
     return out
+
+
+def for_project(root: Path, *, slug: str, logs: List[str]) -> List[dict]:
+    return _groups(root, logs, lambda g: slug in _strong(g))
+
+
+def _project_entities(root: Path) -> Dict[str, str]:
+    """Project slug → its `entity`, from every project index."""
+    out: Dict[str, str] = {}
+    folder = root / vault.PROJECTS_DIR
+    for index in sorted(folder.glob("*/index.md")) if folder.is_dir() else []:
+        try:
+            fm, _ = markdown.split_frontmatter(index.read_text(encoding="utf-8"))
+        except (ValueError, OSError):
+            continue
+        if fm.get("entity"):
+            out[str(fm.get("slug") or index.parent.name)] = str(fm["entity"])
+    return out
+
+
+def for_entity(root: Path, *, slug: str, logs: List[str]) -> List[dict]:
+    """An entity's groups (#273): tagged with the entity itself, or strongly
+    linked to one of its projects. Same shape as for_project, so mail about
+    an organisation that has no project yet still reaches its page."""
+    project_entity = _project_entities(root)
+    return _groups(root, logs, lambda g: slug in (g.get("entities") or [])
+                   or any(project_entity.get(p) == slug for p in _strong(g)))
 
 
 _CODE_RE = re.compile(r"\b(?:[A-Z]{1,5}-?\d{2,}|\d{2,}-[A-Z]{1,5})\b")

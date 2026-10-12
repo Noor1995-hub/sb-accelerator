@@ -287,6 +287,10 @@ def build_parser() -> argparse.ArgumentParser:
     ent_write.add_argument("--edits", required=True,
                            help="path to a JSON file, or - to read stdin")
     ent_write.add_argument("--today", help="ISO date; defaults to today")
+    ent_write.add_argument(
+        "--automatic", action="store_true",
+        help="the unattended update: never replace a bullet without a source "
+             "marker (skipped and reported) and keep the unvalidated markers")
 
     decisions = top.add_parser("decision", help="decision notes")
     decisions_sub = decisions.add_subparsers(dest="action", required=True)
@@ -938,6 +942,12 @@ def build_parser() -> argparse.ArgumentParser:
     m_for_project.add_argument("--slug", required=True)
     m_for_project.add_argument("--logs", required=True, help="comma-separated log stems")
 
+    m_for_entity = messages_sub.add_parser(
+        "for-entity", help="an entity's groups: tagged with it, or strongly linked to one of its projects")
+    _add_vault_argument(m_for_entity)
+    m_for_entity.add_argument("--slug", required=True)
+    m_for_entity.add_argument("--logs", required=True, help="comma-separated log stems")
+
     m_propose = messages_sub.add_parser("keywords-propose", help="at most one keyword proposal a week")
     _add_vault_argument(m_propose)
     m_propose.add_argument("--today")
@@ -1098,6 +1108,9 @@ def _dispatch(args: argparse.Namespace) -> int:
         if args.action == "for-project":
             stems = [s.strip() for s in args.logs.split(",") if s.strip()]
             return _ok({"groups": msglog.for_project(root, slug=args.slug, logs=stems)})
+        if args.action == "for-entity":
+            stems = [s.strip() for s in args.logs.split(",") if s.strip()]
+            return _ok({"groups": msglog.for_entity(root, slug=args.slug, logs=stems)})
         if args.action == "keywords-propose":
             return _ok({"proposal": msglog.keywords_propose(root, today=vault.today_iso(args.today))})
         if args.action == "check-lines":
@@ -1155,7 +1168,8 @@ def _dispatch(args: argparse.Namespace) -> int:
         payload = (json.load(sys.stdin) if args.edits == "-"
                    else json.loads(Path(args.edits).read_text(encoding="utf-8")))
         return _ok(entity.write(root, args.slug, payload,
-                                vault.today_iso(args.today)))
+                                vault.today_iso(args.today),
+                                automatic=args.automatic))
     if args.group == "decision":
         if args.action == "list":
             return _ok(decision.list_decisions(root, args.project))

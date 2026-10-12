@@ -13,7 +13,7 @@ Followed by `/evening-sync` (after stage 3b), and on demand by `/sync-recordings
 | Mail and Teams | evening stage 3b runs first | not read; `update-queue` still sees any log already on disk that is newer than a project's last state write |
 | Session records from `/add` | yes, when newer than the project's last state write | yes |
 | Project-state updates and decisions (C) | yes | yes |
-| Entity updates (D) | yes | yes — for the entities of what was just processed |
+| Entity updates (D) | yes | yes — every entity with new material since its last update, not only the entities of what was just processed |
 | `today` and the owner slug | stage 1 (`dates plan`, `config read`) | `today` from `dates plan`, `owner` from `config read` — step 9 |
 | `sync_notes` lines (A, C) | the recap | the caller's summary Warnings line — there is no recap |
 
@@ -73,13 +73,14 @@ entry carries `indexPath`, `decisionsDir`, `lastUpdated`, `stateUpdated`,
 `newFiles`, `newNotes` (owner notes ticked Include that belong to the project), and the `existingDecisions` projection. Next to the queue it returns
 `notesNotQueued`: harvested notes with projects that no queue entry carries
 (their project could not be queued) — the write-back in section C never marks
-them. Carry `warnings` — especially `SELF-CHECK`
+them. It also returns `entitiesNeedingUpdate` (section D) and `queuedAt`, the
+minute the queue was built (`YYYY-MM-DDTHH:MM`); keep it for D. Carry `warnings` — especially `SELF-CHECK`
 lines — into the final summary verbatim.
 
 ## C. Project-state updates
 
 If the queue is empty, record "no projects to update", run the write-back for
-your notes below (evening: a note with no project is still marked; on demand it stays ticked — see below), then go to the caller's next step (evening: stage 6, the recap; on demand: the caller's decisions step).
+your notes below (evening: a note with no project is still marked; on demand it stays ticked — see below), then go to section D — an entity can have new material when no project does.
 Otherwise, dispatch one subagent per queued project (each with `model:
 sonnet`), each carrying the queue entry, the harvest jottings (evening only; on demand there are none) that mention
 the project, today's date, and these instructions.
@@ -242,24 +243,30 @@ is not an error.
 After every section C batch has returned (D reads the projects' fresh
 "Where it stands"). `update-queue`'s result from B carries
 `entitiesNeedingUpdate`: one entry per active or prospect entity with
-material newer than its `entity-updated` stamp — `slug`, `dossierPath`,
-`entityName`, `newFiles` (meetings), `newLogs`, `newSessions`, `newNotes`,
-`parentMode` and `teamFiles` (a team's material, for its parent). Empty →
-record "no entity pages to update" and go on.
+material newer than its `entity-updated` stamp (on a first run, at most the
+last 14 days) — `slug`, `dossierPath`, `entityName`, `parent` and
+`parentName` (a team's parent, else null), `newFiles` (meetings), `newLogs`,
+`newSessions`, `newNotes`, `parentMode` and `teamFiles` (a team's material,
+for its parent). Empty → record "no entity pages to update" and go on.
 
 Otherwise dispatch one subagent per entry (`model: sonnet`), in the same
 blocking batches of at most 3 as section C — the rule written there applies
 here unchanged, including its reasons. There is no cap on the number of
-entries. Each subagent carries its entry, today's date and these instructions:
+entries. Each subagent carries its entry, today's date, B's `queuedAt` and
+these instructions:
 
 1. Read the new material end to end: the meetings (Key Takeaways, Debrief,
    Action items), the log groups via
-   `python3 "$VAULTLIB" messages for-project --vault "$VAULT" --slug <a project of this entity> --logs <newLogs>`
-   (or read the log notes when the entity has no project), the session
-   records, the notes. Read the dossier as it stands:
-   `python3 "$VAULTLIB" entity read --vault "$VAULT" --slug <slug>`.
+   `python3 "$VAULTLIB" messages for-entity --vault "$VAULT" --slug <slug> --logs <comma-separated newLogs>`
+   (it returns the groups tagged with this entity or strongly linked to one
+   of its projects, each with its `link` and `kind`; for `teamFiles` run it
+   with the team's slug and its `logs`), the session records, the notes.
+   Read the dossier as it stands:
+   `python3 "$VAULTLIB" entity read --vault "$VAULT" --slug <slug>`, and the
+   `stage` of the entity's projects (its Engagements) from their `index.md`.
 2. Decide what changes, per section — writing nothing is a valid outcome,
-   and nothing is ever invented:
+   and nothing is ever invented. "At most 3 per run" is per section per
+   entity: the entity's own material and its team material together.
    - **Relationship History** (`relationship_history`: date, what,
      significance): dated events that matter for the relationship — a
      milestone, a decision, an escalation, a contract, a key person
@@ -267,37 +274,52 @@ entries. Each subagent carries its entry, today's date and these instructions:
    - **Dynamics** (`meeting_log`: date, topic, dynamics): how the
      relationship feels, one line per real signal. At most 3 per run.
    - **Context** (`context`: label, fact, why): standing facts about the
-     organisation. Reuse an existing label when it is the same topic, so the
-     point is updated, not repeated.
+     organisation. Context holds at most 8 points — when full, update an
+     existing automatic point rather than add one.
    - **Sensitivities** (`sensitivities`: topic, detail, implications): what
-     to handle with care. Same label rule.
+     to handle with care.
+   - **Reusing a label** (Context, Sensitivities) replaces that point, so it
+     is allowed ONLY for a bullet that already ends in an automatic source
+     marker — `(meeting · …)`, `(mail · …)`, `(chat · …)`, `(session · …)`,
+     `(note · …)` — and the new text carries that bullet's prior markers
+     next to the new one. A bullet without a marker is the owner's and its
+     label is never reused: add a new label instead. `entity write
+     --automatic` enforces this: it skips such an item and lists it in
+     `skipped`.
    - **`parentMode` true** (the entry has only `teamFiles`): only
      Relationship History, only big events from the team's material. When
      the entry has its own material too, handle that in full and the
      `teamFiles` the same parent-mode way.
 3. Every item ends with its source marker, in the field that renders last
    (`why`, `significance`, `dynamics`, `implications`): `(meeting · [[<meeting stem>]])`,
-   `(mail · <link>)` or `(chat · <link>)` (the group's `link`),
+   `(mail · <link>)` or `(chat · <link>)` (the group's `link`, `mail` or
+   `chat` per its `kind`),
    `(session · [[<path without .md>|<title>]])`, `(note · <note title>)`.
    Team material on a parent page puts `(<team name> team)` before the
    marker.
-4. Write, then stamp — also when nothing was worth writing, so the same
-   material is not read again:
+4. Write, then stamp with B's `queuedAt` — also when nothing was worth
+   writing, so the same material is not read again:
 
 ```bash
 cat > "$SCRATCH/entity-edits-<slug>.payload.json" <<'JSON'
 {"relationship_history": [{"date": "2026-10-12", "what": "…", "significance": "… (meeting · [[12-10-26-steerco]])"}]}
 JSON
-python3 "$VAULTLIB" entity write --vault "$VAULT" --slug <slug> --edits "$SCRATCH/entity-edits-<slug>.payload.json"
-python3 "$VAULTLIB" entity touch --vault "$VAULT" --slug <slug>
+python3 "$VAULTLIB" entity write --vault "$VAULT" --slug <slug> --automatic --edits "$SCRATCH/entity-edits-<slug>.payload.json"
+python3 "$VAULTLIB" entity touch --vault "$VAULT" --slug <slug> --timestamp <queuedAt>
 ```
 
    Skip `entity write` when there is nothing to write; `entity touch`
-   always runs. A refusal names the field: fix it and retry once.
-5. Return a fenced JSON block: `{"slug", "written": {"relationship_history":
-   N, "meeting_log": N, "context": N, "sensitivities": N}, "notes"}`. A
-   subagent that fails or returns no block becomes a warning, not a retry —
-   its entity stays queued for the next run (no `entity touch`).
+   always runs. On a refusal (it names the field), fix it and retry once.
+   If it still fails, drop the refused section and write the rest; then run
+   `entity touch` anyway and report what was skipped in `notes`, so a
+   refusal never re-queues the same material night after night. Items the
+   write lists in `skipped` go to `notes` too.
+5. Return a fenced JSON block: `{"slug", "entityName", "parentName",
+   "written": {"relationship_history": N, "meeting_log": N, "context": N,
+   "sensitivities": N}, "notes"}`. A subagent that fails before it reaches
+   `entity touch`, or returns no block, becomes a warning, not a retry —
+   its entity stays queued for the next run. A refused write is not such a
+   failure: step 4 covers it.
 
 ## Returns
 
@@ -310,5 +332,5 @@ What the caller carries into its summary:
 - notes absorbed — `{path, projects}` for each note whose `mark-absorbed` returned `marked`
 - notes kept (`include` still ticked), each with why, including `notesNotQueued`
 - `sync_notes` lines from A and C — kept apart from warnings
-- `entitiesUpdated`: `[{slug, written}]` from D (names for the summary's **Entity pages updated** line)
+- `entitiesUpdated`: `[{slug, entityName, parentName, written}]` from D. The summary's **Entity pages updated** line lists only the entities where something was written, by name, a team with its parent: "Finance (Acme)"
 - warnings, verbatim, including `SELF-CHECK` lines
