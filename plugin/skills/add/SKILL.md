@@ -81,8 +81,11 @@ Decide, from the content:
   (context, not a meeting) for text. A conversation with Claude is always a
   **session**.
 - **projects**: zero or more active projects, matched on project names,
-  `keywords`, entity names and the people involved. Use the routing digest
-  (`sync routing-signals`) as `/sync-recordings` step 3 does.
+  entity names and the people involved. Use the routing digest
+  (`sync routing-signals`) as `/sync-recordings` step 3 does. **A session
+  needs at least one active project**: with none, it would be stored and
+  never shown anywhere. If none fits, ask which project it belongs to, or
+  offer `/new-project` first; if the owner wants no project, do not add it.
 - **entities**: for an item with no project that is still about an entity,
   decide it as `/sync-recordings` step 3 does (passed in step 5 only when
   `projects` is empty).
@@ -110,7 +113,10 @@ Session · Acme ERP rollout · "Pricing approach for Acme"
 - Time and material after go-live
 ```
 
-Anything you left out under rule 5: say so in one short line under it. A
+Anything you left out under rule 5: say so in one short line under it. For a
+file already in `10-inbox/` (processed in place), the original keeps what it
+holds: if it contains something rule 5 forbids, say so and ask the owner to
+remove it from the file first. A
 correction from the owner → show the line again. No → write nothing, end.
 
 ### 5. Write
@@ -136,8 +142,9 @@ New people the owner confirmed: `person ensure` as
 `${CLAUDE_PLUGIN_ROOT}/skills/sync-recordings/SKILL.md` step 3 does.
 
 **Text or a file.** First write it to `10-inbox/<today>-<short-kebab-title>.md`
-(the text as given; the name uses a–z, 0–9 and hyphens only, and if it exists
-add `-2`, `-3`), with the owner's intent on the first line:
+(the text as given, minus anything rule 5 leaves out — named on the step-4
+line; the name uses a–z, 0–9 and hyphens only, and if it exists add `-2`,
+`-3`), with the owner's intent on the first line:
 
 ```markdown
 <!-- added with /add on <today>: "<the owner's words: what it is, for which project>" -->

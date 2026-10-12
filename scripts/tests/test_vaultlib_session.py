@@ -37,7 +37,7 @@ def payload(**over):
 def test_writes_a_hidden_session_record(tmp_path):
     root = make_vault(tmp_path)
     result = session.write(root, payload(), now=NOW)
-    assert result["path"] == "_messages/sessions/2026-10-12-pricing-approach-for-acme.md"
+    assert result["path"] == "_messages/sessions/2026-10-12-session-pricing-approach-for-acme.md"
     text = (root / result["path"]).read_text(encoding="utf-8")
     data, body = markdown.split_frontmatter(text)
     assert data["type"] == "session"
@@ -52,7 +52,7 @@ def test_same_title_same_day_gets_a_suffix(tmp_path):
     root = make_vault(tmp_path)
     first = session.write(root, payload(), now=NOW)
     second = session.write(root, payload(summary=["Other point"]), now=NOW)
-    assert second["stem"] == "2026-10-12-pricing-approach-for-acme-2"
+    assert second["stem"] == "2026-10-12-session-pricing-approach-for-acme-2"
     assert "Fixed price" in (root / first["path"]).read_text(encoding="utf-8")
 
 
@@ -94,4 +94,34 @@ def test_cli_round_trip(tmp_path):
         [sys.executable, str(CLI), "session", "write", "--vault", str(root),
          "--note", str(note), "--now", "2026-10-12T15:42"],
         capture_output=True, text=True, check=True).stdout)
-    assert out["ok"] and out["result"]["stem"] == "2026-10-12-pricing-approach-for-acme"
+    assert out["ok"] and out["result"]["stem"] == "2026-10-12-session-pricing-approach-for-acme"
+
+
+def test_session_stems_never_collide_with_decision_stems(tmp_path):
+    """Final review: a decision titled like the session that day must not
+    share its stem — links resolve sessions first and the state write
+    would then refuse the defining decision."""
+    root = make_vault(tmp_path)
+    result = session.write(root, payload(title="Fixed price for phase 1"), now=NOW)
+    assert result["stem"] == "2026-10-12-session-fixed-price-for-phase-1"
+
+
+def test_a_session_needs_an_active_project(tmp_path):
+    """Final review: a session with no project is never queued and sits
+    hidden forever."""
+    root = make_vault(tmp_path)
+    with pytest.raises(session.SessionError, match="at least one active project"):
+        session.write(root, payload(projects=[]), now=NOW)
+    index = root / "30-projects" / "acme-erp" / "index.md"
+    index.write_text(index.read_text(encoding="utf-8").replace(
+        "slug: acme-erp", "slug: acme-erp\nstatus: completed"), encoding="utf-8")
+    with pytest.raises(session.SessionError, match="not active"):
+        session.write(root, payload(), now=NOW)
+
+
+@pytest.mark.parametrize("title", ["See [this]", "a | b", "会議"])
+def test_titles_that_break_links_or_slugs_are_refused_before_any_write(tmp_path, title):
+    root = make_vault(tmp_path)
+    with pytest.raises(session.SessionError, match="title"):
+        session.write(root, payload(title=title), now=NOW)
+    assert not (root / "_messages" / "sessions").exists()

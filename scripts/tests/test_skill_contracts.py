@@ -2285,8 +2285,9 @@ def test_log_decision_source_may_be_an_owner_note():
 def test_ontology_types_decision_source_as_meeting_log_or_owner_note():
     text = (REPO_ROOT / "plugin" / "template" / "99-workflow-config" / "reference"
             / "ontology.md").read_text(encoding="utf-8")
-    assert "`source` (`[[meeting]]` / `[[message log]]` / `[[owner note]]`)" in text
+    assert "`source` (`[[meeting]]` / `[[message log]]` / `[[session]]` / `[[owner note]]`)" in text
     assert "- `Decision —source→ Owner note`" in text
+    assert "- `Decision —source→ Session`" in text
     assert "a note of your own in `80-thoughts-ideas/`" in text
 
 

@@ -1363,8 +1363,9 @@ everything stays in triage.
 **A meeting with no project** (`projects` empty — an informal recording with
 no calendar event, typically): before showing the list, read the note
 (title, Key Takeaways, Debrief) and suggest **at most one** active project,
-from the same signals as routing in step 3 (project names, `keywords`,
-entity names, the people on it). Only when one project clearly fits;
+from the same signals as routing in step 3 (project names, entity names,
+the people on it — run `sync routing-signals` if step 3 did not run in this
+call). Only when one project clearly fits;
 otherwise the line keeps "no project". Show it with a question mark:
 
 `3. Hallway chat · Mon 12 Oct 14:20 · no project — Acme ERP rollout? · Jan Peeters`

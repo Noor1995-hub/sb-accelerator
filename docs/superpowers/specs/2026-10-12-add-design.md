@@ -137,7 +137,10 @@ python3 "$VAULTLIB" session write --vault "$VAULT" --note "$SCRATCH/session.payl
 The payload has `title`, `date` (from `dates plan`, never computed),
 `projects`, `people`, `summary` (bullets), `decisions` (candidate lines, may
 be empty) and `scope` (`whole` or the owner's words for the part kept). The
-CLI writes `_messages/sessions/<date>-<title-slug>.md`:
+CLI writes `_messages/sessions/<date>-session-<title-slug>.md` ("session" in
+the name keeps it apart from decision notes, which are `<date>-<title>`; a
+session needs at least one active project, and its title may not contain
+`[`, `]` or `|`):
 
 ```yaml
 ---

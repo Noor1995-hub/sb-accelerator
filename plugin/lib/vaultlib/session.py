@@ -65,12 +65,31 @@ def write(root: Path, payload: dict, *, now: Optional[datetime] = None) -> dict:
     if missing:
         raise SessionError(f"missing payload key(s) {missing}")
     title = _line(payload["title"], "title")
+    if any(ch in title for ch in "[]|"):
+        raise SessionError("title must not contain [, ] or | — it becomes a "
+                           "link alias on the project page")
+    try:
+        title_slug = naming.slugify(title)
+    except ValueError as exc:
+        raise SessionError(f"title {title!r} gives no file name: {exc}") from exc
     try:
         day = date.fromisoformat(str(payload["date"])).isoformat()
     except ValueError as exc:
         raise SessionError(f"date {payload['date']!r} is not YYYY-MM-DD") from exc
     projects = _slugs(root, payload["projects"], "projects",
                       lambda s: root / vault.PROJECTS_DIR / s / "index.md")
+    if not projects:
+        # A session with no project is never queued and never shown: it would
+        # sit hidden forever (final review, #267).
+        raise SessionError("a session needs at least one active project — name "
+                           "one, or create it with /new-project first")
+    for slug in projects:
+        data, _ = markdown.split_frontmatter(
+            (root / vault.PROJECTS_DIR / slug / "index.md").read_text(encoding="utf-8"))
+        status = data.get("status")
+        if status not in (None, "active"):
+            raise SessionError(f"project {slug!r} is not active (status "
+                               f"{status!r}) — nothing would read this session")
     people = _slugs(root, payload["people"], "people",
                     lambda s: root / vault.PEOPLE_DIR / f"{s}.md")
     summary = _lines(payload["summary"], "summary", allow_empty=False)
@@ -80,7 +99,10 @@ def write(root: Path, payload: dict, *, now: Optional[datetime] = None) -> dict:
 
     folder = root / SESSIONS_DIR
     folder.mkdir(parents=True, exist_ok=True)
-    base = f"{day}-{naming.slugify(title)}"
+    # "session" keeps the stem out of decision notes' `<date>-<title>` space:
+    # links resolve sessions before decisions, so a shared stem would make a
+    # same-titled decision unresolvable (final review, #267).
+    base = f"{day}-session-{title_slug}"
     stem, n = base, 1
     while (folder / f"{stem}.md").exists():
         n += 1
