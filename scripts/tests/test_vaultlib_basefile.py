@@ -39,3 +39,24 @@ def test_comments_quotes_and_crlf():
 def test_no_views_raises():
     with pytest.raises(basefile.BaseFileError):
         basefile.read("filters:\n  and: []\n")
+
+
+def test_quoted_keys_and_order_items_at_the_key_indent():
+    text = "\n".join([
+        "formulas:",
+        '  "st": if(status, status.title(), "")',
+        "properties:",
+        '  "note.role":',
+        "    displayName: Function",
+        "views:",
+        "  - type: table",
+        "    name: X",
+        "    order:",
+        "    - note.role",
+        "    - formula.st",
+        "",
+    ])
+    got = basefile.read(text)
+    assert got["formulas"]["st"].startswith("if(status")
+    assert got["display"]["note.role"] == "Function"
+    assert got["views"][0]["order"] == ["note.role", "formula.st"]

@@ -148,7 +148,11 @@ def read(path: Path) -> Dict[str, List[List[str]]]:
         shared: List[str] = []
         if "xl/sharedStrings.xml" in names:
             for si in ET.fromstring(z.read("xl/sharedStrings.xml")).iter(q("si")):
-                shared.append("".join(t.text or "" for t in si.iter(q("t"))))
+                # Only the item's own text and its rich-text runs — never the
+                # phonetic guide (<rPh>), which Excel keeps next to East-Asian text.
+                parts = [t for t in si.findall(q("t"))]
+                parts += [t for r in si.findall(q("r")) for t in r.findall(q("t"))]
+                shared.append("".join(t.text or "" for t in parts))
         rels = ET.fromstring(z.read("xl/_rels/workbook.xml.rels"))
         target = {r.get("Id"): r.get("Target") for r in rels}
         result: Dict[str, List[List[str]]] = {}
@@ -158,7 +162,10 @@ def read(path: Path) -> Dict[str, List[List[str]]]:
             rows: List[List[str]] = []
             for row in ET.fromstring(z.read(part)).iter(q("row")):
                 values: Dict[int, str] = {}
+                position = -1
                 for c in row.iter(q("c")):
+                    # `r` is optional in the format: without it, a cell follows the previous one.
+                    position = _col_index(c.get("r")) if c.get("r") else position + 1
                     kind = c.get("t")
                     if kind == "inlineStr":
                         value = "".join(t.text or "" for t in c.iter(q("t")))
@@ -166,7 +173,7 @@ def read(path: Path) -> Dict[str, List[List[str]]]:
                         node = c.find(q("v"))
                         raw = node.text if node is not None and node.text else ""
                         value = shared[int(raw)] if kind == "s" and raw else raw
-                    values[_col_index(c.get("r"))] = value
+                    values[position] = value
                 line = [values.get(i, "") for i in range(max(values) + 1)] if values else []
                 while line and line[-1] == "":
                     line.pop()

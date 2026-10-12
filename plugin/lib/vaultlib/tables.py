@@ -213,6 +213,8 @@ def export(root: Path, table: str, *, today: str, view: Optional[str] = None,
             options, strict = sorted(all_names[_LINK_KIND[kind]].values(), key=str.lower), False
         else:
             continue  # lists of links: no dropdown (a cell holds several)
+        if not options:
+            continue  # an empty list would give an inverted range Excel "repairs"
         letter = xlsx.col_letter(len(lists))
         lists.append([c["prop"]] + options)
         validations.append({"col": i, "source": f"_lists!${letter}$2:${letter}${len(options) + 1}",
@@ -238,6 +240,10 @@ def export(root: Path, table: str, *, today: str, view: Optional[str] = None,
             "columns": headers[1:], "warnings": cols["warnings"]}
 
 
+_EXCEL_ERRORS = {"#N/A", "#REF!", "#VALUE!", "#DIV/0!", "#NAME?", "#NUM!", "#NULL!",
+                 "#SPILL!", "#CALC!", "#GETTING_DATA"}
+
+
 def _norm(text: str, kind: str) -> object:
     text = (text or "").strip()
     if kind in ("people", "projects"):
@@ -250,6 +256,10 @@ def to_value(text: str, kind: str, all_names: dict):
     text = (text or "").strip()
     if text == "":
         return None, None, False
+    if "\n" in text or "\r" in text:
+        return None, "one line only — the cell holds a line break (Alt+Enter)", False
+    if text in _EXCEL_ERRORS:
+        return None, f"{text} is an Excel error value, not a value to keep", False
     if kind.startswith("choice:"):
         options = kind.split(":", 1)[1].split("|")
         match = next((o for o in options if o.lower() == text.lower()), None)
@@ -283,22 +293,97 @@ def to_value(text: str, kind: str, all_names: dict):
     return slug, problem, bool(problem and "matches no" in problem)
 
 
+def _name_prop(table: str) -> str:
+    return _spec(table)["fields"][0][0]
+
+
+def _slug_of(table: str, key: str, data: dict) -> str:
+    if table == "people":
+        return Path(key).stem
+    return str(data.get("slug") or Path(key).parent.name)
+
+
+def _check_row(root: Path, table: str, slug: str, merged: dict, changed: Dict[str, object],
+               quote, others: Dict[str, str]) -> Optional[str]:
+    """The creators' own rules, applied to an update or a new row. Returns a
+    refusal reason, or None. `changed` may be normalised in place (email)."""
+    name_prop = _name_prop(table)
+    if changed.get(name_prop):
+        holder = others.get(str(changed[name_prop]).lower())
+        if holder is not None and holder != slug:
+            return (f"another row or {_spec(table)['object']} already has this name "
+                    f"({changed[name_prop]}) — were rows moved or copied?")
+    for prop, value in changed.items():
+        if isinstance(value, str):
+            try:
+                markdown.emit_scalar(value, prop in quote)
+            except ValueError as exc:
+                return f"{prop}: {exc}"
+    if table == "people" and changed.get("email"):
+        try:
+            changed["email"] = person._require_email(changed["email"])
+        except ValueError as exc:
+            return str(exc)
+    if table == "entities" and "parent" in changed:
+        if not changed["parent"]:
+            return "taking a team out of its entity is not supported here — do it in Obsidian"
+        if slug:
+            try:
+                entity._validate_parent(root, slug, str(changed["parent"]))
+            except entity.EntityError as exc:
+                return str(exc)
+    if table == "projects" and ("parent" in changed or "project-type" in changed):
+        parent = merged.get("parent")
+        if parent:
+            if slug and parent == slug:
+                return f"project {slug!r} cannot be its own parent"
+            if merged.get("project-type") == "area-of-responsibility":
+                return "a responsibility (area-of-responsibility) cannot have a parent"
+            parent_index = root / vault.PROJECTS_DIR / str(parent) / "index.md"
+            if not parent_index.is_file():
+                return f"parent project {parent!r} does not exist"
+            pdata, _ = markdown.split_frontmatter(parent_index.read_text(encoding="utf-8"))
+            if pdata.get("parent"):
+                return f"maximum two levels: {parent!r} already has a parent"
+            if slug and any(o["data"].get("parent") == slug for o in objects(root, "projects")):
+                return f"{slug!r} has sub-projects of its own — it cannot get a parent"
+    return None
+
+
+def _new_row_exists(root: Path, table: str, values: dict) -> Optional[str]:
+    name = str(values.get(_name_prop(table)) or "")
+    if table == "people":
+        existing = person._existing_note(root, naming.slugify(name))
+        return f"already exists: {existing.relative_to(root).as_posix()}" if existing else None
+    if table == "entities":
+        slug = naming.slugify(name)
+        path = root / vault.ENTITIES_DIR / slug / "dossier.md"
+        return f"already exists: {vault.ENTITIES_DIR}/{slug}/dossier.md" if path.exists() else None
+    slug = project._compose_slug(str(values.get("entity") or ""), name)
+    clash = naming.find_collision(slug, vault.list_dir_names(root / vault.PROJECTS_DIR))
+    return f"already exists: {vault.PROJECTS_DIR}/{clash}" if clash else None
+
+
 def plan(root: Path, file_rel: str) -> dict:
     book = xlsx.read(root / file_rel)
     meta = {r[0]: (r[1] if len(r) > 1 else "") for r in book.get("_meta", []) if r}
+    if not meta or not book.get("_original"):
+        raise TablesError("the workbook has lost its hidden sheets — export again")
     table = meta.get("table", "")
     spec = _spec(table)
     if meta.get("format") != FORMAT:
         raise TablesError(f"workbook format {meta.get('format')!r} is not {FORMAT} — export again")
     title = table.title()
     sheet = book.get(title) or []
-    original = book.get("_original") or []
+    original = book["_original"]
     headers = json.loads(meta.get("headers") or "[]")
     if not sheet or [h.strip() for h in sheet[0][:len(headers)]] != headers or len(sheet[0]) > len(headers):
         raise TablesError("the columns were changed in Excel — export again")
     props = original[0]
     kinds = {f[0]: f[1] for f in spec["fields"]}
     required = {f[0] for f in spec["fields"] if f[2]}
+    quote = spec["quote"]
+    name_prop = _name_prop(table)
     by_key = {r[0]: r for r in original[1:] if r}
     current = {o["key"]: o["data"] for o in objects(root, table)}
     all_names = names(root)
@@ -307,36 +392,71 @@ def plan(root: Path, file_rel: str) -> dict:
     def pad(row):
         return list(row) + [""] * (len(props) - len(row))
 
-    for index, raw in enumerate(sheet[1:], start=2):
-        row = pad(raw)
+    rows = [(index, pad(raw)) for index, raw in enumerate(sheet[1:], start=2)]
+    key_count: Dict[str, int] = {}
+    for _, row in rows:
+        if row[0].strip():
+            key_count[row[0].strip()] = key_count.get(row[0].strip(), 0) + 1
+    # Who carries which name after this import: existing objects keep theirs
+    # unless their own row renames them.
+    others: Dict[str, str] = {}
+    for key, data in current.items():
+        others[str(data.get(name_prop) or "").lower()] = _slug_of(table, key, data)
+    name_col = props.index(name_prop) if name_prop in props else None
+    if name_col is not None:
+        for _, row in rows:
+            key = row[0].strip()
+            if key in current and key_count.get(key) == 1:
+                orig = pad(by_key.get(key, [key]))
+                if row[name_col].strip() != orig[name_col].strip():
+                    others.pop(orig[name_col].strip().lower(), None)
+
+    def unknown(i, raw, kind):
+        out["unknown"].append({"header": headers[i], "value": raw.strip(),
+                               "kind": _LINK_KIND.get(kind, "")})
+
+    for index, row in rows:
         key = row[0].strip()
         if not key:
             if not any(c.strip() for c in row[1:]):
                 continue
-            values, problems = {}, []
+            values, problems, bad = {}, [], set()
             for i, prop in enumerate(props[1:], start=1):
-                value, problem, unknown = to_value(row[i], kinds[prop], all_names)
-                if unknown:
-                    out["unknown"].append({"header": headers[i], "value": row[i].strip(),
-                                           "kind": _LINK_KIND.get(kinds[prop], "")})
+                value, problem, is_unknown = to_value(row[i], kinds[prop], all_names)
+                if is_unknown:
+                    unknown(i, row[i], kinds[prop])
                 if problem:
                     problems.append(f"{headers[i]}: {problem}")
+                    bad.add(prop)
                 elif value not in (None, []):
                     values[prop] = value
-            missing = [headers[props.index(p)] for p in required if p in props and p not in values]
+            missing = [headers[props.index(p)] for p in required
+                       if p in props and p not in values and p not in bad]
             if missing:
                 problems.append(f"missing {', '.join(missing)}")
+            if not problems:
+                problem = (_new_row_exists(root, table, values)
+                           or _check_row(root, table, "", values, values, quote, others))
+                if problem:
+                    problems.append(problem)
             if problems:
                 out["refused"].append({"row": index, "key": "", "header": "",
                                        "reason": "new row: " + "; ".join(problems)})
             else:
+                others[str(values[name_prop]).lower()] = f"(new row {index})"
                 out["new"].append({"row": index, "values": values})
+            continue
+        if key_count.get(key, 0) > 1:
+            out["refused"].append({"row": index, "key": key, "header": "",
+                                   "reason": f"this row's hidden key appears {key_count[key]} times — "
+                                             "a copied row? Add someone new on an empty row"})
             continue
         if key not in current:
             out["refused"].append({"row": index, "key": key, "header": "",
                                    "reason": f"{key} is no longer in the vault — export again"})
             continue
         orig = pad(by_key.get(key, [key]))
+        row_updates, row_problems = [], []
         for i, prop in enumerate(props[1:], start=1):
             kind = kinds[prop]
             mine, before = _norm(row[i], kind), _norm(orig[i], kind)
@@ -346,26 +466,41 @@ def plan(root: Path, file_rel: str) -> dict:
             if now == mine:
                 continue
             if now != before:
-                out["conflicts"].append({"key": key, "header": headers[i],
-                                         "yours": row[i].strip(), "vault": cell(current[key].get(prop), kind, all_names)})
+                out["conflicts"].append({"key": key, "header": headers[i], "yours": row[i].strip(),
+                                         "vault": cell(current[key].get(prop), kind, all_names)})
                 continue
             if table == "projects" and prop == "entity":
-                out["refused"].append({"row": index, "key": key, "header": headers[i],
-                                       "reason": "moving a project to another entity is not supported"})
+                row_problems.append(f"{headers[i]}: moving a project to another entity is not supported")
                 continue
-            value, problem, unknown = to_value(row[i], kind, all_names)
-            if unknown:
-                out["unknown"].append({"header": headers[i], "value": row[i].strip(),
-                                       "kind": _LINK_KIND.get(kind, "")})
+            value, problem, is_unknown = to_value(row[i], kind, all_names)
+            if is_unknown:
+                unknown(i, row[i], kind)
             if problem:
-                out["refused"].append({"row": index, "key": key, "header": headers[i], "reason": problem})
-            elif value in (None, []) and prop in required:
-                out["refused"].append({"row": index, "key": key, "header": headers[i],
-                                       "reason": f"{headers[i]} is required"})
+                row_problems.append(f"{headers[i]}: {problem}")
+                continue
+            if value in (None, []) and prop in required:
+                row_problems.append(f"{headers[i]} is required")
+                continue
+            if value is None and kind in ("people", "projects"):
+                value = []
+            row_updates.append({"key": key, "prop": prop, "header": headers[i],
+                                "from": orig[i].strip(), "to": row[i].strip(), "value": value})
+        if not row_problems and row_updates:
+            changed = {u["prop"]: u["value"] for u in row_updates}
+            merged = dict(current[key])
+            merged.update(changed)
+            problem = _check_row(root, table, _slug_of(table, key, current[key]),
+                                 merged, changed, quote, others)
+            if problem:
+                row_problems.append(problem)
             else:
-                out["updates"].append({"key": key, "prop": prop, "header": headers[i],
-                                       "from": orig[i].strip(), "to": row[i].strip(),
-                                       "value": value if value != [] else None})
+                for u in row_updates:
+                    u["value"] = changed[u["prop"]]
+        if row_problems:
+            out["refused"].append({"row": index, "key": key, "header": "",
+                                   "reason": "; ".join(row_problems)})
+        else:
+            out["updates"].extend(row_updates)
     out["counts"] = {k: len(out[k]) for k in ("updates", "new", "conflicts", "refused", "unknown")}
     return out
 
@@ -391,6 +526,11 @@ def _write_props(root: Path, key: str, values: Dict[str, object], quote) -> None
 
 def _create(root: Path, table: str, values: dict, today: str) -> str:
     if table == "people":
+        existing = person._existing_note(root, naming.slugify(values["person-name"]))
+        if existing is not None:
+            # person.ensure would fill an empty email on the existing note.
+            raise TablesError(f"already exists: {existing.relative_to(root).as_posix()} — "
+                              "fill it in on its own row")
         made = person.ensure(root, values["person-name"], today, email=values.get("email"))
         if not made.get("created", True):
             raise TablesError(f"already exists: {made.get('path')} — fill it in on its own row")
@@ -427,9 +567,16 @@ def apply(root: Path, file_rel: str, *, today: str) -> dict:
         grouped.setdefault(u["key"], {})[u["prop"]] = u["value"]
     for key, values in grouped.items():
         try:
-            _write_props(root, key, values, quote)
+            parent = values.pop("parent", None) if table == "entities" else None
+            if values:
+                _write_props(root, key, values, quote)
+            if parent:
+                data, _ = markdown.split_frontmatter((root / key).read_text(encoding="utf-8"))
+                entity.ensure(root, slug=Path(key).parent.name, name=str(data.get("entity-name")),
+                              today=today, parent=str(parent))
+                values["parent"] = parent
             result["written"] += [{"key": key, "prop": p} for p in values]
-        except (ValueError, OSError) as exc:
+        except (entity.EntityError, ValueError, OSError) as exc:
             result["failed"].append({"key": key, "reason": str(exc)})
     for new in planned["new"]:
         try:

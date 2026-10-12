@@ -50,12 +50,16 @@ When the owner says it is done:
 python3 "$VAULTLIB" table import --vault "$VAULT" --file "<path>"
 ```
 
-Show the plan in a few lines: counts first, then each conflict, refusal and
-unknown name, one line each. For an unknown entity name: *"LLBG is not an
-entity: create it, or keep it as text?"* Create → `entity ensure` with that
-name (as `/update-entity` step 1 does), then run the plan again. A refused
-row: say why, and that it can be fixed in the Excel and imported again.
-Wait for the owner's OK.
+Show the plan in a few lines: counts first, then every **name change** (an
+update to the name column: "Jan Peeters → Jan Peeters-Maes"), each conflict,
+refusal and unknown name, one line each. For an unknown entity name: *"LLBG
+is not an entity: create it, or keep it as text?"* Create → `entity ensure`
+with that name (as `/update-entity` step 1 does), then run the plan again. An
+unknown person (a project's owner, a stakeholder): create them with
+`person ensure` and run the plan again, or correct the name in the Excel. A
+refused row: say why, and that it can be fixed in the Excel and imported
+again. A plan with no changes at all usually means the file was not saved,
+or was saved under another name: say so. Wait for the owner's OK.
 
 ### 4. Apply
 

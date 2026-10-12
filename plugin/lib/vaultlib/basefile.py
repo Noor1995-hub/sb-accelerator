@@ -40,10 +40,10 @@ def read(text: str) -> dict:
             continue
         if section == "formulas" and indent == 2 and ":" in stripped:
             key, _, expr = stripped.partition(":")
-            formulas[key.strip()] = _unquote(expr)
+            formulas[_unquote(key)] = _unquote(expr)
         elif section == "properties":
             if indent == 2 and stripped.endswith(":"):
-                current_prop = stripped[:-1].strip()
+                current_prop = _unquote(stripped[:-1])
             elif indent == 4 and stripped.startswith("displayName:") and current_prop:
                 display[current_prop] = _unquote(stripped.partition(":")[2])
         elif section == "views":
@@ -54,6 +54,9 @@ def read(text: str) -> dict:
                 rest = stripped[2:]
                 if rest.startswith("name:"):
                     view["name"] = _unquote(rest.partition(":")[2])
+            elif view is not None and in_order and indent >= 4 and stripped.startswith("- "):
+                # YAML allows the items at the key's own indent.
+                view["order"].append(_unquote(stripped[2:]))
             elif view is not None and indent == 4:
                 in_order = stripped == "order:"
                 if stripped.startswith("name:"):

@@ -9,7 +9,10 @@ from test_vaultlib_tables_export import make_vault
 
 def exported(root, table="people"):
     rel = tables.export(root, table, today="2026-10-12")["path"]
-    return rel, xlsx.read(root / rel)
+    book = xlsx.read(root / rel)
+    width = len(book[table.title()][0])
+    book[table.title()] = [r + [""] * (width - len(r)) for r in book[table.title()]]
+    return rel, book
 
 
 def save(root, rel, book):

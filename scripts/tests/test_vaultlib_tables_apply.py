@@ -91,5 +91,7 @@ def test_a_new_entity_row_never_updates_an_existing_entity(tmp_path):
     book["Entities"].append(row)
     save(root, rel, book)
     result = tables.apply(root, rel, today="2026-10-12")
-    assert "already exists" in result["failed"][0]["reason"]
+    # Final review: refused in the plan itself now, before anything is written.
+    assert "already exists" in result["plan"]["refused"][0]["reason"]
+    assert result["created"] == [] and result["failed"] == []
     assert fm(root, "40-entities/acme/dossier.md")[0]["status"] == "active"
