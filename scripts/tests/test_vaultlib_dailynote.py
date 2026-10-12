@@ -1623,3 +1623,27 @@ def test_read_takes_the_notes_heading_and_the_old_end_of_day_alike(tmp_path):
     old = dailynote.read(root, "2026-10-05")
     assert new["notes"] == ["call Dana about the pilot"] == new["end_of_day"]
     assert old["notes"] == ["wrap up"] == old["end_of_day"]
+
+
+def test_a_for_today_banner_counts_the_same_missed_runs_as_the_plan(tmp_path):
+    # Review 2026-10-12: last note Monday, caught up Thursday morning. The
+    # plan counts Mon, Tue and Wed evenings; the banner said 2.
+    root = make_windowed_vault(tmp_path)
+    (root / "60-daily-notes" / "2026-06-15.md").write_text(
+        "---\ndate: 2026-06-15\ntype: daily-note\n---\n", encoding="utf-8")
+    from vaultlib import dates
+    plan = dates.plan(root, "2026-06-18", for_today=True)
+    dailynote.write(root, windowed_payload(
+        date="2026-06-18",
+        recap_window={"from": plan["recap_from"], "to": plan["recap_to"],
+                      "plan_for": plan["plan_for"]}))
+    text = (root / "60-daily-notes" / "2026-06-18.md").read_text(encoding="utf-8")
+    assert plan["business_days_missed"] == 3
+    assert "3 business days without an evening run" in text
+
+
+def test_plan_for_must_be_the_plans_own_value(tmp_path):
+    root = make_windowed_vault(tmp_path)
+    with pytest.raises(dailynote.DailyNoteError, match="plan_for"):
+        dailynote.write(root, windowed_payload(
+            recap_window={"from": "2026-06-12", "to": "2026-06-12", "plan_for": "tonight"}))

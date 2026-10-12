@@ -452,3 +452,14 @@ def test_a_transcript_page_in_the_other_id_form_is_the_same_recording(tmp_path):
         write_json(tmp_path, "t.json", {**SEGMENTS, "file_id": f"of_{hex_id}"}),
         None, str(tmp_path / "scratch"), utc_offset="+02:00")
     assert result["recording_id"] == f"plaud:{hex_id}"
+
+
+def test_reassemble_reports_the_blob_size_for_paging(tmp_path):
+    # Review 2026-10-12: only m365 reported it, so a long Plaud transcript
+    # had nothing telling the worker to read past the first window.
+    result = plaud.reassemble(
+        write_json(tmp_path, "m.json", META),
+        write_json(tmp_path, "t.json", SEGMENTS),
+        None, str(tmp_path / "s"), utc_offset="+00:00")
+    blob = Path(result["blob_path"]).read_text(encoding="utf-8")
+    assert result["blob_lines"] == blob.count("\n") and result["blob_chars"] == len(blob)

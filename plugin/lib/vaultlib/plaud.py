@@ -272,4 +272,8 @@ def reassemble(meta_path: str, transcript_paths, note_path: Optional[str],
         "blob_path": str(blob_path),
         "warnings": warnings,
         "coverage_pct": coverage,
+        # Same paging signal as m365 reassemble: the worker reads a long
+        # blob in windows instead of drafting from the first one alone.
+        "blob_lines": blob.count("\n"),
+        "blob_chars": len(blob),
     }

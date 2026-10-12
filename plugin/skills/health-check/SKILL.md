@@ -60,6 +60,8 @@ which project is stale, which entity has gone quiet, or any other vault
 object; the counts carry the whole story:
 
 - Meetings in the window, and how many still have no project linked.
+- The review backlog: meetings still waiting in To review (`needs_review`)
+  and decisions waiting in To review (`decisions_to_review`).
 - Daily-note coverage over working days in the window.
 - Input items pending and the skip-list size.
 - Projects and entities with no meeting reference in the last 30 days —

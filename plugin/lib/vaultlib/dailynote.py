@@ -82,7 +82,7 @@ _HEADING_RE = re.compile(
 _TASK_RE = re.compile(r"\A- \[( |x|X)\]\s*(.*)\Z")
 _ALLOWED_KEYS = ("date", "recap", "meetings", "meetings_note", "recap_window")
 _ALLOWED_MEETING_KEYS = ("time", "subject", "entity", "prep")
-_ALLOWED_WINDOW_KEYS = ("from", "to", "detailed_from")
+_ALLOWED_WINDOW_KEYS = ("from", "to", "detailed_from", "plan_for")
 _DIGEST_LENGTH = 16
 
 
@@ -152,7 +152,19 @@ def _validate_window(payload: dict, note_date: str) -> Optional[dict]:
             raise DailyNoteError(
                 f"recap_window.detailed_from ({detailed.isoformat()}) must "
                 f"fall within {start.isoformat()}..{end.isoformat()}")
-    return {"from": start, "to": end, "detailed_from": detailed}
+    plan_for = raw.get("plan_for", "next-business-day")
+    if plan_for not in ("today", "next-business-day"):
+        raise DailyNoteError(
+            f"recap_window.plan_for {plan_for!r} must be `dates plan`'s "
+            "plan_for: 'today' or 'next-business-day'")
+    # Which evening runs the banner counts as missed: up to the run now
+    # writing, which in the --for-today frame is a late one standing in for
+    # the evening before the note's date — `dates plan` counts it, and so
+    # must the banner (review 2026-10-12: plan said 3, the note said 2).
+    count_to = (datetime.strptime(note_date, "%Y-%m-%d").date()
+                if plan_for == "today" else end)
+    return {"from": start, "to": end, "detailed_from": detailed,
+            "count_to": count_to}
 
 
 def _day_name(date_iso: str) -> str:
@@ -387,7 +399,7 @@ def _catchup_banner(root: Path, window: Optional[dict]) -> Optional[str]:
     """
     if window is None:
         return None
-    missed = dates.missed_runs(root, window["from"], window["to"])
+    missed = dates.missed_runs(root, window["from"], window.get("count_to", window["to"]))
     if missed <= 0:
         return None
     lines = [

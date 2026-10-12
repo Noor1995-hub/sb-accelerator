@@ -431,7 +431,7 @@ the vault.
 cat > "$SCRATCH/daily-note.payload.json" <<'JSON'
 {
   "date": "<next_business_day>",
-  "recap_window": {"from": "<recap_from>", "to": "<recap_to>",
+  "recap_window": {"from": "<recap_from>", "to": "<recap_to>", "plan_for": "<plan_for>",
                    "detailed_from": "<recap_detail_from, only when capped>"},
   "recap": {
     "glance": {
@@ -489,7 +489,9 @@ window's meetings, jottings and decisions and stamps the digest on the recap
 marker. A re-run over an unchanged input set comes back with
 `recap_skipped: true` and leaves the recap byte-identical — that is success,
 not a failure to write. Omitting `recap_window` silently forfeits both the
-guard and the catch-up banner, so always pass it. That applies to a
+guard and the catch-up banner, so always pass it. Copy `plan_for` from
+`dates plan` verbatim: it decides which missed evenings the banner counts,
+so the note says the same number as the plan. That applies to a
 *correction* too: if you have to rewrite a recap you already wrote this run,
 re-run `daily-note write` with `recap_window` again. A rewrite without it
 strips the stamp, and the next evening regenerates a recap the vault owner has

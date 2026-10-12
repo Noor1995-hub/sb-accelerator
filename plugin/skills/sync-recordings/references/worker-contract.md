@@ -41,9 +41,12 @@ enrichment (write it to `rec_N.note.json`); on failure proceed without.
 
 ## Fetching — M365
 
-Your briefing carries the event's URI and your scratch stem
-(`m365_event_<n>`) — no pre-read event file, no `transcript_url`. Fetch the
-event and derive your own ids before you touch a transcript:
+A worker dispatched by `/sync-recordings` always gets the **pre-fetched
+event variant** below — the probe already read the event — so it skips
+step 1. Steps 1–2 are the raw-URI path, which the probe contract restates:
+the briefing carries the event's URI and a scratch stem (`m365_event_<n>`)
+— no pre-read event file, no `transcript_url`. Fetch the event and derive
+your own ids before you touch a transcript:
 
 1. One `read_resource` call on the event URI you were given, **exactly as
    given**. It is a CLI-derived `calendar:///events/<id>` form that may
@@ -169,7 +172,7 @@ event and derive your own ids before you touch a transcript:
 Sanctioned Graph calls: exactly two — your own event, your own transcript.
 You make no other Graph call — not the calendar, not another occurrence.
 
-**Pre-fetched event variant.** Some briefings name an already-fetched event
+**Pre-fetched event variant.** Every `/sync-recordings` worker briefing names an already-fetched event
 in two forms — the **object** file (for Reassemble and Attendees below)
 and its one-element **array** wrapping (for the `ids` call right here) —
 plus its already-derived `recording_id` and a verbatim `transcript_url`,
@@ -295,11 +298,13 @@ Extract from the blob file the `reassemble` result named — never from the raw
 transcript files you wrote to scratch: the M365 one is unparsed WEBVTT, and
 for a recurring series it may carry other occurrences' transcripts (an inbox
 item has no blob: extract from the file you were given). Read the blob
-**completely**: `reassemble` reports `blob_lines` and `blob_chars`, and
-a long meeting's blob is larger than one Read call returns. When
-`blob_chars` is over 60,000, read it in consecutive `offset`/`limit`
-windows of 400 lines until you have covered all `blob_lines` lines, and
-draft from the whole meeting — never from the first window alone. Read
+**completely**: both `reassemble` commands report `blob_lines` and
+`blob_chars`, and a long meeting's blob is larger than one Read call
+returns. When `blob_chars` is over 60,000, read it in consecutive
+`offset`/`limit` windows of 400 lines until you have covered all
+`blob_lines` lines, and draft from the whole meeting — never from the first
+window alone. An inbox file gets the same treatment: if one Read did not
+reach its end, keep reading in 400-line windows until it does. Read
 `references/payload-contract.md` (its path is in your prompt) and draft
 the payload to `$SCRATCH/<scratch stem>.payload.json`: content fields from the
 transcript; every routing field copied from your prompt unchanged — except
