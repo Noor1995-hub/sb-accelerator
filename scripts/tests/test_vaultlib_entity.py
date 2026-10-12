@@ -1050,3 +1050,36 @@ def test_cli_entity_write_automatic_flag(tmp_path):
                          capture_output=True, text=True, encoding="utf-8")
     payload = json.loads(out.stdout)
     assert payload["ok"] and payload["result"]["skipped"], out.stdout + out.stderr
+
+
+
+@pytest.mark.parametrize("key,item", [
+    ("context", {"label": "Size", "fact": "1,200 staff", "why": "scale"}),
+    ("sensitivities", {"topic": "Layoffs", "detail": "x", "implications": "careful"}),
+    ("relationship_history", {"date": "2026-10-12", "what": "Steerco", "significance": "approved"}),
+    ("meeting_log", {"date": "2026-10-12", "topic": "Review", "dynamics": "tense"}),
+])
+def test_an_automatic_line_without_a_source_is_skipped(tmp_path, key, item):
+    """#273: every automatic line names its source — enforced, not hoped for."""
+    root = seeded(tmp_path)
+    result = entity.write(root, "meridian-freight-holdings", {key: [item]}, TODAY, automatic=True)
+    assert result["changes"] == []
+    assert len(result["skipped"]) == 1 and "source" in result["skipped"][0]
+
+
+def test_an_automatic_line_with_a_source_is_written_next_to_a_skipped_one(tmp_path):
+    root = seeded(tmp_path)
+    result = entity.write(root, "meridian-freight-holdings", {"relationship_history": [
+        {"date": "2026-10-12", "what": "Steerco", "significance": "approved (meeting · [[12-10-26-steerco]])"},
+        {"date": "2026-10-11", "what": "Call", "significance": "no source"},
+    ]}, TODAY, automatic=True)
+    text = entity.read(root, "meridian-freight-holdings")["sections"]["Relationship History"]
+    assert "Steerco" in text and "Call" not in text
+    assert len(result["skipped"]) == 1
+
+
+def test_a_manual_write_needs_no_source(tmp_path):
+    root = seeded(tmp_path)
+    result = entity.write(root, "meridian-freight-holdings", {"relationship_history": [
+        {"date": "2026-10-11", "what": "Call", "significance": "told by the owner"}]}, TODAY)
+    assert result["changes"] and result["skipped"] == []

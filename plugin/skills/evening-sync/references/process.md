@@ -296,7 +296,8 @@ these instructions:
    `chat` per its `kind`),
    `(session · [[<path without .md>|<title>]])`, `(note · <note title>)`.
    Team material on a parent page puts `(<team name> team)` before the
-   marker.
+   marker. `entity write --automatic` enforces the marker: an item whose last
+   field does not end in one is not written, and is listed in `skipped`.
 4. Write, then stamp with B's `queuedAt` — also when nothing was worth
    writing, so the same material is not read again:
 

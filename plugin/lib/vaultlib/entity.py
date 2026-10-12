@@ -785,6 +785,10 @@ def _validate_items(edit_key: str, items: list) -> None:
 _SOURCE_MARKER_RE = re.compile(r"\((?:meeting|mail|chat|session|note) · .*\)\s*\Z")
 _BULLET_LABEL_RE = re.compile(r"- \*\*(.+?):\*\*")
 _LABEL_KEYS = {"context": "label", "sensitivities": "topic"}
+# The field each section renders last — where an automatic line's source
+# marker sits (#273).
+_MARKER_FIELD = {"context": "why", "sensitivities": "implications",
+                 "relationship_history": "significance", "meeting_log": "dynamics"}
 
 
 def _owner_bullet_labels(content: str) -> List[str]:
@@ -864,6 +868,27 @@ def write(root: Path, slug: str, edits: Mapping, today: str, *,
 
     skipped: List[str] = []
     if automatic:
+        # Every automatic line names its source (owner, #273): enforced here,
+        # so an unattended run cannot write an unsourced claim.
+        for key in list(active):
+            field = _MARKER_FIELD.get(key)
+            if field is None:
+                continue
+            kept = []
+            for item in active[key]:
+                if _SOURCE_MARKER_RE.search(_text(item.get(field)) or ""):
+                    kept.append(item)
+                else:
+                    skipped.append(
+                        f"{key}: no source marker at the end of '{field}' — an "
+                        "automatic line must say where it came from; not written")
+            if kept:
+                active[key] = kept
+            else:
+                del active[key]
+        if not active:
+            return {"path": path.relative_to(root).as_posix(), "changes": [],
+                    "repairs": [], "skipped": skipped}
         contents = dict(sections)
         for key, label_key in _LABEL_KEYS.items():
             if key not in active:
