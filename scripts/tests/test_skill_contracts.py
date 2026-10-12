@@ -64,7 +64,7 @@ def test_expected_skills_exist():
             "sync-recordings", "evening-sync", "report-feedback",
             "health-check", "upgrade-vault", "setup-my-brain",
             "schedule-daily-loop", "provision-vault",
-            "sync-messages"} <= names
+            "sync-messages", "add"} <= names
 
 
 @pytest.mark.parametrize("path", SKILL_FILES, ids=lambda p: p.parent.name)
@@ -2476,3 +2476,22 @@ def test_add_and_sync_recordings_split_their_triggers():
     add = read_skill("add").split("---", 2)[1]
     assert "remember this" in add and "add this to my second brain" in add
     assert "sync" not in add.split("description:", 1)[1].split("\n", 1)[0].lower().replace("/sync-recordings", "")
+
+
+def test_add_review_fixes_are_pinned():
+    text = read_skill("add")
+    # I2: honest calendar for a meeting
+    assert "calendar enrichment" in text.lower() and "step 2" in text
+    assert "calendar-not-applicable" in text and "recording-duration" in text
+    assert "calendar_match" in text
+    # I1: source is the arrival channel, not read from sync scan
+    assert "`manual`" in text and "`email`" in text
+    # I4 / M4: originals and already-synced
+    assert "already inside `10-inbox/`" in text
+    assert "already_synced" in text
+    # M2 / M5 / M7
+    assert "$SCRATCH` is the session scratch directory" in text
+    assert "Another run is busy (the evening run or another sync)" in text
+    assert "Never derive a date from" in text
+    sync = read_skill("sync-recordings").split("---", 2)[1]
+    assert "/add" in sync.split("description:", 1)[1].split(chr(10), 1)[0]

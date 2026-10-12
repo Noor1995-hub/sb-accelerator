@@ -1,6 +1,6 @@
 ---
 name: add
-description: Put one thing into the second brain now — pasted text, a file, or this conversation — with the owner's intent, then update the project pages right away. Triggers when the user invokes /add, or says "add this to my second brain" or "remember this". For recordings (Teams, a recorder) and for new meetings, /sync-recordings is the skill.
+description: Put one thing into the second brain now — pasted text, a file, or this conversation — with the owner's intent, then update the project pages right away. Triggers when the user invokes /add, or says "add this to my second brain" or "remember this". For recordings from Teams or a recorder, and for fetching everything waiting in the inbox, /sync-recordings is the skill.
 user_invocable: true
 origin: net-new
 ---
@@ -16,7 +16,7 @@ updated before the owner leaves the chat.
 Writing to the vault needs a shell, so this skill runs in **Cowork** or
 **Claude Code**. It cannot run in Chat; say so plainly.
 
-Set `VAULT` to the vault root, and:
+Set `VAULT` to the vault root. `$SCRATCH` is the session scratch directory: payloads land there, never in the vault. Also:
 
 ```bash
 VAULTLIB="${CLAUDE_PLUGIN_ROOT}/lib/vaultlib/cli.py"
@@ -83,6 +83,14 @@ Decide, from the content:
 - **projects**: zero or more active projects, matched on project names,
   `keywords`, entity names and the people involved. Use the routing digest
   (`sync routing-signals`) as `/sync-recordings` step 3 does.
+- **entities**: for an item with no project that is still about an entity,
+  decide it as `/sync-recordings` step 3 does (passed in step 5 only when
+  `projects` is empty).
+- **calendar** (a `meeting` only): run calendar enrichment for this one item
+  as `/sync-recordings` step 2 does, so `calendar_match` and the calendar
+  confidence reason are true: found → the match; searched, nothing →
+  `no-calendar-match`; tool unavailable → `calendar-tool-unavailable`. A
+  `note` gets `calendar_match: false` and `calendar-not-applicable`.
 - **people**: existing people by name. Someone new is created only after the
   step-4 OK.
 
@@ -113,7 +121,7 @@ Take the run lock — only now, never while a question is open:
 python3 "$VAULTLIB" runlock acquire --vault "$VAULT" --routine add
 ```
 
-`acquired: false` → nothing written; say *"Your evening run is busy; try
+`acquired: false` → nothing written; say *"Another run is busy (the evening run or another sync); try
 again in a few minutes."* and end.
 
 **From here until the end of step 6, every exit releases the lock first** —
@@ -128,25 +136,36 @@ New people the owner confirmed: `person ensure` as
 `${CLAUDE_PLUGIN_ROOT}/skills/sync-recordings/SKILL.md` step 3 does.
 
 **Text or a file.** First write it to `10-inbox/<today>-<short-kebab-title>.md`
-(the text as given), with the owner's intent on the first line:
+(the text as given; the name uses a–z, 0–9 and hyphens only, and if it exists
+add `-2`, `-3`), with the owner's intent on the first line:
 
 ```markdown
 <!-- added with /add on <today>: "<the owner's words: what it is, for which project>" -->
 ```
 
-Then run `sync scan` and take the entry for that file: its `recording_id`
-and `source`. Dispatch **one** worker exactly as `/sync-recordings` step 6
-("Extract and write", the **inbox** briefing in
+A file the owner gave that is already inside `10-inbox/` is processed in place
+instead: prepend the same header line to it and use it as the inbox file below
+(no copy).
+
+Then run `sync scan` and take the entry for that file: its `recording_id`.
+Listed under `already_synced` (the same content was synced before) → `sync
+archive` it, tell the owner it is already in the brain, release the lock,
+sweep scratch and end. Dispatch **one** worker exactly as `/sync-recordings`
+step 6 ("Extract and write", the **inbox** briefing in
 `${CLAUDE_PLUGIN_ROOT}/skills/sync-recordings/SKILL.md`) does, with a
 blocking Agent call. That briefing already has the slots for the routing: pass
 the owner-confirmed `projects`, `type` (`note` for a note; for a meeting leave
 the subtype to the worker), attendee slugs (from `person ensure`), a
-`calendar-subject` (the step-4 title), `source` and `recording_id` from the
-scan, `entities` only when `projects` is empty, and `confidence` +
-`confidence-reasons` stamped by `/sync-recordings` step 4's rules for an item
-with no calendar match. The owner's OK is recorded by the accept below, not by
-the confidence. The item's date is the date in its own content, else `today`.
-Do not read the worker contract yourself.
+`calendar-subject` (the step-4 title), `calendar_match` and the calendar
+confidence reason from step 3, `source` (the arrival channel: `manual` for
+pasted text or a file, `email` for forwarded mail; `sync scan` does not
+return it), `recording_id` from the scan, `recording-duration` (0 when
+unknown), `entities` only when `projects` is empty, and `confidence` +
+`confidence-reasons` stamped by `/sync-recordings` step 4's rules. The
+owner's OK is recorded by the accept below, not by the confidence. The item's
+date is a full date written in its own content, otherwise `today`.
+Never derive a date from "Tuesday" or the like. Do not read the worker contract
+yourself.
 
 The worker replies `written: <stem>`. Verify the note is on disk, then move
 the inbox file out:
@@ -154,6 +173,8 @@ the inbox file out:
 ```bash
 python3 "$VAULTLIB" sync archive --vault "$VAULT" --path "10-inbox/<name>"
 ```
+
+When the file was processed in place, this moves the original too.
 
 No note written, or any other worker reply → leave the file in the inbox (the
 evening run retries it), say so in one line, release the lock, sweep scratch

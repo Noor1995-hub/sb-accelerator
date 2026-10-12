@@ -1,6 +1,6 @@
 ---
 name: sync-recordings
-description: Sync new meeting transcripts into the vault — from files dropped in the inbox, from a Plaud recorder connector, or from Microsoft 365. Triggers when the user invokes /sync-recordings or asks to sync recordings, process transcripts, or pull in what's in the inbox.
+description: Sync new meeting transcripts into the vault — from files dropped in the inbox, from a Plaud recorder connector, or from Microsoft 365. Triggers when the user invokes /sync-recordings or asks to sync recordings, process transcripts, or pull in what's in the inbox. One pasted text, a file, or this conversation ("add this to my second brain") is /add.
 user_invocable: true
 upstreamed-from: busdev@ccc27b8
 ---
