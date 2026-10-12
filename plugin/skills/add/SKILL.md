@@ -96,6 +96,11 @@ Decide, from the content:
   `note` gets `calendar_match: false` and `calendar-not-applicable`.
 - **people**: existing people by name. Someone new is created only after the
   step-4 OK.
+- **facts about people**: anything the owner tells you a person said about
+  themselves ("Jan told me he's moving to Antwerp") — kept only as the
+  person said it, never your interpretation of them. A conversation that
+  holds only such facts needs no project and no session record: step 5
+  writes just the facts.
 
 Ask one short question per thing you cannot tell. Never more than needed.
 
@@ -112,6 +117,8 @@ Session · Acme ERP rollout · "Pricing approach for Acme"
 - Fixed price for phase 1
 - Time and material after go-live
 ```
+
+Facts about people go under it as `Jan Peeters: moving to the Antwerp office`.
 
 Anything you left out under rule 5: say so in one short line under it. For a
 file already in `10-inbox/` (processed in place), the original keeps what it
@@ -217,15 +224,31 @@ decision candidates you saw (may be empty); section C applies the
 material-decision test to them. If `session write` fails: surface `error` and
 `hint`, release the lock, sweep scratch and end.
 
+**Facts about people** (each confirmed in step 4), per person — after
+`session write`, or as the whole write when there is no session record:
+
+```bash
+cat > "$SCRATCH/person-facts-<slug>.payload.json" <<'JSON'
+{"facts": [{"date": "<today>", "fact": "Is moving to the Antwerp office. (session · [[_messages/sessions/<stem>|<title>]])"}]}
+JSON
+python3 "$VAULTLIB" person write --vault "$VAULT" --slug <slug> --automatic --facts "$SCRATCH/person-facts-<slug>.payload.json"
+```
+
+`<stem>` is the `stem` `session write` returned. With no session record the
+marker is `(session · /add, <today>)`. A fact is what the person said about
+themselves, never your reading of them; it stays on their page and goes into
+nothing meant for someone else. A fact listed in `skipped`: fix it and retry
+once, else say so in step 8's **Warnings**.
+
 ### 6. Process
 
 Follow `${CLAUDE_PLUGIN_ROOT}/skills/evening-sync/references/process.md` with
 the **On demand** column of its Inputs table, exactly as `/sync-recordings`
-step 9 does: sections A, B, C and D, `<today>` from the `dates plan` run above,
+step 9 does: sections A, B, C, D and E, `<today>` from the `dates plan` run above,
 `<owner-slug>` = `owner` from `config read`, `sync_notes` lines to step 8's
-**Warnings**. When section D has returned, release the lock — the project
-and entity pages are written, and the question that follows must not hold up
-the evening run:
+**Warnings**. When section E has returned, release the lock — the project,
+entity and people pages are written, and the question that follows must not
+hold up the evening run:
 
 ```bash
 python3 "$VAULTLIB" runlock release --vault "$VAULT" --routine add
@@ -245,6 +268,7 @@ skip to step 8. Ask once **"Keep or dismiss?"**, and run
 **What:** Meeting · Acme ERP rollout · "Forecast call moves to Thursday"  (or Session · …)
 **Project pages updated:** {names}
 **Entity pages updated:** {names, a team as "Finance (Acme)"} | none
+**People pages:** {N} facts added for {M} people | none
 **Decisions:** {N} kept · {N} dismissed · {N} left in Decisions › To review
 **Warnings:** {verbatim} | none
 ```

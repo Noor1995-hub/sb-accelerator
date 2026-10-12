@@ -2584,8 +2584,9 @@ def test_update_entity_bash_blocks_continue_lines_properly():
     for block in re.findall(r"```bash\n(.*?)```", _people_step(), re.S):
         for line in block.splitlines():
             assert "   --" not in line.strip(), line
-    assert "## Notes from <entity name>" in _people_step()
-    assert "(from /update-entity, <today>)" in _people_step()
+    assert "## What I know" in _people_step()
+    assert "person write" in _people_step() and "--automatic" in _people_step()
+    assert "## Notes from <entity name>" not in _people_step()
 
 
 def test_the_m365_worker_passes_no_entity_without_a_per_attendee_map():
@@ -2615,11 +2616,11 @@ def test_process_has_entity_updates_after_project_updates():
     assert "Dispatch in blocking batches of at most 3" not in d   # C's rule, referenced not copied
 
 
-def test_on_demand_runs_release_the_lock_after_entity_updates():
+def test_on_demand_runs_release_the_lock_after_people_updates():
     for skill, step in (("sync-recordings", "### 9. Process"), ("add", "### 6. Process")):
         text = read_skill(skill)
         part = text.split(step, 1)[1].split("###", 1)[0]
-        assert "section D" in part and part.index("section D") < part.index("runlock release"), skill
+        assert "section E" in part and part.index("section E") < part.index("runlock release"), skill
 
 
 def test_summaries_list_entity_pages_updated():
@@ -2678,3 +2679,55 @@ def test_entity_inputs_and_returns_are_accurate():
     returns = text.split("## Returns", 1)[1]
     assert "entityName" in returns and "parentName" in returns
     assert "Finance (Acme)" in returns
+
+
+def _process_e():
+    text = read_ref("evening-sync", "process.md")
+    return " ".join(text.split("## E. Facts about people", 1)[1].split("## Returns", 1)[0].split())
+
+
+def test_process_has_people_updates_after_entity_updates():
+    text = read_ref("evening-sync", "process.md")
+    assert (text.index("## D. Entity updates") < text.index("## E. Facts about people")
+            < text.index("## Returns"))
+    e = _process_e()
+    for needle in ("peopleWork", "peopleNeedingUpdate", "person write", "--automatic",
+                   "person touch", "queuedAt", "(meeting · ", "(mail · ", "(chat · ",
+                   "section C"):
+        assert needle in e, needle
+
+
+def test_people_updates_keep_only_what_the_person_said():
+    e = _process_e().lower()
+    assert "said about themselves" in e
+    assert "what others said" in e and "interpretation" in e
+
+
+def test_people_updates_show_nothing_personal():
+    e = _process_e().lower()
+    assert "counts only" in e and "daily note" in e
+    stage5 = read_skill("evening-sync").split("## Stage 5", 1)[1].split("## Stage 6", 1)[0]
+    assert "What I know" in stage5
+
+
+def test_summaries_count_people_facts():
+    for skill in ("evening-sync", "sync-recordings", "add"):
+        assert "**People pages:**" in read_skill(skill), skill
+
+
+def test_add_writes_person_facts_at_once():
+    text = read_skill("add")
+    step5 = text.split("### 5. Write", 1)[1].split("### 6.", 1)[0]
+    assert "person write" in step5 and "--automatic" in step5 and "(session · " in step5
+    assert "said about themselves" in " ".join(text.split()).lower()
+
+
+def test_process_inputs_table_names_people_updates():
+    text = read_ref("evening-sync", "process.md")
+    table = text.split("## Inputs", 1)[1].split("## A.", 1)[0]
+    assert "Facts about people (E)" in table
+
+
+def test_people_updates_read_mail_through_for_person():
+    """A log group's marker cites its link, which only the reader returns."""
+    assert "messages for-person" in _process_e()

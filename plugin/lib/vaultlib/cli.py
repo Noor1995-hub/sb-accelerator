@@ -963,6 +963,11 @@ def build_parser() -> argparse.ArgumentParser:
     _add_vault_argument(m_for_entity)
     m_for_entity.add_argument("--slug", required=True)
     m_for_entity.add_argument("--logs", required=True, help="comma-separated log stems")
+    m_for_person = messages_sub.add_parser(
+        "for-person", help="a person's groups: every group whose people name them")
+    _add_vault_argument(m_for_person)
+    m_for_person.add_argument("--slug", required=True)
+    m_for_person.add_argument("--logs", required=True, help="comma-separated log stems")
 
     m_propose = messages_sub.add_parser("keywords-propose", help="at most one keyword proposal a week")
     _add_vault_argument(m_propose)
@@ -1138,6 +1143,9 @@ def _dispatch(args: argparse.Namespace) -> int:
         if args.action == "for-entity":
             stems = [s.strip() for s in args.logs.split(",") if s.strip()]
             return _ok({"groups": msglog.for_entity(root, slug=args.slug, logs=stems)})
+        if args.action == "for-person":
+            stems = [s.strip() for s in args.logs.split(",") if s.strip()]
+            return _ok({"groups": msglog.for_person(root, slug=args.slug, logs=stems)})
         if args.action == "keywords-propose":
             return _ok({"proposal": msglog.keywords_propose(root, today=vault.today_iso(args.today))})
         if args.action == "check-lines":

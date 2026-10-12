@@ -448,6 +448,12 @@ def for_entity(root: Path, *, slug: str, logs: List[str]) -> List[dict]:
                    or any(project_entity.get(p) == slug for p in _strong(g)))
 
 
+def for_person(root: Path, *, slug: str, logs: List[str]) -> List[dict]:
+    """A person's groups (#273 piece 4): every group whose `people` names
+    them, so section E can cite each group's link. Same shape as for_entity."""
+    return _groups(root, logs, lambda g: slug in (g.get("people") or []))
+
+
 _CODE_RE = re.compile(r"\b(?:[A-Z]{1,5}-?\d{2,}|\d{2,}-[A-Z]{1,5})\b")
 _MONTHS = ("January", "February", "March", "April", "May", "June", "July",
            "August", "September", "October", "November", "December")
