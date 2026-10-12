@@ -96,7 +96,7 @@ A person P is queued when material newer than P's start point names P:
 | Source | Names P when | Activity time |
 |---|---|---|
 | Confirmed meeting, incl. `type: note` | `P ∈ attendees[]` | as for the entity queue |
-| Mail/Teams day log group | `P ∈` the group's `people` | the group's time |
+| Mail/Teams day log group | `P ∈` the group's `people` | the log's `updated-at`, as for the entity queue (a later rewrite of the day re-reads its groups; exact duplicates are skipped) |
 
 - Start point: `person-updated`; when absent, `created` at 00:00; when both
   are absent (a page made by hand), today at 00:00 — section E's stamp takes

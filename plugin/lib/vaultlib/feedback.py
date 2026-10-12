@@ -49,7 +49,8 @@ class FeedbackError(Exception):
 
 _FACT_DATE_RE = re.compile(r"\A- (?:\d{4}-\d{2}-\d{2} — )?")
 _FACT_MARKER_RE = re.compile(
-    r"\s*\((?:meeting|mail|chat|session|note|moved from|from) [^()]*\)\s*\Z")
+    r"\s*\((?:meeting|mail|chat|session|note|moved from|from|notes from) [^()]*\)\s*\Z",
+    re.IGNORECASE)
 
 
 def _facts(body: str) -> list:
@@ -57,15 +58,22 @@ def _facts(body: str) -> list:
     its date and source marker: facts about a person never leave the vault."""
     out = []
     for title, content in markdown.split_sections(body):
-        if title != "What I know":
+        if title.strip().lower() != "what i know":
             continue
         for line in content.split("\n"):
             line = line.strip()
             if not line:
                 continue
-            # Without its closing punctuation, so a draft quoting the fact
-            # mid-sentence still matches.
-            text = _FACT_MARKER_RE.sub("", _FACT_DATE_RE.sub("", line)).strip().rstrip(".!?;:,")
+            # Every trailing marker goes — a line the structure-15 upgrade
+            # moved can carry two — and so does the closing punctuation, so a
+            # draft quoting the fact mid-sentence still matches.
+            text = _FACT_DATE_RE.sub("", line)
+            while True:
+                stripped = _FACT_MARKER_RE.sub("", text)
+                if stripped == text:
+                    break
+                text = stripped
+            text = text.strip().rstrip(".!?;:,")
             if text:
                 out.append(text)
     return out

@@ -196,3 +196,12 @@ def test_verify_catches_a_differently_cased_notes_from(tmp_path):
     root = vault(tmp_path, {"dana.md": raw})
     with pytest.raises(Exception, match="Notes from"):
         load().verify(root)
+
+
+def test_lines_inside_a_code_block_are_moved_untouched(tmp_path):
+    # Final review M3: the entity suffix must never land inside a query.
+    raw = (HEAD + "\n# Dana\n\n## Notes from Acme\n\n```dataview\n- LIST FROM \"x\"\n```\n\n- a\n")
+    root = vault(tmp_path, {"dana.md": raw})
+    load().apply(root)
+    _, text = body(root)
+    assert '```dataview\n- LIST FROM "x"\n```' in text and "- a (Notes from Acme)" in text

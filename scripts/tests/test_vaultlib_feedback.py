@@ -193,3 +193,15 @@ def test_a_fact_from_what_i_know_is_blocked(tmp_path):
     assert {"kind": "fact", "fragment": "Is selling the house in Ghent"} in result["blocked"]
     assert feedback.lint(root, "plays chess on sundays")["ok"] is False
     assert feedback.lint(root, "The sync crashed on step 6.")["ok"] is True
+
+
+def test_migrated_lines_and_any_heading_case_are_blocked(tmp_path):
+    # Final review I2: a migrated /update-entity line carries two trailing
+    # parentheticals, and the heading may be "## What I Know".
+    root = seeded_vault(tmp_path)
+    (root / "50-people" / "zed.md").write_text(
+        '---\nperson-name: "Zed Q"\nslug: zed\n---\n# Zed Q\n\n## What I Know\n\n'
+        "- Wants numbers, not narrative. (from /update-entity, 2026-10-01) (Notes from Acme)\n",
+        encoding="utf-8")
+    result = feedback.lint(root, "the user wants numbers, not narrative in the recap")
+    assert {"kind": "fact", "fragment": "Wants numbers, not narrative"} in result["blocked"]

@@ -2313,7 +2313,7 @@ def test_evening_sync_notes_steps_run_in_order():
     assert (t.index("## Stage 2") < t.index("follow section A of")
             < t.index("**To Do's.**") < t.index("### Stage 3c")
             < t.index("Follow section B of") < t.index("## Stage 4")
-            < t.index("Follow sections C and D of") < t.index("## Stage 5"))
+            < t.index("Follow sections C, D and E of") < t.index("## Stage 5"))
 
 
 def test_evening_sync_empty_queue_still_marks_notes():
@@ -2731,3 +2731,20 @@ def test_process_inputs_table_names_people_updates():
 def test_people_updates_read_mail_through_for_person():
     """A log group's marker cites its link, which only the reader returns."""
     assert "messages for-person" in _process_e()
+
+
+def test_people_updates_need_the_speaker_to_be_the_person():
+    """Final review I1: a condensed log point or an unattributed takeaway
+    does not show who said it — rule 2 means writing nothing then."""
+    e = _process_e().lower()
+    assert "does not show that the person said it" in e and "write nothing" in e
+
+
+def test_people_updates_write_one_person_at_a_time_in_the_main_run():
+    """Final review M1/M2: parallel subagents must not write the same page;
+    they return facts, the run writes them in turn and reports skips."""
+    e = _process_e()
+    steps = e.split("When every batch has returned", 1)
+    assert "person write" not in steps[0]
+    assert "person write" in steps[1] and "one person at a time" in steps[1]
+    assert "Warnings" in steps[1] and "not stamped" in steps[1]

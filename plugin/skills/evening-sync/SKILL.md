@@ -228,7 +228,7 @@ Follow section B of `${CLAUDE_PLUGIN_ROOT}/skills/evening-sync/references/proces
 
 ## Stage 4 — Project-state updates
 
-Follow sections C and D of `${CLAUDE_PLUGIN_ROOT}/skills/evening-sync/references/process.md`, passing the stage-2 harvest jottings to C. Record its Returns for stages 6 and 7.
+Follow sections C, D and E of `${CLAUDE_PLUGIN_ROOT}/skills/evening-sync/references/process.md`, passing the stage-2 harvest jottings to C. Record its Returns for stages 6 and 7.
 
 ## Stage 5 — Tomorrow's calendar and prep
 

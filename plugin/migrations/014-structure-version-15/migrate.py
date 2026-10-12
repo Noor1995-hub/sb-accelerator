@@ -146,9 +146,19 @@ def apply(root: Path) -> dict:
             if entity is not None:
                 lines = _trim(content)
                 if entity:
-                    lines = [line + f" (Notes from {entity})"
-                             if line.startswith("- ") and f"the {entity} page" not in line
-                             else line for line in lines]
+                    # Outside code blocks only: a suffix inside a query
+                    # would break it.
+                    tagged, fence = [], None
+                    for line in lines:
+                        match = markdown._FENCE_RE.match(line)
+                        if match:
+                            token = match.group(1)
+                            fence = None if fence == token else (fence or token)
+                        elif (fence is None and line.startswith("- ")
+                              and f"the {entity} page" not in line):
+                            line += f" (Notes from {entity})"
+                        tagged.append(line)
+                    lines = tagged
                 if moved and lines:
                     if not (moved[-1].startswith("- ") and lines[0].startswith("- ")):
                         moved.append("")

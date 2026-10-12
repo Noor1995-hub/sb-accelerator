@@ -349,10 +349,22 @@ here unchanged. There is no cap. Each subagent carries its item, the
    written business case", "I'm moving to the Antwerp office", "I'm having a
    hard time with this topic". Never what others said about them, never an
    interpretation of tone or mood ("seemed stressed"), nothing invented,
-   nothing already on their page. Writing nothing is a valid outcome — most
-   meetings hold no such fact.
-3. Write per person, one line per fact, the date being the material's own
-   `date`:
+   nothing already on their page. When the material does not show that the
+   person said it themselves — a condensed mail or chat point ("Dana is
+   selling her house" may be the owner writing to Dana), a Key Takeaway with
+   no speaker — write nothing for it. Writing nothing is a valid outcome —
+   most meetings hold no such fact.
+3. Do not write to the page — several subagents run at once and may share a
+   person. Return a fenced JSON block: `{"path", "facts": {"<slug>":
+   [{"date", "fact"}, …], …}, "notes"}`, one line per fact, the date being
+   the material's own `date`, each fact ending in its source marker:
+   `(meeting · [[<meeting stem>]])` for a meeting, or `(mail · <link>)` /
+   `(chat · <link>)` for a log group (the group's `link`, `mail` or `chat`
+   per its `kind`). A person with nothing gets `[]`. A subagent that fails
+   or returns no block becomes a warning.
+
+When every batch has returned, write the facts one person at a time — never
+two `person write` calls on the same page at once:
 
 ```bash
 cat > "$SCRATCH/person-facts-<slug>.payload.json" <<'JSON'
@@ -361,24 +373,24 @@ JSON
 python3 "$VAULTLIB" person write --vault "$VAULT" --slug <slug> --automatic --facts "$SCRATCH/person-facts-<slug>.payload.json"
 ```
 
-   The marker is `(meeting · [[<meeting stem>]])` for a meeting, or
-   `(mail · <link>)` / `(chat · <link>)` for a log group (the group's `link`,
-   `mail` or `chat` per its `kind`). `person write` refuses a fact without a
-   marker or on more than one line and lists it in `skipped`; fix it and
-   retry once, then drop it and report it in `notes`.
-4. Return a fenced JSON block: `{"path", "written": {"<slug>": N, …},
-   "skipped": [...], "notes"}`. A subagent that fails or returns no block
-   becomes a warning.
+The payload joins that person's facts from every item. `person write`
+refuses a fact without a marker, on more than one line or with a bad date,
+and refuses the whole page when its `## What I know` is left inside an open
+code block; each lands in `skipped` with a reason that holds no fact text.
+`duplicates` are fine. Every `skipped` reason goes to the caller's
+**Warnings** with the person's name. When it is the open-code-block
+refusal, that person is not stamped, so once the owner closes the block the
+next run reads the material again.
 
-When every batch has returned, stamp each person in `peopleNeedingUpdate`
-whose items all returned a block — also when nothing was written:
+Then stamp each person in `peopleNeedingUpdate` whose items all returned a
+block and whose page was not refused — also when nothing was written:
 
 ```bash
 python3 "$VAULTLIB" person touch --vault "$VAULT" --slug <slug> --timestamp <queuedAt>
 ```
 
-A person with a failed item is not stamped, so the next run reads the
-material again (`person write` skips exact duplicates).
+A person with a failed item is not stamped either (`person write` skips
+exact duplicates when the material is read again).
 
 What reaches the caller is **counts only**: facts written and people
 touched. No fact text goes into the summary, the recap or the daily note —
