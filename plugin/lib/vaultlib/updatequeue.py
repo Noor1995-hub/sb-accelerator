@@ -347,14 +347,16 @@ def _entity_queue(root: Path, confirmed: List[dict], logs: List[dict],
 
 
 def _people_queue(root: Path, confirmed: List[dict], logs: List[dict],
-                  owner_slug: str, warnings: List[str]) -> Tuple[List[dict], List[dict]]:
+                  owner_slug: str, warnings: List[str], *,
+                  today: date) -> Tuple[List[dict], List[dict]]:
     """People with material newer than their `person-updated` stamp (#273
     piece 4), and that material grouped per meeting and per day log so one
     reader handles everyone in it.
 
     No look-back: without a stamp the start point is the `created` day at
     00:00 (a person created tonight still gets tonight's meeting); without
-    either the person is skipped and named in `warnings`. Session records are
+    either — a page made by hand — it is today at 00:00, and section E's
+    stamp takes over from the first run. Session records are
     not a source — /add writes session facts on the spot. Confirmed meetings
     of every type count, `type: note` captures included."""
     starts: Dict[str, datetime] = {}
@@ -375,11 +377,7 @@ def _people_queue(root: Path, confirmed: List[dict], logs: List[dict],
             warnings.append(f"{rel}: unparseable person-updated {raw!r} — falling "
                             "back to created; rewrite it as YYYY-MM-DDTHH:MM or delete it")
         if stamp is None:
-            day = _parse_first_iso_date(data.get("created"))
-            if day is None:
-                warnings.append(f"{rel}: no usable person-updated or created — "
-                                "facts about this person are not read")
-                continue
+            day = _parse_first_iso_date(data.get("created")) or today
             stamp = datetime.combine(day, time.min)
         starts[slug] = stamp
         names[slug] = (rel, str(data.get("person-name") or slug))
@@ -716,7 +714,7 @@ def run(root: Path, today: str, owner: str) -> dict:
                                    warnings, today=today_date,
                                    queued_notes=queued_notes)
     people_queue, people_work = _people_queue(root, confirmed, logs, owner_slug,
-                                              warnings)
+                                              warnings, today=today_date)
     return {
         "today": today_date.isoformat(),
         # The minute this queue was built. Sections D and E stamp

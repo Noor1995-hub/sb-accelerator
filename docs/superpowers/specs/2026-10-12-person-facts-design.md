@@ -99,7 +99,8 @@ A person P is queued when material newer than P's start point names P:
 | Mail/Teams day log group | `P ∈` the group's `people` | the group's time |
 
 - Start point: `person-updated`; when absent, `created` at 00:00; when both
-  are absent, P is skipped and named in `warnings`.
+  are absent (a page made by hand), today at 00:00 — section E's stamp takes
+  over from the first run, and no warning repeats every night.
 - Session records are **not** a source here — session facts are written on
   the spot (see `/add`), so reading them again would write them twice.
 - The vault owner's own person note is never queued.
@@ -183,7 +184,7 @@ Test-first for every CLI part.
   CRLF input handled; frontmatter only `last-updated`; unknown slug error.
 - `person touch`: sets, idempotent, rejects a malformed timestamp.
 - `update-queue`: meeting and `type: note` attendees; log group `people`;
-  stamp excludes older material; `created` fallback; neither → `warnings`;
+  stamp excludes older material; `created` fallback; neither → today;
   owner excluded; sessions excluded; `peopleWork` grouping with per-person
   start points.
 - Migration 014: one and several `Notes from` sections; non-bullet text

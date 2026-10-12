@@ -1224,13 +1224,17 @@ def test_created_is_the_start_point_without_a_stamp(tmp_path):
     assert [w["path"] for w in work] == ["20-meetings/new.md"]
 
 
-def test_no_stamp_and_no_created_warns_and_skips(tmp_path):
+def test_no_stamp_and_no_created_starts_today_without_a_warning(tmp_path):
+    # A hand-made page has neither: it starts from today (section E's stamp
+    # takes over after that), never with a nightly warning.
     root = make_vault(tmp_path)
     write_person(root, "dana")                       # no created, no stamp
-    write_meeting(root, "m", date_value="2026-10-11T10:00", attendees=["dana"])
-    queued, _, warnings = people_run(root)
-    assert queued == []
-    assert any("50-people/dana.md" in w and "person-updated" in w for w in warnings)
+    write_meeting(root, "old", date_value="2026-10-11T10:00", attendees=["dana"])
+    write_meeting(root, "new", date_value="2026-10-12T10:00", attendees=["dana"])
+    queued, work, warnings = people_run(root, today="2026-10-12")
+    assert [p["slug"] for p in queued] == ["dana"]
+    assert [w["path"] for w in work] == ["20-meetings/new.md"]
+    assert not any("dana" in w for w in warnings)
 
 
 def test_unparseable_stamp_warns_and_falls_back_to_created(tmp_path):
