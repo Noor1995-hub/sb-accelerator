@@ -189,10 +189,24 @@
     },
     "person": {
       "enums": {
+        "decision-role": [
+          "sponsor",
+          "champion",
+          "evaluator",
+          "influencer",
+          "blocker",
+          null
+        ],
         "relationship": [
           "colleague",
           "direct-report",
           "external",
+          null
+        ],
+        "stance": [
+          "champion",
+          "neutral",
+          "blocker",
           null
         ]
       },
@@ -201,8 +215,11 @@
       ],
       "optional": [
         "email",
+        "entity",
         "company",
         "role",
+        "decision-role",
+        "stance",
         "projects",
         "created",
         "last-updated",
@@ -249,6 +266,7 @@
         "next-milestone",
         "next-milestone-date",
         "state-updated",
+        "stage",
         "keywords"
       ],
       "required": [

@@ -170,7 +170,7 @@ object: project
 required: [project-name, slug, status, project-type, entity, owner, created,
            last-updated]
 optional: [type, parent, stakeholders, meetings-7d, meetings-30d, key-people,
-           next-milestone, next-milestone-date, state-updated, keywords]
+           next-milestone, next-milestone-date, state-updated, stage, keywords]
 enums:
   status: [active, paused, completed, cancelled]
   project-type: [initiative, area-of-responsibility]
@@ -200,6 +200,9 @@ body_sections: [Coming up, Recent meetings, Recent decisions, Background]
   unique across entities and typing one during meeting triage selects entity
   and project in a single gesture.
 - Example: `30-projects/acme-industries-operating-model/index.md`
+- `stage` — the card's Stage sentence, stored by `project state write`
+  (machine-maintained, like `state-updated`); the entity page's Engagements
+  shows it (#273).
 - `state-updated` is a full ISO timestamp (`YYYY-MM-DDTHH:MM`) written by
   `project touch` alongside `last-updated`. `last-updated` stays the
   human-facing day; `state-updated` is what the evening run's update queue
@@ -226,11 +229,22 @@ body_sections: [Coming up, Recent meetings, Recent decisions, Background]
 object: person
 required: [person-name, slug]
 keys_present: [relationship]
-optional: [email, company, role, projects, created, last-updated,
-           meetings-7d, meetings-30d, last-met, messages-7d, messages-30d]
+optional: [email, entity, company, role, decision-role, stance, projects, created,
+           last-updated, meetings-7d, meetings-30d, last-met, messages-7d, messages-30d]
 enums:
   relationship: [colleague, direct-report, external, null]
+  decision-role: [sponsor, champion, evaluator, influencer, blocker, null]
+  stance: [champion, neutral, blocker, null]
 ```
+
+- `entity` — the slug of the entity (or team) the person belongs to; that
+  entity's page lists them under Stakeholders (#273). Set by `person set`,
+  by `/update-tables`, and by `person ensure --entity` when routing knows it
+  for certain.
+- `company` — legacy free text, kept only where the structure-14 upgrade
+  found no single matching entity. Nothing new writes it.
+- `role` (the person's title), `decision-role` and `stance` are the person's
+  stakeholder fields, shown on their entity's page.
 
 - `relationship: null` (key present, value empty) = **uncurated** — that is
   what People.base's "Uncurated" view filters on. `keys_present` means the
@@ -418,11 +432,11 @@ a per-skill template.
 | Section | Shape | Merge rule |
 |---|---|---|
 | `## Context` | `> [!info]+ **Standing context**` callout holding `> - **{Label}:** {fact} — {why it matters}` | Update the bullet with a matching label; otherwise append inside the callout. Maximum 8 bullets; consolidate the least important rather than exceeding it. |
-| `## Stakeholders` | Table: Name · Title · Role in Decision · Stance · Notes | Match on name, case-insensitive. Update only fields carrying new information; never overwrite specific data with vaguer data. Never remove a row. New rows get `<!-- needs-review -->` in Notes. |
+| `## Stakeholders` | Live query: people whose `entity` is this entity or one of its teams (Name · Team · Title · Role in decision · Stance) | Not written. Edit the people (`person set`, People table, `/update-tables`). |
 | `## Relationship History` | `- **{YYYY-MM-DD}:** {what happened} — {significance}` | Insert in date order. Never modify or remove an existing entry. |
 | `## Meeting Log` | A Dataview index of the entity's meetings, then `### Dynamics` holding `- **{YYYY-MM-DD} — {Topic}:** {the read of the room}` | The table is a query — nothing writes it, and it needs no maintenance. Dynamics bullets are append-only, newest first. Never modify or remove an existing bullet. |
 | `## Sensitivities` | `> [!warning]+ **Handle with care**` callout holding `> - **{topic}:** {detail} — {implications}` | Update a matching topic; otherwise append inside the callout. Never remove. |
-| `## Engagements` | Table: Project · Status · One-liner | Match on project slug. Update status and one-liner. Never remove. Link `[{slug}](../../30-projects/{slug}/index.md)`. |
+| `## Engagements` | Live query: projects of this entity or its teams (Project · Status · Where it stands · Next milestone) | Not written. |
 
 Empty sections carry `*No entries yet.*` — replaced on first real entry.
 
@@ -452,8 +466,8 @@ or was written by hand without it, is absent from the table until the field
 is added: the query has no other way to reach it. See §Meeting for why the
 field exists rather than the join being computed from `projects[]`.
 
-**Role in Decision** vocabulary: sponsor · champion · evaluator · influencer
-· blocker. **Stance** vocabulary: champion · neutral · blocker.
+A person's **`decision-role`** vocabulary: sponsor · champion · evaluator ·
+influencer · blocker. **`stance`** vocabulary: champion · neutral · blocker.
 
 **Unvalidated marking.** Content that was generated rather than confirmed by
 a human carries `<!-- unvalidated -->` directly under its section header, and
