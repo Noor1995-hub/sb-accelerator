@@ -1325,3 +1325,9 @@ def test_unsettle_duplicate_requires_both_event_keys_or_neither(tmp_path):
     with pytest.raises(seenevents.SeenEventsError, match="travel together"):
         seenevents.unsettle_duplicate(
             root, "m365:aaaa111122223333", start_utc="2026-08-28T14:00:00")
+
+
+def test_a_malformed_outcome_without_a_start_still_fails(tmp_path):
+    root = make_vault(tmp_path)
+    with pytest.raises(seenevents.SeenEventsError):
+        seenevents.record(root, [{"id": "AAMkAGId3", "outcome": "written"}], NOW)

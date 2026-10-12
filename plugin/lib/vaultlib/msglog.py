@@ -497,7 +497,7 @@ def status(root: Path, *, now: str, first_run_since: Optional[str], auth_error: 
     if auth_error:
         lines.append(AUTH_LINE)
     if first_run_since:
-        lines.append("From today, this note also covers your mail and Teams.")
+        lines.append("From now on, this note also covers your mail and Teams.")
     behind = [((now_dt - seenevents.parse_now(g["from"])).days, g["source"]) for g in state["gaps"]]
     moved = [seenevents.parse_now(s) for s in (state["cursor"], state["last_run"]) if s]
     if moved:

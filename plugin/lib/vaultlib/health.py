@@ -506,7 +506,8 @@ def render(data: dict) -> str:
     lines += ["", "## Decisions", "| status | count |", "|---|---|"]
     lines += [f"| {status} | {count} |"
               for status, count in sorted(data["decisions"].items())]
-    lines += [f"| to_review | {data['decisions_to_review']} |"]
+    lines += ["", "### Decisions waiting for review (all time)"]
+    lines += _table([("to_review", data["decisions_to_review"])])
     lines += ["", "## Unparsed"]
     lines += _table([("unparsed", data["unparsed"])])
     lines += ["", "## Provenance"]

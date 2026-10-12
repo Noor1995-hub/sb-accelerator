@@ -15,7 +15,9 @@ from typing import Dict, List, Optional
 
 from . import basefile, entity, markdown, naming, person, project, vault, xlsx
 
-FORMAT = "1"
+# "2" (review 2026-10-12): cells show choice labels and "Name (Entity)";
+# a format-1 workbook's hidden snapshot would read as conflicts.
+FORMAT = "2"
 LIST_SEP = "; "
 
 
@@ -318,6 +320,12 @@ def to_value(text: str, kind: str, all_names: dict):
             return hits[0], None
         if len(hits) > 1:
             return None, f"{name!r} matches several: {', '.join(sorted(hits))}"
+        # A bare name that two entities share shows as "Name (Entity)":
+        # say it is ambiguous, not unknown.
+        shared = [s for s, n in target.items() if n.lower().startswith(name.lower() + " (")]
+        if shared:
+            return None, (f"{name!r} matches several: "
+                          f"{', '.join(sorted(target[s] for s in shared))} — pick one")
         return None, f"{name!r} matches no {_LINK_KIND[kind]}"
 
     if kind in ("people", "projects"):
@@ -392,6 +400,14 @@ def _check_row(root: Path, table: str, slug: str, merged: dict, changed: Dict[st
             pdata, _ = markdown.split_frontmatter(parent_index.read_text(encoding="utf-8"))
             if pdata.get("parent"):
                 return f"maximum two levels: {parent!r} already has a parent"
+            # The rule `project scaffold` applies: a sub-project stays within
+            # its (top-level) entity (review 2026-10-12).
+            parent_entity = str(pdata.get("entity") or "")
+            own_entity = str(merged.get("entity") or "")
+            if (parent_entity and own_entity and project._top_entity(root, parent_entity)
+                    != project._top_entity(root, own_entity)):
+                return (f"parent project {parent!r} belongs to another entity — "
+                        "a sub-project stays within its entity")
             if slug and any(o["data"].get("parent") == slug for o in objects(root, "projects")):
                 return f"{slug!r} has sub-projects of its own — it cannot get a parent"
     return None

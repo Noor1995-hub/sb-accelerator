@@ -243,7 +243,7 @@ def test_messages_block_renders_needs_you_first_with_the_pointers(tmp_path):
     clean, offenders, _ = recap.validate(root, {**full_payload(), "messages": {
         "items": [{"kind": "context", "text": "Operating model: workshop 2 moves to 14 Oct."},
                   {"kind": "needs-you", "text": "Sam is waiting for your budget figures."}],
-        "status": ["From today, this note also covers your mail and Teams."],
+        "status": ["From now on, this note also covers your mail and Teams."],
         "decisions_to_confirm": 1, "keyword_proposal": None}})
     assert offenders == []
     out = recap.render(root, clean, meetings=0, window_label="today")

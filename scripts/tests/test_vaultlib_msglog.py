@@ -395,7 +395,7 @@ def test_status_peek_keeps_the_catch_up_line_until_a_real_run(tmp_path):
 def test_status_first_morning_line(tmp_path):
     root = make_vault(tmp_path)
     assert msglog.status(root, now="2026-09-30T19:00:00Z", first_run_since="2026-09-28T22:00:00Z") == [
-        "From today, this note also covers your mail and Teams."]
+        "From now on, this note also covers your mail and Teams."]
 
 
 def test_check_lines_drops_an_unsupported_line(env, tmp_path):
@@ -646,7 +646,7 @@ def test_status_merges_one_interval_closed_for_several_sources_and_never_exceeds
         {"source": "teams", "from": "2026-09-25T00:00:00Z", "to": "2026-09-25T12:00:00Z"}]
     msgstate.save(root, state)
     lines = msglog.status(root, now="2026-10-01T19:00:00Z", first_run_since="2026-09-30T22:00:00Z")
-    assert lines == ["From today, this note also covers your mail and Teams.",
+    assert lines == ["From now on, this note also covers your mail and Teams.",
                      "I couldn't catch up on your mail and Teams from 20 September to 22 September.",
                      "I couldn't catch up on your mail from 23 September to 24 September."]
     assert msglog.status(root, now="2026-10-01T19:00:00Z", first_run_since=None) == [

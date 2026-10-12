@@ -228,3 +228,25 @@ def test_shared_project_names_are_told_apart_by_entity(tmp_path):
     save(root, rel, book)
     [update] = tables.plan(root, rel)["updates"]
     assert update["value"] == ["beta-erp"]
+
+
+def test_a_parent_project_of_another_entity_is_refused_in_the_plan(tmp_path):
+    # Review of #284: scaffold refused it, the table plan let it through.
+    root = make_vault(tmp_path)
+    _second_entity_with_same_project_name(root)
+    rel, book = exported(root, "projects")
+    row = next(r for r in book["Projects"][1:] if r[0] == "30-projects/beta-erp/index.md")
+    row[col(book, "Projects", "Parent")] = "ERP rollout (Acme)"
+    save(root, rel, book)
+    p = tables.plan(root, rel)
+    assert p["updates"] == [] and "stays within its entity" in p["refused"][0]["reason"]
+
+
+def test_a_bare_shared_project_name_is_ambiguous_not_unknown(tmp_path):
+    root = make_vault(tmp_path)
+    _second_entity_with_same_project_name(root)
+    rel, book = exported(root, "people")
+    book["People"][1][col(book, "People", "Projects")] = "ERP rollout"
+    save(root, rel, book)
+    p = tables.plan(root, rel)
+    assert p["unknown"] == [] and "matches several" in p["refused"][0]["reason"]

@@ -75,10 +75,11 @@ before touching anything:
   data; one with a `lossy` string drops something a human might want back
   — read that string out in full, not summarized, so the consultant knows
   exactly what will not survive the run.
-- When the chain includes 009: the lossy lines of 003, 004 and 006 are
-  about Notebook Navigator settings, and 009 switches Navigator off — say
-  so right after reading them out, so nobody weighs the loss of settings
-  for a sidebar that is gone two steps later.
+- When the chain includes 009: the Navigator parts of the lossy lines of
+  003, 004 and 006 are moot, because 009 switches Navigator off — say so
+  right after reading them out. The rest still stands: 003 also hides
+  `claude`, `99-workflow-config` and `CLAUDE.md` in the sidebar and trims
+  the ribbon, and those changes outlive Navigator.
 - That a full vault snapshot is taken first, automatically, before the
   first migration applies — a zip under
   `99-workflow-config/snapshots/`, with only the three most recent

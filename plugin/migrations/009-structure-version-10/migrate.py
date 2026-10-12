@@ -27,8 +27,8 @@ Every file is merged key by key, never replaced: they hold the owner's own
 settings and Obsidian's UI state. A file that is missing is created only for
 `bookmarks.json` and `daily-notes.json`; `workspace.json` is skipped when
 absent (Obsidian writes a fresh one). `LOSSY` is set because Navigator is
-switched off and the startup note, new-note folder and sidebar tab are reset
-even where the owner had chosen otherwise. Obsidian must be closed while
+switched off and the daily-note settings, new-note folder and sidebar tab are
+reset even where the owner had chosen otherwise. Obsidian must be closed while
 this runs: it rewrites `workspace.json` on quit.
 """
 from __future__ import annotations
@@ -46,8 +46,9 @@ from vaultlib import vault  # noqa: E402
 TARGET_VERSION = 10
 LOSSY = (
     "switches Notebook Navigator off and makes Obsidian's Bookmarks list the "
-    "sidebar menu; Obsidian opens today's daily note on startup and files new "
-    "notes in 80-thoughts-ideas — even where the owner had chosen otherwise "
+    "sidebar menu; sets the Daily notes folder and format (opening today's "
+    "note on startup off) and files new notes in 80-thoughts-ideas — even "
+    "where the owner had chosen otherwise "
     "(their own bookmarks are kept, after the menu)"
 )
 
