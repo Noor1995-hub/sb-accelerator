@@ -201,11 +201,11 @@ M365: skip with one line in the summary.
 
 Runs every evening, whatever stage 3b did — off, skipped or failed.
 
-Follow section B of `references/process.md`.
+Follow section B of `${CLAUDE_PLUGIN_ROOT}/skills/evening-sync/references/process.md`.
 
 ## Stage 4 — Project-state updates
 
-Follow section C of `references/process.md`, passing the stage-2 harvest jottings. Record its Returns for stage 7.
+Follow section C of `${CLAUDE_PLUGIN_ROOT}/skills/evening-sync/references/process.md`, passing the stage-2 harvest jottings. Record its Returns for stages 6 and 7.
 
 ## Stage 5 — Tomorrow's calendar and prep
 

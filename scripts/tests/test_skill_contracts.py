@@ -1250,7 +1250,7 @@ def test_evening_sync_runs_messages_between_sync_and_project_updates():
     heading = text.index("### Stage 3c — Refresh (every evening)")
     assert marker < heading < stage4, "refresh has its own heading after 3b, so the queue sees tonight's logs"
     assert "Runs every evening, whatever stage 3b did" in text[heading:stage4]
-    assert "Follow section B of `references/process.md`" in text[heading:stage4]
+    assert "Follow section B of `${CLAUDE_PLUGIN_ROOT}/skills/evening-sync/references/process.md`" in text[heading:stage4]
     assert "update-queue" not in text[marker:heading], "refresh is not inside 3b"
 
 
@@ -1353,7 +1353,6 @@ def test_evening_sync_stage4_dispatch_is_a_blocking_batch_cap():
     # calls IS the batch, and the batch returning IS the only signal to send
     # the next one. Anchored on the operative sentence, not just "blocking"
     # or "batch", which both already appear elsewhere in this stage.
-    text = _normalized(_evening_sync())
     stage4 = _normalized(read_ref("evening-sync", "process.md")).split("## C.", 1)[1].split("## Returns", 1)[0]
     assert "at most 3" in stage4 and "blocking Agent calls" in stage4, (
         "stage 4 must say the batch is capped at 3 blocking Agent calls, "
@@ -2332,6 +2331,12 @@ def test_evening_sync_notes_steps_run_in_order():
     writeback = text.index('notes mark-absorbed --vault')
     assert text.index("## C.") < text.index("Dispatch in blocking batches") < writeback
     assert writeback < text.index("## Returns")
+    # The pointers must sit where the moved text used to run (#271).
+    t = read_skill("evening-sync")
+    assert (t.index("## Stage 2") < t.index("follow section A of")
+            < t.index("**To Do's.**") < t.index("### Stage 3c")
+            < t.index("Follow section B of") < t.index("## Stage 4")
+            < t.index("Follow section C of") < t.index("## Stage 5"))
 
 
 def test_evening_sync_empty_queue_still_marks_notes():

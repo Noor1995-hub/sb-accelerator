@@ -72,7 +72,7 @@ lines — into the final summary verbatim.
 ## C. Project-state updates
 
 If the queue is empty, record "no projects to update", run the write-back for
-your notes below (a note with no project is still marked), then go to the evening run's stage 6 (recap; on demand: nothing).
+your notes below (a note with no project is still marked), then go to the caller's next step (evening: stage 6, the recap; on demand: step 10).
 Otherwise, dispatch one subagent per queued project (each with `model:
 sonnet`), each carrying the queue entry, the harvest jottings (evening only; on demand there are none) that mention
 the project, today's date, and these instructions.
@@ -227,7 +227,10 @@ is not an error.
 What the caller carries into its summary:
 
 - folded ticks (from B, including the second `reconcile-reviews`) and any `conflict_ticks`
+- metrics written (`metricsWritten`: projects, people) from B
 - `projectsNeedingUpdate` slugs
-- per project: `stateWritten`, `decisionsWritten`, `decisionsSkipped`
-- notes absorbed and notes kept (`include` still ticked)
+- per project: `stateWritten`, `decisionsWritten` (stems, each with its `source`), `decisionsSkipped`
+- notes absorbed — `{path, projects}` for each note whose `mark-absorbed` returned `marked`
+- notes kept (`include` still ticked), each with why, including `notesNotQueued`
+- `sync_notes` lines from A and C — kept apart from warnings
 - warnings, verbatim, including `SELF-CHECK` lines
