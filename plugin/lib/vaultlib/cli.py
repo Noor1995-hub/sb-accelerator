@@ -266,6 +266,12 @@ def build_parser() -> argparse.ArgumentParser:
     _add_vault_argument(ent_read)
     ent_read.add_argument("--slug", required=True)
 
+    ent_touch = entities_sub.add_parser(
+        "touch", help="stamp entity-updated after the automatic update read new material")
+    _add_vault_argument(ent_touch)
+    ent_touch.add_argument("--slug", required=True)
+    ent_touch.add_argument("--timestamp", help="YYYY-MM-DDTHH:MM; defaults to now")
+
     ent_validate = entities_sub.add_parser(
         "validate",
         help="clear the [!unvalidated] banner — the explicit review act; "
@@ -1141,6 +1147,8 @@ def _dispatch(args: argparse.Namespace) -> int:
             ))
         if args.action == "read":
             return _ok(entity.read(root, args.slug))
+        if args.action == "touch":
+            return _ok(entity.touch(root, args.slug, timestamp=args.timestamp))
         if args.action == "validate":
             return _ok(entity.validate(root, args.slug,
                                        vault.today_iso(args.today)))

@@ -968,3 +968,25 @@ def test_read_returns_the_live_queries_as_raw_text(tmp_path):
     sections = entity.read(root, SLUG)["sections"]
     assert entity.STAKEHOLDERS_QUERY in sections["Stakeholders"]
     assert entity.ENGAGEMENTS_QUERY in sections["Engagements"]
+
+
+
+def test_touch_stamps_entity_updated_and_nothing_else(tmp_path):
+    """#273 piece 3: the automatic update marks what it has read."""
+    root = make_vault(tmp_path)
+    entity.ensure(root, slug="acme", name="Acme", today="2026-10-12")
+    path = root / "40-entities/acme/dossier.md"
+    before = path.read_text(encoding="utf-8")
+    result = entity.touch(root, "acme", timestamp="2026-10-12T21:05")
+    after = path.read_text(encoding="utf-8")
+    assert result["entity-updated"] == "2026-10-12T21:05" and result["changed"]
+    assert after.replace("entity-updated: 2026-10-12T21:05\n", "") == before
+
+
+def test_touch_refuses_a_bad_timestamp_and_defaults_to_now(tmp_path):
+    root = make_vault(tmp_path)
+    entity.ensure(root, slug="acme", name="Acme", today="2026-10-12")
+    with pytest.raises(entity.EntityError):
+        entity.touch(root, "acme", timestamp="12/10 21h")
+    stamped = entity.touch(root, "acme")["entity-updated"]
+    assert re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}", stamped)

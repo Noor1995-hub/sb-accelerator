@@ -893,3 +893,25 @@ def validate(root: Path, slug: str, today: str) -> dict:
     updated = markdown.upsert_scalar_field(updated, "last-updated", today)
     vault.atomic_write(path, updated)
     return {"slug": slug, "path": parsed["path"], "changed": True}
+
+
+_STAMP_RE = re.compile(r"\A\d{4}-\d{2}-\d{2}T\d{2}:\d{2}\Z")
+
+
+def touch(root: Path, slug: str, *, timestamp: Optional[str] = None) -> dict:
+    """Stamp `entity-updated`: the automatic update has read every piece of
+    new material up to this minute (#273). The update queue compares new
+    meetings, logs and sessions against it, as it does a project's
+    `state-updated`. Nothing else in the dossier changes."""
+    if timestamp is None:
+        timestamp = datetime.datetime.now().isoformat(timespec="minutes")
+    if not _STAMP_RE.match(str(timestamp)):
+        raise EntityError(f"timestamp {timestamp!r} must be YYYY-MM-DDTHH:MM")
+    read(root, slug)  # raises EntityError if the dossier does not exist
+    path = _dossier_path(root, slug)
+    text = path.read_text(encoding="utf-8")
+    updated = markdown.upsert_scalar_field(text, "entity-updated", timestamp)
+    if updated != text:
+        vault.atomic_write(path, updated)
+    return {"slug": slug, "path": path.relative_to(root).as_posix(),
+            "entity-updated": timestamp, "changed": updated != text}
