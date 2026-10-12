@@ -60,9 +60,17 @@ def _facts(body: str) -> list:
     for title, content in markdown.split_sections(body):
         if title.strip().lower() != "what i know":
             continue
+        fence = None
         for line in content.split("\n"):
+            # A code block (a query the upgrade moved here) holds no facts;
+            # its words would refuse any draft that says "list".
+            match = markdown._FENCE_RE.match(line)
+            if match:
+                token = match.group(1)
+                fence = None if fence == token else (fence or token)
+                continue
             line = line.strip()
-            if not line:
+            if not line or fence is not None:
                 continue
             # Every trailing marker goes — a line the structure-15 upgrade
             # moved can carry two — and so does the closing punctuation, so a

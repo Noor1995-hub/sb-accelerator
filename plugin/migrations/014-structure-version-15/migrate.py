@@ -190,10 +190,12 @@ def verify(root: Path) -> dict:
         except (ValueError, OSError):
             continue          # reported by apply; the owner's to fix
         checked += 1
-        # A section left open by a code block was reported by apply and is
-        # the owner's to move, like an unreadable page.
-        if any(_entity_of(t) is not None and not _open_fence(c)
-               for t, c in markdown.split_sections(body) if t):
+        # A page with a Notes-from section left open by a code block was
+        # reported by apply and left whole — every section of it is the
+        # owner's to move, like an unreadable page.
+        sections = [(t, c) for t, c in markdown.split_sections(body)
+                    if t and _entity_of(t) is not None]
+        if sections and not any(_open_fence(c) for _, c in sections):
             problems.append(f"{rel}: still has a '## Notes from' heading")
         if data.get("person-updated") in (None, ""):
             problems.append(f"{rel}: no person-updated")

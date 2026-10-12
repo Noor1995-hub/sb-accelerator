@@ -205,3 +205,14 @@ def test_lines_inside_a_code_block_are_moved_untouched(tmp_path):
     load().apply(root)
     _, text = body(root)
     assert '```dataview\n- LIST FROM "x"\n```' in text and "- a (Notes from Acme)" in text
+
+
+def test_verify_passes_a_page_apply_left_alone_for_an_open_fence(tmp_path):
+    # PR review: apply leaves the whole page when any Notes-from section
+    # leaves a fence open; verify must excuse the whole page, or the
+    # upgrade stops.
+    raw = (HEAD + "\n# Dana\n\n## Notes from Acme\n\n- a\n\n## Notes from Beta\n\n```dataview\nLIST\n")
+    root = vault(tmp_path, {"dana.md": raw})
+    module = load()
+    module.apply(root)
+    module.verify(root)
