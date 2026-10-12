@@ -899,3 +899,30 @@ def test_a_note_whose_project_cannot_queue_is_listed_as_not_queued(tmp_path):
 def test_notes_not_queued_is_empty_when_every_note_queued(tmp_path):
     root = make_vault(tmp_path)
     assert updatequeue.run(root, "2026-06-21", "owner-morgan")["notesNotQueued"] == []
+
+
+def test_project_written_at_noon_is_not_requeued_without_new_input(tmp_path):
+    """#271: the on-demand run wrote state at 12:00 after the 09:00 meeting
+    was accepted at 11:30; the evening run has nothing new for it."""
+    root = make_vault(tmp_path)
+    write_project(root, "alpha", last_updated="2026-10-12",
+                  state_updated="2026-10-12T12:00")
+    write_meeting(root, "morning", date_value="2026-10-12T09:00",
+                  projects=["alpha"], confirmed_at="2026-10-12T11:30")
+    result = updatequeue.run(root, "2026-10-12", "owner-morgan")
+    assert result["projectsNeedingUpdate"] == []
+    assert not [w for w in result["warnings"] if "SELF-CHECK" in w]
+
+
+def test_mail_read_in_the_evening_requeues_a_project_written_at_noon(tmp_path):
+    """#271: mail from this morning is read by the evening run; its log is
+    stamped with the evening write time, so the project queues again."""
+    root = vault_with_project_and_owner(
+        tmp_path, "acme-industries-rollout", "2026-10-12T12:00")
+    write_log(root, "2026-10-12",
+              [g("m1", projects=["acme-industries-rollout"])],
+              "2026-10-12T21:05")
+    queue = updatequeue.run(root, "2026-10-12", "morgan-ellery")[
+        "projectsNeedingUpdate"]
+    assert [e["slug"] for e in queue] == ["acme-industries-rollout"]
+    assert queue[0]["newLogs"] == ["2026-10-12-messages"]
