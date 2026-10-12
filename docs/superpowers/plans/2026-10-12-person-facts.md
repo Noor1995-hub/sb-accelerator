@@ -964,9 +964,7 @@ def apply(root: Path) -> dict:
             result["stamped"] += 1
         # Compared against the LF text: a CRLF page with nothing to do stays
         # byte-identical, as in migration 013.
-        if text != original.replace("
-", "
-"):
+        if text != original.replace("\r\n", "\n"):
             vault.atomic_write(path, text)
     return result
 
