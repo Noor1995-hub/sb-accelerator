@@ -1424,7 +1424,7 @@ the note is hidden, the recording is not skip-listed.
 ### 9. Process
 
 Follow `${CLAUDE_PLUGIN_ROOT}/skills/evening-sync/references/process.md`
-with the **On demand** column of its Inputs table: sections A, B and C —
+with the **On demand** column of its Inputs table: sections A, B, C and D —
 without daily-note content, To Do's, or mail and Teams. Keep its Returns for
 steps 10 and 11.
 
@@ -1439,8 +1439,9 @@ On demand there is no recap: wherever process.md says "the recap", "tonight"
 or "tomorrow", it means the evening run. The `sync_notes` lines from A and C
 go to step 11's **Warnings** line.
 
-When section C has returned, release the lock — the pages are written, and
-the questions that follow must not hold up the evening run:
+When section D has returned, release the lock — the project and entity
+pages are written, and the questions that follow must not hold up the
+evening run:
 
 ```bash
 python3 "$VAULTLIB" runlock release --vault "$VAULT" --routine sync-recordings
@@ -1472,6 +1473,7 @@ Summarize from disk, then `scratch sweep`:
 **Meetings:** {N} accepted · {N} dismissed · {N} changed · {N} left in triage
 **Your notes:** {N} absorbed ({titles}) · {N} kept for tonight ({why})
 **Project pages rewritten:** {project names}
+**Entity pages updated:** {names, a team as "Finance (Acme)"} | none
 **Decisions:** {N} kept · {N} dismissed · {N} left in Decisions › To review
 **Not done now:** mail and Teams, and tomorrow's daily note — tonight's run
 **Warnings:** {verbatim, `sync_notes` lines included} | none

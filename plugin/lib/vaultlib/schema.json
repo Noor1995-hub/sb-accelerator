@@ -77,7 +77,8 @@
         "owner",
         "parent",
         "created",
-        "last-updated"
+        "last-updated",
+        "entity-updated"
       ],
       "required": [
         "type",

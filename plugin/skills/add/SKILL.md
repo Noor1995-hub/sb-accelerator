@@ -221,10 +221,11 @@ material-decision test to them. If `session write` fails: surface `error` and
 
 Follow `${CLAUDE_PLUGIN_ROOT}/skills/evening-sync/references/process.md` with
 the **On demand** column of its Inputs table, exactly as `/sync-recordings`
-step 9 does: sections A, B and C, `<today>` from the `dates plan` run above,
+step 9 does: sections A, B, C and D, `<today>` from the `dates plan` run above,
 `<owner-slug>` = `owner` from `config read`, `sync_notes` lines to step 8's
-**Warnings**. When section C has returned, release the lock — the pages are
-written, and the question that follows must not hold up the evening run:
+**Warnings**. When section D has returned, release the lock — the project
+and entity pages are written, and the question that follows must not hold up
+the evening run:
 
 ```bash
 python3 "$VAULTLIB" runlock release --vault "$VAULT" --routine add
@@ -243,6 +244,7 @@ skip to step 8. Ask once **"Keep or dismiss?"**, and run
 ## Added
 **What:** Meeting · Acme ERP rollout · "Forecast call moves to Thursday"  (or Session · …)
 **Project pages updated:** {names}
+**Entity pages updated:** {names, a team as "Finance (Acme)"} | none
 **Decisions:** {N} kept · {N} dismissed · {N} left in Decisions › To review
 **Warnings:** {verbatim} | none
 ```

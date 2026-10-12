@@ -386,7 +386,7 @@ with: a client, a business unit, a partner, a supplier.
 ```yaml
 object: entity
 required: [type, entity-name, slug, status]
-optional: [entity-type, industry, owner, parent, created, last-updated]
+optional: [entity-type, industry, owner, parent, created, last-updated, entity-updated]
 enums:
   status: [prospect, active, dormant]
   entity-type: [client, business-unit, partner, supplier, other]
@@ -394,6 +394,10 @@ enums:
 body_sections: [Context, Stakeholders, Relationship History, Meeting Log,
                 Sensitivities, Engagements]
 ```
+
+`entity-updated` — when the automatic update last read new material (ISO
+minute, machine-maintained by `entity touch`, #273). `last-updated` is the day
+the page last changed.
 
 **Teams (#253).** A team or department is an entity with `parent:` — the slug
 of the entity it belongs to — usually `entity-type: business-unit`. At most two
