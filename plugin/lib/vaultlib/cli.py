@@ -279,6 +279,14 @@ def build_parser() -> argparse.ArgumentParser:
     _add_vault_argument(dec_list)
     dec_list.add_argument("--project", required=True, help="project slug")
 
+    dec_review = decisions_sub.add_parser(
+        "review", help="Keep or Dismiss one decision, as the owner answered (#271)")
+    _add_vault_argument(dec_review)
+    dec_review.add_argument("--path", required=True, help="vault-relative path")
+    verdict = dec_review.add_mutually_exclusive_group(required=True)
+    verdict.add_argument("--keep", action="store_true")
+    verdict.add_argument("--dismiss", action="store_true")
+
     dec_write = decisions_sub.add_parser(
         "write", help="write a decision note, applying any supersession edge")
     _add_vault_argument(dec_write)
@@ -1092,6 +1100,8 @@ def _dispatch(args: argparse.Namespace) -> int:
     if args.group == "decision":
         if args.action == "list":
             return _ok(decision.list_decisions(root, args.project))
+        if args.action == "review":
+            return _ok(decision.review(root, args.path, keep=args.keep))
         payload = (json.load(sys.stdin) if args.note == "-"
                    else json.loads(Path(args.note).read_text(encoding="utf-8")))
         return _ok(decision.write(

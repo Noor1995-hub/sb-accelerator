@@ -469,3 +469,39 @@ def write(root: Path, *, project: str, date: str, payload: dict,
             applied["footer_added"] = True
         result["supersession"] = applied
     return result
+
+
+def review(root: Path, path: str, *, keep: bool) -> dict:
+    """The owner's Keep or Dismiss on one decision, given in the chat (#271).
+
+    The same two ticks as Decisions.base: Keep is `reviewed: true`, Dismiss is
+    `archived: true`. Dismissing never touches a decision this one superseded
+    — that one stays `superseded`, as with Dismiss in Obsidian — so the result
+    names it for the caller to tell the owner.
+    """
+    target = (root / path).resolve()
+    projects = (root / vault.PROJECTS_DIR).resolve()
+    if (target.suffix != ".md" or target.parent.name != "decisions"
+            or target.parent.parent.parent != projects):
+        raise DecisionError(f"{path!r} is not a decision note under "
+                            f"{vault.PROJECTS_DIR}/<project>/decisions/")
+    if not target.is_file():
+        raise DecisionError(f"{path!r} does not exist")
+    text = target.read_text(encoding="utf-8")
+    data, _ = markdown.split_frontmatter(text)
+    if data.get("type") != "decision":
+        raise DecisionError(f"{path!r} is not a decision note (type is "
+                            f"{data.get('type')!r})")
+    field = "reviewed" if keep else "archived"
+    updated = markdown.upsert_scalar_field(text, field, "true")
+    if updated != text:
+        vault.atomic_write(target, updated)
+    data, _ = markdown.split_frontmatter(updated)
+    return {
+        "path": target.relative_to(root.resolve()).as_posix(),
+        "project": data.get("project"),
+        "summary": data.get("summary"),
+        "reviewed": data.get("reviewed") is True,
+        "dismissed": data.get("archived") is True,
+        "supersedes": _unwrap(data.get("supersedes")),
+    }
