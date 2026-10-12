@@ -619,8 +619,16 @@ def apply(root: Path, file_rel: str, *, today: str) -> dict:
     for key, values in grouped.items():
         try:
             parent = values.pop("parent", None) if table == "entities" else None
+            old_name = None
+            if table == "entities" and "entity-name" in values:
+                old_name = markdown.split_frontmatter(
+                    (root / key).read_text(encoding="utf-8"))[0].get("entity-name")
             if values:
                 _write_props(root, key, values, quote)
+            if old_name is not None:
+                # _write_props already moved the heading; the teams follow.
+                entity.refresh_after_rename(root, Path(key).parent.name, None,
+                                            str(values["entity-name"]))
             if parent:
                 data, _ = markdown.split_frontmatter((root / key).read_text(encoding="utf-8"))
                 entity.ensure(root, slug=Path(key).parent.name, name=str(data.get("entity-name")),

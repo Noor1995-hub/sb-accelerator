@@ -282,6 +282,33 @@ def _with_part_of(text: str, line: str) -> str:
     raise EntityError("dossier has no `# title` line to put the Part of link under")
 
 
+def refresh_after_rename(root: Path, slug: str, old_name: Optional[str],
+                         new_name: str) -> List[str]:
+    """After `entity-name` changed: the page's own `# heading` and every
+    team's **Part of** link text follow, so no page keeps the old name
+    (review 2026-10-12). Returns the vault-relative paths it rewrote."""
+    rewritten: List[str] = []
+    path = _dossier_path(root, slug)
+    text = path.read_text(encoding="utf-8")
+    if old_name and old_name != new_name:
+        renamed = text.replace(f"\n# {old_name}\n",
+                               "\n" + markdown.title_heading(new_name) + "\n", 1)
+        if renamed != text:
+            vault.atomic_write(path, renamed)
+            rewritten.append(path.relative_to(root).as_posix())
+    line = _part_of_line(slug, {"entity-name": new_name})
+    for child in _children(root, slug):
+        child_path = _dossier_path(root, child)
+        child_text = child_path.read_text(encoding="utf-8")
+        if PART_OF_PREFIX not in child_text:
+            continue
+        updated = _with_part_of(child_text, line)
+        if updated != child_text:
+            vault.atomic_write(child_path, updated)
+            rewritten.append(child_path.relative_to(root).as_posix())
+    return rewritten
+
+
 def _ensure_teams_section(root: Path, parent: str) -> bool:
     path = _dossier_path(root, parent)
     text = path.read_text(encoding="utf-8")
@@ -347,6 +374,8 @@ def _apply_existing_fields(root: Path, path: Path, slug: str, *,
         rewritten = _with_part_of(rewritten, part_of)
     rewritten = markdown.upsert_scalar_field(rewritten, "last-updated", today)
     vault.atomic_write(path, rewritten)
+    if "entity-name" in updated_fields:
+        refresh_after_rename(root, slug, frontmatter.get("entity-name"), name)
     return {"slug": slug, "path": rel_path, "created": False,
             "changed": True, "updated": updated_fields}
 

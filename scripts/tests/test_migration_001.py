@@ -1035,13 +1035,13 @@ def test_meeting_write_output_satisfies_migration_001_verify(tmp_path):
 
     entity_module.ensure(root, slug="fresh-holdings", name="Fresh Holdings",
                          today="2026-04-01")
-    project.scaffold(root, name="Fresh Initiative", project_type="initiative",
-                     entity="fresh-holdings", owner="morgan-ellery",
-                     today="2026-04-01")
     person = root / "50-people" / "morgan-ellery.md"
     person.write_text(
         "---\nperson-name: Morgan Ellery\nslug: morgan-ellery\n"
         "relationship: colleague\n---\n", encoding="utf-8")
+    project.scaffold(root, name="Fresh Initiative", project_type="initiative",
+                     entity="fresh-holdings", owner="morgan-ellery",
+                     today="2026-04-01")
 
     meeting.write(root, {
         "title": "fresh initiative kickoff",

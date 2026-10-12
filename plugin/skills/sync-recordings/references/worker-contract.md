@@ -212,7 +212,13 @@ python3 "$VAULTLIB" person ensure --vault "$VAULT" --name "<name>" --email "<add
 
 The address is stored on a new person and filled into an existing one whose
 email is empty; a set email is never overwritten. Leave `--email` off for an
-entry with no address — never guess one.
+entry with no address — never guess one. A person already on file with that
+address comes back under their own slug, whatever name Outlook shows
+("Peeters, Jan"), so no second note is made.
+
+Skip an entry that is a meeting room or equipment rather than a person (an
+entry typed `resource`, or a name and address that plainly belong to a
+room); when unsure, keep it.
 
 Do not link attendees to an entity: your briefing carries no per-attendee
 routing, so which entity a person belongs to would be a guess.
@@ -220,7 +226,9 @@ routing, so which entity a person belongs to would be a guess.
 Use each result's `slug`, plus the vault owner's person slug your prompt
 already carries, for the payload's `attendees` — the owner's slug arrives
 pre-resolved (the orchestrator read it from `config read`'s `owner`), so
-you never call `person ensure` for it yourself. Count the calls whose
+you never call `person ensure` for it yourself. The owner is usually among
+the event's attendees too: list every slug once, so a result that is the
+owner's own slug adds nothing. Count the calls whose
 result carries `"created": true` — those are people this vault has never
 seen before; everyone else came back `"created": false`.
 

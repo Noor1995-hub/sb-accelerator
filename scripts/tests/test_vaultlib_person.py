@@ -454,3 +454,21 @@ def test_write_facts_reuses_the_section_in_any_case(tmp_path):
                        [{"date": "2026-10-08", "fact": f"X. {M}"}], "2026-10-12")
     text = path.read_text(encoding="utf-8")
     assert text.count("## What I") == 1 and f"- mine\n- 2026-10-08 — X. {M}\n" in text
+
+
+def test_ensure_finds_the_person_by_email_before_the_name(tmp_path):
+    # Review 2026-10-12: Outlook's "Peeters, Jan" (or a person renamed in the
+    # table) made a second note although the address was already on file.
+    root = make_vault(tmp_path)
+    person.ensure(root, "Jan Peeters", "2026-09-30", email="Jan.Peeters@acme.example")
+    result = person.ensure(root, "Peeters, Jan", "2026-10-12", email="jan.peeters@acme.example")
+    assert result["slug"] == "jan-peeters" and result["created"] is False
+    assert result["ignored"] == ["name"]
+    assert sorted(p.name for p in (root / "50-people").glob("*.md")) == ["jan-peeters.md"]
+
+
+def test_ensure_without_a_known_email_still_creates_by_name(tmp_path):
+    root = make_vault(tmp_path)
+    person.ensure(root, "Jan Peeters", "2026-09-30", email="jan@acme.example")
+    made = person.ensure(root, "Jan de Wit", "2026-10-12", email="dewit@acme.example")
+    assert made["slug"] == "jan-de-wit" and made["created"] is True

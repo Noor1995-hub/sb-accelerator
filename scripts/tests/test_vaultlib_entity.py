@@ -1085,3 +1085,15 @@ def test_a_manual_write_needs_no_source(tmp_path):
     result = entity.write(root, "meridian-freight-holdings", {"relationship_history": [
         {"date": "2026-10-11", "what": "Call", "significance": "told by the owner"}]}, TODAY)
     assert result["changes"] and result["skipped"] == []
+
+
+def test_renaming_an_entity_moves_its_heading_and_its_teams_links(tmp_path):
+    # Review 2026-10-12: the heading and every team's Part of kept the old name.
+    root = two_entities(tmp_path)
+    entity.ensure(root, slug="acme-finance", name="Finance", today="2026-10-02", parent="acme")
+    entity.ensure(root, slug="acme", name="Acme Group", today="2026-10-03")
+    _, body = md.split_frontmatter(dossier(root, "acme"))
+    assert "# Acme Group" in body and "# Acme Industries" not in body
+    _, team = md.split_frontmatter(dossier(root, "acme-finance"))
+    assert "**Part of** [[40-entities/acme/dossier|Acme Group]]" in team
+    assert team.count("**Part of**") == 1

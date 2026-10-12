@@ -109,6 +109,26 @@ def _validate_inputs(root: Path, slug: str, project_type: str,
             f"maximum two levels of nesting: {parent!r} already has a parent "
             f"({parent_data['parent']!r})"
         )
+    # A sub-project sits under a project of the same entity — or of the same
+    # top-level entity, so a team's work can hang under its parent's project
+    # (review 2026-10-12: a Nordbridge project under a Meridian parent was
+    # accepted).
+    parent_entity = str(parent_data.get("entity") or "")
+    if parent_entity and _top_entity(root, parent_entity) != _top_entity(root, entity):
+        raise ProjectError(
+            f"parent project {parent!r} belongs to {parent_entity!r}, not to "
+            f"{entity!r} — a sub-project stays within its entity"
+        )
+
+
+def _top_entity(root: Path, slug: str) -> str:
+    """The entity itself, or the entity it is a team of."""
+    dossier = root / ENTITIES_DIR / slug / "dossier.md"
+    try:
+        data, _ = markdown.split_frontmatter(dossier.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return slug
+    return str(data.get("parent") or slug)
 
 
 def scaffold(root: Path, *, name: str, project_type: str, entity: str,
@@ -142,6 +162,12 @@ def scaffold(root: Path, *, name: str, project_type: str, entity: str,
             "owner joins to 50-people/<slug>.md"
         ) from exc
     _validate_inputs(root, slug, project_type, entity, parent)
+    # owner joins to a person note; a dangling one is a hole in the
+    # relationship graph (review 2026-10-12).
+    if not (root / vault.PEOPLE_DIR / f"{str(owner).strip()}.md").is_file():
+        raise ProjectError(
+            f"owner {owner!r} has no person note at {vault.PEOPLE_DIR}/{owner}.md — "
+            "create it first with: person ensure --name \"<Full Name>\"")
 
     frontmatter = {
         "type": "project",

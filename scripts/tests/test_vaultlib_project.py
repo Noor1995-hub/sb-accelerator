@@ -32,6 +32,9 @@ BASE_SLUG = "meridian-freight-holdings-yard-automation-program"
 
 def vault_with_entity(tmp_path, slug="meridian-freight-holdings"):
     root = make_vault(tmp_path)
+    (root / "50-people").mkdir(exist_ok=True)
+    (root / "50-people" / "morgan-ellery.md").write_text(
+        '---\nperson-name: "Morgan Ellery"\nslug: morgan-ellery\n---\n', encoding="utf-8")
     dossier = root / "40-entities" / slug / "dossier.md"
     dossier.parent.mkdir(parents=True)
     dossier.write_text(
@@ -552,3 +555,26 @@ def test_keywords_add_remove_and_list(tmp_path):
     assert project.keywords_list(root, slug=slug)["keywords"] == ["P-2317"]
     project.keywords_remove(root, slug=slug, keyword="P-2317", today="2026-09-30")
     assert project.keywords_list(root, slug=slug)["keywords"] == []
+
+
+# --- review 2026-10-12: owner and parent must join to something real -------
+
+def test_an_owner_without_a_person_note_is_refused(tmp_path):
+    root = vault_with_entity(tmp_path)
+    with pytest.raises(project.ProjectError, match="person ensure"):
+        project.scaffold(root, **dict(BASE, owner="nobody-here"))
+
+
+def test_a_parent_from_another_entity_is_refused_but_a_team_may_nest(tmp_path):
+    root = vault_with_entity(tmp_path)
+    for slug, extra in (("nordbridge", ""), ("meridian-finance", "parent: meridian-freight-holdings\n")):
+        d = root / "40-entities" / slug / "dossier.md"
+        d.parent.mkdir(parents=True)
+        d.write_text(f'---\ntype: entity\nentity-name: "E"\nslug: {slug}\nstatus: active\n{extra}---\n',
+                     encoding="utf-8")
+    parent = project.scaffold(root, **BASE)["slug"]
+    with pytest.raises(project.ProjectError, match="stays within its entity"):
+        project.scaffold(root, **dict(BASE, name="Elsewhere", entity="nordbridge", parent=parent))
+    team = project.scaffold(root, **dict(BASE, name="Finance yard", entity="meridian-finance",
+                                         parent=parent))
+    assert team["slug"].startswith("meridian-finance-")
