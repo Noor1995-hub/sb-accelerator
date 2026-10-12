@@ -312,7 +312,11 @@ enums:
   *Dismissed* in *All*, is never a project's defining decision and is never
   superseded. `decision list` still returns it, flagged `dismissed`, so the
   evening run's dedup does not capture it again. It is not `withdrawn`: a
-  withdrawn decision was real and later reversed.
+  withdrawn decision was real and later reversed. A dismissed decision that
+  had superseded another made no real replacement, so that prior flips back
+  to `active` with a dated `**Restored** —` footer (`decision review
+  --dismiss` at once; a tick in the table at the evening's
+  `reconcile-reviews`).
 - `date` is the date the decision was **made**, not the date it was written
   down. It is what orders the decision log.
 - `summary` is one full sentence — it is the Decision column in

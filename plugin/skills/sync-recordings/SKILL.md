@@ -1388,7 +1388,13 @@ can say otherwise in the same answer ("3 accept, no project", "3 project is
 finance close"). A suggestion taken counts as a change for the one-line
 read-back below.
 
-Translate the answer into a list of `{path, action[, projects][, attendees][, accept]}`.
+**Changed to no project, and the meeting has `entities`:** ask about that
+item once — *"Also take it off <entity_names>'s page?"* Yes → add
+`"entities": []` to its change; no → leave `entities` out, and it stays on
+that page. An entity can be right without a project, so never clear it
+unasked.
+
+Translate the answer into a list of `{path, action[, projects][, attendees][, entities][, accept]}`.
 Projects and people are slugs: match the owner's words to existing project and
 people names. Never invent a slug. If a name matches nothing, or matches two,
 ask about that one item. When the answer changed a project or attendees, read
@@ -1468,9 +1474,9 @@ python3 "$VAULTLIB" decision review --vault "$VAULT" --path "<decisionsDir>/<ste
 python3 "$VAULTLIB" decision review --vault "$VAULT" --path "<decisionsDir>/<stem>.md" --dismiss
 ```
 
-A dismissed decision whose result has `supersedes` set: say *"It had replaced
-<that decision>, which stays marked replaced — reopen it in Decisions if it
-still holds."*
+A dismissed decision whose result has `restored` set: say *"It had replaced
+<that decision>, which is back in force."* (The CLI restores it, with a dated
+footer; a Dismiss ticked in Decisions is restored the same way that evening.)
 
 ### 11. Summary
 

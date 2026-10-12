@@ -6,13 +6,13 @@ The detail behind [[Start here]]. Nothing here is needed day to day.
 
 ## Reviewing
 
-A meeting arrives **To review** because something about it was inferred rather than known — a name matched by guess, a calendar entry matched loosely, an email routed to a project by its sender's domain. Per row, tick **Keep** once it looks right, or **Dismiss** if it is noise (a bad recording, something that was not really a meeting). A dismissed row leaves the tables; the file stays. Keep is the signal that a row can be trusted; nothing else sets it.
+A meeting arrives **To review** because something about it was inferred rather than known — a name matched by guess, a calendar entry matched loosely, an email routed to a project by its sender's domain. Per row, tick **Keep** once it looks right, or **Dismiss** if it is noise (a bad recording, something that was not really a meeting). A dismissed row leaves the other views and shows under **Dismissed**, where unticking Dismiss brings it back; the file stays. Keep is the signal that a row can be trusted; nothing else sets it.
 
 To fix a wrong project or person on a meeting, type the right one in its **Projects** or **Attendees** cell in *To review*. Those cells take the short code — `acme-industries-operating-model`, `jordan-reyes` — that you see in the note's properties; every other table shows names.
 
 A row of type **Note** is a capture rather than a meeting: a forwarded email or a voice memo worth keeping. Its **Calendar match** box is never ticked, because no calendar was consulted.
 
-A decision is **To review** when it was captured during the evening run rather than logged by you. Tick **Keep** once you have read it, or **Dismiss** if it was not really a decision. A decision is never deleted; one that a later decision replaces shows as **Replaced**.
+A decision is **To review** when it was captured during the evening run rather than logged by you. Tick **Keep** once you have read it, or **Dismiss** if it was not really a decision. A decision is never deleted; one that a later decision replaces shows as **Replaced** — and if you dismiss the one that replaced it, it is back in force that evening.
 
 ## To Do's
 

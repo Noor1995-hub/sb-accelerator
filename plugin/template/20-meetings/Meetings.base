@@ -96,3 +96,24 @@ views:
     columnSize:
       formula.project-names: 170
       formula.attendee-names: 170
+  # Owner's call 2026-10-12: a dismiss can be undone — untick Dismiss here
+  # and the meeting is back in All Meetings (and in To review, if it was
+  # never kept).
+  - type: table
+    name: Dismissed
+    filters:
+      and:
+        - archived == true
+    order:
+      - formula.open
+      - date
+      - calendar-subject
+      - formula.project-names
+      - archived
+    sort:
+      - property: date
+        direction: DESC
+    columnSize:
+      note.calendar-subject: 220
+      formula.project-names: 170
+      note.archived: 80

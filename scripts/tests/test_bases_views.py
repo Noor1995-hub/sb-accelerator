@@ -92,6 +92,10 @@ EXPECTED = [
     # file stays in 20-meetings/, the table stops listing it (#237).
     ("20-meetings/Meetings.base", "All Meetings",
      ALL_MEETINGS - {MEETINGS.format("05-06-26-pipeline-governance-review")}),
+    # ...and are found again under Dismissed, where unticking undoes it
+    # (owner's call 2026-10-12).
+    ("20-meetings/Meetings.base", "Dismissed",
+     {MEETINGS.format("05-06-26-pipeline-governance-review")}),
     # Each exclusion path stays represented: 20-04 is reviewed-but-not-yet-
     # reconciled (reviewed: true holds it out of Triage until reconcile-reviews
     # flips it to confirmed), 05-06 is archived, and the five `confirmed`

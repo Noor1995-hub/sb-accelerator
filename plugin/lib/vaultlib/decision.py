@@ -41,6 +41,8 @@ OPTIONAL_NOTE_FIELDS = ("status", "source", "supersedes")
 # running a query. Append-only — the prior note's prose is never rewritten.
 SUPERSEDED_FOOTER = "**Superseded** — {date} · replaced by [[{stem}]]."
 WITHDRAWN_FOOTER = "**Withdrawn** — {date} · {why}"
+RESTORED_FOOTER = ("**Restored** — {date} · back in force: the decision that "
+                   "replaced it, [[{stem}]], was dismissed as not a real decision.")
 
 
 class DecisionError(Exception):
@@ -525,9 +527,9 @@ def review(root: Path, path: str, *, keep: bool) -> dict:
     """The owner's Keep or Dismiss on one decision, given in the chat (#271).
 
     The same two ticks as Decisions.base: Keep is `reviewed: true`, Dismiss is
-    `archived: true`. Dismissing never touches a decision this one superseded
-    — that one stays `superseded`, as with Dismiss in Obsidian — so the result
-    names it for the caller to tell the owner.
+    `archived: true`. Dismiss says the note was never a real decision, so a
+    decision it replaced is back in force: that one is restored (owner's call,
+    2026-10-12), and the result names it for the caller to tell the owner.
     """
     target, text, data = _decision_note(root, path)
     field = "reviewed" if keep else "archived"
@@ -535,6 +537,11 @@ def review(root: Path, path: str, *, keep: bool) -> dict:
     if updated != text:
         vault.atomic_write(target, updated)
     data, _ = markdown.split_frontmatter(updated)
+    restored = None
+    if not keep:
+        found = restore_dismissed(root, today=vault.today_iso(),
+                                  only=target.resolve())
+        restored = found[0] if found else None
     return {
         "path": target.relative_to(root.resolve()).as_posix(),
         "project": data.get("project"),
@@ -542,4 +549,52 @@ def review(root: Path, path: str, *, keep: bool) -> dict:
         "reviewed": data.get("reviewed") is True,
         "dismissed": data.get("archived") is True,
         "supersedes": _unwrap(data.get("supersedes")),
+        "restored": restored,
     }
+
+
+def restore_dismissed(root: Path, *, today: str,
+                      only: Optional[Path] = None) -> list:
+    """Put back in force every decision whose replacement was dismissed.
+
+    A dismissed decision (`archived: true`) was not a real decision, so the
+    supersession it made never happened: the decision it replaced flips back
+    from `superseded` to `active` and gains a dated **Restored** footer —
+    appended, never rewritten, like every decision edge. Only a prior whose
+    Superseded footer names the dismissed note is touched, so the call is
+    idempotent and runs every evening (`sync reconcile-reviews`), which is
+    how a Dismiss ticked in Decisions.base reaches it. `only` limits it to
+    one dismissed note. Returns the vault-relative paths restored.
+    """
+    restored: list = []
+    folder = root / vault.PROJECTS_DIR
+    notes = sorted(folder.glob("*/decisions/*.md")) if folder.is_dir() else []
+    for path in notes:
+        if only is not None and path.resolve() != only:
+            continue
+        try:
+            data, _ = markdown.split_frontmatter(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        prior_stem = _unwrap(data.get("supersedes"))
+        if data.get("archived") is not True or not prior_stem:
+            continue
+        prior = _find_note(path.parent, prior_stem)
+        if prior is None:
+            continue
+        prior_text = prior.read_text(encoding="utf-8")
+        try:
+            prior_data, _ = markdown.split_frontmatter(prior_text)
+        except ValueError:
+            continue
+        pointer = f"replaced by [[{path.stem}]]"
+        if prior_data.get("status") != "superseded" or pointer not in prior_text:
+            continue
+        try:
+            updated = markdown.replace_scalar_field(prior_text, "status", "active")
+        except ValueError:
+            continue
+        footer = RESTORED_FOOTER.format(date=today, stem=path.stem)
+        vault.atomic_write(prior, updated.rstrip("\n") + "\n\n" + footer + "\n")
+        restored.append(prior.relative_to(root).as_posix())
+    return restored
