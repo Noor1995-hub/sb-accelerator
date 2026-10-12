@@ -1243,12 +1243,14 @@ def test_evening_sync_runs_messages_between_sync_and_project_updates():
     marker = text.index("### Stage 3b — Mail and Teams")
     assert stage3 < marker < stage4
     assert text.index("skills/sync-messages/SKILL.md") > stage3
-    refresh = text.index('"$VAULTLIB" sync update-queue')
-    assert refresh > marker, "the queue must see tonight's logs"
-    assert refresh < stage4
+    # #271: the refresh text lives in process.md section B; stage 3c keeps
+    # its heading, after 3b, and points at it.
+    process = read_ref("evening-sync", "process.md")
+    assert '"$VAULTLIB" sync update-queue' in process.split("## B.")[1].split("## C.")[0]
     heading = text.index("### Stage 3c — Refresh (every evening)")
-    assert marker < heading < refresh < stage4, "refresh has its own heading after 3b"
-    assert "Runs every evening, whatever stage 3b did" in text[heading:refresh]
+    assert marker < heading < stage4, "refresh has its own heading after 3b, so the queue sees tonight's logs"
+    assert "Runs every evening, whatever stage 3b did" in text[heading:stage4]
+    assert "Follow section B of `references/process.md`" in text[heading:stage4]
     assert "update-queue" not in text[marker:heading], "refresh is not inside 3b"
 
 
@@ -1352,7 +1354,7 @@ def test_evening_sync_stage4_dispatch_is_a_blocking_batch_cap():
     # the next one. Anchored on the operative sentence, not just "blocking"
     # or "batch", which both already appear elsewhere in this stage.
     text = _normalized(_evening_sync())
-    stage4 = text.split("## Stage 4", 1)[1].split("## Stage 5", 1)[0]
+    stage4 = _normalized(read_ref("evening-sync", "process.md")).split("## C.", 1)[1].split("## Returns", 1)[0]
     assert "at most 3" in stage4 and "blocking Agent calls" in stage4, (
         "stage 4 must say the batch is capped at 3 blocking Agent calls, "
         "not just that dispatch happens 'up to 3 in parallel'"
@@ -1794,7 +1796,7 @@ def test_evening_sync_payload_example_is_the_v2_contract():
 
 
 def test_evening_sync_project_state_example_matches_the_cli():
-    text = read_skill("evening-sync")
+    text = read_ref("evening-sync", "process.md")
     state = _heredoc_json(text, "project-state")
     assert {"as_of", "stage", "hot_potatoes", "coming_up", "owe"} <= set(state)
     assert "project state write" in text
@@ -2159,7 +2161,7 @@ def test_sync_messages_unattended_mode_never_asks():
 
 
 def test_stage4_reads_logs_marks_their_items_and_captures_decisions():
-    stage4 = read_skill("evening-sync").split("## Stage 4")[1].split("## Stage 5")[0]
+    stage4 = read_ref("evening-sync", "process.md").split("## C.")[1].split("## Returns")[0]
     flat = re.sub(r"\s+", " ", stage4)
     assert "messages for-project" in flat and "newLogs" in flat
     assert "(mail ·" in flat or "(chat ·" in flat
@@ -2246,7 +2248,7 @@ def test_sync_messages_never_runs_on_a_vault_awaiting_its_update():
 
 
 def test_evening_sync_absorbs_notes_ticked_include():
-    text = read_skill("evening-sync")
+    text = read_ref("evening-sync", "process.md")
     flat = " ".join(text.split())
     assert 'python3 "$VAULTLIB" notes harvest --vault "$VAULT"' in text
     assert 'python3 "$VAULTLIB" notes assign --vault "$VAULT"' in text
@@ -2260,7 +2262,7 @@ def test_evening_sync_absorbs_notes_ticked_include():
 
 
 def test_evening_sync_marks_a_note_only_after_its_projects_were_written():
-    flat = " ".join(read_skill("evening-sync").split())
+    flat = " ".join(read_ref("evening-sync", "process.md").split())
     assert ("mark a note only when it appears in at least one queue entry's `newNotes` "
             "and every such entry came back `stateWritten: true`, or when its harvested "
             "`projects` is empty") in flat
@@ -2269,7 +2271,7 @@ def test_evening_sync_marks_a_note_only_after_its_projects_were_written():
 
 
 def test_evening_sync_carries_notes_not_queued_from_the_update_queue():
-    stage3c = read_skill("evening-sync").split("### Stage 3c")[1].split("## Stage 4")[0]
+    stage3c = read_ref("evening-sync", "process.md").split("## B.")[1].split("## C.")[0]
     assert "`notesNotQueued`" in stage3c
 
 
@@ -2294,7 +2296,7 @@ def test_evening_sync_records_actions_without_doing_date_arithmetic():
 
 
 def test_evening_sync_harvest_warnings_go_to_sync_notes():
-    stage2 = read_skill("evening-sync").split("## Stage 2")[1].split("## Stage 3")[0]
+    stage2 = read_ref("evening-sync", "process.md").split("## A.")[1].split("## B.")[0]
     flat = " ".join(stage2.split())
     assert ("`notes harvest` warnings, and a failed `notes harvest` call, go to "
             "`sync_notes`, never to `watch`") in flat
@@ -2325,18 +2327,40 @@ def test_evening_sync_reads_the_notes_section_of_the_daily_note():
 
 
 def test_evening_sync_notes_steps_run_in_order():
-    text = read_skill("evening-sync")
+    text = read_ref("evening-sync", "process.md")
     assert text.index('notes assign --vault') < text.index('"$VAULTLIB" sync update-queue')
     writeback = text.index('notes mark-absorbed --vault')
-    assert text.index("## Stage 4") < text.index("Dispatch in blocking batches") < writeback
-    assert writeback < text.index("## Stage 6")
+    assert text.index("## C.") < text.index("Dispatch in blocking batches") < writeback
+    assert writeback < text.index("## Returns")
 
 
 def test_evening_sync_empty_queue_still_marks_notes():
-    flat = " ".join(read_skill("evening-sync").split())
+    flat = " ".join(read_ref("evening-sync", "process.md").split())
     assert 'record "no projects to update", run the write-back for your notes below' in flat
 
 
 def test_evening_sync_notes_read_lists_only_marked_notes():
     flat = " ".join(read_skill("evening-sync").split())
     assert "whose `mark-absorbed` returned `marked`" in flat
+
+
+BATCHING_RULE = "Dispatch in blocking batches of at most 3"
+
+
+@pytest.mark.xfail(reason="sync-recordings wired in Task 6", strict=True)
+def test_processing_lives_in_one_shared_reference():
+    """#271: the evening run and the on-demand meeting sync follow the same
+    processing text — never two copies that drift."""
+    process = read_ref("evening-sync", "process.md")
+    for heading in ("## Inputs", "## A. Your notes ticked Include",
+                    "## B. Refresh", "## C. Project-state updates", "## Returns"):
+        assert heading in process, heading
+    assert BATCHING_RULE in process
+    for name in ("evening-sync", "sync-recordings"):
+        assert "references/process.md" in read_skill(name), name
+
+
+def test_batching_rule_has_exactly_one_home():
+    hits = [p for p in SKILLS_DIR.rglob("*.md")
+            if BATCHING_RULE in p.read_text(encoding="utf-8")]
+    assert [p.name for p in hits] == ["process.md"]
