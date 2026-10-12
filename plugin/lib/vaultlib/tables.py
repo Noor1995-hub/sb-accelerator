@@ -29,7 +29,9 @@ TABLES = {
         "quote": person.PERSON_QUOTE_KEYS,
         "fields": [("person-name", "text", True),
                    ("relationship", "choice:colleague|direct-report|external", False),
-                   ("company", "company", False), ("role", "text", False),
+                   ("entity", "entity", False), ("role", "text", False),
+                   ("decision-role", "choice:sponsor|champion|evaluator|influencer|blocker", False),
+                   ("stance", "choice:champion|neutral|blocker", False),
                    ("email", "text", False), ("projects", "projects", False)],
     },
     "projects": {
@@ -52,7 +54,7 @@ TABLES = {
     },
 }
 _LINK_KIND = {"entity": "entity", "person": "person", "project": "project",
-              "people": "person", "projects": "project", "company": "entity"}
+              "people": "person", "projects": "project"}
 
 
 def _spec(table: str) -> dict:
@@ -209,7 +211,7 @@ def export(root: Path, table: str, *, today: str, view: Optional[str] = None,
         kind = kinds[c["prop"]]
         if kind.startswith("choice:"):
             options, strict = kind.split(":", 1)[1].split("|"), True
-        elif kind in ("entity", "person", "project", "company"):
+        elif kind in ("entity", "person", "project"):
             options, strict = sorted(all_names[_LINK_KIND[kind]].values(), key=str.lower), False
         else:
             continue  # lists of links: no dropdown (a cell holds several)
@@ -278,9 +280,6 @@ def to_value(text: str, kind: str, all_names: dict):
             return None, f"{name!r} matches several: {', '.join(sorted(hits))}"
         return None, f"{name!r} matches no {_LINK_KIND[kind]}"
 
-    if kind == "company":
-        known = any(n.lower() == text.lower() for n in target.values())
-        return text, None, not known
     if kind in ("people", "projects"):
         out = []
         for part in _norm(text, kind):

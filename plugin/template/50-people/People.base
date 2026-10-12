@@ -8,6 +8,9 @@ formulas:
   # Project names, not slugs (#240); the projects list itself stays
   # editable on the person's note.
   project-names: if(projects, projects.map(link("30-projects/" + value + "/index.md", if(file("30-projects/" + value + "/index.md"), file("30-projects/" + value + "/index.md").properties["project-name"], value))), "")
+  # The entity's name, not its slug (#273); a person the structure-14 upgrade
+  # could not link still shows their old company text.
+  entity-name: if(entity, link("40-entities/" + entity + "/dossier.md", if(file("40-entities/" + entity + "/dossier.md"), file("40-entities/" + entity + "/dossier.md").properties["entity-name"], entity)), company)
 properties:
   formula.open:
     displayName: " "
@@ -15,10 +18,14 @@ properties:
     displayName: Name
   note.relationship:
     displayName: Relationship
-  note.company:
-    displayName: Company
+  formula.entity-name:
+    displayName: Entity
   note.role:
     displayName: Role
+  note.decision-role:
+    displayName: Role in decision
+  note.stance:
+    displayName: Stance
   formula.project-names:
     displayName: Projects
   note.meetings-30d:
@@ -32,8 +39,10 @@ views:
       - formula.open
       - person-name
       - relationship
-      - company
+      - formula.entity-name
       - role
+      - decision-role
+      - stance
       - last-met
       - meetings-30d
       - formula.project-names
@@ -52,7 +61,7 @@ views:
       - person-name
       - last-met
       - relationship
-      - company
+      - formula.entity-name
       - role
       - meetings-30d
       - formula.project-names
@@ -69,7 +78,7 @@ views:
     order:
       - formula.open
       - person-name
-      - company
+      - formula.entity-name
       - role
       - meetings-30d
     sort:

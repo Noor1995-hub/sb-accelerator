@@ -80,14 +80,25 @@ def test_bad_choice_unknown_and_ambiguous_names_are_refused(tmp_path):
     assert "busy" in reasons and "several" in reasons
 
 
-def test_company_not_an_entity_is_kept_as_text_and_listed(tmp_path):
+def test_an_entity_that_does_not_exist_is_refused_and_listed(tmp_path):
+    """#273: a person's entity is a real link now, not text."""
     root = make_vault(tmp_path)
     rel, book = exported(root)
-    book["People"][1][col(book, "People", "Company")] = "LLBG"
+    book["People"][1][col(book, "People", "Entity")] = "LLBG"
     save(root, rel, book)
     p = tables.plan(root, rel)
-    assert p["updates"][0]["value"] == "LLBG"
-    assert p["unknown"] == [{"header": "Company", "value": "LLBG", "kind": "entity"}]
+    assert p["counts"]["updates"] == 0 and p["counts"]["refused"] == 1
+    assert p["unknown"] == [{"header": "Entity", "value": "LLBG", "kind": "entity"}]
+
+
+def test_stance_and_role_in_decision_are_choices(tmp_path):
+    root = make_vault(tmp_path)
+    rel, book = exported(root)
+    book["People"][1][col(book, "People", "Stance")] = "Champion"
+    book["People"][1][col(book, "People", "Role in decision")] = "sponsor"
+    save(root, rel, book)
+    values = {u["prop"]: u["value"] for u in tables.plan(root, rel)["updates"]}
+    assert values == {"stance": "champion", "decision-role": "sponsor"}
 
 
 def test_clearing_a_required_field_and_moving_a_project_are_refused(tmp_path):

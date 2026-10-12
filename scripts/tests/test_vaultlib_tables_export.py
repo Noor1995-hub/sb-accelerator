@@ -18,7 +18,7 @@ def make_vault(tmp_path):
         (root / rel).write_text((TEMPLATE / rel).read_text(encoding="utf-8"), encoding="utf-8")
     (root / "50-people/jan-peeters.md").write_text(
         '---\nperson-name: "Jan Peeters"\nslug: jan-peeters\nrelationship: external\n'
-        'company: "Acme"\nrole:\nprojects: [acme-erp]\nmeetings-30d: 4\n---\n# Jan Peeters\n',
+        'entity: acme\nrole:\nprojects: [acme-erp]\nmeetings-30d: 4\n---\n# Jan Peeters\n',
         encoding="utf-8")
     (root / "40-entities/acme/dossier.md").write_text(
         '---\ntype: entity\nentity-name: "Acme"\nslug: acme\nstatus: active\n'
@@ -35,8 +35,10 @@ def test_people_columns_follow_the_owners_view_and_skip_machine_fields():
     got = tables.columns(spec, (TEMPLATE / "50-people/People.base").read_text(encoding="utf-8"), None)
     props = [c["prop"] for c in got["columns"]]
     headers = [c["header"] for c in got["columns"]]
-    assert props[:5] == ["person-name", "relationship", "company", "role", "projects"]
-    assert headers[:5] == ["Name", "Relationship", "Company", "Role", "Projects"]
+    assert props[:7] == ["person-name", "relationship", "entity", "role", "decision-role",
+                         "stance", "projects"]
+    assert headers[:7] == ["Name", "Relationship", "Entity", "Role", "Role in decision",
+                           "Stance", "Projects"]
     assert "email" in props                       # editable, not in the view → appended
     assert "meetings-30d" not in props and "last-met" not in props
 
@@ -71,7 +73,7 @@ def test_export_writes_the_workbook(tmp_path):
     header, row = book["People"][0], book["People"][1]
     assert header[0] == "_key" and row[0] == "50-people/jan-peeters.md"
     assert row[header.index("Projects")] == "ERP rollout"
-    assert row[header.index("Company")] == "Acme"
+    assert row[header.index("Entity")] == "Acme"
     assert book["_original"][0][:3] == ["_key", "person-name", "relationship"]
     meta = dict((r[0], r[1]) for r in book["_meta"])
     assert meta["table"] == "people" and json.loads(meta["headers"]) == header
