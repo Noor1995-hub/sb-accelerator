@@ -15,6 +15,8 @@ delivers them.
 
 ## Unreleased
 
+- Teams meeting transcripts shorter than about an hour no longer depend on the AI copying the transcript out word for word: the plugin now copies it itself, as it already did for longer meetings. Since 8 October that kind of copy can be cut off partway by a safety check, which leaves the meeting as a fetch error to retry the next evening. (#294)
+
 ## v0.13.21 — 2026-10-13
 
 - A recording now matches its calendar meeting when the start times line up, even when the recording's title and speaker labels share nothing with the invite. If exactly one meeting was running and began within 5 minutes of the recording, `/sync-recordings` links it and fills in the subject, organizer and everyone invited (new people get a person note, as for Teams meetings); it rates the match *medium* (never *high*). Two meetings in the same slot are still not matched on time alone. Every calendar-matched recording now lists the invitees by name, not just you. Before this, a call recorded at 11:01 for an 11:00 meeting could land in **To review** as "no calendar match". (#276)
