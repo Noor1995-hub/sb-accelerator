@@ -15,6 +15,7 @@ import hashlib
 import json
 import os
 import re
+import time
 from datetime import datetime, timedelta, timezone as _timezone
 from pathlib import Path
 from typing import List, Optional, Tuple
@@ -799,29 +800,145 @@ def _resolve_spill(source: str, roots: List[Path]) -> Path:
     return path
 
 
+# --- capture from the session log: an inline transcript read --------------
+#
+# A read under the tool-result cap (meetings shorter than roughly an hour)
+# arrives inline, and the worker used to persist it by re-typing it as Write
+# input. From claude-sonnet-5-5 on the API's output classifier stops long
+# re-typed copies of meeting speech partway (stop_reason "refusal") — half
+# of all Plaud worker runs, 2026-10-08 to 10-13 — so the model never writes
+# a transcript; the CLI copies it from where the host already holds it.
+#
+# The host appends every tool call and its result to the session log the
+# moment the result arrives. The key is the transcript URL itself: the
+# worker read it "exactly as given", and `derive_id` re-derives that same
+# string from the event file, so nothing the model types picks the result.
+# A probe may have read the same URL minutes earlier in a sibling log; the
+# worker's own log is the newest, and either way it is the same transcript.
+# The result found is the inline JSON, or the host's oversized-result
+# notice, whose named file is then resolved as for `--from`.
+
+# The log being searched was written seconds ago; the window keeps the scan
+# off months of old sessions without any risk to the live one.
+LOG_WINDOW_S = 12 * 3600
+_SPILL_NOTICE_RE = re.compile(
+    r"exceeds maximum allowed tokens\. Output has been saved to (.+?)\.?\s*$",
+    re.M)
+
+
+def _tool_blocks(line: str) -> list:
+    try:
+        entry = json.loads(line)
+    except json.JSONDecodeError:
+        return []
+    message = entry.get("message") if isinstance(entry, dict) else None
+    content = message.get("content") if isinstance(message, dict) else None
+    return [b for b in content if isinstance(b, dict)] if isinstance(content, list) else []
+
+
+def _result_text(block: dict) -> str:
+    parts = block.get("content")
+    if isinstance(parts, str):
+        return parts
+    texts = [p.get("text") for p in parts if isinstance(p, dict)
+             and p.get("type") == "text"] if isinstance(parts, list) else []
+    if len(texts) != 1 or not isinstance(texts[0], str):
+        raise M365Error(
+            f"the transcript read's result carries {len(texts)} text parts, "
+            "not one — not a transcript read capture understands")
+    return texts[0]
+
+
+def _read_in_log(uri: str, log: Path) -> Optional[dict]:
+    """The last tool result for a read_resource call on `uri` in one log."""
+    pending: set = set()
+    last = None
+    with open(log, encoding="utf-8", errors="replace") as fh:
+        for line in fh:
+            if not (("read_resource" in line and "tool_use" in line)
+                    or (pending and any(i in line for i in pending))):
+                continue
+            for block in _tool_blocks(line):
+                if (block.get("type") == "tool_use"
+                        and str(block.get("name", "")).endswith("read_resource")
+                        and isinstance(block.get("input"), dict)
+                        and block["input"].get("uri") == uri):
+                    pending.add(block.get("id"))
+                elif (block.get("type") == "tool_result"
+                        and block.get("tool_use_id") in pending):
+                    last = block
+    return last
+
+
+def _from_log(uri: str, roots: List[Path], now: float) -> Tuple[dict, Path]:
+    logs = {f for root in roots if root.is_dir() for f in root.rglob("*.jsonl")
+            if now - f.stat().st_mtime <= LOG_WINDOW_S}
+    # Newest first: the worker's own log was written to a moment ago.
+    for log in sorted(logs, key=lambda f: f.stat().st_mtime, reverse=True):
+        block = _read_in_log(uri, log)
+        if block is not None:
+            return block, log
+    raise M365Error(
+        f"no read_resource result for this event's transcript URL in a "
+        f"session log of the last {LOG_WINDOW_S // 3600} hours (looked "
+        f"under: {', '.join(str(r) for r in roots) or 'no roots'}) — read "
+        "the transcript_url exactly as `m365 ids` gave it, then capture")
+
+
 def _fmt_ms(ms: int) -> str:
     s = max(int(ms), 0) // 1000
     return f"{s // 3600:02d}:{s % 3600 // 60:02d}:{s % 60:02d}"
 
 
-def capture(source: str, out_path: str, *, event_path: Optional[str] = None,
-            roots: Optional[List[Path]] = None) -> dict:
-    """Copy a spilled transcript read to scratch, byte for byte (a leading
-    BOM aside), after proving it is one complete transcript read. Returns
-    counts only — never content."""
-    path = _resolve_spill(source, spill_roots() if roots is None else list(roots))
-    raw = path.read_bytes()
+def capture(source: Optional[str], out_path: str, *,
+            event_path: Optional[str] = None,
+            roots: Optional[List[Path]] = None,
+            now: Optional[float] = None) -> dict:
+    """Copy one transcript read to scratch, byte for byte (a leading BOM
+    aside), after proving it is one complete transcript read. `source` is
+    the spill path an oversized-result notice named; without it the read
+    is found in the session log by the event's own transcript URL, inline
+    or spilled. Returns counts only — never content."""
+    roots = spill_roots() if roots is None else list(roots)
+    if source is not None:
+        path = _resolve_spill(source, roots)
+        raw = path.read_bytes()
+        found_in = "spill"
+    else:
+        if event_path is None:
+            raise M365Error("capture needs --from (a spill path) or --event "
+                            "(to find the read in the session log)")
+        event = _load(event_path, "event")
+        if not isinstance(event, dict):
+            raise M365Error("event must be a JSON object")
+        uri = derive_id(event)["transcript_url"]
+        block, _log = _from_log(uri, roots, time.time() if now is None else now)
+        text = _result_text(block)
+        if block.get("is_error"):
+            raise M365Error("the newest read of this transcript URL failed "
+                            f"({text.splitlines()[0][:160] if text else 'no text'})"
+                            " — nothing to capture")
+        notice = _SPILL_NOTICE_RE.search(text) if text.startswith("Error:") else None
+        if notice:
+            path = _resolve_spill(notice.group(1).strip(), roots)
+            raw = path.read_bytes()
+            found_in = "spill"
+        else:
+            path = None
+            raw = text.encode("utf-8")
+            found_in = "session-log"
     body = raw[3:] if raw.startswith(b"\xef\xbb\xbf") else raw
     try:
         payload = json.loads(body.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise M365Error(
-            f"spilled file is not a complete transcript read (invalid JSON: "
+            f"captured read is not a complete transcript read (invalid JSON: "
             f"{exc}) — a cut-off read must not become a meeting note") from exc
     transcripts = payload.get("transcripts") if isinstance(payload, dict) else None
     if not isinstance(transcripts, list) or not transcripts:
-        raise M365Error("spilled file carries no transcripts — not a "
-                        "transcript read")
+        raise M365Error("captured read carries no transcripts — not a "
+                        "transcript read (a transcripts_empty answer is "
+                        "`no-transcript`, not a capture)")
     cues = 0
     last_ms = 0
     for entry in transcripts:
@@ -838,7 +955,8 @@ def capture(source: str, out_path: str, *, event_path: Optional[str] = None,
     out.write_bytes(body)
 
     result = {
-        "source_path": str(path),
+        "captured_from": found_in,
+        "source_path": str(path) if path is not None else None,
         "transcript_path": str(out),
         "bytes": len(raw),
         "transcripts": len(transcripts),
