@@ -15,6 +15,8 @@ delivers them.
 
 ## Unreleased
 
+## v0.13.21 — 2026-10-13
+
 - A recording now matches its calendar meeting when the start times line up, even when the recording's title and speaker labels share nothing with the invite. If exactly one meeting was running and began within 5 minutes of the recording, `/sync-recordings` links it and fills in the subject, organizer and everyone invited (new people get a person note, as for Teams meetings); it rates the match *medium* (never *high*). Two meetings in the same slot are still not matched on time alone. Every calendar-matched recording now lists the invitees by name, not just you. Before this, a call recorded at 11:01 for an 11:00 meeting could land in **To review** as "no calendar match". (#276)
 
 - **A missed evening is never hidden by a note you typed in first**: if you open today's note before the evening run has written it (the calendar icon creates an empty one) and type in it, the catch-up still sees the missed evening and writes the real note around your words, which stay under Notes. An Excel file from `/update-tables` is removed once everything in it is in the vault; it stays while anything still needs fixing. (#285)
