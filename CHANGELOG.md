@@ -15,7 +15,7 @@ delivers them.
 
 ## Unreleased
 
-- **Long Plaud recordings sync again**: every Plaud recording longer than about 45 minutes had failed since 8 October with a fetch error and nothing written — the worker was stopped while copying the transcript into its scratch files. The transcript is now copied by the plugin's own tooling, never by the AI, so recordings of any length go through, every page exactly as Plaud sent it. A recording that was parked for repeated fetch errors in the meantime comes back with `sync unskip --id plaud:<id>`. (#PR)
+- **Long Plaud recordings sync again**: every Plaud recording longer than about 45 minutes had failed since 8 October with a fetch error and nothing written — the worker was stopped while copying the transcript into its scratch files. The transcript is now copied by the plugin's own tooling, never by the AI, so recordings of any length go through, every page exactly as Plaud sent it. A recording that was parked for repeated fetch errors in the meantime comes back with `sync unskip --id plaud:<id>`. (#295)
 
 ## v0.13.21 — 2026-10-13
 
