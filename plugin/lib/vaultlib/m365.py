@@ -10,6 +10,7 @@ anything else raises rather than guessing.
 """
 from __future__ import annotations
 
+import codecs
 import glob
 import hashlib
 import json
@@ -892,11 +893,12 @@ def _read_in_log(uri: str, log: Path) -> Optional[dict]:
 
 
 def _from_log(uri: str, roots: List[Path], now: float) -> Tuple[dict, Path]:
-    logs = {f for root in roots if root.is_dir() for f in root.rglob("*.jsonl")
-            if now - f.stat().st_mtime <= LOG_WINDOW_S}
     # Newest first: the worker's own log was written to a moment ago.
-    for log in sorted(logs, key=lambda f: f.stat().st_mtime, reverse=True):
-        block = _read_in_log(uri, log)
+    for log in recent_logs(roots, now, LOG_WINDOW_S):
+        try:
+            block = _read_in_log(uri, log)
+        except OSError:
+            continue
         if block is not None:
             return block, log
     raise M365Error(
@@ -906,9 +908,35 @@ def _from_log(uri: str, roots: List[Path], now: float) -> Tuple[dict, Path]:
         "the transcript_url exactly as `m365 ids` gave it, then capture")
 
 
+def _text_part(text: str) -> str:
+    """A result a host delivers as a one-part MCP text list
+    (`[{"type":"text","text":"<read>"}]`, as a spilled file does on Claude
+    Desktop) is the read inside it; anything else is returned unchanged."""
+    try:
+        parts = json.loads(text)
+    except json.JSONDecodeError:
+        return text
+    if (isinstance(parts, list) and len(parts) == 1
+            and isinstance(parts[0], dict) and parts[0].get("type") == "text"
+            and isinstance(parts[0].get("text"), str)):
+        return parts[0]["text"]
+    return text
+
+
 def _fmt_ms(ms: int) -> str:
     s = max(int(ms), 0) // 1000
     return f"{s // 3600:02d}:{s % 3600 // 60:02d}:{s % 60:02d}"
+
+
+def _spilled_read(path: Path) -> bytes:
+    raw = path.read_bytes()
+    body = raw[3:] if raw.startswith(codecs.BOM_UTF8) else raw
+    try:
+        text = body.decode("utf-8")
+    except UnicodeDecodeError:
+        return raw
+    inner = _text_part(text)
+    return raw if inner is text else inner.encode("utf-8")
 
 
 def capture(source: Optional[str], out_path: str, *,
@@ -923,7 +951,7 @@ def capture(source: Optional[str], out_path: str, *,
     roots = spill_roots() if roots is None else list(roots)
     if source is not None:
         path = _resolve_spill(source, roots)
-        raw = path.read_bytes()
+        raw = _spilled_read(path)
         found_in = "spill"
     else:
         if event_path is None:
@@ -942,11 +970,11 @@ def capture(source: Optional[str], out_path: str, *,
         notice = _SPILL_NOTICE_RE.search(text) if text.startswith("Error:") else None
         if notice:
             path = _resolve_spill(notice.group(1).strip(), roots)
-            raw = path.read_bytes()
+            raw = _spilled_read(path)
             found_in = "spill"
         else:
             path = None
-            raw = text.encode("utf-8")
+            raw = _text_part(text).encode("utf-8")
             found_in = "session-log"
     body = raw[3:] if raw.startswith(b"\xef\xbb\xbf") else raw
     try:

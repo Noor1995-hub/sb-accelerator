@@ -9,6 +9,7 @@ import json
 from urllib.parse import unquote
 
 import pytest
+from pathlib import Path
 
 from vaultlib import m365
 
@@ -1138,3 +1139,59 @@ def test_reassemble_accepts_a_transcript_captured_from_the_log(tmp_path):
                              utc_offset="+02:00")
 
     assert result["blob_lines"] > 0
+
+
+# --- hosts that deliver results as MCP text parts, paths past the OS limit --
+#
+# Live 2026-10-14 (Plaud, Claude Desktop): a result spilled to a file is a
+# list of MCP text parts, not the bare JSON, and a project folder nested past
+# the Windows path limit made the log scan's stat() raise. Teams shares both.
+
+def test_capture_from_a_spill_that_is_a_list_of_text_parts(tmp_path):
+    root = tmp_path / "projects"
+    text = connector_json(NAIVE)
+    src = spill(root, TRANSCRIPT, rel="proj/sess/tool-results")
+    src.write_text(json.dumps([{"type": "text", "text": text}]), encoding="utf-8")
+    out = tmp_path / "out.json"
+
+    result = m365.capture(str(src), str(out), roots=[root])
+
+    assert out.read_bytes() == text.encode("utf-8")
+    assert result["transcripts"] == 1
+
+
+def test_capture_follows_a_notice_to_a_text_part_spill(tmp_path):
+    root = tmp_path / "projects"
+    text = connector_json(NAIVE)
+    src = spill(root, TRANSCRIPT, rel="proj/sess/tool-results")
+    src.write_text(json.dumps([{"type": "text", "text": text}]), encoding="utf-8")
+    log_read(root / "p" / "s.jsonl", SCOPED_URL,
+             f"Error: result (54,154 characters across 1 line) exceeds maximum "
+             f"allowed tokens. Output has been saved to {src}.\nFormat: Plain text")
+    event = write_json(tmp_path, "event.json", EVENT)
+    out = tmp_path / "out.json"
+
+    m365.capture(None, str(out), event_path=event, roots=[root])
+
+    assert out.read_bytes() == text.encode("utf-8")
+
+
+def test_capture_skips_a_log_it_cannot_stat(tmp_path, monkeypatch):
+    root = tmp_path / "projects"
+    log_read(root / "p" / "s.jsonl", SCOPED_URL, connector_json(TRANSCRIPT))
+    bad = log_read(root / "p" / "unreachable.jsonl", SCOPED_URL,
+                   connector_json(NAIVE))
+    real_stat = Path.stat
+
+    def stat(self, *a, **kw):
+        if self.name == bad.name:
+            raise FileNotFoundError(str(self))
+        return real_stat(self, *a, **kw)
+
+    monkeypatch.setattr(Path, "stat", stat)
+    event = write_json(tmp_path, "event.json", EVENT)
+    out = tmp_path / "out.json"
+
+    m365.capture(None, str(out), event_path=event, roots=[root])
+
+    assert out.read_text(encoding="utf-8") == connector_json(TRANSCRIPT)
