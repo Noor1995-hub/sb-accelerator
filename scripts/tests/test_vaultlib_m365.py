@@ -9,6 +9,7 @@ import json
 from urllib.parse import unquote
 
 import pytest
+from pathlib import Path
 
 from vaultlib import m365
 
@@ -939,3 +940,258 @@ def test_resolve_attendees_matches_by_address_before_name(tmp_path):
     assert result["created"] == []
     assert sorted(p.name for p in (root / "50-people").glob("*.md")) == [
         "jo-client.md", "owner-person.md"]
+
+
+# --- capture from the session log: an inline transcript read ---------------
+#
+# A read under the tool-result cap arrives inline and is in the session log
+# the moment it arrives. Re-typing it was the step the output classifier
+# stops on claude-sonnet-5-5; the CLI finds it by the event's own
+# transcript URL instead. Log lines mirror Claude Code's jsonl shape.
+
+READ_TOOL = "mcp__38771dd3-7d7e-4380-93a7-0a568401598f__read_resource"
+
+
+def log_read(log, uri, result, *, use_id="toolu_01", is_error=None,
+             tool=READ_TOOL):
+    """Append one read_resource call and its result to a session log."""
+    log.parent.mkdir(parents=True, exist_ok=True)
+    content = result if isinstance(result, str) and result.startswith("Error:") \
+        else [{"type": "text", "text": result}]
+    block = {"tool_use_id": use_id, "type": "tool_result", "content": content}
+    if is_error is not None:
+        block["is_error"] = is_error
+    lines = [
+        {"type": "assistant", "message": {"role": "assistant", "content": [
+            {"type": "tool_use", "id": use_id, "name": tool,
+             "input": {"uri": uri}}]}},
+        {"type": "user", "message": {"role": "user", "content": [block]}},
+    ]
+    with open(log, "a", encoding="utf-8") as fh:
+        for line in lines:
+            fh.write(json.dumps(line) + "\n")
+    return log
+
+
+def connector_json(obj):
+    """The connector's compact JSON, non-ASCII left as is."""
+    return json.dumps(obj, separators=(",", ":"), ensure_ascii=False)
+
+
+NAIVE = dict(TRANSCRIPT, meeting={"id": "MSo...", "subject": "Café & sync"})
+
+
+def test_capture_copies_an_inline_read_from_the_session_log(tmp_path):
+    root = tmp_path / "projects"
+    text = connector_json(NAIVE)
+    log_read(root / "proj" / "sess" / "subagents" / "agent-a1.jsonl",
+             SCOPED_URL, text)
+    event = write_json(tmp_path, "event.json", EVENT)
+    out = tmp_path / "scratch" / "m365_event_1.transcript.json"
+
+    result = m365.capture(None, str(out), event_path=event, roots=[root])
+
+    assert out.read_bytes() == text.encode("utf-8")
+    assert result["captured_from"] == "session-log"
+    assert result["source_path"] is None
+    assert result["transcripts"] == 1
+    assert result["cues"] == 4
+    assert "Café" not in json.dumps(result)  # counts only, never content
+
+
+def test_capture_follows_a_spill_notice_found_in_the_session_log(tmp_path):
+    root = tmp_path / "projects"
+    src = spill(root, TRANSCRIPT, rel="proj/sess/tool-results")
+    notice = (f"Error: result (54,154 characters across 1 line) exceeds "
+              f"maximum allowed tokens. Output has been saved to {src}.\n"
+              f"Format: Plain text\nSearch within the file for specific "
+              f"content, and use jq if the content is JSON.")
+    log_read(root / "proj" / "sess" / "subagents" / "agent-a1.jsonl",
+             SCOPED_URL, notice)
+    event = write_json(tmp_path, "event.json", EVENT)
+    out = tmp_path / "out.json"
+
+    result = m365.capture(None, str(out), event_path=event, roots=[root])
+
+    assert out.read_bytes() == src.read_bytes()
+    assert result["captured_from"] == "spill"
+    assert result["source_path"] == str(src)
+
+
+def test_capture_follows_a_windows_spill_notice_by_name(tmp_path):
+    """Cowork's notice names the Windows host path, spaces and all."""
+    root = tmp_path / "sessions" / "n" / "mnt" / ".claude" / "projects"
+    spill(root, TRANSCRIPT, rel="proj/sess/tool-results",
+          name="mcp-x-read_resource-17.txt")
+    host = (r"C:\Users\u\AppData\Roaming\Claude\local-agent-mode-sessions"
+            r"\9b\x\.claude\projects\proj\sess\tool-results"
+            r"\mcp-x-read_resource-17.txt")
+    log_read(root / "proj" / "sess.jsonl", SCOPED_URL,
+             f"Error: result (61,060 characters across 1 line) exceeds maximum "
+             f"allowed tokens. Output has been saved to {host}.\nFormat: Plain text")
+    event = write_json(tmp_path, "event.json", EVENT)
+
+    result = m365.capture(None, str(tmp_path / "out.json"), event_path=event,
+                          roots=[root])
+
+    assert result["captured_from"] == "spill"
+
+
+def test_capture_takes_the_newest_log_holding_the_url(tmp_path):
+    """A probe read the same URL earlier, in a sibling log."""
+    import os
+    root = tmp_path / "projects"
+    probe = log_read(root / "p" / "s" / "subagents" / "agent-probe.jsonl",
+                     SCOPED_URL, connector_json(NAIVE))
+    own = log_read(root / "p" / "s" / "subagents" / "agent-worker.jsonl",
+                   SCOPED_URL, connector_json(TRANSCRIPT))
+    os.utime(probe, (1_000_000, 1_000_000))
+    os.utime(own, (1_000_100, 1_000_100))
+    event = write_json(tmp_path, "event.json", EVENT)
+    out = tmp_path / "out.json"
+
+    m365.capture(None, str(out), event_path=event, roots=[root],
+                 now=1_000_200)
+
+    assert out.read_text(encoding="utf-8") == connector_json(TRANSCRIPT)
+
+
+def test_capture_takes_the_last_read_in_a_log(tmp_path):
+    """A retried read: the transport error first, the transcript second."""
+    root = tmp_path / "projects"
+    log = root / "p" / "s.jsonl"
+    log_read(log, SCOPED_URL, "Error: connection reset", use_id="toolu_a",
+             is_error=True)
+    log_read(log, SCOPED_URL, connector_json(TRANSCRIPT), use_id="toolu_b")
+    event = write_json(tmp_path, "event.json", EVENT)
+    out = tmp_path / "out.json"
+
+    m365.capture(None, str(out), event_path=event, roots=[root])
+
+    assert out.read_text(encoding="utf-8") == connector_json(TRANSCRIPT)
+
+
+def test_capture_ignores_reads_of_other_urls(tmp_path):
+    """A sibling worker's read — or this worker's own, rebuilt URL — is
+    never this event's transcript."""
+    root = tmp_path / "projects"
+    log = root / "p" / "s.jsonl"
+    log_read(log, URL, connector_json(TRANSCRIPT))  # unscoped: rebuilt
+    log_read(log, SCOPED_URL, connector_json(TRANSCRIPT),
+             tool="mcp__other__get_thing")
+    event = write_json(tmp_path, "event.json", EVENT)
+
+    with pytest.raises(m365.M365Error, match="no read_resource result"):
+        m365.capture(None, str(tmp_path / "out.json"), event_path=event,
+                     roots=[root])
+
+
+def test_capture_ignores_logs_outside_the_window(tmp_path):
+    import os
+    root = tmp_path / "projects"
+    log = log_read(root / "p" / "s.jsonl", SCOPED_URL,
+                   connector_json(TRANSCRIPT))
+    os.utime(log, (1_000_000, 1_000_000))
+    event = write_json(tmp_path, "event.json", EVENT)
+
+    with pytest.raises(m365.M365Error, match="no read_resource result"):
+        m365.capture(None, str(tmp_path / "out.json"), event_path=event,
+                     roots=[root], now=1_000_000 + m365.LOG_WINDOW_S + 1)
+
+
+def test_capture_refuses_a_newest_read_that_is_not_a_transcript(tmp_path):
+    root = tmp_path / "projects"
+    log_read(root / "p" / "s.jsonl", SCOPED_URL, connector_json(
+        {"note": "Microsoft Graph returned no transcripts for this meeting",
+         "meeting": {"id": "MSo..."}, "transcripts": []}))
+    event = write_json(tmp_path, "event.json", EVENT)
+    out = tmp_path / "out.json"
+
+    with pytest.raises(m365.M365Error, match="no transcripts"):
+        m365.capture(None, str(out), event_path=event, roots=[root])
+    assert not out.exists()
+
+
+def test_capture_refuses_a_failed_newest_read(tmp_path):
+    root = tmp_path / "projects"
+    log_read(root / "p" / "s.jsonl", SCOPED_URL, "Error: 403 Forbidden",
+             is_error=True)
+    event = write_json(tmp_path, "event.json", EVENT)
+
+    with pytest.raises(m365.M365Error, match="failed"):
+        m365.capture(None, str(tmp_path / "out.json"), event_path=event,
+                     roots=[root])
+
+
+def test_capture_needs_a_spill_path_or_an_event(tmp_path):
+    with pytest.raises(m365.M365Error, match="--from .* or --event"):
+        m365.capture(None, str(tmp_path / "out.json"), roots=[tmp_path])
+
+
+def test_reassemble_accepts_a_transcript_captured_from_the_log(tmp_path):
+    root = tmp_path / "projects"
+    log_read(root / "p" / "s.jsonl", SCOPED_URL, connector_json(NAIVE))
+    event = write_json(tmp_path, "event.json", EVENT)
+    out = tmp_path / "scratch" / "t.json"
+    m365.capture(None, str(out), event_path=event, roots=[root])
+
+    result = m365.reassemble(event, str(out), str(tmp_path / "scratch"),
+                             utc_offset="+02:00")
+
+    assert result["blob_lines"] > 0
+
+
+# --- hosts that deliver results as MCP text parts, paths past the OS limit --
+#
+# Live 2026-10-14 (Plaud, Claude Desktop): a result spilled to a file is a
+# list of MCP text parts, not the bare JSON, and a project folder nested past
+# the Windows path limit made the log scan's stat() raise. Teams shares both.
+
+def test_capture_from_a_spill_that_is_a_list_of_text_parts(tmp_path):
+    root = tmp_path / "projects"
+    text = connector_json(NAIVE)
+    src = spill(root, TRANSCRIPT, rel="proj/sess/tool-results")
+    src.write_text(json.dumps([{"type": "text", "text": text}]), encoding="utf-8")
+    out = tmp_path / "out.json"
+
+    result = m365.capture(str(src), str(out), roots=[root])
+
+    assert out.read_bytes() == text.encode("utf-8")
+    assert result["transcripts"] == 1
+
+
+def test_capture_follows_a_notice_to_a_text_part_spill(tmp_path):
+    root = tmp_path / "projects"
+    text = connector_json(NAIVE)
+    src = spill(root, TRANSCRIPT, rel="proj/sess/tool-results")
+    src.write_text(json.dumps([{"type": "text", "text": text}]), encoding="utf-8")
+    log_read(root / "p" / "s.jsonl", SCOPED_URL,
+             f"Error: result (54,154 characters across 1 line) exceeds maximum "
+             f"allowed tokens. Output has been saved to {src}.\nFormat: Plain text")
+    event = write_json(tmp_path, "event.json", EVENT)
+    out = tmp_path / "out.json"
+
+    m365.capture(None, str(out), event_path=event, roots=[root])
+
+    assert out.read_bytes() == text.encode("utf-8")
+
+
+def test_capture_skips_a_log_it_cannot_stat(tmp_path, monkeypatch):
+    root = tmp_path / "projects"
+    log_read(root / "p" / "s.jsonl", SCOPED_URL, connector_json(TRANSCRIPT))
+    bad = log_read(root / "p" / "unreachable.jsonl", SCOPED_URL,
+                   connector_json(NAIVE))
+    real_stat = Path.stat
+
+    def stat(self, *a, **kw):
+        if self.name == bad.name:
+            raise FileNotFoundError(str(self))
+        return real_stat(self, *a, **kw)
+
+    monkeypatch.setattr(Path, "stat", stat)
+    event = write_json(tmp_path, "event.json", EVENT)
+    out = tmp_path / "out.json"
+
+    m365.capture(None, str(out), event_path=event, roots=[root])
+
+    assert out.read_text(encoding="utf-8") == connector_json(TRANSCRIPT)

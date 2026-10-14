@@ -163,31 +163,36 @@ your own ids before you touch a transcript:
 4. One `read_resource` call on the `transcript_url` `m365 ids` returned in
    step 2, **exactly as given** — never rebuild or re-scope the URL; a
    recurring series answers a rebuilt, unscoped URL with other occurrences'
-   transcripts. Write the raw result to
-   `$SCRATCH/m365_event_<n>.transcript.json` verbatim. Then:
+   transcripts. **You never write the transcript yourself** — not the
+   scratch file, not a line of it. Re-typing a read as Write input is
+   stopped partway by the API's output classifier on long meeting speech
+   (half of all Plaud worker runs failed that way, 2026-10-08 to 10-13).
+   The CLI copies it from where the host already holds it. Then:
 
-   - **Oversized — the result is a notice, not content.** A transcript of
-     roughly an hour or more exceeds the tool-result cap, and the host
-     answers with an error like `result (104,221 characters across 1
+   - **Transcript content, or an oversized notice** — either the read
+     itself (JSON carrying `transcripts`), or, for a transcript of roughly
+     an hour or more, an error like `result (104,221 characters across 1
      line) exceeds maximum allowed tokens. Output has been saved to
-     <path>`. That is not a failed read: the full transcript is on disk.
-     Never open, read, grep, or re-type that file — not even a few lines —
-     and never write the scratch transcript yourself. Hand the path to the
-     CLI, **exactly as the notice gave it** (a Windows path in Cowork is
-     expected; the CLI resolves it inside the sandbox):
+     <path>`. The notice is not a failed read: the full transcript is on
+     disk. Either way, never open, read, grep, or re-type the content or
+     that file — not even a few lines — and run the same one call:
 
      ```bash
-     python3 "$VAULTLIB" m365 capture --from "<path from the notice>" \
-       --out "$SCRATCH/m365_event_<n>.transcript.json" \
-       --event <your event file — the object file, as in Reassemble>
+     python3 "$VAULTLIB" m365 capture --event <your event file — the object file, as in Reassemble> \
+       --out "$SCRATCH/m365_event_<n>.transcript.json"
      ```
 
-     `ok: true` → the scratch transcript is written, verbatim; continue
-     to Attendees and confidence as for any found transcript, and carry
-     the result's `warnings` (if any) to the end of your outcome line.
-     `ok: false` → reply `fetch-error: transcript too large to capture
-     (<the CLI's error, first clause>)` — it retries next run, and a
-     human can still drop the Teams transcript file in the inbox.
+     It derives the transcript URL from the event file and finds your read
+     of exactly that URL in this session's log — the inline content, or
+     the file the notice named — so it only finds it if step 4's read used
+     the URL exactly as given. `ok: true` → the scratch transcript is
+     written, verbatim (`captured_from` says which); continue to Attendees
+     and confidence as for any found transcript, and carry the result's
+     `warnings` (if any) to the end of your outcome line. `ok: false` →
+     reply `fetch-error: transcript capture refused (<the CLI's error,
+     first clause>)` — it retries next run, and a human can still drop the
+     Teams transcript file in the inbox. Never retry by writing the
+     transcript yourself.
    - `NOT_FOUND` with `transcripts_empty` → reply `no-transcript`
      (transcription was off for that meeting — settled, not an error).
    - **403/Forbidden** — classify by the body: Graph code 3003 / "does not
@@ -413,7 +418,7 @@ orchestrator's summary.
 | `no-transcript` | M365: `m365 ids` returned `skipped: no-transcript-url` (before any fetch), or the transcript read answered `transcripts_empty` |
 | `no-access` | M365: 403 on the transcript read, body carries Graph code 3003 / "does not have access to lookup meeting" — or the body is unreadable / carries no readable Graph error code at all (safer default); the transcript is not reachable from this account, either because the organizer's domain is missing from `adapters.m365.home_domains` (or the list is unset) or because the tenant's Microsoft Graph transcript-access setting is off; permanent |
 | `forbidden` | M365: a 403 on the transcript read whose body positively names a different cause — another tenant, permanent |
-| `fetch-error: <one clause why>` | transport failure, incomplete page set, a Plaud result `plaud capture` refused twice, or an oversized M365 transcript `m365 capture` refused — retries next run; append `(recording-id: <ns:id>)` whenever the id is known — Plaud: always, straight from your briefing; M365: only once your own `m365 ids` call has already succeeded, never before |
+| `fetch-error: <one clause why>` | transport failure, incomplete page set, a Plaud result `plaud capture` refused twice, or an M365 transcript `m365 capture` refused — retries next run; append `(recording-id: <ns:id>)` whenever the id is known — Plaud: always, straight from your briefing; M365: only once your own `m365 ids` call has already succeeded, never before |
 | `auth-error` | connector wants re-authentication — the adapter should stop |
 | `already-synced: <recording_id>` | M365 only: `sync dedup` already reports your derived id `synced` — stop before the transcript read; no payload |
 | `skip-listed: <recording_id>` | M365 only: `sync dedup` already reports your derived id `skipped` — stop before the transcript read; no payload |

@@ -726,16 +726,18 @@ def build_parser() -> argparse.ArgumentParser:
     m365_re.add_argument("--utc-offset", dest="utc_offset")
     m365_cap = m365_sub.add_parser(
         "capture",
-        help="copy a transcript read the host spilled to a tool-results file "
-             "into scratch, verbatim — counts only, never content")
+        help="copy a transcript read into scratch, verbatim, from where the "
+             "host already holds it — counts only, never content")
     m365_cap.add_argument(
-        "--from", dest="source", required=True,
-        help="the path the host's oversized-result notice named, as given — "
-             "a host path the sandbox cannot see is resolved by name")
+        "--from", dest="source",
+        help="the path an oversized-result notice named, as given — a host "
+             "path the sandbox cannot see is resolved by name; omit it to "
+             "find the read in the session log by --event's transcript URL")
     m365_cap.add_argument("--out", required=True,
                           help="scratch transcript file (never the vault)")
     m365_cap.add_argument("--event",
-                          help="the event file — enables the coverage check")
+                          help="the event object file — names the transcript "
+                               "URL to find, and enables the coverage check")
 
     discover_group = top.add_parser(
         "discover", help="Session-1 discovery: M365 evidence and the proposal check")

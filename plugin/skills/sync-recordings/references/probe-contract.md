@@ -94,8 +94,9 @@ re-typed. This contract's one exception: you classify the transcript
 fetch **in place, then write it nowhere** — not scratch, not the vault.
 The extraction worker the orchestrator dispatches on `transcript-found`
 re-fetches the same transcript per its own contract (the pre-fetched
-event variant, `worker-contract.md`) and writes it there, under the
-ordinary verbatim rule. The double-fetch on `transcript-found` is
+event variant, `worker-contract.md`), and `m365 capture` copies it into
+scratch from that worker's session log — no model writes it, there
+either. The double-fetch on `transcript-found` is
 accepted, not a bug to route around — and, with every M365 first look now
 probed, it is the path every found meeting takes, not a rare case. It is
 also cheap: the transcript enters a haiku context a second time (~30k

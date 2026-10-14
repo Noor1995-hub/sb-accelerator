@@ -1105,6 +1105,45 @@ def test_m365_capture_unreachable_file_fails_through_the_cli(
     assert "not reachable" in payload["error"]
 
 
+def test_m365_capture_from_the_session_log_through_the_cli(
+    capsys, tmp_path, monkeypatch
+):
+    from vaultlib import m365
+    root = tmp_path / "projects"
+    monkeypatch.setattr(m365, "spill_roots", lambda: [root])
+    log = root / "proj" / "sess" / "subagents" / "agent-a1.jsonl"
+    log.parent.mkdir(parents=True)
+    uri = M365_EVENT["meetingTranscriptUrl"]
+    lines = [
+        {"type": "assistant", "message": {"content": [{
+            "type": "tool_use", "id": "toolu_1",
+            "name": "mcp__x__read_resource", "input": {"uri": uri}}]}},
+        {"type": "user", "message": {"content": [{
+            "type": "tool_result", "tool_use_id": "toolu_1",
+            "content": [{"type": "text",
+                         "text": json.dumps(M365_TRANSCRIPT)}]}]}},
+    ]
+    log.write_text("".join(json.dumps(x) + "\n" for x in lines),
+                   encoding="utf-8")
+    event = tmp_path / "event.json"
+    event.write_text(json.dumps(M365_EVENT), encoding="utf-8")
+    out = tmp_path / "scratch" / "m365_event_1.transcript.json"
+
+    code, payload = run(capsys, [
+        "m365", "capture", "--event", str(event), "--out", str(out),
+    ])
+
+    assert code == 0, payload
+    assert payload["result"]["captured_from"] == "session-log"
+    assert "Alles goed" not in json.dumps(payload)  # counts only, never content
+    assert out.read_text(encoding="utf-8") == json.dumps(M365_TRANSCRIPT)
+    code, payload = run(capsys, [
+        "m365", "reassemble", "--event", str(event), "--transcript", str(out),
+        "--out", str(tmp_path / "scratch"), "--utc-offset", "+02:00",
+    ])
+    assert code == 0, payload
+
+
 M365_LISTING = [{
     "id": "AAMkAGId1",
     "subject": "Weekly sync",
