@@ -1,0 +1,964 @@
+{
+ "about": "Anonymised replay of 19 unmatched recorder recordings (2026-10-12..14) against the owner's real calendar shapes: times, showAs, organizer and attendee counts are real; subjects, titles and addresses are rewritten. Run: python scripts/eval_calendar_match.py",
+ "timezone": "Europe/Brussels",
+ "listings": {
+  "2026-10-12": [
+   {
+    "id": "evt-a1",
+    "subject": "Alignment client A - one voice",
+    "organizer": "a1-org@home.example",
+    "attendees": [
+     "a1-org@home.example",
+     "owner@home.example",
+     "a1-p1@home.example"
+    ],
+    "start": {
+     "dateTime": "2026-10-12T06:15:00.0000000",
+     "timeZone": "UTC"
+    },
+    "end": {
+     "dateTime": "2026-10-12T06:45:00.0000000",
+     "timeZone": "UTC"
+    },
+    "location": null,
+    "showAs": "busy",
+    "isAllDay": false,
+    "isCancelled": false,
+    "isOrganizer": false,
+    "recurrence": null
+   },
+   {
+    "id": "evt-a2",
+    "subject": "timesheets",
+    "organizer": "owner@home.example",
+    "attendees": null,
+    "start": {
+     "dateTime": "2026-10-12T06:30:00.0000000",
+     "timeZone": "UTC"
+    },
+    "end": {
+     "dateTime": "2026-10-12T07:00:00.0000000",
+     "timeZone": "UTC"
+    },
+    "location": null,
+    "showAs": "busy",
+    "isAllDay": false,
+    "isCancelled": false,
+    "isOrganizer": true,
+    "recurrence": null
+   },
+   {
+    "id": "evt-a3",
+    "subject": "Placeholder steerco deck",
+    "organizer": "a3-org@client-a.example",
+    "attendees": [
+     "a3-org@client-a.example",
+     "owner@home.example",
+     "a3-p1@home.example",
+     "a3-p2@client-a.example",
+     "a3-p3@home.example"
+    ],
+    "start": {
+     "dateTime": "2026-10-12T07:30:00.0000000",
+     "timeZone": "UTC"
+    },
+    "end": {
+     "dateTime": "2026-10-12T08:30:00.0000000",
+     "timeZone": "UTC"
+    },
+    "location": null,
+    "showAs": "busy",
+    "isAllDay": false,
+    "isCancelled": false,
+    "isOrganizer": false,
+    "recurrence": null
+   },
+   {
+    "id": "evt-a4",
+    "subject": "Focus time",
+    "organizer": "owner@home.example",
+    "attendees": null,
+    "start": {
+     "dateTime": "2026-10-12T08:30:00.0000000",
+     "timeZone": "UTC"
+    },
+    "end": {
+     "dateTime": "2026-10-12T09:00:00.0000000",
+     "timeZone": "UTC"
+    },
+    "location": null,
+    "showAs": "busy",
+    "isAllDay": false,
+    "isCancelled": false,
+    "isOrganizer": true,
+    "recurrence": null
+   },
+   {
+    "id": "evt-a5",
+    "subject": "Client B - core team sync",
+    "organizer": "a5-org@home.example",
+    "attendees": [
+     "a5-org@home.example",
+     "owner@home.example",
+     "a5-p1@home.example",
+     "a5-p2@home.example",
+     "a5-p3@home.example",
+     "a5-p4@home.example",
+     "a5-p5@home.example"
+    ],
+    "start": {
+     "dateTime": "2026-10-12T09:00:00.0000000",
+     "timeZone": "UTC"
+    },
+    "end": {
+     "dateTime": "2026-10-12T09:30:00.0000000",
+     "timeZone": "UTC"
+    },
+    "location": null,
+    "showAs": "busy",
+    "isAllDay": false,
+    "isCancelled": false,
+    "isOrganizer": false,
+    "recurrence": null
+   },
+   {
+    "id": "evt-a6",
+    "subject": "FW: Placeholder steerco deck",
+    "organizer": "a6-org@client-a.example",
+    "attendees": [
+     "a6-org@client-a.example",
+     "owner@home.example",
+     "a6-p1@home.example",
+     "a6-p2@client-a.example"
+    ],
+    "start": {
+     "dateTime": "2026-10-12T09:30:00.0000000",
+     "timeZone": "UTC"
+    },
+    "end": {
+     "dateTime": "2026-10-12T11:00:00.0000000",
+     "timeZone": "UTC"
+    },
+    "location": null,
+    "showAs": "tentative",
+    "isAllDay": false,
+    "isCancelled": false,
+    "isOrganizer": false,
+    "recurrence": null
+   },
+   {
+    "id": "evt-a7",
+    "subject": "Info",
+    "organizer": "a7-org@home.example",
+    "attendees": [
+     "a7-org@home.example",
+     "owner@home.example"
+    ],
+    "start": {
+     "dateTime": "2026-10-12T11:00:00.0000000",
+     "timeZone": "UTC"
+    },
+    "end": {
+     "dateTime": "2026-10-12T12:00:00.0000000",
+     "timeZone": "UTC"
+    },
+    "location": null,
+    "showAs": "free",
+    "isAllDay": false,
+    "isCancelled": false,
+    "isOrganizer": false,
+    "recurrence": null
+   },
+   {
+    "id": "evt-a8",
+    "subject": "Practice offsite + dinner",
+    "organizer": "a8-org@home.example",
+    "attendees": [
+     "a8-org@home.example",
+     "owner@home.example",
+     "a8-p1@home.example",
+     "a8-p2@home.example",
+     "a8-p3@home.example",
+     "a8-p4@home.example",
+     "a8-p5@home.example",
+     "a8-p6@home.example",
+     "a8-p7@home.example",
+     "a8-p8@home.example",
+     "a8-p9@home.example"
+    ],
+    "start": {
+     "dateTime": "2026-10-12T11:00:00.0000000",
+     "timeZone": "UTC"
+    },
+    "end": {
+     "dateTime": "2026-10-12T20:00:00.0000000",
+     "timeZone": "UTC"
+    },
+    "location": null,
+    "showAs": "busy",
+    "isAllDay": false,
+    "isCancelled": false,
+    "isOrganizer": false,
+    "recurrence": null
+   },
+   {
+    "id": "evt-a9",
+    "subject": "AI platform - weekly product call",
+    "organizer": "owner@home.example",
+    "attendees": [
+     "a9-p0@home.example",
+     "a9-p1@home.example",
+     "a9-p2@home.example",
+     "a9-p3@home.example",
+     "a9-p4@home.example",
+     "a9-p5@home.example",
+     "a9-p6@home.example",
+     "a9-p7@home.example",
+     "a9-p8@home.example",
+     "a9-p9@home.example",
+     "a9-p10@home.example",
+     "a9-p11@home.example",
+     "a9-p12@home.example"
+    ],
+    "start": {
+     "dateTime": "2026-10-12T13:00:00.0000000",
+     "timeZone": "UTC"
+    },
+    "end": {
+     "dateTime": "2026-10-12T14:00:00.0000000",
+     "timeZone": "UTC"
+    },
+    "location": null,
+    "showAs": "busy",
+    "isAllDay": false,
+    "isCancelled": false,
+    "isOrganizer": true,
+    "recurrence": null
+   },
+   {
+    "id": "evt-a10",
+    "subject": "Declined: Client A core team",
+    "organizer": "a10-org@home.example",
+    "attendees": [
+     "a10-org@home.example",
+     "owner@home.example",
+     "a10-p1@home.example",
+     "a10-p2@home.example"
+    ],
+    "start": {
+     "dateTime": "2026-10-12T14:00:00.0000000",
+     "timeZone": "UTC"
+    },
+    "end": {
+     "dateTime": "2026-10-12T14:30:00.0000000",
+     "timeZone": "UTC"
+    },
+    "location": null,
+    "showAs": "free",
+    "isAllDay": false,
+    "isCancelled": false,
+    "isOrganizer": false,
+    "recurrence": null
+   }
+  ],
+  "2026-10-13": [
+   {
+    "id": "evt-b1",
+    "subject": "Onboarding & AI upskilling",
+    "organizer": "b1-org@home.example",
+    "attendees": [
+     "b1-org@home.example",
+     "owner@home.example"
+    ],
+    "start": {
+     "dateTime": "2026-10-13T07:00:00.0000000",
+     "timeZone": "UTC"
+    },
+    "end": {
+     "dateTime": "2026-10-13T08:00:00.0000000",
+     "timeZone": "UTC"
+    },
+    "location": null,
+    "showAs": "busy",
+    "isAllDay": false,
+    "isCancelled": false,
+    "isOrganizer": false,
+    "recurrence": null
+   },
+   {
+    "id": "evt-b2",
+    "subject": "Weekly status - AI tooling governance",
+    "organizer": "b2-org@home.example",
+    "attendees": [
+     "b2-org@home.example",
+     "owner@home.example",
+     "b2-p1@home.example",
+     "b2-p2@home.example",
+     "b2-p3@home.example",
+     "b2-p4@home.example",
+     "b2-p5@home.example",
+     "b2-p6@home.example",
+     "b2-p7@home.example",
+     "b2-p8@home.example",
+     "b2-p9@home.example",
+     "b2-p10@home.example",
+     "b2-p11@home.example",
+     "b2-p12@home.example",
+     "b2-p13@home.example",
+     "b2-p14@home.example",
+     "b2-p15@home.example",
+     "b2-p16@home.example",
+     "b2-p17@home.example",
+     "b2-p18@home.example",
+     "b2-p19@home.example",
+     "b2-p20@home.example",
+     "b2-p21@home.example"
+    ],
+    "start": {
+     "dateTime": "2026-10-13T07:00:00.0000000",
+     "timeZone": "UTC"
+    },
+    "end": {
+     "dateTime": "2026-10-13T07:30:00.0000000",
+     "timeZone": "UTC"
+    },
+    "location": null,
+    "showAs": "tentative",
+    "isAllDay": false,
+    "isCancelled": false,
+    "isOrganizer": false,
+    "recurrence": null
+   },
+   {
+    "id": "evt-b3",
+    "subject": "45 with a vendor founder",
+    "organizer": "b3-org@vendor.example",
+    "attendees": [
+     "b3-org@vendor.example",
+     "owner@home.example"
+    ],
+    "start": {
+     "dateTime": "2026-10-13T08:00:00.0000000",
+     "timeZone": "UTC"
+    },
+    "end": {
+     "dateTime": "2026-10-13T08:45:00.0000000",
+     "timeZone": "UTC"
+    },
+    "location": null,
+    "showAs": "busy",
+    "isAllDay": false,
+    "isCancelled": false,
+    "isOrganizer": false,
+    "recurrence": null
+   },
+   {
+    "id": "evt-b4",
+    "subject": "Candidate interview",
+    "organizer": "b4-org@home.example",
+    "attendees": [
+     "b4-org@home.example",
+     "owner@home.example",
+     "b4-p1@home.example",
+     "b4-p2@home.example"
+    ],
+    "start": {
+     "dateTime": "2026-10-13T08:45:00.0000000",
+     "timeZone": "UTC"
+    },
+    "end": {
+     "dateTime": "2026-10-13T09:45:00.0000000",
+     "timeZone": "UTC"
+    },
+    "location": null,
+    "showAs": "tentative",
+    "isAllDay": false,
+    "isCancelled": false,
+    "isOrganizer": false,
+    "recurrence": null
+   },
+   {
+    "id": "evt-b5",
+    "subject": "Practice | weekly sync",
+    "organizer": "owner@home.example",
+    "attendees": [
+     "b5-p0@home.example"
+    ],
+    "start": {
+     "dateTime": "2026-10-13T09:30:00.0000000",
+     "timeZone": "UTC"
+    },
+    "end": {
+     "dateTime": "2026-10-13T10:00:00.0000000",
+     "timeZone": "UTC"
+    },
+    "location": null,
+    "showAs": "busy",
+    "isAllDay": false,
+    "isCancelled": false,
+    "isOrganizer": true,
+    "recurrence": null
+   },
+   {
+    "id": "evt-b6",
+    "subject": "BLOCK AI SESSION CLIENT C",
+    "organizer": "owner@home.example",
+    "attendees": [
+     "b6-p0@home.example"
+    ],
+    "start": {
+     "dateTime": "2026-10-13T11:00:00.0000000",
+     "timeZone": "UTC"
+    },
+    "end": {
+     "dateTime": "2026-10-13T15:00:00.0000000",
+     "timeZone": "UTC"
+    },
+    "location": null,
+    "showAs": "busy",
+    "isAllDay": false,
+    "isCancelled": false,
+    "isOrganizer": true,
+    "recurrence": null
+   },
+   {
+    "id": "evt-b7",
+    "subject": "Deepdive - AI architecture",
+    "organizer": "b7-org@client-c.example",
+    "attendees": [
+     "b7-org@client-c.example",
+     "owner@home.example",
+     "b7-p1@home.example",
+     "b7-p2@client-c.example",
+     "b7-p3@home.example",
+     "b7-p4@client-c.example",
+     "b7-p5@home.example",
+     "b7-p6@client-c.example",
+     "b7-p7@home.example",
+     "b7-p8@client-c.example",
+     "b7-p9@home.example",
+     "b7-p10@client-c.example"
+    ],
+    "start": {
+     "dateTime": "2026-10-13T13:00:00.0000000",
+     "timeZone": "UTC"
+    },
+    "end": {
+     "dateTime": "2026-10-13T14:30:00.0000000",
+     "timeZone": "UTC"
+    },
+    "location": null,
+    "showAs": "busy",
+    "isAllDay": false,
+    "isCancelled": false,
+    "isOrganizer": false,
+    "recurrence": null
+   }
+  ],
+  "2026-10-14": [
+   {
+    "id": "evt-c1",
+    "subject": "AI hive - client D",
+    "organizer": "c1-org@home.example",
+    "attendees": [
+     "c1-org@home.example",
+     "owner@home.example",
+     "c1-p1@home.example",
+     "c1-p2@home.example",
+     "c1-p3@home.example",
+     "c1-p4@home.example"
+    ],
+    "start": {
+     "dateTime": "2026-10-14T06:30:00.0000000",
+     "timeZone": "UTC"
+    },
+    "end": {
+     "dateTime": "2026-10-14T06:55:00.0000000",
+     "timeZone": "UTC"
+    },
+    "location": null,
+    "showAs": "tentative",
+    "isAllDay": false,
+    "isCancelled": false,
+    "isOrganizer": false,
+    "recurrence": null
+   },
+   {
+    "id": "evt-c2",
+    "subject": "Catch-up 1:1",
+    "organizer": "owner@home.example",
+    "attendees": [
+     "c2-p0@home.example"
+    ],
+    "start": {
+     "dateTime": "2026-10-14T07:00:00.0000000",
+     "timeZone": "UTC"
+    },
+    "end": {
+     "dateTime": "2026-10-14T08:00:00.0000000",
+     "timeZone": "UTC"
+    },
+    "location": null,
+    "showAs": "busy",
+    "isAllDay": false,
+    "isCancelled": false,
+    "isOrganizer": true,
+    "recurrence": null
+   },
+   {
+    "id": "evt-c3",
+    "subject": "AI | growth call - tailored AI solutions",
+    "organizer": "c3-org@home.example",
+    "attendees": [
+     "c3-org@home.example",
+     "owner@home.example",
+     "c3-p1@home.example",
+     "c3-p2@home.example",
+     "c3-p3@home.example",
+     "c3-p4@home.example",
+     "c3-p5@home.example",
+     "c3-p6@home.example",
+     "c3-p7@home.example",
+     "c3-p8@home.example",
+     "c3-p9@home.example",
+     "c3-p10@home.example",
+     "c3-p11@home.example",
+     "c3-p12@home.example",
+     "c3-p13@home.example",
+     "c3-p14@home.example",
+     "c3-p15@home.example",
+     "c3-p16@home.example",
+     "c3-p17@home.example",
+     "c3-p18@home.example",
+     "c3-p19@home.example",
+     "c3-p20@home.example",
+     "c3-p21@home.example",
+     "c3-p22@home.example",
+     "c3-p23@home.example",
+     "c3-p24@home.example",
+     "c3-p25@home.example",
+     "c3-p26@home.example"
+    ],
+    "start": {
+     "dateTime": "2026-10-14T08:00:00.0000000",
+     "timeZone": "UTC"
+    },
+    "end": {
+     "dateTime": "2026-10-14T08:45:00.0000000",
+     "timeZone": "UTC"
+    },
+    "location": null,
+    "showAs": "busy",
+    "isAllDay": false,
+    "isCancelled": false,
+    "isOrganizer": false,
+    "recurrence": null
+   },
+   {
+    "id": "evt-c4",
+    "subject": "Prep session Client E AI in SDLC",
+    "organizer": "owner@home.example",
+    "attendees": [
+     "c4-p0@home.example",
+     "c4-p1@home.example",
+     "c4-p2@home.example",
+     "c4-p3@home.example",
+     "c4-p4@home.example"
+    ],
+    "start": {
+     "dateTime": "2026-10-14T09:00:00.0000000",
+     "timeZone": "UTC"
+    },
+    "end": {
+     "dateTime": "2026-10-14T10:00:00.0000000",
+     "timeZone": "UTC"
+    },
+    "location": null,
+    "showAs": "busy",
+    "isAllDay": false,
+    "isCancelled": false,
+    "isOrganizer": true,
+    "recurrence": null
+   },
+   {
+    "id": "evt-c5",
+    "subject": "Kick-off - AI hive - platform team",
+    "organizer": "owner@home.example",
+    "attendees": [
+     "c5-p0@home.example",
+     "c5-p1@home.example",
+     "c5-p2@home.example",
+     "c5-p3@home.example",
+     "c5-p4@home.example",
+     "c5-p5@home.example",
+     "c5-p6@home.example"
+    ],
+    "start": {
+     "dateTime": "2026-10-14T12:00:00.0000000",
+     "timeZone": "UTC"
+    },
+    "end": {
+     "dateTime": "2026-10-14T14:00:00.0000000",
+     "timeZone": "UTC"
+    },
+    "location": null,
+    "showAs": "busy",
+    "isAllDay": false,
+    "isCancelled": false,
+    "isOrganizer": true,
+    "recurrence": null
+   },
+   {
+    "id": "evt-c6",
+    "subject": "AI hive + portal topics",
+    "organizer": "owner@home.example",
+    "attendees": [
+     "c6-p0@home.example",
+     "c6-p1@home.example"
+    ],
+    "start": {
+     "dateTime": "2026-10-14T12:30:00.0000000",
+     "timeZone": "UTC"
+    },
+    "end": {
+     "dateTime": "2026-10-14T14:00:00.0000000",
+     "timeZone": "UTC"
+    },
+    "location": null,
+    "showAs": "busy",
+    "isAllDay": false,
+    "isCancelled": false,
+    "isOrganizer": true,
+    "recurrence": null
+   },
+   {
+    "id": "evt-c7",
+    "subject": "Weekly sync practice",
+    "organizer": "c7-org@home.example",
+    "attendees": [
+     "c7-org@home.example",
+     "owner@home.example",
+     "c7-p1@home.example",
+     "c7-p2@home.example"
+    ],
+    "start": {
+     "dateTime": "2026-10-14T14:00:00.0000000",
+     "timeZone": "UTC"
+    },
+    "end": {
+     "dateTime": "2026-10-14T15:00:00.0000000",
+     "timeZone": "UTC"
+    },
+    "location": null,
+    "showAs": "busy",
+    "isAllDay": false,
+    "isCancelled": false,
+    "isOrganizer": false,
+    "recurrence": null
+   },
+   {
+    "id": "evt-c8",
+    "subject": "Coaching session 2 - AI",
+    "organizer": "c8-org@client-b.example",
+    "attendees": [
+     "c8-org@client-b.example",
+     "owner@home.example",
+     "c8-p1@home.example",
+     "c8-p2@client-b.example",
+     "c8-p3@home.example"
+    ],
+    "start": {
+     "dateTime": "2026-10-14T14:30:00.0000000",
+     "timeZone": "UTC"
+    },
+    "end": {
+     "dateTime": "2026-10-14T16:00:00.0000000",
+     "timeZone": "UTC"
+    },
+    "location": null,
+    "showAs": "busy",
+    "isAllDay": false,
+    "isCancelled": false,
+    "isOrganizer": false,
+    "recurrence": null
+   },
+   {
+    "id": "evt-c9",
+    "subject": "Declined: personal errand",
+    "organizer": "c9-org@client-e.example",
+    "attendees": [
+     "c9-org@client-e.example",
+     "owner@home.example"
+    ],
+    "start": {
+     "dateTime": "2026-10-14T15:00:00.0000000",
+     "timeZone": "UTC"
+    },
+    "end": {
+     "dateTime": "2026-10-14T16:55:00.0000000",
+     "timeZone": "UTC"
+    },
+    "location": null,
+    "showAs": "free",
+    "isAllDay": false,
+    "isCancelled": false,
+    "isOrganizer": false,
+    "recurrence": null
+   },
+   {
+    "id": "evt-c10",
+    "subject": "Office day",
+    "organizer": "c10-org@home.example",
+    "attendees": [
+     "c10-org@home.example",
+     "owner@home.example",
+     "c10-p1@home.example",
+     "c10-p2@home.example",
+     "c10-p3@home.example",
+     "c10-p4@home.example",
+     "c10-p5@home.example",
+     "c10-p6@home.example",
+     "c10-p7@home.example",
+     "c10-p8@home.example",
+     "c10-p9@home.example",
+     "c10-p10@home.example",
+     "c10-p11@home.example",
+     "c10-p12@home.example",
+     "c10-p13@home.example",
+     "c10-p14@home.example",
+     "c10-p15@home.example",
+     "c10-p16@home.example",
+     "c10-p17@home.example",
+     "c10-p18@home.example",
+     "c10-p19@home.example",
+     "c10-p20@home.example",
+     "c10-p21@home.example",
+     "c10-p22@home.example",
+     "c10-p23@home.example",
+     "c10-p24@home.example",
+     "c10-p25@home.example",
+     "c10-p26@home.example",
+     "c10-p27@home.example",
+     "c10-p28@home.example",
+     "c10-p29@home.example",
+     "c10-p30@home.example",
+     "c10-p31@home.example",
+     "c10-p32@home.example",
+     "c10-p33@home.example",
+     "c10-p34@home.example",
+     "c10-p35@home.example",
+     "c10-p36@home.example",
+     "c10-p37@home.example",
+     "c10-p38@home.example",
+     "c10-p39@home.example"
+    ],
+    "start": {
+     "dateTime": "2026-10-15T00:00:00.0000000",
+     "timeZone": "UTC"
+    },
+    "end": {
+     "dateTime": "2026-10-16T00:00:00.0000000",
+     "timeZone": "UTC"
+    },
+    "location": null,
+    "showAs": "free",
+    "isAllDay": true,
+    "isCancelled": false,
+    "isOrganizer": false,
+    "recurrence": null
+   }
+  ]
+ },
+ "recordings": [
+  {
+   "id": "r01",
+   "start_local": "2026-10-12T08:15",
+   "duration_min": 20,
+   "title": "Alignment call, one voice towards the client",
+   "expect_cli": "single",
+   "expect_event": "evt-a1",
+   "expect_final": "time",
+   "why": "gap 1: a solo 'timesheets' block overlapped and made it ambiguous"
+  },
+  {
+   "id": "r02",
+   "start_local": "2026-10-12T08:37",
+   "duration_min": 13,
+   "title": "Strategic scope of the practice and AI hive transition",
+   "expect_cli": "ambiguous",
+   "expect_event": null,
+   "expect_final": "none",
+   "why": "two meetings overlap, neither starts near it"
+  },
+  {
+   "id": "r03",
+   "start_local": "2026-10-12T09:06",
+   "duration_min": 12,
+   "title": "AI hive architecture, plugin integrations and team roles",
+   "expect_cli": "none",
+   "expect_event": null,
+   "expect_final": "none",
+   "why": "between meetings"
+  },
+  {
+   "id": "r04",
+   "start_local": "2026-10-12T09:31",
+   "duration_min": 89,
+   "title": "Steerco deck preparation",
+   "expect_cli": "single",
+   "expect_event": "evt-a3",
+   "expect_final": "time",
+   "why": "gap 1: a solo 'Focus time' block overlapped and made it ambiguous"
+  },
+  {
+   "id": "r05",
+   "start_local": "2026-10-12T11:00",
+   "duration_min": 21,
+   "title": "Core team sync",
+   "expect_cli": "single",
+   "expect_event": "evt-a5",
+   "expect_final": "time",
+   "why": "gap 1: 'Focus time' ended 11:00 but counted, made it ambiguous"
+  },
+  {
+   "id": "r06",
+   "start_local": "2026-10-12T11:21",
+   "duration_min": 2,
+   "title": "Short alignment on the architecture overview",
+   "expect_cli": "overlap",
+   "expect_event": null,
+   "expect_final": "side-call",
+   "why": "2 minutes inside a 30-minute meeting that started 21 minutes earlier"
+  },
+  {
+   "id": "r07",
+   "start_local": "2026-10-12T11:25",
+   "duration_min": 11,
+   "title": "Client A projects, team structure and AI",
+   "expect_cli": "single",
+   "expect_event": "evt-a6",
+   "expect_final": "time",
+   "why": "CHANGED by the fix: was ambiguous (a meeting ending 11:30 counted); now the tentative 11:30 client A meeting starting 5 minutes later. Recorded as a correct no-match in the 2026-10-14 replay; the topic is client A's, so the new match is plausible — confirm"
+  },
+  {
+   "id": "r08",
+   "start_local": "2026-10-12T13:23",
+   "duration_min": 138,
+   "title": "2027 AI strategy, governance, KPIs",
+   "expect_cli": "ambiguous",
+   "expect_event": "evt-a8",
+   "expect_final": "content",
+   "why": "gap 4a: inside the offsite, overlapping the 15:00 weekly; the offsite agenda (Vision 2027) decides it"
+  },
+  {
+   "id": "r09",
+   "start_local": "2026-10-12T16:06",
+   "duration_min": 116,
+   "title": "AI hive architecture, EU sovereign cloud",
+   "expect_cli": "overlap",
+   "expect_event": null,
+   "expect_final": "side-call",
+   "why": "inside the offsite; no content tie in the replay"
+  },
+  {
+   "id": "r10",
+   "start_local": "2026-10-12T18:38",
+   "duration_min": 49,
+   "title": "AI governance, compliance and commercial",
+   "expect_cli": "overlap",
+   "expect_event": "evt-a8",
+   "expect_final": "content",
+   "why": "gap 4b: hours into the offsite; matched only if the agenda corroborates, otherwise a side call"
+  },
+  {
+   "id": "r11",
+   "start_local": "2026-10-13T12:33",
+   "duration_min": 7,
+   "title": "Licence automation and benchmark alignment",
+   "expect_cli": "none",
+   "expect_event": null,
+   "expect_final": "none",
+   "why": "between meetings"
+  },
+  {
+   "id": "r12",
+   "start_local": "2026-10-13T14:06",
+   "duration_min": 2,
+   "title": "Directions to parking C",
+   "expect_cli": "overlap",
+   "expect_event": null,
+   "expect_final": "side-call",
+   "why": "2 minutes inside a 4-hour working block"
+  },
+  {
+   "id": "r13",
+   "start_local": "2026-10-13T17:03",
+   "duration_min": 8,
+   "title": "Starting the hive, resource planning",
+   "expect_cli": "none",
+   "expect_event": null,
+   "expect_final": "none",
+   "why": "after the last meeting"
+  },
+  {
+   "id": "r14",
+   "start_local": "2026-10-13T17:43",
+   "duration_min": 15,
+   "title": "Programme alignment with two colleagues",
+   "expect_cli": "none",
+   "expect_event": null,
+   "expect_final": "none",
+   "why": "after the last meeting"
+  },
+  {
+   "id": "r15",
+   "start_local": "2026-10-14T10:54",
+   "duration_min": 6,
+   "title": "Career path call",
+   "expect_cli": "overlap",
+   "expect_event": null,
+   "expect_final": "none",
+   "why": "starts 6 minutes before a prep session it has nothing to do with"
+  },
+  {
+   "id": "r16",
+   "start_local": "2026-10-14T11:06:36",
+   "duration_min": 56,
+   "title": "Client E AI in SDLC preparation",
+   "expect_cli": "overlap",
+   "expect_event": "evt-c4",
+   "expect_final": "content",
+   "why": "gap 3: 6.6 minutes late; 'Client E' is in both titles"
+  },
+  {
+   "id": "r17",
+   "start_local": "2026-10-14T13:04",
+   "duration_min": 5,
+   "title": "Ending a partner collaboration",
+   "expect_cli": "none",
+   "expect_event": null,
+   "expect_final": "none",
+   "why": "between meetings"
+  },
+  {
+   "id": "r18",
+   "start_local": "2026-10-14T14:15",
+   "duration_min": 51,
+   "title": "AI hive platform kick-off",
+   "expect_cli": "ambiguous",
+   "expect_event": "evt-c5",
+   "expect_final": "content",
+   "why": "gap 4a: two AI hive events tie on title; the kick-off's agenda (product owner, architect, developer) decides it"
+  },
+  {
+   "id": "r19",
+   "start_local": "2026-10-14T16:04",
+   "duration_min": 2,
+   "title": "Weekly sync",
+   "expect_cli": "single",
+   "expect_event": "evt-c7",
+   "expect_final": "time",
+   "why": "gap 2: two meetings ending 16:00 counted and made it ambiguous"
+  }
+ ]
+}

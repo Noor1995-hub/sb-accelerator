@@ -656,9 +656,10 @@ record for, however many longer blocks also overlap. It answers `match`:
 - `none` — nothing is in the slot. Stamp `no-calendar-match`.
 
 **A short call inside a long event is a side call, not that event.** When
-a recording ends unmatched and a candidate has `inside: true` (the
-recording lies wholly within it — an offsite, a training day, a working
-block), do not match it on time — a phone call taken between sessions
+a recording ends unmatched and a candidate has `inside: true` and `solo:
+false` (the recording lies wholly within a meeting with other people in it
+— an offsite, a training day, a shared working block), do not match it on
+time — a phone call taken between sessions
 would be filed under the offsite with nothing to flag it. Say so instead:
 pass the worker a `calendar-context` line, `Recorded during <subject>
 (<HH:MM>–<HH:MM>); not matched to it — likely a side call.` (the
