@@ -379,6 +379,14 @@ def agenda(events, *, timezone: Optional[str] = None,
 START_MATCH_MINUTES = 5
 
 
+def _is_solo(event: dict) -> bool:
+    """A block with nobody else in it — "Focus time", "timesheets": no
+    attendee other than the organizer."""
+    organizer = _attendee_address(event.get("organizer"))
+    return not any(_attendee_address(a) not in ("", organizer)
+                   for a in event.get("attendees") or [])
+
+
 def calendar_match(events, *, start_local: str, duration_min: int = 0,
                    timezone: Optional[str] = None,
                    utc_offset: Optional[str] = None,
@@ -392,13 +400,29 @@ def calendar_match(events, *, start_local: str, duration_min: int = 0,
     hold (2026-10-09: an 11:01 call against an 11:00 weekly was stamped
     `no-calendar-match`). When the clock alone is unambiguous it is enough.
 
-    The slot is every live event (not cancelled, not all-day) that overlaps
-    the recording's own span. Exactly one, starting within
-    `START_MATCH_MINUTES` of the recording start (either side), is a
-    `single` match. Two or more is `ambiguous` — never auto-matched on time,
-    the caller keeps its keyword/attendee scoring. None is `none`. A single
-    overlapping event that starts further away than the tolerance is also
-    `none`: a bare overlap says someone was in a meeting, not which one.
+    The slot is every live event that overlaps the recording's own span.
+    Live means not cancelled, not all-day and not `showAs: free` — a free
+    entry is a declined invite ("Declined: …") or a placeholder the owner is
+    not in. An event that started earlier and ends within
+    `START_MATCH_MINUTES` of the recording start has just ended: it is not
+    in the slot (2026-10-14: a 16:04 call was made ambiguous by two
+    meetings ending at 16:00).
+
+    The match is anchored on the start (2026-10-12: a 09:31 call was made
+    ambiguous by a solo "Focus time" block that merely overlapped it). The
+    anchored events are those starting within `START_MATCH_MINUTES` of the
+    recording, either side. Exactly one is a `single` match, however many
+    longer events also overlap. Two or more: if exactly one has someone
+    other than its organizer in it, that one is `single` (a solo block is a
+    placeholder); otherwise `ambiguous` — never auto-matched on time, the
+    caller keeps its keyword/attendee scoring. With nothing anchored, one
+    overlapping event is `overlap` — a bare overlap says someone was in a
+    meeting, not which one, so the caller accepts it only on content
+    corroboration — and two or more are `ambiguous`. Nothing is `none`.
+
+    Every unmatched candidate carries `inside` (the recording lies wholly
+    within the event): a short call inside a long offsite or block is
+    probably a side call, which the caller says rather than matches.
 
     The listing carries attendees as bare addresses; names need the full
     event read, which `resolve_attendees` turns into slugs. `known_attendees`
@@ -429,16 +453,27 @@ def calendar_match(events, *, start_local: str, duration_min: int = 0,
             continue
         if event.get("isCancelled") or event.get("isAllDay"):
             continue
+        if str(event.get("showAs") or "").casefold() == "free":
+            continue
         ev_start = _event_start(event)
         ev_end = _event_end(event) or ev_start
+        anchored = abs(ev_start - rec_start) <= tolerance
         # Overlap, with the tolerance letting a recording that began a hair
-        # before a meeting (or after it ended) still count as in its slot.
-        if ev_start < rec_end + tolerance and ev_end > rec_start - tolerance:
-            slot.append((ev_start, event))
-    slot.sort(key=lambda item: item[0])
+        # before a meeting still count as in its slot — but not one that
+        # began as an earlier meeting was wrapping up.
+        if not anchored and not (ev_start < rec_end + tolerance
+                                 and ev_end > rec_start + tolerance):
+            continue
+        slot.append((ev_start, ev_end, anchored, event))
+    slot.sort(key=lambda item: (not item[2], abs(item[0] - rec_start), item[0]))
     result = {"slot_size": len(slot), "tolerance_min": START_MATCH_MINUTES}
-    if len(slot) == 1 and abs(slot[0][0] - rec_start) <= tolerance:
-        ev_start, event = slot[0]
+    anchored = [item for item in slot if item[2]]
+    if len(anchored) > 1:
+        attended = [item for item in anchored if not _is_solo(item[3])]
+        if len(attended) == 1:
+            anchored = attended
+    if len(anchored) == 1:
+        ev_start, _, _, event = anchored[0]
         local_ev, _ = dates.utc_to_local(ev_start, timezone, utc_offset)
         book = address_book or {}
         known = []
@@ -459,19 +494,32 @@ def calendar_match(events, *, start_local: str, duration_min: int = 0,
             "uri": _derived_uri(event),
         })
         return result
-    result["match"] = "ambiguous" if len(slot) > 1 else "none"
-    if len(slot) > 1:
-        # The scoring fallback picks among these; each carries its derived
-        # uri so a scored winner's full read never needs a hand-built one.
-        result["candidates"] = [{
-            "subject": str(event.get("subject") or "").strip(),
-            "start_local": dates.utc_to_local(ev_start, timezone, utc_offset)[0]
-                                .strftime("%Y-%m-%dT%H:%M"),
-            "attendees": (list(event["attendees"])
-                          if isinstance(event.get("attendees"), list) else []),
-            "id": event.get("id"),
-            "uri": _derived_uri(event),
-        } for ev_start, event in slot]
+    if not slot:
+        result["match"] = "none"
+        return result
+    result["match"] = "overlap" if len(slot) == 1 else "ambiguous"
+    # The scoring fallback picks among these, anchored and nearest first;
+    # each carries its derived uri so a scored winner's full read never
+    # needs a hand-built one.
+    result["candidates"] = [{
+        "subject": str(event.get("subject") or "").strip(),
+        "start_local": dates.utc_to_local(ev_start, timezone, utc_offset)[0]
+                            .strftime("%Y-%m-%dT%H:%M"),
+        "end_local": dates.utc_to_local(ev_end, timezone, utc_offset)[0]
+                          .strftime("%Y-%m-%dT%H:%M"),
+        "start_offset_min": round((ev_start - rec_start).total_seconds() / 60),
+        "anchored": is_anchored,
+        "inside": ev_start <= rec_start and ev_end >= rec_end,
+        "solo": _is_solo(event),
+        "show_as": event.get("showAs"),
+        "organizer": event.get("organizer"),
+        "location": event.get("location"),
+        "recurring": bool(event.get("recurrence")),
+        "attendees": (list(event["attendees"])
+                      if isinstance(event.get("attendees"), list) else []),
+        "id": event.get("id"),
+        "uri": _derived_uri(event),
+    } for ev_start, ev_end, is_anchored, event in slot]
     return result
 
 

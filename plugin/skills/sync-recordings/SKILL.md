@@ -614,28 +614,57 @@ python3 "$VAULTLIB" m365 calendar-match --vault "$VAULT" --events "$SCRATCH/cale
 ```
 
 (`--start` is the recording's owner-local start, `--duration-min` its
-length in minutes — the plaud listing's `duration` over 60000, rounded.) It answers
-`match`:
+length in minutes — the plaud listing's `duration` over 60000, rounded.)
+The CLI decides which events are in the recording's slot: cancelled,
+all-day and `showAs: free` entries (declined invites, placeholders) are
+not, and neither is a meeting that was just ending when the recording
+began. Among the rest, an event that *starts* within 5 minutes of the
+recording is anchored to it — that is the meeting the owner pressed
+record for, however many longer blocks also overlap. It answers `match`:
 
-- `single` — exactly one live event overlaps the recording and starts
-  within 5 minutes of it. **That is a match even with zero title or
-  attendee overlap**: a Plaud auto-title shares no word with the meeting's
+- `single` — exactly one anchored event (or, of several, exactly one with
+  someone other than its organizer in it: a solo "Focus time" block is a
+  placeholder). **That is a match even with zero title or attendee
+  overlap**: a Plaud auto-title shares no word with the meeting's
   subject, and its speakers are `Speaker 2` / `Speaker 4`, so neither
   signal exists to be found (an 11:01 call against an 11:00 weekly was
   once stamped `no-calendar-match` for exactly this reason). Stamp
   `calendar_match: true` with `calendar-match-medium` — never `-high`: the
   clock corroborates *when*, not *what*.
-- `ambiguous` — two or more events share the slot. Never auto-match on
-  time. Fall back to scoring: title-keyword overlap and attendee-name
-  matches beat same-day-only; a clear winner is `calendar-match-medium`
-  (or `-high` when the title and attendees both agree), a tie is a
-  no-match.
-- `none` — nothing overlaps, or the one event that does starts too far
-  from the recording to say it is the meeting. Stamp `no-calendar-match`.
+- `ambiguous` — two or more candidates, none singled out by the clock.
+  Never auto-match on time. Read each candidate's full event when there
+  are at most 3 — `read_resource` with its `uri`, copied exactly, all in
+  one batch of parallel calls, each written as returned to
+  `$SCRATCH/calendar.<id>.cand<n>.json` — and score them against the
+  recording's title, summary and speakers: title-keyword overlap,
+  attendee names, and the event body or agenda (roles, topics, the
+  project it names) beat same-day-only. Candidates arrive anchored and
+  nearest first; an `anchored: false` candidate needs that content
+  evidence, never its clock alone. A clear winner is
+  `calendar-match-medium` (or `-high` when the title and attendees both
+  agree); a tie is a no-match.
+- `overlap` — one event overlaps the recording but started more than 5
+  minutes away from it (`start_offset_min` says how far). A bare overlap
+  says the owner was in a meeting, not that this recording is it: match
+  it only on content — a word of the recording's title in the event's
+  subject, an attendee named in the recording, or the event's subject
+  or topic in its summary. Corroborated, stamp `calendar-match-medium`;
+  otherwise `no-calendar-match`.
+- `none` — nothing is in the slot. Stamp `no-calendar-match`.
+
+**A short call inside a long event is a side call, not that event.** When
+a recording ends unmatched and a candidate has `inside: true` (the
+recording lies wholly within it — an offsite, a training day, a working
+block), do not match it on time — a phone call taken between sessions
+would be filed under the offsite with nothing to flag it. Say so instead:
+pass the worker a `calendar-context` line, `Recorded during <subject>
+(<HH:MM>–<HH:MM>); not matched to it — likely a side call.` (the
+candidate's `start_local`/`end_local` clock times), so the debrief tells
+the reviewer where it happened.
 
 A match pre-fills `calendar-subject`, `organizer`, `location`, `recurring`,
 `attendee-emails` from the `single` result's `event` (or the scored winner
-among the `ambiguous` result's `candidates`).
+among the `ambiguous` or `overlap` result's `candidates`).
 
 **Then resolve the matched meeting's people from the event itself.** The
 listing carries attendees as bare addresses; the full event read carries
@@ -666,7 +695,8 @@ already in the vault, matched by address), with no new people created.
 
 **Stamp honestly — these are different facts, never collapse them:**
 
-- searched, nothing matched (`none`, or `ambiguous` with no winner) → reason `no-calendar-match`
+- searched, nothing matched (`none`, `ambiguous` with no winner, or an
+  uncorroborated `overlap`) → reason `no-calendar-match`
 - tool missing or errored → reason `calendar-tool-unavailable`
 
 (Upstream, collapsing them hid a six-day connector outage.)
@@ -1058,7 +1088,8 @@ Pass each worker *paths and decisions*, not content:
 - the routing you decided: `projects`, `calendar_match`, `calendar-subject`
   (always non-empty — the matched event's subject, or the item's own
   subject or a short descriptive title), whichever of
-  `organizer`/`location`/`recurring`/`attendee-emails` are known, `source`,
+  `organizer`/`location`/`recurring`/`attendee-emails` are known, the
+  step-2 `calendar-context` line when there is one, `source`,
   and the step-1 classification (`type: note` for a capture; otherwise the
   worker picks the meeting subtype from the transcript). For plaud, inbox,
   and captures this also includes attendee slugs, `confidence` +

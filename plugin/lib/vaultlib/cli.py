@@ -665,9 +665,10 @@ def build_parser() -> argparse.ArgumentParser:
                        "falls on another day are dropped and counted")
     m365_cm = m365_sub.add_parser(
         "calendar-match",
-        help="time-only calendar match for one plaud/inbox recording: a single "
-             "live event starting within 5 minutes of the recording is a match "
-             "(single); two or more in the slot are ambiguous; none is none")
+        help="time-only calendar match for one plaud/inbox recording: exactly "
+             "one live event starting within 5 minutes of the recording is a "
+             "match (single); one overlapping event starting further away is "
+             "overlap; two or more are ambiguous; none is none")
     m365_cm.add_argument(
         "--events", required=True,
         help="path to the raw outlook_calendar_search output (every page), "

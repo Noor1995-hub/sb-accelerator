@@ -2346,6 +2346,38 @@ def test_sync_recordings_step2_leaves_the_clock_match_to_the_cli():
     assert "calendar-match-medium" in step2 and "never `-high`" in step2
 
 
+
+def test_sync_recordings_step2_overlap_needs_content_and_flags_side_calls():
+    """2026-10-12..14 replay: a 6.6-minute-late start was silently `none`,
+    and a call inside a 9-hour offsite could neither match nor say where it
+    happened. `overlap` hands the candidate over for corroboration — never a
+    time-only match — and an unmatched call inside an event is named as a
+    side call in its debrief."""
+    text = (SKILLS_DIR / "sync-recordings" / "SKILL.md").read_text(encoding="utf-8")
+    step2 = text[text.index("### 2. Calendar enrichment"):text.index("### 3. Route")]
+    flat = " ".join(step2.split())
+    assert "- `overlap` —" in step2
+    assert "match it only on content" in flat
+    assert "an uncorroborated `overlap`) → reason `no-calendar-match`" in flat
+    assert "`inside: true`" in flat and "`calendar-context` line" in flat
+    assert "`showAs: free`" in flat
+    contract = (SKILLS_DIR / "sync-recordings" / "references"
+                / "payload-contract.md").read_text(encoding="utf-8")
+    assert "`calendar-context` line" in " ".join(contract.split())
+    assert "step-2 `calendar-context` line" in " ".join(text.split())
+
+
+def test_sync_recordings_step2_scores_ambiguous_candidates_on_their_body():
+    """Two AI Hive events tied on title; the kick-off's agenda (PO,
+    architect, developer) decided it. Candidates are read in full."""
+    text = (SKILLS_DIR / "sync-recordings" / "SKILL.md").read_text(encoding="utf-8")
+    step2 = text[text.index("### 2. Calendar enrichment"):text.index("### 3. Route")]
+    flat = " ".join(step2.split())
+    assert "Read each candidate's full event when there are at most 3" in flat
+    assert "event body or agenda" in flat
+    assert "never its clock alone" in flat
+
+
 def test_sync_recordings_step2_names_people_from_the_full_event_read():
     """The listing has addresses only, so a matched plaud/inbox meeting
     used to end up with the owner as its only attendee."""

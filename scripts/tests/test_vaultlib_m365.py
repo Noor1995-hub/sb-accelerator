@@ -836,13 +836,18 @@ def test_calendar_match_no_event_is_none():
     assert result == {"slot_size": 0, "tolerance_min": 5, "match": "none"}
 
 
-def test_calendar_match_overlap_far_from_the_start_is_not_a_match():
+def test_calendar_match_overlap_far_from_the_start_is_not_a_time_only_match():
     # A recording that began 20 minutes into a meeting says "someone was in
-    # a meeting", not which one.
+    # a meeting", not which one: the caller gets the candidate to corroborate.
     result = m365.calendar_match([_weekly()], start_local="2026-10-09T11:20",
                                  duration_min=5, utc_offset="+02:00")
-    assert result["match"] == "none"
+    assert result["match"] == "overlap"
     assert result["slot_size"] == 1
+    assert "event" not in result
+    [candidate] = result["candidates"]
+    assert candidate["start_offset_min"] == -20
+    assert candidate["anchored"] is False
+    assert candidate["inside"] is True
 
 
 def test_calendar_match_ignores_cancelled_and_all_day_events():
@@ -894,6 +899,146 @@ def test_calendar_match_ambiguous_lists_candidates_with_derived_uris():
                                                          m365.event_uri("BBB")]
     assert [c["start_local"] for c in result["candidates"]] == ["2026-10-09T11:00",
                                                                 "2026-10-09T11:05"]
+
+
+
+# --- calendar-match gaps (2026-10-12..14 replay: 8 misses) ---
+
+def _solo(subject, start, end, **extra):
+    # A block the owner put in their own calendar: organizer, no attendees.
+    return _listing_event(subject, start, end, attendees=[], isOrganizer=True,
+                          organizer="owner@example.com", **extra)
+
+
+def test_calendar_match_a_solo_block_overlapping_does_not_break_a_single():
+    events = [_listing_event("Steering deck", "2026-10-12T07:30:00.0000000",
+                             "2026-10-12T08:30:00.0000000"),
+              _solo("Focus time", "2026-10-12T08:30:00.0000000",
+                    "2026-10-12T09:00:00.0000000")]
+    result = m365.calendar_match(events, start_local="2026-10-12T09:31",
+                                 duration_min=75, utc_offset="+02:00")
+    assert result["match"] == "single"
+    assert result["event"]["subject"] == "Steering deck"
+    assert result["slot_size"] == 2
+
+
+def test_calendar_match_free_and_declined_entries_are_not_in_the_slot():
+    events = [_weekly(),
+              _listing_event("Info", "2026-10-09T09:00:00.0000000",
+                             "2026-10-09T10:00:00.0000000", showAs="free"),
+              _listing_event("Declined: Pipeline sync", "2026-10-09T09:00:00.0000000",
+                             "2026-10-09T09:30:00.0000000", showAs="free")]
+    result = m365.calendar_match(events, start_local="2026-10-09T11:01",
+                                 duration_min=21, utc_offset="+02:00")
+    assert result["match"] == "single"
+    assert result["slot_size"] == 1
+
+
+def test_calendar_match_tentative_events_stay_in_the_slot():
+    result = m365.calendar_match([_weekly(showAs="tentative")],
+                                 start_local="2026-10-09T11:01",
+                                 duration_min=21, utc_offset="+02:00")
+    assert result["match"] == "single"
+
+
+def test_calendar_match_a_meeting_that_just_ended_is_not_in_the_slot():
+    events = [_listing_event("Weekly sync", "2026-10-14T14:00:00.0000000",
+                             "2026-10-14T15:00:00.0000000"),
+              _listing_event("Kick-off", "2026-10-14T12:00:00.0000000",
+                             "2026-10-14T14:00:00.0000000"),
+              _listing_event("Topics", "2026-10-14T12:30:00.0000000",
+                             "2026-10-14T14:00:00.0000000")]
+    result = m365.calendar_match(events, start_local="2026-10-14T16:04",
+                                 duration_min=50, utc_offset="+02:00")
+    assert result["match"] == "single"
+    assert result["event"]["subject"] == "Weekly sync"
+    assert result["slot_size"] == 1
+
+
+def test_calendar_match_an_anchored_event_beats_a_long_running_one():
+    events = [_listing_event("Offsite", "2026-10-09T07:00:00.0000000",
+                             "2026-10-09T16:00:00.0000000"),
+              _weekly()]
+    result = m365.calendar_match(events, start_local="2026-10-09T11:01",
+                                 duration_min=21, utc_offset="+02:00")
+    assert result["match"] == "single"
+    assert result["event"]["subject"] == "Leadership enablement - weekly call"
+
+
+def test_calendar_match_two_anchored_one_solo_is_the_attended_one():
+    events = [_weekly(),
+              _solo("timesheets", "2026-10-09T09:00:00.0000000",
+                    "2026-10-09T09:30:00.0000000")]
+    result = m365.calendar_match(events, start_local="2026-10-09T11:01",
+                                 duration_min=21, utc_offset="+02:00")
+    assert result["match"] == "single"
+    assert result["event"]["subject"] == "Leadership enablement - weekly call"
+
+
+def test_calendar_match_a_solo_block_alone_still_matches():
+    # "Lunch with X" the owner blocked without inviting anyone is a meeting.
+    result = m365.calendar_match(
+        [_solo("Lunch", "2026-10-09T10:00:00.0000000", "2026-10-09T11:00:00.0000000")],
+        start_local="2026-10-09T12:02", duration_min=40, utc_offset="+02:00")
+    assert result["match"] == "single"
+
+
+def test_calendar_match_an_attendee_who_is_the_organizer_is_still_solo():
+    block = _solo("Block", "2026-10-09T09:00:00.0000000", "2026-10-09T10:00:00.0000000",
+                  )
+    block["attendees"] = ["Owner@Example.com"]
+    result = m365.calendar_match([_weekly(), block], start_local="2026-10-09T11:01",
+                                 duration_min=21, utc_offset="+02:00")
+    assert result["match"] == "single"
+
+
+def test_calendar_match_a_start_seven_minutes_off_is_overlap_not_none():
+    event = _listing_event("Prep session SDLC", "2026-10-14T09:00:00.0000000",
+                           "2026-10-14T10:00:00.0000000")
+    result = m365.calendar_match([event], start_local="2026-10-14T11:06:36",
+                                 duration_min=40, utc_offset="+02:00")
+    assert result["match"] == "overlap"
+    [candidate] = result["candidates"]
+    assert candidate["subject"] == "Prep session SDLC"
+    assert candidate["start_offset_min"] == -7
+    assert candidate["uri"] == m365.event_uri("Pre")
+
+
+def test_calendar_match_a_call_inside_a_long_event_is_overlap_and_inside():
+    offsite = _listing_event("Offsite + dinner", "2026-10-12T11:00:00.0000000",
+                             "2026-10-12T20:00:00.0000000")
+    result = m365.calendar_match([offsite], start_local="2026-10-12T18:38",
+                                 duration_min=12, utc_offset="+02:00")
+    assert result["match"] == "overlap"
+    [candidate] = result["candidates"]
+    assert candidate["inside"] is True
+    assert candidate["start_local"] == "2026-10-12T13:00"
+    assert candidate["end_local"] == "2026-10-12T22:00"
+
+
+def test_calendar_match_candidates_put_the_anchored_and_nearest_first():
+    events = [_listing_event("Kick-off", "2026-10-14T12:00:00.0000000",
+                             "2026-10-14T14:00:00.0000000"),
+              _listing_event("Topics", "2026-10-14T12:03:00.0000000",
+                             "2026-10-14T14:00:00.0000000"),
+              _listing_event("Offsite", "2026-10-14T08:00:00.0000000",
+                             "2026-10-14T16:00:00.0000000", showAs="tentative")]
+    result = m365.calendar_match(events, start_local="2026-10-14T14:02",
+                                 duration_min=60, utc_offset="+02:00")
+    assert result["match"] == "ambiguous"
+    assert [c["subject"] for c in result["candidates"]] == ["Topics", "Kick-off", "Offsite"]
+    assert [c["anchored"] for c in result["candidates"]] == [True, True, False]
+    assert result["candidates"][2]["show_as"] == "tentative"
+    assert result["candidates"][0]["solo"] is False
+
+
+def test_calendar_match_a_short_meeting_starting_at_the_recording_still_matches():
+    # A 5-minute event "ends within the tolerance" — anchoring keeps it.
+    event = _listing_event("Quick check", "2026-10-09T09:00:00.0000000",
+                           "2026-10-09T09:05:00.0000000")
+    result = m365.calendar_match([event], start_local="2026-10-09T11:00",
+                                 duration_min=5, utc_offset="+02:00")
+    assert result["match"] == "single"
 
 
 FULL_EVENT = {

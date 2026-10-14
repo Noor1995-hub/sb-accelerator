@@ -21,6 +21,10 @@ that too is decided for you), `takeaways`, `debrief`, `action-items` — from
 the transcript; enrichment summaries are supporting context only, never the
 source of record.
 
+When your prompt carries a `calendar-context` line (an unmatched recording
+made during a calendar event), open the `debrief` with it verbatim, in
+italics, on its own line — it tells the reviewer where the call happened.
+
 ```json
 {
   "title": "vendor strategy walk-through",
