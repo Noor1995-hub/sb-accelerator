@@ -835,10 +835,10 @@
    "start_local": "2026-10-12T11:25",
    "duration_min": 11,
    "title": "Client A projects, team structure and AI",
-   "expect_cli": "single",
-   "expect_event": "evt-a6",
-   "expect_final": "time",
-   "why": "CHANGED by the fix: was ambiguous (a meeting ending 11:30 counted); now the tentative 11:30 client A meeting starting 5 minutes later. Recorded as a correct no-match in the 2026-10-14 replay; the topic is client A's, so the new match is plausible — confirm"
+   "expect_cli": "overlap",
+   "expect_event": null,
+   "expect_final": "none",
+   "why": "a phone call from 5 minutes before a tentative client A meeting, mostly over by its start; confirmed a no-match by the owner. A tentative invite starting after the recording began never matches on time alone"
   },
   {
    "id": "r08",

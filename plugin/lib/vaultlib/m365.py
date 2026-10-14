@@ -413,14 +413,16 @@ def calendar_match(events, *, start_local: str, duration_min: int = 0,
     The match is anchored on the start (2026-10-12: a 09:31 call was made
     ambiguous by a solo "Focus time" block that merely overlapped it). The
     anchored events are those starting within `START_MATCH_MINUTES` of the
-    recording, either side. Exactly one is a `single` match, however many
-    longer events also overlap. Two or more: if exactly one has someone
-    other than its organizer in it, that one is `single` (a solo block is a
-    placeholder); otherwise `ambiguous` — never auto-matched on time, the
-    caller keeps its keyword/attendee scoring. With nothing anchored, one
-    overlapping event is `overlap` — a bare overlap says someone was in a
-    meeting, not which one, so the caller accepts it only on content
-    corroboration — and two or more are `ambiguous`. Nothing is `none`.
+    recording, either side — except a tentative invite that starts after the
+    recording began, which is left to corroboration. Exactly one anchored
+    event is a `single` match, however many longer events also overlap. Two
+    or more: if exactly one has someone other than its organizer in it, that
+    one is `single` (a solo block is a placeholder); otherwise `ambiguous` —
+    never auto-matched on time, the caller keeps its keyword/attendee
+    scoring. With nothing anchored, one event in the slot is `overlap` — a
+    bare overlap says someone was in a meeting, not which one, so the caller
+    accepts it only on content corroboration — and two or more are
+    `ambiguous`. Nothing is `none`.
 
     Every unmatched candidate carries `inside` (the recording lies wholly
     within the event): a short call inside a long offsite or block is
@@ -460,6 +462,14 @@ def calendar_match(events, *, start_local: str, duration_min: int = 0,
         ev_start = _event_start(event)
         ev_end = _event_end(event) or ev_start
         anchored = abs(ev_start - rec_start) <= tolerance
+        # A tentative invite that starts after the recording began is a weak
+        # anchor: the owner never accepted it, and a call already running
+        # when it began is as likely a call before it (2026-10-12: an
+        # 11-minute phone call from 11:25 against a tentative 11:30 steerco).
+        # It stays in the slot for corroboration, never a time-only match.
+        if (anchored and ev_start > rec_start
+                and str(event.get("showAs") or "").casefold() == "tentative"):
+            anchored = False
         # Overlap, with the tolerance letting a recording that began a hair
         # before a meeting still count as in its slot — but not one that
         # began as an earlier meeting was wrapping up.

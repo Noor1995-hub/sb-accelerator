@@ -1033,6 +1033,35 @@ def test_calendar_match_candidates_put_the_anchored_and_nearest_first():
     assert result["candidates"][0]["solo"] is False
 
 
+
+def test_calendar_match_a_tentative_invite_starting_after_the_call_is_not_a_time_match():
+    # 2026-10-12: an 11-minute phone call from 11:25, confirmed by the owner
+    # as not the tentative 11:30 steerco it ran into.
+    steerco = _listing_event("FW: Steering deck", "2026-10-12T09:30:00.0000000",
+                             "2026-10-12T11:00:00.0000000", showAs="tentative")
+    result = m365.calendar_match([steerco], start_local="2026-10-12T11:25",
+                                 duration_min=11, utc_offset="+02:00")
+    assert result["match"] == "overlap"
+    [candidate] = result["candidates"]
+    assert candidate["anchored"] is False
+    assert candidate["start_offset_min"] == 5
+
+
+def test_calendar_match_a_tentative_invite_already_started_still_matches():
+    # Recording at 10:47 for a tentative 10:45 interview: the owner went.
+    interview = _listing_event("Interview", "2026-10-13T08:45:00.0000000",
+                               "2026-10-13T09:45:00.0000000", showAs="tentative")
+    result = m365.calendar_match([interview], start_local="2026-10-13T10:47",
+                                 duration_min=34, utc_offset="+02:00")
+    assert result["match"] == "single"
+
+
+def test_calendar_match_an_accepted_meeting_starting_after_the_call_still_matches():
+    result = m365.calendar_match([_weekly()], start_local="2026-10-09T10:57",
+                                 duration_min=25, utc_offset="+02:00")
+    assert result["match"] == "single"
+
+
 def test_calendar_match_a_short_meeting_starting_at_the_recording_still_matches():
     # A 5-minute event "ends within the tolerance" — anchoring keeps it.
     event = _listing_event("Quick check", "2026-10-09T09:00:00.0000000",

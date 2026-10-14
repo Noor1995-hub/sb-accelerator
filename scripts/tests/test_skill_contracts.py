@@ -2361,6 +2361,7 @@ def test_sync_recordings_step2_overlap_needs_content_and_flags_side_calls():
     assert "an uncorroborated `overlap`) → reason `no-calendar-match`" in flat
     assert "`inside: true` and `solo: false`" in flat and "`calendar-context` line" in flat
     assert "`showAs: free`" in flat
+    assert "A tentative invite that starts *after* the recording began is not" in flat
     contract = (SKILLS_DIR / "sync-recordings" / "references"
                 / "payload-contract.md").read_text(encoding="utf-8")
     assert "`calendar-context` line" in " ".join(contract.split())

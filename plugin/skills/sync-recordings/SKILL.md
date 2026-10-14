@@ -623,7 +623,10 @@ all-day and `showAs: free` entries (declined invites, placeholders) are
 not, and neither is a meeting that was just ending when the recording
 began. Among the rest, an event that *starts* within 5 minutes of the
 recording is anchored to it — that is the meeting the owner pressed
-record for, however many longer blocks also overlap. It answers `match`:
+record for, however many longer blocks also overlap. A tentative invite
+that starts *after* the recording began is not: the owner never accepted
+it, and a call already running when it began is as likely a call before
+it. It answers `match`:
 
 - `single` — exactly one anchored event (or, of several, exactly one with
   someone other than its organizer in it: a solo "Focus time" block is a
@@ -646,8 +649,9 @@ record for, however many longer blocks also overlap. It answers `match`:
   evidence, never its clock alone. A clear winner is
   `calendar-match-medium` (or `-high` when the title and attendees both
   agree); a tie is a no-match.
-- `overlap` — one event overlaps the recording but started more than 5
-  minutes away from it (`start_offset_min` says how far). A bare overlap
+- `overlap` — one event overlaps the recording but is not anchored to
+  it: it started more than 5 minutes away (`start_offset_min` says how
+  far), or it is a tentative invite that began after the recording did. A bare overlap
   says the owner was in a meeting, not that this recording is it: match
   it only on content — a word of the recording's title in the event's
   subject, an attendee named in the recording, or the event's subject
