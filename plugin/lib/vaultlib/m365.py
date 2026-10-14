@@ -761,6 +761,27 @@ def spill_roots() -> List[Path]:
     return roots
 
 
+def recent_logs(roots: List[Path], now: float, window_s: float) -> List[Path]:
+    """Session logs (`*.jsonl`) under `roots` modified within `window_s`,
+    newest first. A path the OS cannot stat or list — on Windows a deeply
+    nested project folder can pass the path-length limit — is skipped, never
+    fatal: the log being looked for is not behind it."""
+    found = []
+    for root in roots:
+        for here, _dirs, names in os.walk(root):  # onerror=None: skips unlistable dirs
+            for name in names:
+                if not name.endswith(".jsonl"):
+                    continue
+                path = Path(here) / name
+                try:
+                    mtime = path.stat().st_mtime
+                except OSError:
+                    continue
+                if now - mtime <= window_s:
+                    found.append((mtime, path))
+    return [p for _m, p in sorted(set(found), reverse=True)]
+
+
 def _resolve_spill(source: str, roots: List[Path]) -> Path:
     parts = [p for p in re.split(r"[\\/]+", source) if p]
     if not parts:

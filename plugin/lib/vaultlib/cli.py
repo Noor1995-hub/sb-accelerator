@@ -649,6 +649,13 @@ def build_parser() -> argparse.ArgumentParser:
         "--tag",
         help="an inline result: its untrusted-user-data-<16 hex> block "
              "name, as the result's first line gives it")
+    plaud_src.add_argument(
+        "--file-id", dest="file_id",
+        help="an inline page with no wrapper (the host does not add one): "
+             "the page's own file_id, with --offset")
+    plaud_cap.add_argument(
+        "--offset", type=int,
+        help="with --file-id: the page's own offset (0 for the first page)")
     plaud_cap.add_argument("--out", required=True,
                            help="scratch page or note file (never the vault)")
 
@@ -1395,7 +1402,8 @@ def _dispatch(args: argparse.Namespace) -> int:
                                  accept_collision=args.accept_collision))
     if args.group == "plaud":
         if args.action == "capture":
-            return _ok(plaud.capture(args.out, source=args.source, tag=args.tag))
+            return _ok(plaud.capture(args.out, source=args.source, tag=args.tag,
+                                     file_id=args.file_id, offset=args.offset))
         return _ok(plaud.reassemble(
             args.meta, args.transcript, args.note, args.out,
             timezone=args.timezone, utc_offset=args.utc_offset))

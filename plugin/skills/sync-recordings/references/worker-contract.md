@@ -26,7 +26,7 @@ past ~45 minutes failed that way, every run.
 
 `mcp__plaud__get_transcript` is paginated. Always pass `limit: 500` (the
 connector's maximum); start without a `cursor`. Every result comes back
-in one of two forms — handle both the same way, with one `plaud capture`
+in one of three forms — handle all the same way, with one `plaud capture`
 call per result:
 
 - **Spilled** — a notice that the result `exceeds maximum allowed tokens`
@@ -35,19 +35,30 @@ call per result:
   Cowork is expected):
 
   ```bash
-  python3 "$VAULTLIB" plaud capture --from "<path from the notice>" \
-    --out "$SCRATCH/rec_N.transcript.01.json"
+  python3 "$VAULTLIB" plaud capture --from "<path from the notice>"     --out "$SCRATCH/rec_N.transcript.01.json"
   ```
 
-- **Inline** — the page itself, inside a block named
+- **Inline, wrapped** — the page itself, inside a block named
   `untrusted-user-data-` plus 16 hex digits (the result's first line names
   it). Hand the CLI that name; it finds that exact result in this
   session's log:
 
   ```bash
-  python3 "$VAULTLIB" plaud capture --tag untrusted-user-data-<16 hex> \
-    --out "$SCRATCH/rec_N.transcript.01.json"
+  python3 "$VAULTLIB" plaud capture --tag untrusted-user-data-<16 hex>     --out "$SCRATCH/rec_N.transcript.01.json"
   ```
+
+- **Inline, bare** — the page itself with no wrapper and no block name
+  (some hosts, Claude Desktop among them, do not add one). Hand the CLI
+  the page's own `file_id` and `offset` — the values the result carries,
+  `offset` being 0 for the first page and, for a later page, the one the
+  previous capture result reported:
+
+  ```bash
+  python3 "$VAULTLIB" plaud capture --file-id <file_id> --offset <offset>     --out "$SCRATCH/rec_N.transcript.01.json"
+  ```
+
+  The note has no offset: on a host that does not wrap, `get_note` cannot
+  be captured, so proceed without it.
 
 Number the pages `.01.json`, `.02.json`, … in fetch order. The capture
 result reports `offset`, `returned`, `total` and `next_cursor`: when

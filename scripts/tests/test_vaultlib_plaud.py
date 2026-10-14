@@ -658,3 +658,171 @@ def test_captured_pages_and_note_reassemble(tmp_path):
     assert result["coverage_pct"] == 98
     assert result["has_enrichment"] is True
     assert "Tot vrijdag." in Path(result["blob_path"]).read_text(encoding="utf-8")
+
+
+# --- hosts that do not wrap results (Claude Desktop, Code tab) --------------
+#
+# Live 2026-10-14, plugin 0.13.22: Desktop returns get_transcript as bare
+# JSON — no untrusted-user-data block in the tool result or in the log — so
+# `--tag` found nothing and every Plaud recording failed. A page is found by
+# its own file_id and offset instead; a spilled page may be a list of MCP
+# text parts, wrapped or not.
+
+def bare_body(obj):
+    return json.dumps(obj, indent=2, ensure_ascii=False)
+
+
+def test_capture_by_file_id_and_offset_finds_a_bare_result_in_the_log(tmp_path):
+    root = tmp_path / "projects"
+    body = bare_body(LAST)
+    logged(root, bare_body(PAGE))     # another page of the same recording
+    logged(root, body)
+    out = tmp_path / "p.json"
+
+    result = plaud.capture(str(out), file_id="of_rec_42", offset=2, roots=[root])
+
+    assert out.read_text(encoding="utf-8") == body
+    assert result["captured_from"] == "session-log"
+    assert (result["offset"], result["next_cursor"]) == (2, None)
+
+
+def test_capture_by_file_id_reads_a_plain_string_tool_result(tmp_path):
+    root = tmp_path / "projects"
+    logged(root, bare_body(LAST), as_list=False)
+
+    result = plaud.capture(str(tmp_path / "p.json"), file_id="of_rec_42",
+                           offset=2, roots=[root])
+
+    assert result["returned"] == 1
+
+
+def test_capture_by_file_id_accepts_a_wrapped_result_too(tmp_path):
+    root = tmp_path / "projects"
+    text, body = wrapped(LAST)
+    logged(root, text)
+    out = tmp_path / "p.json"
+
+    plaud.capture(str(out), file_id="of_rec_42", offset=2, roots=[root])
+
+    assert out.read_text(encoding="utf-8") == body
+
+
+def test_capture_by_file_id_takes_the_same_page_read_twice(tmp_path):
+    """A retried read of one page: two identical results are one body."""
+    root = tmp_path / "projects"
+    logged(root, bare_body(LAST))
+    logged(root, bare_body(LAST), name="agent-a2.jsonl")
+
+    plaud.capture(str(tmp_path / "p.json"), file_id="of_rec_42", offset=2,
+                  roots=[root])
+
+
+def test_capture_by_file_id_refuses_two_different_bodies(tmp_path):
+    root = tmp_path / "projects"
+    logged(root, bare_body(LAST))
+    logged(root, bare_body(dict(LAST, total=9)))
+
+    with pytest.raises(plaud.PlaudError, match="2 different results"):
+        plaud.capture(str(tmp_path / "p.json"), file_id="of_rec_42", offset=2,
+                      roots=[root])
+
+
+def test_capture_by_file_id_ignores_other_recordings_and_offsets(tmp_path):
+    root = tmp_path / "projects"
+    logged(root, bare_body(dict(LAST, file_id="of_other")))
+    logged(root, bare_body(PAGE))     # offset 0, not 2
+
+    with pytest.raises(plaud.PlaudError, match="no transcript page"):
+        plaud.capture(str(tmp_path / "p.json"), file_id="of_rec_42", offset=2,
+                      roots=[root])
+
+
+def test_capture_by_file_id_ignores_the_workers_own_bash_line(tmp_path):
+    root = tmp_path / "projects"
+    d = root / "proj" / "sess"
+    d.mkdir(parents=True)
+    (d / "agent-a1.jsonl").write_text(json.dumps({"type": "assistant", "message": {
+        "content": [{"type": "tool_use", "name": "Bash", "input": {
+            "command": "plaud capture --file-id of_rec_42 --offset 2"}}]}})
+        + "\n", encoding="utf-8")
+
+    with pytest.raises(plaud.PlaudError, match="no transcript page"):
+        plaud.capture(str(tmp_path / "p.json"), file_id="of_rec_42", offset=2,
+                      roots=[root])
+
+
+def test_capture_file_id_and_offset_go_together_and_alone(tmp_path):
+    with pytest.raises(plaud.PlaudError, match="--offset"):
+        plaud.capture(str(tmp_path / "p.json"), file_id="of_rec_42",
+                      roots=[tmp_path])
+    with pytest.raises(plaud.PlaudError, match="exactly one"):
+        plaud.capture(str(tmp_path / "p.json"), tag=TAG, file_id="of_rec_42",
+                      offset=0, roots=[tmp_path])
+
+
+def test_capture_from_a_bare_spill_writes_the_file_unchanged(tmp_path):
+    root = tmp_path / "projects"
+    body = bare_body(PAGE)
+    src = spilled(root, body)
+    out = tmp_path / "p.json"
+
+    result = plaud.capture(str(out), source=str(src), roots=[root])
+
+    assert out.read_text(encoding="utf-8") == body
+    assert result["kind"] == "transcript-page"
+
+
+def test_capture_from_a_spill_that_is_a_list_of_text_parts(tmp_path):
+    """Large Desktop results spill as [{"type":"text","text":"<page>"}]; the
+    page, not the list, is what is copied — and it is a page, not a note."""
+    root = tmp_path / "projects"
+    body = bare_body(PAGE)
+    src = spilled(root, json.dumps([{"type": "text", "text": body}]))
+    out = tmp_path / "p.json"
+
+    result = plaud.capture(str(out), source=str(src), roots=[root])
+
+    assert out.read_text(encoding="utf-8") == body
+    assert result["kind"] == "transcript-page"
+
+
+def test_capture_from_a_text_part_spill_that_is_wrapped_inside(tmp_path):
+    root = tmp_path / "projects"
+    text, body = wrapped(PAGE)
+    src = spilled(root, json.dumps([{"type": "text", "text": text}]))
+    out = tmp_path / "p.json"
+
+    plaud.capture(str(out), source=str(src), roots=[root])
+
+    assert out.read_text(encoding="utf-8") == body
+
+
+def test_a_note_list_is_not_mistaken_for_text_parts(tmp_path):
+    root = tmp_path / "projects"
+    src = spilled(root, bare_body(NOTE))
+
+    result = plaud.capture(str(tmp_path / "n.json"), source=str(src),
+                           roots=[root])
+
+    assert result["kind"] == "note"
+
+
+def test_the_log_scan_skips_a_path_it_cannot_stat(tmp_path, monkeypatch):
+    """Windows: a deeply nested project folder passes the OS path limit and
+    stat() raises; that log is skipped, the scan goes on."""
+    root = tmp_path / "projects"
+    logged(root, bare_body(LAST))
+    bad = logged(root, bare_body(PAGE), name="agent-unreachable.jsonl")
+    real_stat = Path.stat
+
+    def stat(self, *a, **kw):
+        if self.name == bad.name:
+            raise FileNotFoundError(str(self))
+        return real_stat(self, *a, **kw)
+
+    monkeypatch.setattr(Path, "stat", stat)
+
+    result = plaud.capture(str(tmp_path / "p.json"), file_id="of_rec_42",
+                           offset=2, roots=[root])
+
+    assert result["offset"] == 2
