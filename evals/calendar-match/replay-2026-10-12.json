@@ -856,9 +856,9 @@
    "duration_min": 116,
    "title": "AI hive architecture, EU sovereign cloud",
    "expect_cli": "overlap",
-   "expect_event": null,
-   "expect_final": "side-call",
-   "why": "inside the offsite; no content tie in the replay"
+   "expect_event": "evt-a8",
+   "expect_final": "content",
+   "why": "inside the offsite, two hours in; it belongs to the offsite (judged by hand), so the agenda must corroborate it — otherwise a side call"
   },
   {
    "id": "r10",
