@@ -15,7 +15,12 @@ delivers them.
 
 ## Unreleased
 
+- **Plaud recordings sync again in Claude Desktop**: after 0.13.22 every Plaud recording failed with a fetch error and no meeting note, because the plugin only recognised results that carry a marker Claude Desktop does not add. It now also finds a page by the recording and position it names, and reads large results that Claude Desktop saves as a list of text parts. A folder on Windows whose path is too long no longer stops the search. (#297)
 - Teams meeting transcripts shorter than about an hour no longer depend on the AI copying the transcript out word for word: the plugin now copies it itself, as it already did for longer meetings. Since 8 October that kind of copy can be cut off partway by a safety check, which leaves the meeting as a fetch error to retry the next evening. (#294)
+
+## v0.13.22 — 2026-10-14
+
+- **Long Plaud recordings sync again**: every Plaud recording longer than about 45 minutes had failed since 8 October with a fetch error and nothing written — the worker was stopped while copying the transcript into its scratch files. The transcript is now copied by the plugin's own tooling, never by the AI, so recordings of any length go through, every page exactly as Plaud sent it. A recording that was parked for repeated fetch errors in the meantime comes back with `sync unskip --id plaud:<id>`. (#295)
 
 ## v0.13.21 — 2026-10-13
 
