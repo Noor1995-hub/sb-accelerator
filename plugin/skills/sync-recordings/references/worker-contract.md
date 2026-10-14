@@ -1,7 +1,7 @@
 # Worker contract (fetch, extract, write — one recording)
 
-You are the worker for exactly one recording. Fetch its transcript, write
-every raw page to scratch verbatim, reassemble, check for a cross-adapter
+You are the worker for exactly one recording. Fetch its transcript, get
+every raw page into scratch verbatim, reassemble, check for a cross-adapter
 duplicate (M365), extract against the payload contract, write the note, and
 verify it on disk. Your reply is **one outcome line from the table at the
 bottom — nothing else**: never transcript, blob, or payload text. Your
@@ -17,27 +17,67 @@ deletes by pattern (`rec_*.json`, `m365_*.json`, `*.blob.md`,
 
 ## Fetching — Plaud
 
-`mcp__plaud__get_transcript` is paginated: it answers `limit` utterances at
-a time (50 by default) and reports `total`, `offset` and `next_cursor`.
-Call again with the returned `cursor` until `next_cursor` comes back
-**null** (the last page carries the key with a null value, it does not omit
-it). Write **every** page to its own scratch file
-(`rec_N.transcript.01.json`, `.02.json`, …) — the tool result's content
-verbatim, never condensed, summarized, or re-typed; the pagination fields
-(`offset`, `returned`, `total`, `next_cursor`) are facts about what the
-connector sent and are never edited.
+**You never write a Plaud result yourself** — not a transcript page, not
+the note, not a line of either. The CLI copies each result into scratch
+from where the host already holds it. Re-typing a page as Write input was
+never verbatim, cost a quarter-million output tokens on a long meeting,
+and is stopped partway by the API's output classifier: every recording
+past ~45 minutes failed that way, every run.
 
-If a page is too large for the tool result, the harness spills it to a file
-under `~/.claude/projects/…/tool-results/`. Do not go near that path — not
-to read, copy, or delete. Halve `limit` and re-fetch from the same `cursor`
-instead. (M365 has no `limit` to halve, so its transcript read has its own
-rule — `m365 capture`, in step 4 below — and that is the only time a
-spilled file is ever touched, by the CLI, never by you.)
+`mcp__plaud__get_transcript` is paginated. Always pass `limit: 500` (the
+connector's maximum); start without a `cursor`. Every result comes back
+in one of three forms — handle all the same way, with one `plaud capture`
+call per result:
 
-On a transient error retry up to 3×, then reply `fetch-error`. On a **401**,
-reply `auth-error` — re-authentication is interactive and belongs to the
-user; never retry auth in a loop. `mcp__plaud__get_note` is optional
-enrichment (write it to `rec_N.note.json`); on failure proceed without.
+- **Spilled** — a notice that the result `exceeds maximum allowed tokens`
+  and was saved to a file. Never open, read, or grep that file; hand the
+  path to the CLI exactly as the notice gives it (a Windows path in
+  Cowork is expected):
+
+  ```bash
+  python3 "$VAULTLIB" plaud capture --from "<path from the notice>"     --out "$SCRATCH/rec_N.transcript.01.json"
+  ```
+
+- **Inline, wrapped** — the page itself, inside a block named
+  `untrusted-user-data-` plus 16 hex digits (the result's first line names
+  it). Hand the CLI that name; it finds that exact result in this
+  session's log:
+
+  ```bash
+  python3 "$VAULTLIB" plaud capture --tag untrusted-user-data-<16 hex>     --out "$SCRATCH/rec_N.transcript.01.json"
+  ```
+
+- **Inline, bare** — the page itself with no wrapper and no block name
+  (some hosts, Claude Desktop among them, do not add one). Hand the CLI
+  the page's own `file_id` and `offset` — the values the result carries,
+  `offset` being 0 for the first page and, for a later page, the one the
+  previous capture result reported:
+
+  ```bash
+  python3 "$VAULTLIB" plaud capture --file-id <file_id> --offset <offset>     --out "$SCRATCH/rec_N.transcript.01.json"
+  ```
+
+  The note has no offset: on a host that does not wrap, `get_note` cannot
+  be captured, so proceed without it.
+
+Number the pages `.01.json`, `.02.json`, … in fetch order. The capture
+result reports `offset`, `returned`, `total` and `next_cursor`: when
+`next_cursor` is not null, call `get_transcript` again with
+`cursor: <next_cursor>` and `limit: 500`, and capture that page too. Stop
+when `next_cursor` is null. For a spilled page the capture result is the
+only place you see `next_cursor` — take it from there, never guess one.
+
+`mcp__plaud__get_note` is optional enrichment: capture it the same way to
+`$SCRATCH/rec_N.note.json`; on any failure — the call or its capture —
+proceed without it.
+
+A capture that refuses (`ok: false`) is a failed fetch of that page: call
+`get_transcript` again for the same `cursor` once and capture the new
+result; if that refuses too, reply `fetch-error: plaud capture refused
+(<the CLI's error, first clause>)`. On a transient tool error retry up to
+3×, then reply `fetch-error`. On a **401**, reply `auth-error` —
+re-authentication is interactive and belongs to the user; never retry
+auth in a loop.
 
 ## Fetching — M365
 
@@ -123,31 +163,36 @@ your own ids before you touch a transcript:
 4. One `read_resource` call on the `transcript_url` `m365 ids` returned in
    step 2, **exactly as given** — never rebuild or re-scope the URL; a
    recurring series answers a rebuilt, unscoped URL with other occurrences'
-   transcripts. Write the raw result to
-   `$SCRATCH/m365_event_<n>.transcript.json` verbatim. Then:
+   transcripts. **You never write the transcript yourself** — not the
+   scratch file, not a line of it. Re-typing a read as Write input is
+   stopped partway by the API's output classifier on long meeting speech
+   (half of all Plaud worker runs failed that way, 2026-10-08 to 10-13).
+   The CLI copies it from where the host already holds it. Then:
 
-   - **Oversized — the result is a notice, not content.** A transcript of
-     roughly an hour or more exceeds the tool-result cap, and the host
-     answers with an error like `result (104,221 characters across 1
+   - **Transcript content, or an oversized notice** — either the read
+     itself (JSON carrying `transcripts`), or, for a transcript of roughly
+     an hour or more, an error like `result (104,221 characters across 1
      line) exceeds maximum allowed tokens. Output has been saved to
-     <path>`. That is not a failed read: the full transcript is on disk.
-     Never open, read, grep, or re-type that file — not even a few lines —
-     and never write the scratch transcript yourself. Hand the path to the
-     CLI, **exactly as the notice gave it** (a Windows path in Cowork is
-     expected; the CLI resolves it inside the sandbox):
+     <path>`. The notice is not a failed read: the full transcript is on
+     disk. Either way, never open, read, grep, or re-type the content or
+     that file — not even a few lines — and run the same one call:
 
      ```bash
-     python3 "$VAULTLIB" m365 capture --from "<path from the notice>" \
-       --out "$SCRATCH/m365_event_<n>.transcript.json" \
-       --event <your event file — the object file, as in Reassemble>
+     python3 "$VAULTLIB" m365 capture --event <your event file — the object file, as in Reassemble> \
+       --out "$SCRATCH/m365_event_<n>.transcript.json"
      ```
 
-     `ok: true` → the scratch transcript is written, verbatim; continue
-     to Attendees and confidence as for any found transcript, and carry
-     the result's `warnings` (if any) to the end of your outcome line.
-     `ok: false` → reply `fetch-error: transcript too large to capture
-     (<the CLI's error, first clause>)` — it retries next run, and a
-     human can still drop the Teams transcript file in the inbox.
+     It derives the transcript URL from the event file and finds your read
+     of exactly that URL in this session's log — the inline content, or
+     the file the notice named — so it only finds it if step 4's read used
+     the URL exactly as given. `ok: true` → the scratch transcript is
+     written, verbatim (`captured_from` says which); continue to Attendees
+     and confidence as for any found transcript, and carry the result's
+     `warnings` (if any) to the end of your outcome line. `ok: false` →
+     reply `fetch-error: transcript capture refused (<the CLI's error,
+     first clause>)` — it retries next run, and a human can still drop the
+     Teams transcript file in the inbox. Never retry by writing the
+     transcript yourself.
    - `NOT_FOUND` with `transcripts_empty` → reply `no-transcript`
      (transcription was off for that meeting — settled, not an error).
    - **403/Forbidden** — classify by the body: Graph code 3003 / "does not
@@ -373,7 +418,7 @@ orchestrator's summary.
 | `no-transcript` | M365: `m365 ids` returned `skipped: no-transcript-url` (before any fetch), or the transcript read answered `transcripts_empty` |
 | `no-access` | M365: 403 on the transcript read, body carries Graph code 3003 / "does not have access to lookup meeting" — or the body is unreadable / carries no readable Graph error code at all (safer default); the transcript is not reachable from this account, either because the organizer's domain is missing from `adapters.m365.home_domains` (or the list is unset) or because the tenant's Microsoft Graph transcript-access setting is off; permanent |
 | `forbidden` | M365: a 403 on the transcript read whose body positively names a different cause — another tenant, permanent |
-| `fetch-error: <one clause why>` | transport failure, incomplete page set, a Plaud page still oversized at the smallest `limit`, or an oversized M365 transcript `m365 capture` refused — retries next run; append `(recording-id: <ns:id>)` whenever the id is known — Plaud: always, straight from your briefing; M365: only once your own `m365 ids` call has already succeeded, never before |
+| `fetch-error: <one clause why>` | transport failure, incomplete page set, a Plaud result `plaud capture` refused twice, or an M365 transcript `m365 capture` refused — retries next run; append `(recording-id: <ns:id>)` whenever the id is known — Plaud: always, straight from your briefing; M365: only once your own `m365 ids` call has already succeeded, never before |
 | `auth-error` | connector wants re-authentication — the adapter should stop |
 | `already-synced: <recording_id>` | M365 only: `sync dedup` already reports your derived id `synced` — stop before the transcript read; no payload |
 | `skip-listed: <recording_id>` | M365 only: `sync dedup` already reports your derived id `skipped` — stop before the transcript read; no payload |

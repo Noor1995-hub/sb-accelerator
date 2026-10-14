@@ -635,6 +635,29 @@ def build_parser() -> argparse.ArgumentParser:
                           help="scratch directory for the blob (never the vault)")
     plaud_re.add_argument("--timezone", help="IANA timezone name")
     plaud_re.add_argument("--utc-offset", dest="utc_offset")
+    plaud_cap = plaud_sub.add_parser(
+        "capture",
+        help="copy one get_transcript / get_note result into scratch, "
+             "verbatim, from where the host already holds it — counts "
+             "only, never content")
+    plaud_src = plaud_cap.add_mutually_exclusive_group(required=True)
+    plaud_src.add_argument(
+        "--from", dest="source",
+        help="a spilled result: the path the host's oversized-result "
+             "notice named, as given")
+    plaud_src.add_argument(
+        "--tag",
+        help="an inline result: its untrusted-user-data-<16 hex> block "
+             "name, as the result's first line gives it")
+    plaud_src.add_argument(
+        "--file-id", dest="file_id",
+        help="an inline page with no wrapper (the host does not add one): "
+             "the page's own file_id, with --offset")
+    plaud_cap.add_argument(
+        "--offset", type=int,
+        help="with --file-id: the page's own offset (0 for the first page)")
+    plaud_cap.add_argument("--out", required=True,
+                           help="scratch page or note file (never the vault)")
 
     m365_group = top.add_parser(
         "m365", help="Microsoft 365 / Teams transcript adapter helpers")
@@ -704,16 +727,18 @@ def build_parser() -> argparse.ArgumentParser:
     m365_re.add_argument("--utc-offset", dest="utc_offset")
     m365_cap = m365_sub.add_parser(
         "capture",
-        help="copy a transcript read the host spilled to a tool-results file "
-             "into scratch, verbatim — counts only, never content")
+        help="copy a transcript read into scratch, verbatim, from where the "
+             "host already holds it — counts only, never content")
     m365_cap.add_argument(
-        "--from", dest="source", required=True,
-        help="the path the host's oversized-result notice named, as given — "
-             "a host path the sandbox cannot see is resolved by name")
+        "--from", dest="source",
+        help="the path an oversized-result notice named, as given — a host "
+             "path the sandbox cannot see is resolved by name; omit it to "
+             "find the read in the session log by --event's transcript URL")
     m365_cap.add_argument("--out", required=True,
                           help="scratch transcript file (never the vault)")
     m365_cap.add_argument("--event",
-                          help="the event file — enables the coverage check")
+                          help="the event object file — names the transcript "
+                               "URL to find, and enables the coverage check")
 
     discover_group = top.add_parser(
         "discover", help="Session-1 discovery: M365 evidence and the proposal check")
@@ -1379,6 +1404,9 @@ def _dispatch(args: argparse.Namespace) -> int:
         return _ok(meeting.write(root, payload,
                                  accept_collision=args.accept_collision))
     if args.group == "plaud":
+        if args.action == "capture":
+            return _ok(plaud.capture(args.out, source=args.source, tag=args.tag,
+                                     file_id=args.file_id, offset=args.offset))
         return _ok(plaud.reassemble(
             args.meta, args.transcript, args.note, args.out,
             timezone=args.timezone, utc_offset=args.utc_offset))
