@@ -15,7 +15,7 @@ delivers them.
 
 ## Unreleased
 
-- **Plaud recordings sync again in Claude Desktop**: after 0.13.22 every Plaud recording failed with a fetch error and no meeting note, because the plugin only recognised results that carry a marker Claude Desktop does not add. It now also finds a page by the recording and position it names, and reads large results that Claude Desktop saves as a list of text parts. A folder on Windows whose path is too long no longer stops the search. (#10)
+- **Plaud recordings sync again in Claude Desktop**: after 0.13.22 every Plaud recording failed with a fetch error and no meeting note, because the plugin only recognised results that carry a marker Claude Desktop does not add. It now also finds a page by the recording and position it names, and reads large results that Claude Desktop saves as a list of text parts. A folder on Windows whose path is too long no longer stops the search. (#297)
 
 ## v0.13.22 — 2026-10-14
 
