@@ -64,7 +64,10 @@ Called by the owner, it also asks about the meetings waiting for review, brings 
    to draft inline — that is deliberate.
 8. **Scratch transcripts are verbatim.** Every transcript file written to
    scratch is the tool result's content, unchanged — never condensed,
-   summarized, or re-typed from memory. The pagination fields (`offset`,
+   summarized, or re-typed from memory. A Plaud page or note is never
+   written by a model at all: the worker hands each result to
+   `plaud capture`, which copies it from the host's spill file or session
+   log (`worker-contract.md`, Fetching — Plaud). The pagination fields (`offset`,
    `returned`, `total`, `next_cursor`) are facts about what the connector
    sent and are never edited; when `plaud reassemble` refuses a page set,
    the only remedy is re-fetching the missing pages by cursor. Catching

@@ -2505,3 +2505,31 @@ def test_messages_reset(capsys, tmp_path):
     code, payload = run(capsys, ["messages", "reset", "--vault", str(root)])
     assert code == 0 and payload["result"] == {"reset": True}
     assert msgstate.load(root)["cursor"] is None
+
+
+def test_plaud_capture_through_the_cli_reports_counts_only(capsys, tmp_path):
+    tag = "untrusted-user-data-0123456789abcdef"
+    body = json.dumps({"file_id": "of_1", "block": "transaction", "total": 1,
+                       "offset": 0, "limit": 500, "returned": 1,
+                       "next_cursor": None, "segments": [
+                           {"speaker": "Speaker 1", "content": "Alles goed",
+                            "end_time": 1000}]}, indent=2)
+    spill_dir = tmp_path / "projects" / "p" / "s" / "tool-results"
+    spill_dir.mkdir(parents=True)
+    spilled = spill_dir / "mcp-plaud-get_transcript-1.txt"
+    spilled.write_text(f"<{tag} source=\"plaud-recording\">\n{body}\n</{tag}>",
+                       encoding="utf-8")
+    out = tmp_path / "scratch" / "rec_1.transcript.01.json"
+
+    code, payload = run(capsys, [
+        "plaud", "capture", "--from", str(spilled), "--out", str(out)])
+
+    assert code == 0, payload
+    assert payload["result"]["next_cursor"] is None
+    assert "Alles goed" not in json.dumps(payload)
+    assert out.read_text(encoding="utf-8") == body
+
+
+def test_plaud_capture_needs_from_or_tag(capsys, tmp_path):
+    with pytest.raises(SystemExit):
+        run(capsys, ["plaud", "capture", "--out", str(tmp_path / "x.json")])

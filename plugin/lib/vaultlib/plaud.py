@@ -12,11 +12,14 @@ error, not a note written from a third of the meeting.
 from __future__ import annotations
 
 import json
+import re
+import time
 from datetime import datetime, timezone as _timezone
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple
 
 from . import dates, syncjob
+from .m365 import M365Error, _resolve_spill, spill_roots
 
 ENRICHMENT_HEADER = "## Enrichment (recorder summary)"
 
@@ -277,3 +280,150 @@ def reassemble(meta_path: str, transcript_paths, note_path: Optional[str],
         "blob_lines": blob.count("\n"),
         "blob_chars": len(blob),
     }
+
+
+# --- capture: a get_transcript / get_note result, copied to scratch by the CLI
+#
+# The worker used to persist every page by re-typing it as Write input. That
+# copy was never verbatim (models re-indent JSON and drop the connector's
+# wrapper), it cost ~250k output tokens for a two-hour meeting, and from
+# claude-sonnet-5-5 on the API's output classifier stops long re-typed
+# copies partway (stop_reason "refusal") — every recording past ~45 minutes
+# failed, every run. So the model never writes a result; the CLI copies the
+# bytes from where the host already put them:
+#
+#   * a result over the tool-result cap is spilled to a tool-results file,
+#     and the notice names it (`--from`, resolved as for `m365 capture`);
+#   * a result under the cap is in the session's own log the moment it
+#     arrives. The connector wraps every result in a block named
+#     `untrusted-user-data-<16 hex>`, random per call, so that name finds
+#     exactly one result (`--tag`).
+#
+# Either way the page written is the JSON inside the wrapper, byte for byte.
+
+TAG_RE = re.compile(r"untrusted-user-data-[0-9a-f]{16}\Z")
+_WRAPPED = r"<({tag})[^>\n]*>\n(.*)\n</\1>"
+# The session log being searched is the worker's own, written seconds ago.
+# A window keeps the scan off months of old sessions (gigabytes on a
+# long-lived host) without any risk to the live one.
+LOG_WINDOW_S = 12 * 3600
+
+
+def _unwrap(text: str, tag: Optional[str] = None) -> Tuple[str, str]:
+    """(tag, inner JSON text) from one wrapped connector result."""
+    pattern = _WRAPPED.format(
+        tag=re.escape(tag) if tag else r"untrusted-user-data-[0-9a-f]{16}")
+    found = re.findall(pattern, text, re.S)
+    if len(found) != 1:
+        raise PlaudError(
+            "not one wrapped Plaud result (expected exactly one "
+            "untrusted-user-data block) — capture only copies a "
+            "get_transcript or get_note result")
+    return found[0]
+
+
+def _log_results(text) -> List[str]:
+    """The text parts of every tool result in one session-log line."""
+    out: List[str] = []
+    try:
+        entry = json.loads(text)
+    except json.JSONDecodeError:
+        return out
+    message = entry.get("message") if isinstance(entry, dict) else None
+    content = message.get("content") if isinstance(message, dict) else None
+    for block in content if isinstance(content, list) else []:
+        if not (isinstance(block, dict) and block.get("type") == "tool_result"):
+            continue
+        parts = block.get("content")
+        if isinstance(parts, str):
+            out.append(parts)
+        elif isinstance(parts, list):
+            out.extend(p["text"] for p in parts
+                       if isinstance(p, dict) and isinstance(p.get("text"), str))
+    return out
+
+
+def _from_log(tag: str, roots: List[Path], now: float) -> Tuple[str, Path]:
+    logs = [f for root in roots if root.is_dir() for f in root.rglob("*.jsonl")
+            if now - f.stat().st_mtime <= LOG_WINDOW_S]
+    # Newest first: the worker's own log was written to a moment ago.
+    for log in sorted(set(logs), key=lambda f: f.stat().st_mtime, reverse=True):
+        bodies = set()
+        with open(log, encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                if tag not in line:
+                    continue
+                for result in _log_results(line):
+                    if f"<{tag}" in result:
+                        bodies.add(_unwrap(result, tag)[1])
+        if len(bodies) > 1:
+            raise PlaudError(f"{tag} names {len(bodies)} different results "
+                             "in one session log")
+        if bodies:
+            return bodies.pop(), log
+    raise PlaudError(
+        f"no tool result tagged {tag} in a session log of the last "
+        f"{LOG_WINDOW_S // 3600} hours (looked under: "
+        f"{', '.join(str(r) for r in roots) or 'no roots'}) — pass the tag "
+        "exactly as the result's first line names it")
+
+
+def _check_page(page: dict) -> None:
+    for key in ("total", "offset", "returned"):
+        if not isinstance(page.get(key), int):
+            raise PlaudError(f"transcript page has no integer {key!r}")
+    if "next_cursor" not in page:
+        raise PlaudError("transcript page has no next_cursor key")
+    segments = page.get("segments")
+    if not isinstance(segments, list) or len(segments) != page["returned"]:
+        raise PlaudError(
+            "transcript page's segments do not match its own 'returned' — "
+            "not a complete get_transcript result")
+
+
+def capture(out_path: str, *, source: Optional[str] = None,
+            tag: Optional[str] = None, roots: Optional[List[Path]] = None,
+            now: Optional[float] = None) -> dict:
+    """Copy one Plaud result to scratch, verbatim. Exactly one of `source`
+    (the spill path the host's notice named) or `tag` (the result's
+    untrusted-user-data block name). Returns counts — never content."""
+    if (source is None) == (tag is None):
+        raise PlaudError("capture takes exactly one of --from or --tag")
+    roots = spill_roots() if roots is None else list(roots)
+    if source is not None:
+        try:
+            path = _resolve_spill(source, roots)
+        except M365Error as exc:
+            raise PlaudError(str(exc)) from exc
+        tag, body = _unwrap(path.read_text(encoding="utf-8-sig"))
+        found_in = "spill"
+    else:
+        if not TAG_RE.match(tag):
+            raise PlaudError(
+                f"{tag!r} is not a result tag — expected "
+                "untrusted-user-data- and 16 hex digits")
+        body, _log = _from_log(tag, roots, time.time() if now is None else now)
+        found_in = "session-log"
+    try:
+        payload = json.loads(body)
+    except json.JSONDecodeError as exc:
+        raise PlaudError(f"captured result is not valid JSON: {exc}") from exc
+
+    result = {"captured_from": found_in, "path": str(out_path)}
+    if isinstance(payload, dict) and "segments" in payload:
+        _check_page(payload)
+        result.update(kind="transcript-page", file_id=payload.get("file_id"),
+                      total=payload["total"], offset=payload["offset"],
+                      returned=payload["returned"],
+                      next_cursor=payload["next_cursor"])
+    elif isinstance(payload, list):
+        result.update(kind="note", entries=len(payload))
+    else:
+        raise PlaudError("captured result is neither a transcript page nor a "
+                         "note — capture only copies get_transcript and "
+                         "get_note results")
+    out = Path(out_path)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(body, encoding="utf-8", newline="")
+    result["bytes"] = len(body.encode("utf-8"))
+    return result

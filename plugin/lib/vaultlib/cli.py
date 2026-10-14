@@ -635,6 +635,22 @@ def build_parser() -> argparse.ArgumentParser:
                           help="scratch directory for the blob (never the vault)")
     plaud_re.add_argument("--timezone", help="IANA timezone name")
     plaud_re.add_argument("--utc-offset", dest="utc_offset")
+    plaud_cap = plaud_sub.add_parser(
+        "capture",
+        help="copy one get_transcript / get_note result into scratch, "
+             "verbatim, from where the host already holds it — counts "
+             "only, never content")
+    plaud_src = plaud_cap.add_mutually_exclusive_group(required=True)
+    plaud_src.add_argument(
+        "--from", dest="source",
+        help="a spilled result: the path the host's oversized-result "
+             "notice named, as given")
+    plaud_src.add_argument(
+        "--tag",
+        help="an inline result: its untrusted-user-data-<16 hex> block "
+             "name, as the result's first line gives it")
+    plaud_cap.add_argument("--out", required=True,
+                           help="scratch page or note file (never the vault)")
 
     m365_group = top.add_parser(
         "m365", help="Microsoft 365 / Teams transcript adapter helpers")
@@ -1378,6 +1394,8 @@ def _dispatch(args: argparse.Namespace) -> int:
         return _ok(meeting.write(root, payload,
                                  accept_collision=args.accept_collision))
     if args.group == "plaud":
+        if args.action == "capture":
+            return _ok(plaud.capture(args.out, source=args.source, tag=args.tag))
         return _ok(plaud.reassemble(
             args.meta, args.transcript, args.note, args.out,
             timezone=args.timezone, utc_offset=args.utc_offset))

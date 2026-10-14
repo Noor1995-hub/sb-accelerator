@@ -15,6 +15,8 @@ delivers them.
 
 ## Unreleased
 
+- **Long Plaud recordings sync again**: every Plaud recording longer than about 45 minutes had failed since 8 October with a fetch error and nothing written — the worker was stopped while copying the transcript into its scratch files. The transcript is now copied by the plugin's own tooling, never by the AI, so recordings of any length go through, every page exactly as Plaud sent it. A recording that was parked for repeated fetch errors in the meantime comes back with `sync unskip --id plaud:<id>`. (#295)
+
 ## v0.13.21 — 2026-10-13
 
 - A recording now matches its calendar meeting when the start times line up, even when the recording's title and speaker labels share nothing with the invite. If exactly one meeting was running and began within 5 minutes of the recording, `/sync-recordings` links it and fills in the subject, organizer and everyone invited (new people get a person note, as for Teams meetings); it rates the match *medium* (never *high*). Two meetings in the same slot are still not matched on time alone. Every calendar-matched recording now lists the invitees by name, not just you. Before this, a call recorded at 11:01 for an 11:00 meeting could land in **To review** as "no calendar match". (#276)
