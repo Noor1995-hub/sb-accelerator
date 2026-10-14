@@ -15,6 +15,8 @@ delivers them.
 
 ## Unreleased
 
+- **More recordings find their calendar meeting.** The meeting that *starts* when you press record now wins, even when a "Focus time" or "timesheets" block, a declined invite, or a meeting that was just ending sits in the same slot. Before this, all of those blocked the match. A recording that starts a few minutes too late for the clock alone is matched when its title or content backs it up. When two meetings compete, their agendas are read to pick the right one. A short call recorded during an offsite or a long working block is not filed under that event; its note says *Recorded during …; likely a side call*. Time-only matches are still rated *medium*. (#300)
+
 ## v0.13.24 — 2026-10-14
 
 - **Teams transcripts copy correctly in Claude Desktop**: a large Teams transcript that Claude Desktop saves as a list of text parts is now read, and a folder on Windows whose path is too long no longer stops the search for the transcript. (#298)
